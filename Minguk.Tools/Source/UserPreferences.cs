@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 
 namespace Minguk.Tools.Source;
@@ -16,6 +16,10 @@ public class UserPreferences
     {
         Load();
         SizeToFit();
+
+        // 저장해 둔 모니터가 빠졌거나 배치가 바뀌면 창이 화면 밖에 뜬다.
+        // 만들어만 두고 부르지 않던 보정을 여기서 건다.
+        MoveIntoView();
     }
 
     /// <summary>저장된 크기가 현재 화면보다 크면 줄인다. 모니터 구성이 바뀐 경우를 위한 것이다.</summary>

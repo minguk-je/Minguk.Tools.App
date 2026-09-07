@@ -38,6 +38,12 @@ public partial class App : Application
         // 테마가 적용되지 않으므로(AllowStandardControlsTheming=false) 화면은 DevExpress 컨트롤로 짠다.
         CompatibilitySettings.UseLightweightThemes = true;
         LightweightThemeManager.AllowStandardControlsTheming = false;
+
+        // 저장된 테마를 스플래시가 만들어지기 전에 적용한다.
+        // 창이 뜬 뒤에 바꾸면 DevExpress 가 테마 리소스를 통째로 다시 만들면서 화면이 멎는다.
+        UserPreferencesHelper.EnsureDefaults();
+        UserPreferencesHelper.ApplyTheme();
+
         ApplicationThemeHelper.PreloadAsync(PreloadCategories.Core);
 
         // .NET 9 이상에서 BinaryFormatter 가 빠지면서 앱 간 드래그 앤 드롭이 깨진다. 되돌린다.
@@ -57,17 +63,8 @@ public partial class App : Application
                 Logo = new Uri(Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, "Resource", "CI_Minguk.png"), UriKind.Absolute)
             });
 
-        // 스플래시가 닫힌 뒤에 사용자 설정을 적용한다.
-        // 테마·폰트 변경은 리소스를 갈아 끼우는 작업이라 스플래시가 떠 있는 동안 하면 깜빡인다.
-        splashScreenManager.StateChanged += (sender, args) =>
-        {
-            if (args is { NewValue: DevExpress.Mvvm.SplashScreenState.Closed })
-            {
-                UserPreferencesHelper.Initialize();
-                UserPreferencesHelper.LoadUserPreferences();
-            }
-        };
-
+        // 테마는 위에서, 폰트는 OnStartup 에서, 창 위치는 MainWindow.OnSourceInitialized 에서
+        // 각각 "그려지기 전에" 적용한다. 스플래시가 닫힌 뒤에 손보면 그때부터 다시 그리게 된다.
         splashScreenManager.ShowOnStartup();
     }
 
@@ -76,6 +73,10 @@ public partial class App : Application
         try
         {
             base.OnStartup(e);
+
+            // 폰트 리소스를 MainWindow 가 만들어지기 전에 끼운다.
+            // (StartupUri 의 창은 OnStartup 이 끝난 뒤에 생성된다)
+            UserPreferencesHelper.ApplyFonts();
 
             // ── 로캘 ────────────────────────────────────────────────────────
             CultureInfo culture = CultureInfo.CreateSpecificCulture("ko-KR");
