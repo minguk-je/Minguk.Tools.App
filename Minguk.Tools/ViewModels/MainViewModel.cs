@@ -21,6 +21,7 @@ using Minguk.Base.Enums;
 using Minguk.Base.Extension;
 using Minguk.Base.Utilities;
 using Minguk.Base.Views;
+using System.Xml.Linq;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -377,7 +378,8 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
             var documentElapsed = stopwatch.ElapsedMilliseconds;
 
             if (!string.IsNullOrEmpty(Minguk.Tools.Properties.Settings.Default.RootLayout))
-                LayoutSerializationService.Deserialize(Minguk.Tools.Properties.Settings.Default.RootLayout);
+                LayoutSerializationService.Deserialize(
+                    StripWindowGeometry(Minguk.Tools.Properties.Settings.Default.RootLayout));
 
             stopwatch.Stop();
 
@@ -392,6 +394,36 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
             // 레이아웃이 깨져도 앱은 떠야 한다. 저장본을 버리고 기본 배치로 시작한다.
             Logger.Warn(ex, "저장된 레이아웃 복원 실패. 기본 배치로 시작한다.");
             DeleteLayout();
+        }
+    }
+
+    /// <summary>
+    /// 저장된 도킹 배치에서 창 크기 항목($activeWindowId)을 떼어 낸다.
+    ///
+    /// DevExpress 는 도킹 배치를 직렬화할 때 창의 크기·상태까지 같이 담는다.
+    /// 그걸 그대로 되돌리면 복원 도중 창이 한 번 접혔다가(1422 -> 252) 다시 펴진다.
+    /// 100ms 남짓이지만 창이 두 번 열리는 것처럼 보인다.
+    ///
+    /// 창 위치·크기는 UserPreferences 가 첫 렌더 전에 이미 넣어 두었다.
+    /// 여기서는 패널 배치만 되돌리면 된다.
+    /// </summary>
+    private static string StripWindowGeometry(string layout)
+    {
+        try
+        {
+            var document = XDocument.Parse(layout);
+
+            document.Descendants("property")
+                    .Where(element => (string?)element.Attribute("name") == "$activeWindowId")
+                    .Remove();
+
+            return document.ToString(SaveOptions.DisableFormatting);
+        }
+        catch (Exception ex)
+        {
+            // 저장본 형식이 바뀌었더라도 복원 자체는 시도해 본다.
+            Logger.Warn(ex, "레이아웃에서 창 크기 항목을 떼어 내지 못했다. 원본 그대로 쓴다.");
+            return layout;
         }
     }
 
