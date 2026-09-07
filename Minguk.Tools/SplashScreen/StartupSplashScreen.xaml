@@ -28,11 +28,11 @@
         </Grid.RowDefinitions>
 
         <dx:DXImage x:Name="PART_Logo"
-                    Width="Auto"
+                    Width="200"
                     Height="40"
                     Style="{DynamicResource ResourceKey={dxt:FluentSplashScreenThemeKey ResourceKey=LogoImageStyle}}"
                     Source="{Binding Logo}"
-                    Stretch="UniformToFill" />
+                    Stretch="Uniform" />
 
         <TextBlock x:Name="PART_Title"
                    Grid.Row="1"
