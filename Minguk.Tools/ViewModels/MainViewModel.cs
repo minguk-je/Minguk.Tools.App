@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -301,15 +301,36 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
 
     // ── 레이아웃 저장/복원 ────────────────────────────────────────────────
 
+    /// <summary>
+    /// 지난번에 열려 있던 문서 탭과 도킹 배치를 되살린다.
+    ///
+    /// 두 가지를 반드시 같이, 이 순서로 해야 한다.
+    ///   ① LogicalLayout : 문서(탭) 자체를 다시 만든다
+    ///   ② RootLayout    : 만들어진 문서를 어디에 어떻게 놓을지 배치한다
+    /// ②만 따로 미루면 배치할 문서가 없어서 저장된 배치가 그냥 버려진다.
+    ///
+    /// 시작 시간의 대부분이 여기서 나온다. 얼마나 걸렸는지 로그로 남겨 두면
+    /// 느려졌을 때 어디를 봐야 하는지 바로 알 수 있다.
+    /// </summary>
     public void RestoreDocument()
     {
         try
         {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             if (!string.IsNullOrEmpty(Minguk.Tools.Properties.Settings.Default.LogicalLayout))
                 this.RestoreDocumentManagerService(Minguk.Tools.Properties.Settings.Default.LogicalLayout);
 
+            var documentElapsed = stopwatch.ElapsedMilliseconds;
+
             if (!string.IsNullOrEmpty(Minguk.Tools.Properties.Settings.Default.RootLayout))
                 LayoutSerializationService.Deserialize(Minguk.Tools.Properties.Settings.Default.RootLayout);
+
+            stopwatch.Stop();
+
+            Logger.Debug($"탭 복원 {stopwatch.ElapsedMilliseconds}ms " +
+                         $"(문서 {documentElapsed}ms + 배치 {stopwatch.ElapsedMilliseconds - documentElapsed}ms, " +
+                         $"탭 {DocumentManagerService.Documents.Count()}개)");
         }
         catch (Exception ex)
         {
