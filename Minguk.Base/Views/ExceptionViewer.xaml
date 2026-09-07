@@ -1,0 +1,98 @@
+﻿<dx:ThemedWindow x:Class="Minguk.Base.Views.ExceptionViewer"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+                 xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+                 Title="Exception Viwer"
+                 Width="1250"
+                 Height="850"
+                 Loaded="Window_Loaded"
+                 SizeChanged="ExceptionViewerWindow_SizeChanged"
+                 Topmost="False"
+                 UseLayoutRounding="True"
+                 WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid x:Name="RootGrid"
+          Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="treeCol"
+                              Width="Auto"
+                              MinWidth="90"
+                              MaxWidth="250" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition x:Name="textCol"
+                              Width="*"
+                              MinWidth="90" />
+        </Grid.ColumnDefinitions>
+
+        <TreeView x:Name="treeView1"
+                  Grid.Row="0"
+                  Grid.Column="0"
+                  Margin="0"
+                  SelectedItemChanged="treeView1_SelectedItemChanged" />
+
+        <GridSplitter Grid.Row="0"
+                      Grid.RowSpan="1"
+                      Grid.Column="1"
+                      Width="4"
+                      Margin="0,0,0,0"
+                      ResizeBehavior="CurrentAndNext" />
+        <Border Grid.Row="0"
+                Grid.Column="2"
+                Margin="0,0,0,0"
+                BorderBrush="{Binding ElementName=treeView1, Path=BorderBrush}"
+                BorderThickness="{Binding ElementName=treeView1, Path=BorderThickness}">
+            <FlowDocumentScrollViewer x:Name="docViewer"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto" />
+        </Border>
+
+        <Grid Grid.Row="1"
+              Grid.Column="1"
+              Grid.ColumnSpan="2"
+              HorizontalAlignment="Right">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <dxe:CheckEdit x:Name="chkWrap"
+                           Margin="0,0,30,0"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="center"
+                           Checked="chkWrap_Checked"
+                           Content="Wrap text"
+                           IsChecked="True"
+                           Unchecked="chkWrap_Unchecked" />
+            <dx:SimpleButton x:Name="btnCopy"
+                             Grid.Column="1"
+                             Height="24"
+                             Margin="1,3,4,6"
+                             Padding="15,0"
+                             VerticalAlignment="Center"
+                             Click="btnCopy_Click"
+                             Content="Copy All To Clipboard" />
+            <dx:SimpleButton x:Name="btnClose"
+                             Grid.Column="2"
+                             Height="24"
+                             Margin="1,3,4,6"
+                             Padding="15,0"
+                             VerticalAlignment="Center"
+                             Click="btnClose_Click"
+                             Content="Close"
+                             IsCancel="True" />
+        </Grid>
+    </Grid>
+</dx:ThemedWindow>

@@ -1,0 +1,189 @@
+<dx:ThemedWindow x:Class="Minguk.Tools.Views.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+                 xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
+                 xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+                 xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
+                 xmlns:markup="clr-namespace:Minguk.Tools.Markup"
+                 xmlns:views="clr-namespace:Minguk.Tools.Views" 
+                 xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+                 Title="{Binding Title, FallbackValue=Minguk Tools}"
+                 Width="1280"
+                 Height="800"
+                 Padding="0"
+                 Style="{DynamicResource BaseControlStyle}"
+                 AcrylicOpacity="1"
+                 DataContext="{dxmvvm:ViewModelSource Type={x:Type viewModels:MainWindowViewModel}}"
+                 EnableAcrylic="False"
+                 ShowIcon="False"
+                 ShowTitle="True"
+                 TitleAlignment="Center"
+                 Topmost="{Binding IsTopMost, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 WindowKind="Auto"
+                 mc:Ignorable="d"
+                 d:DataContext="{d:DesignInstance {x:Type viewModels:MainWindowViewModel},
+                                                  IsDesignTimeCreatable=False}"
+                 d:DesignHeight="800"
+                 d:DesignWidth="1280">
+
+    <dx:ThemedWindow.Resources>
+        <ResourceDictionary>
+            <!--
+                KeyBinding 은 시각 트리 밖이라 DataContext 가 닿지 않는다.
+                이 중계 객체를 거쳐야 InputBindings 의 Command 바인딩이 살아난다.
+            -->
+            <markup:BindingProxy x:Key="ViewModelProxy"
+                                 Data="{Binding}" />
+
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/ControlTemplate.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/DataTemplate.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/GridColumnStyle.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </dx:ThemedWindow.Resources>
+
+    <dx:ThemedWindow.InputBindings>
+        <KeyBinding Key="Return"
+                    Command="{Binding Data.OnFullModeCommand, Source={StaticResource ViewModelProxy}}"
+                    Modifiers="Shift+Alt" />
+    </dx:ThemedWindow.InputBindings>
+
+    <dxmvvm:Interaction.Behaviors>
+        <dxmvvm:CurrentWindowService ClosingCommand="{Binding OnClosingCommand}" />
+        <dxmvvm:DispatcherService />
+        <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
+                               EventName="Initialized" />
+        <dxmvvm:EventToCommand Command="{Binding OnLoadedCommand}"
+                               EventName="Loaded"
+                               PassEventArgsToCommand="True" />
+        <dxmvvm:EventToCommand Command="{Binding OnActivatedCommand}"
+                               EventName="Activated" />
+    </dxmvvm:Interaction.Behaviors>
+
+    <!-- 좌측 캡션 영역 버튼들 -->
+    <dx:ThemedWindow.ToolbarItemsSource>
+        <dx:ThemedWindowHeaderItemsCollection>
+            <dx:HeaderItemControl Margin="-5,0,0,0"
+                                  Command="{Binding OnMenuVisibleCommand}"
+                                  Content="메뉴"
+                                  ToolTip="메뉴 접기/펼치기">
+                <dx:HeaderItemControl.ContentTemplate>
+                    <DataTemplate>
+                        <Image Width="16"
+                               VerticalAlignment="Center"
+                               Source="{dx:DXImage 'SvgImages/XAF/Action_Navigation.svg'}"
+                               Stretch="Uniform" />
+                    </DataTemplate>
+                </dx:HeaderItemControl.ContentTemplate>
+            </dx:HeaderItemControl>
+
+            <dx:HeaderItemControl Command="{Binding DoPreferencesCommand}"
+                                  ToolTip="설정">
+                <dx:HeaderItemControl.ContentTemplate>
+                    <DataTemplate>
+                        <Image Width="16"
+                               VerticalAlignment="Center"
+                               Source="{dx:DXImage 'SvgImages/Setup/Properties.svg'}"
+                               Stretch="Uniform" />
+                    </DataTemplate>
+                </dx:HeaderItemControl.ContentTemplate>
+            </dx:HeaderItemControl>
+
+            <dx:HeaderItemControl Command="{Binding OnFullModeCommand}"
+                                  Content="전체화면"
+                                  ToolTip="전체화면 (Shift+Alt+Enter)">
+                <dx:HeaderItemControl.ContentTemplate>
+                    <DataTemplate>
+                        <Image Height="16"
+                               VerticalAlignment="Center"
+                               Source="{dx:DXImage 'SvgImages/Dashboards/FullExtent.svg'}"
+                               Stretch="Uniform" />
+                    </DataTemplate>
+                </dx:HeaderItemControl.ContentTemplate>
+            </dx:HeaderItemControl>
+
+            <dx:HeaderItemControl Command="{Binding DoRestartCommand}"
+                                  ToolTip="재시작">
+                <dx:HeaderItemControl.ContentTemplate>
+                    <DataTemplate>
+                        <Image Width="16"
+                               VerticalAlignment="Center"
+                               Source="{dx:DXImage 'SvgImages/Dashboards/ConvertTo.svg'}"
+                               Stretch="Uniform" />
+                    </DataTemplate>
+                </dx:HeaderItemControl.ContentTemplate>
+            </dx:HeaderItemControl>
+
+            <dx:HeaderItemControl Command="{Binding OnExitCommand}"
+                                  Content="종료"
+                                  ToolTip="종료">
+                <dx:HeaderItemControl.ContentTemplate>
+                    <DataTemplate>
+                        <Image Width="16"
+                               VerticalAlignment="Center"
+                               Source="{dx:DXImage 'SvgImages/XAF/Action_Exit.svg'}"
+                               Stretch="Uniform" />
+                    </DataTemplate>
+                </dx:HeaderItemControl.ContentTemplate>
+            </dx:HeaderItemControl>
+        </dx:ThemedWindowHeaderItemsCollection>
+    </dx:ThemedWindow.ToolbarItemsSource>
+
+    <!-- 우측 캡션 영역 (최상위 고정 / 테마 선택) -->
+    <dx:ThemedWindow.HeaderItems>
+        <dxb:ToolBarControl Margin="0,0,20,0"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Background="Transparent"
+                            AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+
+            <dxb:BarCheckItem Padding="10,0,10,0"
+                              BarItemDisplayMode="Default"
+                              Content="최상위"
+                              IsChecked="{Binding IsTopMost, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="항상 위에 표시">
+                <dxb:BarCheckItem.Style>
+                    <Style TargetType="dxb:BarCheckItem">
+                        <Setter Property="Glyph" Value="{image:FreeImage ResourceName='Axialis/Basic/16x16/pin_blue.png'}" />
+                        <Style.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Glyph" Value="{image:FreeImage ResourceName='Axialis/Basic/16x16/pin_red.png'}" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </dxb:BarCheckItem.Style>
+            </dxb:BarCheckItem>
+
+            <!-- BarSplitItemThemeSelectorBehavior 가 테마 목록을 자동으로 채운다 -->
+            <dxb:BarSplitButtonItem Padding="4,0,0,0"
+                                    ActAsDropDown="True"
+                                    BarItemDisplayMode="ContentAndGlyph"
+                                    Content=""
+                                    Glyph="{dx:DXImage 'SvgImages/Dashboards/LocalColors.svg'}"
+                                    ToolTip="테마">
+                <dxmvvm:Interaction.Behaviors>
+                    <dxb:BarSplitItemThemeSelectorBehavior ShowTouchThemes="False" />
+                </dxmvvm:Interaction.Behaviors>
+                <dxb:BarSplitButtonItem.ContentTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" />
+                    </DataTemplate>
+                </dxb:BarSplitButtonItem.ContentTemplate>
+            </dxb:BarSplitButtonItem>
+        </dxb:ToolBarControl>
+    </dx:ThemedWindow.HeaderItems>
+
+    <Grid>
+        <views:MainView />
+    </Grid>
+</dx:ThemedWindow>

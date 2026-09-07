@@ -1,0 +1,29 @@
+<Application x:Class="Minguk.Tools.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:system="clr-namespace:System;assembly=System.Runtime"
+             StartupUri="/Views/MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!--
+                기준 스타일. 이 네 개가 앱 전체의 룩앤필을 결정한다.
+                화면(Window/UserControl)에서도 같은 사전을 한 번 더 병합해야
+                디자이너에서 스타일이 보인다 (런타임은 App 것만으로도 동작한다).
+            -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/ControlTemplate.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/DataTemplate.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/GridColumnStyle.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!--
+                폰트/크기는 리소스로 두고 UserPreferencesHelper 가 런타임에 바꿔 낀다.
+                XAML 에서는 반드시 DynamicResource 로 참조할 것. StaticResource 로 쓰면 설정 변경이 안 먹는다.
+            -->
+            <system:Double x:Key="BaseFontSize">12</system:Double>
+            <system:Double x:Key="EditorFontSize">13</system:Double>
+            <FontFamily x:Key="BaseFontFamily">./Fonts/#D2Coding</FontFamily>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

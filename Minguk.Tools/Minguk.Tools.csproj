@@ -1,0 +1,132 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
+		<InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);Microsoft.Extensions.Configuration.Binder.SourceGeneration</InterceptorsPreviewNamespaces>
+		<Platforms>x64</Platforms>
+		<!-- 플랫폼을 지정하지 않고 빌드할 때의 기본값 (sln/CLI 에서 명시하면 그 값이 우선) -->
+		<Platform Condition="'$(Platform)' == 'AnyCPU'">x64</Platform>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<!-- Windows.Graphics.Capture(WGC) 를 쓰려면 windows10 TFM 이 필요하다. WinRT 프로젝션이 이 TFM 에서만 들어온다.
+		     TargetPlatformVersion 22621 : GraphicsCaptureSession.IsBorderRequired 를 컴파일하기 위한 최소치.
+		     SupportedOSPlatformVersion 19041 : 실제로 요구하는 최소 OS (Windows 10 2004). -->
+		<TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+		<SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Minguk.Tools</RootNamespace>
+		<AssemblyName>Minguk.Tools</AssemblyName>
+		<ApplicationIcon>Resource\CI_Mo.ico</ApplicationIcon>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<!-- App.xaml 에 Main 을 두지 않고 Main.cs 에서 직접 띄운다 (Velopack 초기화가 Application 생성보다 먼저여야 함) -->
+		<StartupObject>Minguk.Tools.App</StartupObject>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- DevExpress WPF - TamsTools 와 같은 버전으로 고정한다. 버전이 어긋나면 테마 리소스 키가 안 맞는다. -->
+		<PackageReference Include="DevExpress.Mvvm" Version="26.1.3" />
+		<PackageReference Include="DevExpress.Images" Version="26.1.3" />
+		<PackageReference Include="DevExpress.Wpf" Version="26.1.3" />
+		<PackageReference Include="DevExpress.Wpf.Core" Version="26.1.3" />
+		<PackageReference Include="DevExpress.Wpf.ThemesLW" Version="26.1.3" />
+
+		<PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.11" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="NLog" Version="6.2.0" />
+		<PackageReference Include="NLog.Extensions.Logging" Version="6.2.0" />
+		<PackageReference Include="System.Reactive" Version="7.0.0" />
+		<PackageReference Include="Velopack" Version="1.2.0" />
+		<!-- WGC 로 받은 프레임은 D3D11 텍스처다. 그걸 만지려면 D3D11 바인딩이 필요하다. -->
+		<PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+		<!-- 전처리 컴퓨트 셰이더를 런타임에 컴파일한다 (d3dcompiler_47.dll 은 Windows 기본 탑재) -->
+		<PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+		<!-- 추론. DirectML EP 라 GPU 벤더를 안 가린다 -->
+		<PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+	</ItemGroup>
+
+	<!--
+	  Minguk.Image 는 소스 프로젝트가 아니라 미리 빌드해 둔 DLL 을 물린다.
+	  csproj 안에 <Resource Include> 가 4만 개라, 소스로 두면 빌드할 때마다
+	  그 거대한 csproj 를 평가하느라 시간을 버린다. 아이콘 팩은 거의 바뀌지 않으므로
+	  DirectML 같은 외부 바이너리와 같은 취급을 한다 - sln 에서도 빠져 있다.
+
+	  아이콘을 추가/교체해야 하면:
+	    1) Minguk.Image\Minguk.Image.csproj 를 단독으로 열어 Release|x64 로 빌드하고
+	    2) 나온 DLL 을 Libs\Minguk.Image.dll 로 덮어쓴 뒤 커밋한다.
+	-->
+	<ItemGroup>
+	  <Reference Include="Minguk.Image">
+	    <HintPath>..\Libs\Minguk.Image.dll</HintPath>
+	    <Private>true</Private>
+	  </Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Minguk.Base\Minguk.Base.csproj" />
+	</ItemGroup>
+
+	<!-- App.xaml 에 x:Class 진입점을 두지 않으므로 ApplicationDefinition 이 아니라 Page 로 넣는다 -->
+	<ItemGroup>
+		<ApplicationDefinition Remove="App.xaml" />
+		<Page Include="App.xaml" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="Properties\Settings.Designer.cs">
+			<DesignTimeSharedInput>True</DesignTimeSharedInput>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Settings.settings</DependentUpon>
+		</Compile>
+		<None Update="Properties\Settings.settings">
+			<Generator>PublicSettingsSingleFileGenerator</Generator>
+			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="AppSettings.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="AppSettings.*.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<DependentUpon>AppSettings.json</DependentUpon>
+		</Content>
+		<Content Include="nlog.config">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Remove="AppSettings.json" />
+		<None Remove="AppSettings.Development.json" />
+		<None Remove="AppSettings.Production.json" />
+		<None Remove="Resource\CI_Burgundy.png" />
+		<None Remove="Resource\CI_Mo.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Resource\CI_Burgundy.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</EmbeddedResource>
+		<EmbeddedResource Include="Resource\CI_Mo.ico">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<!-- 폰트는 pack URI(./Fonts/#D2Coding)로 참조하므로 Resource 로 넣는다 -->
+	<ItemGroup>
+		<Resource Include="Fonts\D2Coding-Ver1.3.2-20180524.ttf">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Resource>
+		<Resource Include="Fonts\D2CodingBold-Ver1.3.2-20180524.ttf">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Resource>
+	</ItemGroup>
+
+</Project>

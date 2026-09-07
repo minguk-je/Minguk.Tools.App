@@ -1,0 +1,181 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+                    xmlns:dxgt="http://schemas.devexpress.com/winfx/2008/xaml/grid/themekeys"
+                    xmlns:converters="clr-namespace:Minguk.Base.Converters"
+                    xmlns:dependency="clr-namespace:Minguk.Base.Dependency">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Style.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <DataTemplate x:Key="checkEditor">
+        <dxe:CheckEdit Name="PART_Editor" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="noneEditor" />
+
+
+    <DataTemplate x:Key="BooleanEditor">
+        <dxe:CheckEdit Name="PART_Editor" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="ImageEditor">
+        <dxe:ImageEdit Name="PART_Editor"
+                       IsEnabled="False"
+                       ShowLoadDialogOnClickMode="Never" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="ColumnHeader">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Margin="0,0,0,0"
+                       Padding="0,1,0,0"
+                       VerticalAlignment="Center"
+                       Text="{Binding}" />
+        </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="OidColumnHeader">
+        <StackPanel Orientation="Horizontal">
+            <!--<Image Source="{images:MGImage ResourceName='devexpress/support/feature_16x16.png'}" Margin="0,-2,0,-2" />-->
+            <TextBlock Margin="0,0,0,0"
+                       Padding="0,1,0,0"
+                       VerticalAlignment="Center"
+                       FontWeight="Normal"
+                       Text="{Binding}" />
+        </StackPanel>
+    </DataTemplate>
+
+
+    <converters:XpoRowStateConverter x:Key="XpoRowStateConverter" />
+
+    <DataTemplate x:Key="{dxgt:RowIndicatorThemeKey ResourceKey=IconPresenterTemplate, IsThemeIndependent=True}">
+        <Grid x:Name="rootOfRowIndicator"
+              Margin="0,0,0,0"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center">
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"
+                                  SharedSizeGroup="RowNumberGroup" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <DockPanel>
+                <TextBlock Width="{Binding Path=View.DataControl.(dependency:GridControlDependency.MaxRowIndicatorWidth)}"
+                           Margin="0,0,2,0"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           TextAlignment="Right">
+                    <TextBlock.Text>
+                        <MultiBinding Converter="{converters:RowNumberConverter}"
+                                      Mode="OneWay">
+                            <Binding Path="View.DataControl" />
+                            <Binding Path="RowHandle.Value" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+
+                <!-- 행 편집 상태 표시 (A: 추가, U: 수정, D: 삭제) — RowState 트리거로 표시 -->
+                <TextBlock x:Name="RowStateText"
+                           MinWidth="0"
+                           Margin="0,0,0,0"
+                           VerticalAlignment="Center"
+                           FontWeight="Bold"
+                           DockPanel.Dock="Right"
+                           Text=""
+                           TextAlignment="Center" />
+
+                <ContentPresenter x:Name="iconPresenter"
+                                  Width="16"
+                                  Margin="0,0,0,0"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Content="{x:Null}"
+                                  DockPanel.Dock="Right" />
+            </DockPanel>
+        </Grid>
+
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding Path=Row.RowState, FallbackValue={x:Null}}"
+                         Value="Added">
+                <Setter TargetName="RowStateText" Property="Text" Value="A" />
+                <Setter TargetName="RowStateText" Property="Foreground" Value="#2E7D32" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=Row.RowState, FallbackValue={x:Null}}"
+                         Value="Modified">
+                <Setter TargetName="RowStateText" Property="Text" Value="U" />
+                <Setter TargetName="RowStateText" Property="Foreground" Value="#E65100" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=Row.RowState, FallbackValue={x:Null}}"
+                         Value="Deleted">
+                <Setter TargetName="RowStateText" Property="Text" Value="D" />
+                <Setter TargetName="RowStateText" Property="Foreground" Value="#C62828" />
+            </DataTrigger>
+
+            <!--
+            <DataTrigger Binding="{Binding Path=Row, Converter={StaticResource XpoRowStateConverter}}"
+                         Value="Added">
+                <Setter TargetName="RowStateText" Property="Text" Value="A" />
+                <Setter TargetName="RowStateText" Property="Foreground" Value="#2E7D32" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=Row, Converter={StaticResource XpoRowStateConverter}}"
+                         Value="Modified">
+                <Setter TargetName="RowStateText" Property="Text" Value="U" />
+                <Setter TargetName="RowStateText" Property="Foreground" Value="#E65100" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=Row, Converter={StaticResource XpoRowStateConverter}}"
+                         Value="Deleted">
+                <Setter TargetName="RowStateText" Property="Text" Value="D" />
+                <Setter TargetName="RowStateText" Property="Foreground" Value="#C62828" />
+            </DataTrigger>
+            -->
+
+            <DataTrigger Binding="{Binding Path=IndicatorState}"
+                         Value="Focused">
+                <Setter TargetName="iconPresenter" Property="ContentTemplate" Value="{DynamicResource {dxgt:RowIndicatorThemeKey ResourceKey=FocusedIconTemplate}}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=IndicatorState}"
+                         Value="Changed">
+                <Setter TargetName="iconPresenter" Property="ContentTemplate" Value="{DynamicResource {dxgt:RowIndicatorThemeKey ResourceKey=ChangedIconTemplate}}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=IndicatorState}"
+                         Value="NewItemRow">
+                <Setter TargetName="iconPresenter" Property="ContentTemplate" Value="{DynamicResource {dxgt:RowIndicatorThemeKey ResourceKey=NewItemRowIconTemplate}}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=IndicatorState}"
+                         Value="Editing">
+                <Setter TargetName="iconPresenter" Property="ContentTemplate" Value="{DynamicResource {dxgt:RowIndicatorThemeKey ResourceKey=EditingIconTemplate}}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=IndicatorState}"
+                         Value="Error">
+                <Setter TargetName="iconPresenter" Property="ContentTemplate" Value="{DynamicResource {dxgt:RowIndicatorThemeKey ResourceKey=ErrorIconTemplate}}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=IndicatorState}"
+                         Value="FocusedError">
+                <Setter TargetName="iconPresenter" Property="ContentTemplate" Value="{DynamicResource {dxgt:RowIndicatorThemeKey ResourceKey=FocusedErrorIconTemplate}}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Path=IndicatorState}"
+                         Value="AutoFilterRow">
+                <Setter TargetName="iconPresenter" Property="ContentTemplate" Value="{DynamicResource {dxgt:RowIndicatorThemeKey ResourceKey=AutoFilterRowIconTemplate}}" />
+            </DataTrigger>
+
+            <DataTrigger Binding="{Binding Path=(dxe:BaseEdit.HasValidationError)}"
+                         Value="True">
+                <Setter TargetName="rootOfRowIndicator" Property="ToolTip">
+                    <Setter.Value>
+                        <DockPanel>
+                            <dxe:ErrorControl Content="{Binding Path=(dxe:BaseEdit.ValidationError)}" />
+                            <ContentPresenter VerticalAlignment="Center"
+                                              Content="{Binding Path=(dxe:BaseEdit.ValidationError).ErrorContent}" />
+                        </DockPanel>
+                    </Setter.Value>
+                </Setter>
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+</ResourceDictionary>

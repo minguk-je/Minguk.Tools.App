@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.9.12120.119 stable
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Minguk.Tools", "Minguk.Tools\Minguk.Tools.csproj", "{CF96AEC3-5F4F-4AFB-9D72-F433A96B2492}"
+	ProjectSection(ProjectDependencies) = postProject
+		{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1} = {455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Minguk.Base", "Minguk.Base\Minguk.Base.csproj", "{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CF96AEC3-5F4F-4AFB-9D72-F433A96B2492}.Debug|x64.ActiveCfg = Debug|x64
+		{CF96AEC3-5F4F-4AFB-9D72-F433A96B2492}.Debug|x64.Build.0 = Debug|x64
+		{CF96AEC3-5F4F-4AFB-9D72-F433A96B2492}.Release|x64.ActiveCfg = Release|x64
+		{CF96AEC3-5F4F-4AFB-9D72-F433A96B2492}.Release|x64.Build.0 = Release|x64
+		{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}.Debug|x64.ActiveCfg = Debug|x64
+		{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}.Debug|x64.Build.0 = Debug|x64
+		{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}.Release|x64.ActiveCfg = Release|x64
+		{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {01C1729F-A8E1-4D99-A9C6-529D50D34AA3}
+	EndGlobalSection
+EndGlobal

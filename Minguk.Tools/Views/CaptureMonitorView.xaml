@@ -1,0 +1,195 @@
+﻿<UserControl
+    x:Class="Minguk.Tools.Views.CaptureMonitorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+    xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+    xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
+    xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+    xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+    xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+    d:DataContext="{d:DesignInstance {x:Type viewModels:CaptureMonitorViewModel},
+                                     IsDesignTimeCreatable=False}"
+    d:DesignHeight="500"
+    d:DesignWidth="900"
+    DataContext="{dxmvvm:ViewModelSource Type={x:Type viewModels:CaptureMonitorViewModel}}"
+    FontFamily="{DynamicResource BaseFontFamily}"
+    FontSize="{DynamicResource BaseFontSize}"
+    Style="{DynamicResource BaseControlStyle}"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/GridColumnStyle.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <dxmvvm:Interaction.Behaviors>
+        <!--
+            캡처 콜백은 스레드풀에서 돈다. ViewModel 이 그리드를 건드리려면 디스패처가 필요하므로
+            여기서 IDispatcherService 를 등록해 준다. 빠뜨리면 통계 줄이 한 줄도 안 쌓인다.
+        -->
+        <dxmvvm:DispatcherService />
+
+        <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}" EventName="Loaded" />
+        <dxmvvm:EventToCommand Command="{Binding OnUnloadedCommand}" EventName="Unloaded" />
+    </dxmvvm:Interaction.Behaviors>
+
+    <DockPanel LastChildFill="True">
+
+        <!--  ── 툴바 ─────────────────────────────────────────────────────  -->
+        <StackPanel
+            Margin="4"
+            DockPanel.Dock="Top"
+            Orientation="Horizontal">
+            <dxe:TextEdit
+                Width="60"
+                Margin="0,0,4,0"
+                EditValue="대상"
+                IsReadOnly="True"
+                ShowBorder="False" />
+
+            <dxe:ComboBoxEdit
+                Width="420"
+                Margin="0,0,4,0"
+                DisplayMember="Display"
+                IsEnabled="{Binding IsNotRunning}"
+                IsTextEditable="False"
+                ItemsSource="{Binding Targets}"
+                SelectedItem="{Binding SelectedTarget}" />
+
+            <dx:SimpleButton
+                Width="80"
+                Margin="0,0,12,0"
+                Command="{Binding RefreshTargetsCommand}"
+                Content="새로 고침"
+                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                GlyphHeight="16"
+                GlyphWidth="16" />
+
+            <dx:SimpleButton
+                Width="100"
+                Margin="0,0,4,0"
+                Command="{Binding DoStartCommand}"
+                Content="시작"
+                Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}"
+                GlyphHeight="16"
+                GlyphWidth="16" />
+
+            <dx:SimpleButton
+                Width="100"
+                Margin="0,0,4,0"
+                Command="{Binding DoStopCommand}"
+                Content="중지"
+                Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}"
+                GlyphHeight="16"
+                GlyphWidth="16" />
+
+            <dx:SimpleButton
+                Width="100"
+                Margin="0,0,12,0"
+                Command="{Binding DoClearCommand}"
+                Content="지우기"
+                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
+                GlyphHeight="16"
+                GlyphWidth="16" />
+
+            <!--
+                리드백을 켜면 프레임마다 GPU→CPU 복사가 붙는다. 캡처만 재는 게 목적이면 꺼 두고,
+                CPU 추론이나 화면 저장이 필요하면 켠다. 세션을 새로 시작해야 반영된다.
+            -->
+            <dxe:CheckEdit
+                Margin="0,0,12,0"
+                Content="CPU 리드백"
+                IsChecked="{Binding EnableCpuReadback}"
+                IsEnabled="{Binding IsNotRunning}"
+                ToolTip="GPU 프레임을 CPU 메모리로 내린다. 켜야 프레임 저장이 된다." />
+
+            <dx:SimpleButton
+                Width="110"
+                Command="{Binding SaveFrameCommand}"
+                Content="프레임 저장"
+                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
+                GlyphHeight="16"
+                GlyphWidth="16"
+                ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
+        </StackPanel>
+
+        <!--  ── 상태 줄 ───────────────────────────────────────────────────  -->
+        <dxe:TextEdit
+            Margin="4,0,4,4"
+            DockPanel.Dock="Bottom"
+            EditValue="{Binding StatusText, Mode=OneWay}"
+            IsReadOnly="True"
+            ShowBorder="False" />
+
+        <!--
+            BaseGridControl / BaseTableView 는 Minguk.Base 가 기본값을 잡아 둔 그리드다.
+            읽기 전용·베스트핏·엑셀형 필터 팝업 등이 이미 켜져 있으므로
+            화면에서는 컬럼 정의만 하면 된다.
+            
+            한 줄은 1초치 요약이다. 프레임마다 한 줄씩 넣으면 UI 가 못 버틴다.
+        -->
+        <controls:BaseGridControl AutoGenerateColumns="None" ItemsSource="{Binding Rows}">
+            <dxg:GridControl.View>
+                <controls:BaseTableView AllowEditing="False" ShowGroupPanel="False" />
+            </dxg:GridControl.View>
+
+            <dxg:GridColumn
+                Width="160"
+                FieldName="Timestamp"
+                Header="시각">
+                <dxg:GridColumn.EditSettings>
+                    <dxe:TextEditSettings DisplayFormat="yyyy-MM-dd HH:mm:ss" />
+                </dxg:GridColumn.EditSettings>
+            </dxg:GridColumn>
+            <dxg:GridColumn
+                Width="70"
+                FieldName="Fps"
+                Header="fps">
+                <dxg:GridColumn.EditSettings>
+                    <dxe:TextEditSettings DisplayFormat="n0" />
+                </dxg:GridColumn.EditSettings>
+            </dxg:GridColumn>
+            <dxg:GridColumn
+                Width="110"
+                FieldName="AvgLatencyMs"
+                Header="지연 평균(ms)">
+                <dxg:GridColumn.EditSettings>
+                    <dxe:TextEditSettings DisplayFormat="n2" />
+                </dxg:GridColumn.EditSettings>
+            </dxg:GridColumn>
+            <dxg:GridColumn
+                Width="110"
+                FieldName="MaxLatencyMs"
+                Header="지연 최대(ms)">
+                <dxg:GridColumn.EditSettings>
+                    <dxe:TextEditSettings DisplayFormat="n2" />
+                </dxg:GridColumn.EditSettings>
+            </dxg:GridColumn>
+            <dxg:GridColumn
+                Width="100"
+                FieldName="AvgReadbackMs"
+                Header="리드백(ms)">
+                <dxg:GridColumn.EditSettings>
+                    <dxe:TextEditSettings DisplayFormat="n2" />
+                </dxg:GridColumn.EditSettings>
+            </dxg:GridColumn>
+            <dxg:GridColumn
+                Width="110"
+                FieldName="Resolution"
+                Header="해상도" />
+            <dxg:GridColumn
+                Width="100"
+                FieldName="FrameId"
+                Header="누적 프레임" />
+            <dxg:GridColumn FieldName="Note" Header="비고" />
+        </controls:BaseGridControl>
+    </DockPanel>
+</UserControl>

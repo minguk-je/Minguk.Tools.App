@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+Logs/
+publish/
+Releases/
+
+# 복사 스크립트가 남긴 진행 표식 (무해)
+.copied
