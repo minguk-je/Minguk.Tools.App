@@ -23,6 +23,8 @@
 
     <UserControl.Resources>
         <ResourceDictionary>
+            <dxmvvm:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/GridColumnStyle.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
@@ -111,6 +113,24 @@
                 IsEnabled="{Binding IsNotRunning}"
                 ToolTip="GPU 프레임을 CPU 메모리로 내린다. 켜야 프레임 저장이 된다." />
 
+            <!--
+                미리보기는 CPU 리드백을 강제한다. 켜면 프레임마다 GPU→CPU 복사가 붙으므로
+                순수 캡처 성능을 잴 때는 꺼 두는 것이 맞다.
+            -->
+            <dxe:CheckEdit
+                Margin="0,0,4,0"
+                Content="미리보기"
+                IsChecked="{Binding ShowPreview}"
+                ToolTip="캡처 중인 화면을 그대로 보여 준다. 초당 60장까지만 올린다." />
+
+            <dxe:TextEdit
+                Width="90"
+                Margin="0,0,12,0"
+                EditValue="{Binding PreviewFps, Mode=OneWay, StringFormat='미리보기 {0} fps'}"
+                IsReadOnly="True"
+                ShowBorder="False"
+                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
             <dx:SimpleButton
                 Width="110"
                 Command="{Binding SaveFrameCommand}"
@@ -128,6 +148,24 @@
             EditValue="{Binding StatusText, Mode=OneWay}"
             IsReadOnly="True"
             ShowBorder="False" />
+
+        <!--  ── 미리보기 ──────────────────────────────────────────────────  -->
+        <!--
+            Stretch=Uniform 이라 원본 비율을 지킨다. 축소해서 보여 주는 용도이므로
+            BitmapScalingMode 는 LowQuality(선형 보간)로 둔다 — 60fps 로 갱신할 때
+            HighQuality 로 두면 축소 비용이 UI 스레드를 잡아먹는다.
+        -->
+        <Border
+            Height="320"
+            Margin="4,0,4,4"
+            Background="#202020"
+            DockPanel.Dock="Top"
+            Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Image
+                RenderOptions.BitmapScalingMode="LowQuality"
+                Source="{Binding PreviewImage}"
+                Stretch="Uniform" />
+        </Border>
 
         <!--
             BaseGridControl / BaseTableView 는 Minguk.Base 가 기본값을 잡아 둔 그리드다.

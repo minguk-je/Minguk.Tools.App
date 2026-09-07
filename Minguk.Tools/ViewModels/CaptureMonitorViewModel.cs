@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -13,6 +13,10 @@ using Newtonsoft.Json;
 using Minguk.Base.Extension;
 using Minguk.Base.Utilities;
 using Minguk.Base.Views;
+using System.Windows.Media.Imaging;
+using System.Windows.Media;
+using System.Windows;
+using System.Diagnostics;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -67,6 +71,38 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     // 저장 요청. 다음 프레임 한 장만 파일로 떨어뜨린다.
     private int _saveRequested;
 
+    // ── 미리보기 ─────────────────────────────────────────────────────────
+
+    private const int PreviewTargetFps = 60;
+
+    /// <summary>
+    /// 미리보기 최소 간격. 목표 주기(1/60)보다 10% 짧게 잡는다.
+    ///
+    /// 딱 1/60 로 두면 60fps 캡처와 주기가 겹쳐서, 프레임이 경계 직전에 도착할 때마다
+    /// 버려지고 다음 장까지 33ms 를 기다리게 된다. 실측으로 미리보기가 35fps 에 묶였다.
+    /// 여유를 조금 줘서 그 경계를 없앤다.
+    /// </summary>
+    private static readonly long PreviewIntervalTicks = Stopwatch.Frequency * 9 / (PreviewTargetFps * 10);
+
+    /// <summary>
+    /// 미리보기로 만들 최대 높이.
+    ///
+    /// 원본을 그대로 올리면 2560x1440 BGRA 한 장이 14.7MB 다. 복사(콜백) + WritePixels(UI) 로
+    /// 프레임당 30MB 를 옮기게 된다. 어차피 320px 칸에 줄여 보여 주므로 옮길 때 미리 솎아 낸다.
+    /// </summary>
+    private const int PreviewMaxHeight = 400;
+
+    private WriteableBitmap? _previewBitmap;
+    private byte[]? _previewBuffer;
+    private int _previewWidth;
+    private int _previewHeight;
+
+    /// <summary>UI 가 앞 장을 아직 그리는 중이면 1. 그동안 들어온 프레임은 버린다.</summary>
+    private int _previewBusy;
+
+    private long _lastPreviewTicks;
+    private int _previewFrames;
+
     // CommandManager 의 자동 재조회는 사용자 입력 때만 돈다. 여기 상태는 캡처 스레드/타이머에서 바뀌므로
     // useCommandManager: false 로 만들고 RaiseCanExecuteChanged 를 직접 부른다.
     public DelegateCommand OnUnloadedCommand { get; set; }
@@ -105,6 +141,32 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     {
         get => GetProperty(() => StatusText);
         set => SetProperty(() => StatusText, value);
+    }
+
+    /// <summary>
+    /// 캡처 중인 화면을 그대로 보여 준다.
+    ///
+    /// CPU 로 내려온 픽셀이 있어야 하므로 켜면 <see cref="EnableCpuReadback"/> 도 같이 켜진다.
+    /// 그만큼 프레임마다 GPU→CPU 복사가 붙는다 — 그 비용은 리드백(ms) 열에 그대로 나온다.
+    /// </summary>
+    public bool ShowPreview
+    {
+        get => GetProperty(() => ShowPreview);
+        set => SetProperty(() => ShowPreview, value, OnShowPreviewChanged);
+    }
+
+    /// <summary>화면에 올리고 있는 프레임. XAML 의 Image 가 이걸 문다.</summary>
+    public WriteableBitmap? PreviewImage
+    {
+        get => GetProperty(() => PreviewImage);
+        set => SetProperty(() => PreviewImage, value);
+    }
+
+    /// <summary>미리보기가 실제로 초당 몇 장 올라갔는지.</summary>
+    public int PreviewFps
+    {
+        get => GetProperty(() => PreviewFps);
+        set => SetProperty(() => PreviewFps, value);
     }
 
     public virtual ObservableCollection<CaptureTarget> Targets { get; set; } = new();
@@ -246,6 +308,135 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         if (Interlocked.CompareExchange(ref _saveRequested, 0, 1) == 1)
             TrySaveFrame(e);
+
+        if (ShowPreview && e.HasPixels)
+            TryPushPreview(e);
+    }
+
+    // ── 미리보기 ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 프레임 한 장을 미리보기 버퍼로 옮기고 UI 에 넘긴다. 여기는 스레드풀이다.
+    ///
+    /// 두 가지로 걸러 낸다.
+    ///   ① 목표 간격이 안 됐으면 건너뛴다
+    ///   ② UI 가 앞 장을 아직 그리는 중이면 버린다
+    /// ②를 큐로 쌓으면 지연만 늘고 결국 못 따라간다. 최신 한 장만 보여 주는 게 맞다.
+    /// </summary>
+    private void TryPushPreview(CapturedFrameEventArgs e)
+    {
+        var now = Stopwatch.GetTimestamp();
+        if (now - _lastPreviewTicks < PreviewIntervalTicks)
+            return;
+
+        if (Interlocked.CompareExchange(ref _previewBusy, 1, 0) != 0)
+            return;
+
+        try
+        {
+            _lastPreviewTicks = now;
+
+            // 정수 배수로만 솎아 낸다. 인덱스 계산이 곱셈 하나로 끝나고 화질도 충분하다.
+            int step = Math.Max(1, (int)Math.Ceiling(e.Height / (double)PreviewMaxHeight));
+
+            int width = e.Width / step;
+            int height = e.Height / step;
+            int stride = width * 4;
+            int required = stride * height;
+
+            if (_previewBuffer is null || _previewBuffer.Length < required)
+                _previewBuffer = new byte[required];
+
+            // RowPitch 는 Width*4 보다 클 수 있다(GPU 정렬). 원본에서 step 간격으로 집어 온다.
+            unsafe
+            {
+                var source = (byte*)e.PixelData;
+
+                fixed (byte* destinationStart = _previewBuffer)
+                {
+                    if (step == 1 && e.RowPitch == stride)
+                    {
+                        Buffer.MemoryCopy(source, destinationStart, required, required);
+                    }
+                    else
+                    {
+                        for (int y = 0; y < height; y++)
+                        {
+                            var sourceRow = (uint*)(source + (long)(y * step) * e.RowPitch);
+                            var destinationRow = (uint*)(destinationStart + (long)y * stride);
+
+                            for (int x = 0; x < width; x++)
+                                destinationRow[x] = sourceRow[x * step];
+                        }
+                    }
+                }
+            }
+
+            _previewWidth = width;
+            _previewHeight = height;
+
+            _dispatcher?.BeginInvoke(BlitPreview);
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Exchange(ref _previewBusy, 0);
+            Logger.Error(ex, "미리보기 프레임 복사 실패");
+        }
+    }
+
+    /// <summary>버퍼를 WriteableBitmap 에 올린다. UI 스레드.</summary>
+    private void BlitPreview()
+    {
+        try
+        {
+            var buffer = _previewBuffer;
+            if (buffer is null)
+                return;
+
+            int width = _previewWidth;
+            int height = _previewHeight;
+
+            // 해상도가 바뀌면(대상 변경 등) 비트맵을 새로 만든다.
+            if (_previewBitmap is null ||
+                _previewBitmap.PixelWidth != width ||
+                _previewBitmap.PixelHeight != height)
+            {
+                _previewBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+                PreviewImage = _previewBitmap;
+            }
+
+            _previewBitmap.WritePixels(new Int32Rect(0, 0, width, height), buffer, width * 4, 0);
+            Interlocked.Increment(ref _previewFrames);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "미리보기 갱신 실패");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _previewBusy, 0);
+        }
+    }
+
+    private void OnShowPreviewChanged()
+    {
+        if (ShowPreview)
+        {
+            // 미리보기는 CPU 로 내려온 픽셀이 있어야 한다.
+            if (!EnableCpuReadback)
+            {
+                EnableCpuReadback = true;
+
+                if (IsRunning)
+                    Note("미리보기는 CPU 리드백이 필요하다. 중지 후 다시 시작해야 나온다.");
+            }
+        }
+        else
+        {
+            PreviewImage = null;
+            _previewBitmap = null;
+            PreviewFps = 0;
+        }
     }
 
     private void TrySaveFrame(CapturedFrameEventArgs e)
@@ -334,6 +525,8 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         while (Rows.Count > MaxRows)
             Rows.RemoveAt(Rows.Count - 1);
 
+        PreviewFps = Interlocked.Exchange(ref _previewFrames, 0);
+
         if (_session is not null)
             StatusText = $"캡처 중: {_session.Target.Display} — {row.Fps:n0} fps, 지연 {row.AvgLatencyMs:n2} ms";
     }
@@ -371,6 +564,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     private void DisposeSession()
     {
+        Interlocked.Exchange(ref _previewFrames, 0);
+        PreviewFps = 0;
+
         _flushTimer?.Dispose();
         _flushTimer = null;
 
