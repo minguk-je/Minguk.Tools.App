@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='utf-8'?>
+﻿<?xml version='1.0' encoding='utf-8'?>
 <SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="Minguk.Tools.Properties" GeneratedClassName="Settings">
   <Profiles />
   <Settings>
@@ -24,6 +24,12 @@
       <Value Profile="(Default)" />
     </Setting>
     <Setting Name="LogicalLayout" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="OpenDocuments" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="ActiveDocument" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
   </Settings>

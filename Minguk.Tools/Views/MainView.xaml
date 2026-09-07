@@ -1,4 +1,4 @@
-<UserControl x:Class="Minguk.Tools.Views.MainView"
+﻿<UserControl x:Class="Minguk.Tools.Views.MainView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -194,7 +194,7 @@
                                         ShowDropDownButton="True"
                                         ShowPinButton="True"
                                         ShowTabHeaders="True"
-                                        TabContentCacheMode="CacheAllTabs">
+                                        TabContentCacheMode="CacheTabsOnSelecting">
 
                         <dxmvvm:Interaction.Behaviors>
                             <!-- ViewModel 의 IDocumentManagerService 가 여기에 문서를 만들어 넣는다 -->

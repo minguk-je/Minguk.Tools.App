@@ -276,13 +276,7 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
                 Utility.ShowWaitSplashScreen(SplashMessageTypes.Loading);
                 try
                 {
-                    document = DocumentManagerService.CreateDocument(viewName, viewName, this);
-                    document.Id = new CustomID($"DocId_{viewName}").ToString();
-                    document.Title = MainMenu.FindMenuItem(viewName)?.MENU_NM ?? viewName;
-                    document.DestroyOnClose = true;
-
-                    if (document.Id is string documentId)
-                        _documentClassNames[documentId] = viewName;
+                    document = CreateDocumentCore(viewName);
                 }
                 finally
                 {
@@ -299,27 +293,86 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
         }
     }
 
+    /// <summary>
+    /// 문서 하나를 만든다. 대기 표시는 붙이지 않는다 — 부르는 쪽이 정한다.
+    ///
+    /// Id 를 CustomID 로 다듬는 이유는 DevExpress Docking 이 XamlName 규칙을 강제하기 때문이다.
+    /// 네임스페이스의 '.' 을 그대로 넣으면 레이아웃 직렬화에서 예외가 난다.
+    /// </summary>
+    private IDocument CreateDocumentCore(string viewName)
+    {
+        var document = DocumentManagerService.CreateDocument(viewName, viewName, this);
+
+        document.Id = new CustomID($"DocId_{viewName}").ToString();
+        document.Title = MainMenu.FindMenuItem(viewName)?.MENU_NM ?? viewName;
+        document.DestroyOnClose = true;
+
+        if (document.Id is string documentId)
+            _documentClassNames[documentId] = viewName;
+
+        return document;
+    }
+
     // ── 레이아웃 저장/복원 ────────────────────────────────────────────────
 
     /// <summary>
     /// 지난번에 열려 있던 문서 탭과 도킹 배치를 되살린다.
     ///
-    /// 두 가지를 반드시 같이, 이 순서로 해야 한다.
-    ///   ① LogicalLayout : 문서(탭) 자체를 다시 만든다
-    ///   ② RootLayout    : 만들어진 문서를 어디에 어떻게 놓을지 배치한다
-    /// ②만 따로 미루면 배치할 문서가 없어서 저장된 배치가 그냥 버려진다.
+    /// 어떤 탭이 열려 있었는지는 우리가 직접 적어 둔다(<see cref="SaveLayout"/>).
+    /// DevExpress 의 논리 레이아웃 직렬화(SerializeDocumentManagerService)는 이 구조에서
+    /// 문서를 하나도 담지 못했다 — 저장본에 DocumentType 이 전부 비어 있었고,
+    /// 그래서 여태 탭이 복원된 적이 없다.
     ///
-    /// 시작 시간의 대부분이 여기서 나온다. 얼마나 걸렸는지 로그로 남겨 두면
-    /// 느려졌을 때 어디를 봐야 하는지 바로 알 수 있다.
+    /// 순서가 중요하다.
+    ///   ① 탭을 다시 만든다        - 활성이던 탭을 마지막에 Show 해서 그게 선택되게 한다
+    ///   ② RootLayout 을 되돌린다  - 만들어진 탭을 어디에 어떻게 놓을지
+    /// ②를 먼저 하면 배치할 대상이 없어서 저장된 배치가 그냥 버려진다.
     /// </summary>
     public void RestoreDocument()
+    {
+        // 첫 화면이 그려진 뒤로 미룬다.
+        // 탭을 되살리는 데 1초쯤 걸리는데, 그 시간을 여기서 붙잡으면 그동안 창이 멎어 있다.
+        // 셸(메뉴 + 빈 문서 영역)을 먼저 보여 주고 탭은 곧이어 채운다.
+        //
+        // 우선순위가 핵심이다. IDispatcherService.BeginInvoke 는 Normal 로 넣는데
+        // Normal 은 Render 보다 높아서 결국 그리기 전에 실행된다 - 미룬 게 아니게 된다.
+        // Background 는 Render/Loaded 보다 낮아서 첫 프레임이 나온 뒤에 돈다.
+        _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            new Action(RestoreDocumentCore));
+    }
+
+    private bool _documentsRestored;
+
+    private async void RestoreDocumentCore()
     {
         try
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            if (!string.IsNullOrEmpty(Minguk.Tools.Properties.Settings.Default.LogicalLayout))
-                this.RestoreDocumentManagerService(Minguk.Tools.Properties.Settings.Default.LogicalLayout);
+            var openDocuments = (Minguk.Tools.Properties.Settings.Default.OpenDocuments ?? string.Empty)
+                .Split('|', StringSplitOptions.RemoveEmptyEntries);
+
+            var activeDocument = Minguk.Tools.Properties.Settings.Default.ActiveDocument;
+
+            // 활성이던 탭은 맨 뒤로 돌린다. 마지막에 Show 한 문서가 선택된 채로 남는다.
+            foreach (var viewName in openDocuments.Where(x => x != activeDocument).Concat(
+                         openDocuments.Where(x => x == activeDocument)))
+            {
+                // 메뉴에 없는 화면(이름이 바뀌었거나 지워진 경우)은 조용히 건너뛴다.
+                if (MainMenu.FindMenuItem(viewName) is null)
+                {
+                    Logger.Debug($"복원 건너뜀 - 메뉴에 없는 화면: {viewName}");
+                    continue;
+                }
+
+                CreateDocumentCore(viewName).Show();
+
+                // 탭 하나를 만들 때마다 디스패처에 자리를 내준다.
+                // 한 번에 몰아서 만들면 그 시간 내내 창이 멎어 보인다.
+                await System.Windows.Threading.Dispatcher.Yield(
+                    System.Windows.Threading.DispatcherPriority.Background);
+            }
 
             var documentElapsed = stopwatch.ElapsedMilliseconds;
 
@@ -328,9 +381,11 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
 
             stopwatch.Stop();
 
+            _documentsRestored = true;
+
             Logger.Debug($"탭 복원 {stopwatch.ElapsedMilliseconds}ms " +
                          $"(문서 {documentElapsed}ms + 배치 {stopwatch.ElapsedMilliseconds - documentElapsed}ms, " +
-                         $"탭 {DocumentManagerService.Documents.Count()}개)");
+                         $"탭 {openDocuments.Length}개)");
         }
         catch (Exception ex)
         {
@@ -340,13 +395,43 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
         }
     }
 
+    /// <summary>
+    /// 열려 있는 탭 목록과 도킹 배치를 저장한다.
+    ///
+    /// 탭은 View 전체 타입 이름으로 적는다. 문서 Id 는 CustomID 로 다듬어져 있어서
+    /// 원래 이름을 되짚을 수 없기 때문에, 만들 때 기록해 둔 _documentClassNames 를 쓴다.
+    /// </summary>
     public void SaveLayout()
     {
         try
         {
-            Minguk.Tools.Properties.Settings.Default.LogicalLayout = this.SerializeDocumentManagerService();
+            // 복원이 끝나기 전에 창을 닫으면 문서가 아직 없다.
+            // 그대로 저장하면 지난번 탭 목록을 빈 값으로 지워 버린다.
+            if (!_documentsRestored)
+            {
+                Logger.Debug("탭 복원 전에 종료됨. 저장된 탭 목록을 그대로 둔다.");
+                Minguk.Tools.Properties.Settings.Default.Save();
+                return;
+            }
+
+            var openDocuments = DocumentManagerService.Documents
+                .Select(document => document.Id as string)
+                .Where(id => id is not null && _documentClassNames.ContainsKey(id))
+                .Select(id => _documentClassNames[id!])
+                .Distinct()
+                .ToArray();
+
+            var activeId = DocumentManagerService.ActiveDocument?.Id as string;
+            var activeDocument = activeId is not null && _documentClassNames.TryGetValue(activeId, out var name)
+                ? name
+                : string.Empty;
+
+            Minguk.Tools.Properties.Settings.Default.OpenDocuments = string.Join('|', openDocuments);
+            Minguk.Tools.Properties.Settings.Default.ActiveDocument = activeDocument;
             Minguk.Tools.Properties.Settings.Default.RootLayout = LayoutSerializationService.Serialize();
             Minguk.Tools.Properties.Settings.Default.Save();
+
+            Logger.Debug($"탭 저장 {openDocuments.Length}개 (활성: {activeDocument})");
         }
         catch (Exception ex)
         {
@@ -358,6 +443,8 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
     {
         try
         {
+            Minguk.Tools.Properties.Settings.Default.OpenDocuments = string.Empty;
+            Minguk.Tools.Properties.Settings.Default.ActiveDocument = string.Empty;
             Minguk.Tools.Properties.Settings.Default.LogicalLayout = string.Empty;
             Minguk.Tools.Properties.Settings.Default.RootLayout = string.Empty;
             Minguk.Tools.Properties.Settings.Default.Save();
