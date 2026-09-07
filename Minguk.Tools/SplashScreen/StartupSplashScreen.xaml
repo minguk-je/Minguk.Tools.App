@@ -28,7 +28,7 @@
         </Grid.RowDefinitions>
 
         <dx:DXImage x:Name="PART_Logo"
-                    Width="140"
+                    Width="Auto"
                     Height="40"
                     Style="{DynamicResource ResourceKey={dxt:FluentSplashScreenThemeKey ResourceKey=LogoImageStyle}}"
                     Source="{Binding Logo}"
