@@ -10,7 +10,11 @@ public partial class MainWindow : ThemedWindow
 {
     public MainWindow()
     {
+        StartupTrace.Mark("  MainWindow 인스턴스화 시작");
+
         InitializeComponent();
+
+        StartupTrace.Mark("  MainWindow.InitializeComponent (XAML 구성)");
     }
 
     /// <summary>
@@ -23,6 +27,8 @@ public partial class MainWindow : ThemedWindow
     /// </summary>
     protected override void OnSourceInitialized(EventArgs e)
     {
+        StartupTrace.Mark("MainWindow 생성");
+
         UserPreferencesHelper.ApplyWindowPlacement(this);
 
         base.OnSourceInitialized(e);
@@ -46,10 +52,8 @@ public partial class MainWindow : ThemedWindow
 
         _activated = true;
 
-        // 프로세스가 뜬 뒤 첫 화면이 그려지기까지 얼마나 걸렸는지 남긴다.
-        var startedAt = System.Diagnostics.Process.GetCurrentProcess().StartTime;
-        NLog.LogManager.GetCurrentClassLogger()
-            .Debug($"첫 화면 표시까지 {(DateTime.Now - startedAt).TotalMilliseconds:n0}ms");
+        StartupTrace.Mark("첫 화면 표시");
+        StartupTrace.Dump();
 
         if (WindowState == System.Windows.WindowState.Minimized)
             WindowState = System.Windows.WindowState.Normal;

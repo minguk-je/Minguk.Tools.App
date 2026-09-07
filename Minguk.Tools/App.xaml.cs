@@ -43,8 +43,12 @@ public partial class App : Application
         // 창이 뜬 뒤에 바꾸면 DevExpress 가 테마 리소스를 통째로 다시 만들면서 화면이 멎는다.
         UserPreferencesHelper.EnsureDefaults();
         UserPreferencesHelper.ApplyTheme();
+        StartupTrace.Mark("  테마 적용");
 
+        // Core 만 건다. Accordion/Docking/LayoutControl 까지 미리 만들어 봤더니
+        // 백그라운드 프리로드가 UI 스레드와 경합해서 첫 화면이 오히려 400ms 늦어졌다.
         ApplicationThemeHelper.PreloadAsync(PreloadCategories.Core);
+        StartupTrace.Mark("  테마 프리로드 요청");
 
         // .NET 9 이상에서 BinaryFormatter 가 빠지면서 앱 간 드래그 앤 드롭이 깨진다. 되돌린다.
         DeserializationSettings.EnableDataObjectBinarySerialization = true;
@@ -65,7 +69,10 @@ public partial class App : Application
 
         // 테마는 위에서, 폰트는 OnStartup 에서, 창 위치는 MainWindow.OnSourceInitialized 에서
         // 각각 "그려지기 전에" 적용한다. 스플래시가 닫힌 뒤에 손보면 그때부터 다시 그리게 된다.
+        StartupTrace.Mark("  스플래시 구성");
+
         splashScreenManager.ShowOnStartup();
+        StartupTrace.Mark("  스플래시 표시");
     }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -77,6 +84,7 @@ public partial class App : Application
             // 폰트 리소스를 MainWindow 가 만들어지기 전에 끼운다.
             // (StartupUri 의 창은 OnStartup 이 끝난 뒤에 생성된다)
             UserPreferencesHelper.ApplyFonts();
+            StartupTrace.Mark("  폰트 적용");
 
             // ── 로캘 ────────────────────────────────────────────────────────
             CultureInfo culture = CultureInfo.CreateSpecificCulture("ko-KR");
@@ -111,8 +119,11 @@ public partial class App : Application
             builder.Services.AddTransient<DashboardView>();
             builder.Services.AddTransient<CaptureMonitorView>();
 
+            StartupTrace.Mark("  DI 구성");
+
             var host = builder.Build();
             host.Start();
+            StartupTrace.Mark("  Host 시작");
 
             // ViewLocator: 문자열 뷰 이름 → 실제 View 인스턴스
             ViewLocator.Default = new MainViewLocator(builder.Services.BuildServiceProvider());
@@ -124,6 +135,7 @@ public partial class App : Application
             // ── 자동 업데이트 ────────────────────────────────────────────────
             // 조용히 받아 두고 종료할 때 적용한다(OnExit). 여기서는 걸어 두기만 하고 기다리지 않는다.
             AppUpdater.StartBackgroundCheck();
+            StartupTrace.Mark("OnStartup 완료");
         }
         catch (Exception ex)
         {
