@@ -29,7 +29,7 @@ set "TFM=net10.0-windows10.0.22621.0"
 
 set "PROJECT=%ROOT%Minguk.Tools\Minguk.Tools.csproj"
 set "PUBLISH_DIR=%ROOT%Minguk.Tools\bin\x64\Release\%TFM%\publish\win-x64"
-set "ICON=%ROOT%Minguk.Tools\Resource\CI_Mo.ico"
+set "ICON=%ROOT%Minguk.Tools\Resource\CI_Minguk.ico"
 for %%I in ("%ROOT%..\Minguk.Tools.App\Releases") do set "RELEASE_DIR=%%~fI"
 
 set "PACK_ID=Minguk.Tools"

@@ -53,8 +53,8 @@ public partial class App : Application
                 Title = AppVersionHelper.ProductName,
                 Subtitle = "실행 중 입니다.",
                 Status = "잠시만 기다려 주세요.",
-                Copyright = $"Copyright ⓒ {DateTime.Now:yyyy} 모비어스(주) All rights reserved.",
-                Logo = new Uri(Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, "Resource", "CI_Burgundy.png"), UriKind.Absolute)
+                Copyright = $"Copyright ⓒ {DateTime.Now:yyyy} Minguk. All rights reserved.",
+                Logo = new Uri(Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, "Resource", "CI_Minguk.png"), UriKind.Absolute)
             });
 
         // 스플래시가 닫힌 뒤에 사용자 설정을 적용한다.

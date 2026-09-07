@@ -46,7 +46,7 @@ try {
     $Project    = ".\Minguk.Tools\Minguk.Tools.csproj"
     $PublishDir = ".\Minguk.Tools\bin\x64\$Configuration\$TargetFramework\publish\$Runtime"
     $ReleaseDir = "..\Minguk.Tools.App\Releases"   # 릴리스 저장소 폴더
-    $IconPath   = ".\Minguk.Tools\Resource\CI_Mo.ico"
+    $IconPath   = ".\Minguk.Tools\Resource\CI_Minguk.ico"
     $PackId     = "Minguk.Tools"
     $MainExe    = "Minguk.Tools.exe"
 

@@ -21,7 +21,7 @@
 		<Nullable>enable</Nullable>
 		<RootNamespace>Minguk.Tools</RootNamespace>
 		<AssemblyName>Minguk.Tools</AssemblyName>
-		<ApplicationIcon>Resource\CI_Mo.ico</ApplicationIcon>
+		<ApplicationIcon>Resource\CI_Minguk.ico</ApplicationIcon>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<!-- App.xaml 에 Main 을 두지 않고 Main.cs 에서 직접 띄운다 (Velopack 초기화가 Application 생성보다 먼저여야 함) -->
 		<StartupObject>Minguk.Tools.App</StartupObject>
@@ -106,15 +106,15 @@
 		<None Remove="AppSettings.json" />
 		<None Remove="AppSettings.Development.json" />
 		<None Remove="AppSettings.Production.json" />
-		<None Remove="Resource\CI_Burgundy.png" />
-		<None Remove="Resource\CI_Mo.ico" />
+		<None Remove="Resource\CI_Minguk.png" />
+		<None Remove="Resource\CI_Minguk.ico" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<EmbeddedResource Include="Resource\CI_Burgundy.png">
+		<EmbeddedResource Include="Resource\CI_Minguk.png">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</EmbeddedResource>
-		<EmbeddedResource Include="Resource\CI_Mo.ico">
+		<EmbeddedResource Include="Resource\CI_Minguk.ico">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</EmbeddedResource>
 	</ItemGroup>
