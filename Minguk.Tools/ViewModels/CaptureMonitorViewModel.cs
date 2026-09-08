@@ -287,6 +287,22 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         set => SetProperty(() => IsReturnFocusAfterClickEnabled, value);
     }
 
+    /// <summary>콤보에 채울 입력 경로 목록.</summary>
+    public virtual ObservableCollection<InputBackend> InputBackends { get; set; }
+        = new((InputBackend[])Enum.GetValues(typeof(InputBackend)));
+
+    /// <summary>
+    /// 지금 쓰는 입력 경로. 바꾸면 돌아가는 중에도 바로 갈아끼운다.
+    ///
+    /// SendInput  - 거의 모든 대상에 통하지만 대상이 앞으로 나오고 커서가 옮겨간다.
+    /// PostMessage - 포커스도 커서도 안 뺏기지만 창 메시지를 보는 대상에만 통한다.
+    /// </summary>
+    public InputBackend SelectedInputBackend
+    {
+        get => GetProperty(() => SelectedInputBackend);
+        set => SetProperty(() => SelectedInputBackend, value, OnSelectedInputBackendChanged);
+    }
+
     public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseDownCommand { get; private set; } = null!;
     public DelegateCommand<MouseWheelEventArgs> OnPreviewMouseWheelCommand { get; private set; } = null!;
     public DelegateCommand<KeyEventArgs> OnPreviewKeyDownCommand { get; private set; } = null!;
@@ -342,7 +358,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         OnPreviewKeyDownCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyDown, false);
         OnPreviewKeyUpCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyUp, false);
 
-        _inputRouter = new PreviewInputRouter(() => SelectedTarget, InputAdapterFactory.Create());
+        _inputRouter = new PreviewInputRouter(
+            () => SelectedTarget,
+            InputAdapterFactory.Create(SelectedInputBackend, GetTargetWindowHandle));
 
         // 돌아오기는 켜 둔다. 꺼져 있으면 한 번 클릭한 뒤 이 앱이 대상 창 뒤로 숨는다.
         IsReturnFocusAfterClickEnabled = true;
@@ -378,6 +396,11 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         CaptureTargetFps = GetSetting(nameof(CaptureTargetFps), 60);
         PreviewTargetFps = GetSetting(nameof(PreviewTargetFps), 60);
+
+        SelectedInputBackend = Enum.TryParse<InputBackend>(
+            GetSetting(nameof(SelectedInputBackend), nameof(InputBackend.SendInput)), out var backend)
+            ? backend
+            : InputBackend.SendInput;
         ShowPreview = GetSetting(nameof(ShowPreview), false);
 
         // 자동 너비와 배치 복원은 반드시 이 순서로, 그리드가 자리를 잡은 뒤에 넣는다.
@@ -445,6 +468,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         SetSetting(nameof(CaptureTargetFps), CaptureTargetFps);
         SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
         SetSetting(nameof(IsColumnAutoWidth), IsColumnAutoWidth);
+        SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
 
         if (SelectedTarget is not null)
             SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));
@@ -1017,6 +1041,24 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         ReportInputForward(_inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: true));
         args.Handled = true;
     }
+
+    /// <summary>
+    /// 입력 경로를 갈아끼운다. 라우터는 어댑터를 물고만 있으므로 통째로 바꿔 주면 된다.
+    /// </summary>
+    private void OnSelectedInputBackendChanged()
+    {
+        if (_inputRouter is null)
+            return;
+
+        _inputRouter.InputAdapter = InputAdapterFactory.Create(SelectedInputBackend, GetTargetWindowHandle);
+
+        StatusText = $"입력 경로: {_inputRouter.AdapterName}";
+        Logger.Debug($"입력 경로를 {_inputRouter.AdapterName} 으로 바꿨다.");
+    }
+
+    /// <summary>PostMessage 경로가 메시지를 넣을 창. 대상이 모니터면 보낼 곳이 없다.</summary>
+    private IntPtr GetTargetWindowHandle()
+        => SelectedTarget is { Kind: CaptureTargetKind.Window } target ? target.Handle : IntPtr.Zero;
 
     /// <summary>
     /// 전달이 안 됐으면 왜 안 됐는지 상태 줄에 띄운다.

@@ -175,6 +175,19 @@
                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!--
+                입력 경로. SendInput 은 커서와 포커스를 옮기고, PostMessage 는 안 옮긴다.
+            -->
+            <dxe:ComboBoxEdit
+                Width="130"
+                Margin="0,0,12,0"
+                IsEnabled="{Binding IsInputForwardingEnabled}"
+                IsTextEditable="False"
+                ItemsSource="{Binding InputBackends}"
+                SelectedItem="{Binding SelectedInputBackend}"
+                ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다. PostMessage: 포커스를 안 뺏지만 창 메시지를 보는 대상에만 통한다."
+                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+            <!--
                 클릭을 넘긴 뒤 이 앱으로 돌아온다. 꺼 두면 대상 창이 앞에 남는다.
             -->
             <dxe:CheckEdit

@@ -29,6 +29,15 @@ public interface IInputAdapter
     string Name { get; }
 
     /// <summary>
+    /// 입력이 들어가려면 대상이 앞에 나와 있어야 하는지.
+    ///
+    /// 커널 입력 큐를 쓰는 경로(SendInput)는 true 다 — 입력이 포커스를 가진 창으로 가므로
+    /// 보내기 전에 대상을 끌어올려야 한다. 창 메시지를 직접 넣는 경로(PostMessage)는 false 고,
+    /// 그래서 이 앱에 포커스를 둔 채로 대상을 조작할 수 있다.
+    /// </summary>
+    bool RequiresForegroundTarget { get; }
+
+    /// <summary>
     /// 지금 커서가 있는 화면 좌표. 못 읽으면 null.
     /// 입력을 넘긴 뒤 커서를 제자리로 돌려놓으려고 둔다.
     /// </summary>

@@ -78,7 +78,8 @@ public sealed class PreviewInputRouter
         // 대상이 이미 그 자리에 드러나 있으면 창을 끌어올리지 않는다.
         // 마우스 클릭은 "커서 아래에 있는 창" 으로 가지 포커스를 따라가지 않기 때문이다.
         // 굳이 올리면 이 앱이 그 뒤로 숨어서 미리보기를 다시 누를 수 없게 된다.
-        if (!IsTargetUnderPoint(screenPoint))
+        // 창 메시지를 직접 넣는 경로는 애초에 끌어올릴 이유가 없다.
+        if (InputAdapter.RequiresForegroundTarget && !IsTargetUnderPoint(screenPoint))
             FocusTargetWindow();
 
         if (!MoveTo(screenPoint))
@@ -105,7 +106,9 @@ public sealed class PreviewInputRouter
         if (_targetProvider() is null)
             return InputForwardResult.NoTarget;
 
-        FocusTargetWindow();
+        // PostMessage 경로는 포커스와 무관하게 대상 창으로 바로 들어간다.
+        if (InputAdapter.RequiresForegroundTarget)
+            FocusTargetWindow();
 
         var sent = isKeyUp
             ? InputAdapter.ReleaseKey(virtualKey)

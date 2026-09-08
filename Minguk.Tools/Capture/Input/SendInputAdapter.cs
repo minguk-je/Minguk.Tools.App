@@ -23,6 +23,9 @@ public sealed class SendInputAdapter : IInputAdapter
 
     public string Name => "SendInput";
 
+    /// <summary>커널 입력 큐는 포커스를 가진 창으로 간다. 그래서 대상을 앞으로 가져와야 한다.</summary>
+    public bool RequiresForegroundTarget => true;
+
     public (int X, int Y)? GetCursorPosition()
         => NativeMethods.GetCursorPos(out var point) ? (point.X, point.Y) : null;
 
