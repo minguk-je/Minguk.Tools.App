@@ -17,6 +17,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using System.Windows;
 using System.Diagnostics;
+using DevExpress.Xpf.LayoutControl;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -73,16 +74,14 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     // ── 미리보기 ─────────────────────────────────────────────────────────
 
-    private const int PreviewTargetFps = 60;
-
     /// <summary>
-    /// 미리보기 최소 간격. 목표 주기(1/60)보다 10% 짧게 잡는다.
+    /// 미리보기 최소 간격(틱). <see cref="PreviewTargetFps"/> 가 바뀌면 다시 계산한다.
     ///
-    /// 딱 1/60 로 두면 60fps 캡처와 주기가 겹쳐서, 프레임이 경계 직전에 도착할 때마다
-    /// 버려지고 다음 장까지 33ms 를 기다리게 된다. 실측으로 미리보기가 35fps 에 묶였다.
-    /// 여유를 조금 줘서 그 경계를 없앤다.
+    /// 목표 주기보다 10% 짧게 잡는 것이 요점이다. 60fps 목표에 간격을 딱 1/60 로 두면
+    /// 60fps 캡처와 주기가 겹쳐서, 프레임이 경계 직전에 도착할 때마다 버려지고
+    /// 다음 장까지 33ms 를 기다리게 된다. 실측으로 미리보기가 35fps 에 묶였다.
     /// </summary>
-    private static readonly long PreviewIntervalTicks = Stopwatch.Frequency * 9 / (PreviewTargetFps * 10);
+    private long _previewIntervalTicks = Stopwatch.Frequency * 9 / (60 * 10);
 
     /// <summary>
     /// 미리보기로 만들 최대 높이.
@@ -97,6 +96,18 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     /// <summary>미리보기를 껐다 켤 때 되살릴 높이. 끄면 행이 0 으로 접히므로 따로 기억한다.</summary>
     private double _lastPreviewHeight = DefaultPreviewHeight;
+
+    /// <summary>
+    /// 지난번에 고른 대상의 표시 이름.
+    ///
+    /// 핸들(HWND/HMONITOR)은 실행마다 바뀌므로 저장해도 소용이 없다.
+    /// 사람이 보는 이름으로 되찾는다 — 모니터는 "[모니터] 디스플레이 1 (2560×1440)" 처럼
+    /// 구성이 그대로면 같은 문자열이 나온다.
+    /// </summary>
+    private string _lastTargetDisplay = string.Empty;
+
+    /// <summary>미리보기 칸. 높이를 직접 넣고 빼려고 들고 있는다.</summary>
+    private LayoutGroup? _previewGroup;
 
     /// <summary>
     /// GPU 경로. 캡처 텍스처를 CPU 를 거치지 않고 바로 화면에 올린다.
@@ -193,14 +204,28 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// 미리보기 칸의 높이. XAML 의 RowDefinition.Height 와 TwoWay 로 물려 있어서
-    /// 스플리터를 끌면 이 값이 따라 바뀌고, 그 값을 저장해 다음에 되살린다.
+    /// 그리드의 열 너비·순서·정렬·필터를 문자열로 뽑고 되돌린다.
+    /// View 의 &lt;dxmvvm:LayoutSerializationService x:Name="GridLayoutService" /&gt; 가 실체다.
     /// </summary>
-    public GridLength PreviewRowHeight
+    private ILayoutSerializationService GridLayoutService
+        => ServiceContainer.GetService<ILayoutSerializationService>("GridLayoutService");
+
+    /// <summary>열 너비를 내용에 맞춘다. 끄면 사용자가 조절한 너비가 유지된다.</summary>
+    public bool IsColumnAutoWidth
     {
-        get => GetProperty(() => PreviewRowHeight);
-        set => SetProperty(() => PreviewRowHeight, value);
+        get => GetProperty(() => IsColumnAutoWidth);
+        set => SetProperty(() => IsColumnAutoWidth, value);
     }
+
+    /// <summary>미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다.</summary>
+    public int PreviewTargetFps
+    {
+        get => GetProperty(() => PreviewTargetFps);
+        set => SetProperty(() => PreviewTargetFps, value, OnPreviewTargetFpsChanged);
+    }
+
+    /// <summary>fps 콤보에 넣을 값들. 5 단위로 60 까지.</summary>
+    public virtual ObservableCollection<int> PreviewFpsOptions { get; set; } = new(new[] { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 });
 
     /// <summary>미리보기가 실제로 초당 몇 장 올라갔는지.</summary>
     public int PreviewFps
@@ -218,7 +243,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     public CaptureMonitorViewModel()
     {
         Caption = "캡처 모니터";
-        PreviewRowHeight = new GridLength(0);
+        PreviewTargetFps = 60;
         CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/screen.png");
 
         // 탭을 닫으면 화면은 사라져도 캡처 세션은 남는다. 여기서 끊어 준다.
@@ -230,28 +255,76 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning && EnableCpuReadback, false);
     }
 
-    /// <summary>
-    /// 지난번에 쓰던 미리보기 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.
-    /// 높이를 먼저 넣어야 한다 — ShowPreview 를 켜는 순간 그 높이로 칸이 펴지기 때문이다.
-    /// </summary>
+    /// <summary>XAML 의 컨트롤을 잡아 온다. 베이스가 초기화 첫 단계에서 불러 준다.</summary>
+    protected override void InitializeControls()
+    {
+        _previewGroup = FindControl<LayoutGroup>("PreviewGroupObjectService");
+    }
+
+    /// <summary>지난번에 쓰던 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.</summary>
     protected override void RestoreSettings()
     {
-        _lastPreviewHeight = GetSetting(nameof(PreviewRowHeight), DefaultPreviewHeight);
+        _lastPreviewHeight = GetSetting(nameof(_lastPreviewHeight), DefaultPreviewHeight);
 
         if (_lastPreviewHeight < 80)
             _lastPreviewHeight = DefaultPreviewHeight;
 
+        if (_previewGroup is not null)
+            _previewGroup.Height = _lastPreviewHeight;
+
+        _lastTargetDisplay = GetSetting(nameof(SelectedTarget), string.Empty);
+
+        PreviewTargetFps = GetSetting(nameof(PreviewTargetFps), 60);
+        IsColumnAutoWidth = GetSetting(nameof(IsColumnAutoWidth), false);
         ShowPreview = GetSetting(nameof(ShowPreview), false);
+
+        RestoreGridLayout();
+    }
+
+    /// <summary>
+    /// 지난번 그리드 상태를 되돌린다.
+    ///
+    /// 저장본이 깨져 있거나 열 구성이 바뀌었으면 예외가 난다. 그때는 그냥 기본 배치로 둔다 —
+    /// 그리드 하나 때문에 화면 전체가 안 열리면 곤란하다.
+    /// </summary>
+    private void RestoreGridLayout()
+    {
+        var layout = GetSetting(nameof(GridLayoutService), string.Empty);
+        if (string.IsNullOrEmpty(layout))
+            return;
+
+        try
+        {
+            GridLayoutService.Deserialize(layout);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "그리드 상태 복원 실패. 기본 배치로 시작한다.");
+        }
     }
 
     protected override void SaveSettings()
     {
-        // 켜져 있는 상태의 높이만 의미가 있다. 꺼져 있으면 행이 0 이라 그대로 저장하면 안 된다.
-        if (ShowPreview && PreviewRowHeight.Value > 0)
-            _lastPreviewHeight = PreviewRowHeight.Value;
+        // 켜져 있을 때의 높이만 의미가 있다. 꺼져 있으면 그룹이 숨겨져 있어 값이 미덥지 않다.
+        if (ShowPreview && _previewGroup is { Height: > 0 })
+            _lastPreviewHeight = _previewGroup.Height;
 
-        SetSetting(nameof(PreviewRowHeight), _lastPreviewHeight);
+        SetSetting(nameof(_lastPreviewHeight), _lastPreviewHeight);
         SetSetting(nameof(ShowPreview), ShowPreview);
+        SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
+        SetSetting(nameof(IsColumnAutoWidth), IsColumnAutoWidth);
+
+        if (SelectedTarget is not null)
+            SetSetting(nameof(SelectedTarget), SelectedTarget.Display);
+
+        try
+        {
+            SetSetting(nameof(GridLayoutService), GridLayoutService.Serialize());
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "그리드 상태 저장 실패");
+        }
     }
 
     protected override void OnLoaded()
@@ -283,7 +356,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             foreach (var window in CaptureTarget.EnumerateWindows().OrderBy(x => x.ProcessName).ThenBy(x => x.Title))
                 Targets.Add(window);
 
+            // ① 방금 전까지 보던 것 → ② 지난 실행에서 고른 것 → ③ 목록의 첫 번째
             SelectedTarget = Targets.FirstOrDefault(x => x.Handle == previous?.Handle && x.Kind == previous.Kind)
+                             ?? Targets.FirstOrDefault(x => x.Display == _lastTargetDisplay)
                              ?? Targets.FirstOrDefault();
 
             StatusText = $"대상 {Targets.Count}개 (모니터 + 창)";
@@ -390,21 +465,20 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// </summary>
     private void TryPushPreview(CapturedFrameEventArgs e)
     {
-        // GPU 경로는 프레임마다 그냥 복사한다.
-        // 복사는 GPU 안에서 끝나고, 화면 갱신은 WPF 가 그릴 때 알아서 가져간다(OnPreviewRendering).
-        // 프레임마다 디스패처를 왕복하던 때는 그 대기 때문에 55fps 언저리에서 막혔다.
+        var now = Stopwatch.GetTimestamp();
+        if (now - _lastPreviewTicks < _previewIntervalTicks)
+            return;
+
+        // GPU 경로는 복사가 GPU 안에서 끝나므로 UI 상태를 볼 필요가 없다.
         if (!_gpuPreviewFailed)
         {
+            _lastPreviewTicks = now;
             PushPreviewOnGpu(e);
             return;
         }
 
-        // 폴백 경로는 CPU 로 옮기는 비용이 크므로 간격과 UI 상태를 본다.
+        // 폴백 경로는 CPU 로 옮기는 비용이 커서 UI 가 앞 장을 그리는 중이면 건너뛴다.
         if (!e.HasPixels)
-            return;
-
-        var now = Stopwatch.GetTimestamp();
-        if (now - _lastPreviewTicks < PreviewIntervalTicks)
             return;
 
         if (Interlocked.CompareExchange(ref _previewBusy, 1, 0) != 0)
@@ -683,21 +757,30 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         }
     }
 
+    /// <summary>목표 fps 가 바뀌면 스로틀 간격을 다시 잡는다.</summary>
+    private void OnPreviewTargetFpsChanged()
+    {
+        var fps = Math.Clamp(PreviewTargetFps, 1, 240);
+
+        // 목표 주기의 90%. 캡처 주기와 경계가 겹쳐 절반이 버려지는 것을 막는다.
+        _previewIntervalTicks = Stopwatch.Frequency * 9 / (fps * 10);
+    }
+
     private void OnShowPreviewChanged()
     {
         if (ShowPreview)
         {
             // GPU 경로는 픽셀을 CPU 로 내리지 않으므로 리드백이 필요 없다.
             // 그 경로를 못 쓰는 환경에서만 FallBackToCpuPreview 가 리드백을 요구한다.
-            PreviewRowHeight = new GridLength(_lastPreviewHeight);
+            if (_previewGroup is not null)
+                _previewGroup.Height = _lastPreviewHeight;
+
             return;
         }
 
         // 끄기 전에 지금 높이를 기억해 둔다. 다시 켜면 그 높이로 돌아온다.
-        if (PreviewRowHeight.Value > 0)
-            _lastPreviewHeight = PreviewRowHeight.Value;
-
-        PreviewRowHeight = new GridLength(0);
+        if (_previewGroup is { Height: > 0 })
+            _lastPreviewHeight = _previewGroup.Height;
 
         HookPreviewRendering(false);
 

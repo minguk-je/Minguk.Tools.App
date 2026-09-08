@@ -7,6 +7,8 @@
     xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
     xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
     xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
+    xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
+    xmlns:dependency="clr-namespace:Minguk.Base.Dependency;assembly=Minguk.Base"
     xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
     xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -46,10 +48,11 @@
     <DockPanel LastChildFill="True">
 
         <!--  ── 툴바 ─────────────────────────────────────────────────────  -->
-        <StackPanel
-            Margin="4"
-            DockPanel.Dock="Top"
-            Orientation="Horizontal">
+        <!--
+            WrapPanel 이다. StackPanel 로 두면 창이 좁을 때 오른쪽 버튼이 그냥 잘려 나간다.
+            항목이 늘어나도 줄바꿈으로 흡수된다.
+        -->
+        <WrapPanel Margin="4" DockPanel.Dock="Top">
             <dxe:TextEdit
                 Width="60"
                 Margin="0,0,4,0"
@@ -58,7 +61,7 @@
                 ShowBorder="False" />
 
             <dxe:ComboBoxEdit
-                Width="420"
+                Width="520"
                 Margin="0,0,4,0"
                 DisplayMember="Display"
                 IsEnabled="{Binding IsNotRunning}"
@@ -67,7 +70,7 @@
                 SelectedItem="{Binding SelectedTarget}" />
 
             <dx:SimpleButton
-                Width="80"
+                Width="110"
                 Margin="0,0,12,0"
                 Command="{Binding RefreshTargetsCommand}"
                 Content="새로 고침"
@@ -123,13 +126,28 @@
                 IsChecked="{Binding ShowPreview}"
                 ToolTip="캡처 중인 화면을 그대로 보여 준다. 초당 60장까지만 올린다." />
 
+            <dxe:ComboBoxEdit
+                Width="70"
+                Margin="0,0,4,0"
+                IsTextEditable="False"
+                ItemsSource="{Binding PreviewFpsOptions}"
+                SelectedItem="{Binding PreviewTargetFps}"
+                ToolTip="미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다."
+                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
             <dxe:TextEdit
-                Width="90"
+                Width="60"
                 Margin="0,0,12,0"
-                EditValue="{Binding PreviewFps, Mode=OneWay, StringFormat='미리보기 {0} fps'}"
+                EditValue="{Binding PreviewFps, Mode=OneWay}"
                 IsReadOnly="True"
                 ShowBorder="False"
                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+            <dxe:CheckEdit
+                Margin="0,0,12,0"
+                Content="열 자동 너비"
+                IsChecked="{Binding IsColumnAutoWidth}"
+                ToolTip="열 너비를 내용에 맞춘다. 끄면 직접 조절한 너비가 유지된다." />
 
             <dx:SimpleButton
                 Width="110"
@@ -139,7 +157,7 @@
                 GlyphHeight="16"
                 GlyphWidth="16"
                 ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
-        </StackPanel>
+        </WrapPanel>
 
         <!--  ── 상태 줄 ───────────────────────────────────────────────────  -->
         <dxe:TextEdit
@@ -150,115 +168,124 @@
             ShowBorder="False" />
 
         <!--
-            미리보기(위) / 통계 그리드(아래). 사이에 스플리터를 둬서 높이를 조절한다.
+            미리보기(위) / 통계 그리드(아래). DevExpress LayoutControl 로 나눈다.
+            AllowVerticalSizing 이 그룹 사이에 드래그 가능한 경계를 만들어 준다 —
+            표준 WPF GridSplitter 는 경량 테마에서 테마가 먹지 않아 쓰지 않는다.
 
-            첫 행 높이는 ViewModel 이 GridLength 로 들고 있다.
-            스플리터가 RowDefinition.Height 를 직접 바꾸므로 TwoWay 로 물려 두면
-            드래그한 높이가 그대로 ViewModel 로 돌아오고, 그 값을 저장해 다음에 되살린다.
-            미리보기를 끄면 0 으로 접는다.
+            높이는 바인딩하지 않고 ViewModel 이 UIObjectService 로 그룹을 잡아
+            직접 넣고 뺀다(TamsTools 와 같은 방식).
         -->
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition
-                    Height="{Binding PreviewRowHeight, Mode=TwoWay}"
-                    MinHeight="0" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" MinHeight="80" />
-            </Grid.RowDefinitions>
+        <dxlc:LayoutControl
+            Margin="4,0,4,4"
+            ItemSpace="0"
+            Orientation="Vertical"
+            Padding="0">
 
-            <!--
-                Stretch=Uniform 이라 원본 비율을 지킨다. 축소해서 보여 주는 용도이므로
-                BitmapScalingMode 는 LowQuality(선형 보간)로 둔다 — 60fps 로 갱신할 때
-                HighQuality 로 두면 축소 비용이 UI 스레드를 잡아먹는다.
-            -->
-            <Border
-                Grid.Row="0"
-                Margin="4,0,4,0"
-                Background="#202020"
+            <dxlc:LayoutGroup
+                Height="320"
+                dxlc:LayoutControl.AllowVerticalSizing="True"
+                ItemSpace="0"
+                Orientation="Vertical"
+                View="Group"
                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <Image
-                    RenderOptions.BitmapScalingMode="LowQuality"
-                    Source="{Binding PreviewImage}"
-                    Stretch="Uniform" />
-            </Border>
 
-            <GridSplitter
-                Grid.Row="1"
-                Height="5"
-                Margin="4,2,4,2"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Center"
-                Background="#40808080"
-                ResizeBehavior="PreviousAndNext"
-                ResizeDirection="Rows"
-                ShowsPreview="False"
-                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <dxmvvm:Interaction.Behaviors>
+                    <dxmvvm:UIObjectService x:Name="PreviewGroupObjectService" />
+                </dxmvvm:Interaction.Behaviors>
 
-        <!--
-            BaseGridControl / BaseTableView 는 Minguk.Base 가 기본값을 잡아 둔 그리드다.
-            읽기 전용·베스트핏·엑셀형 필터 팝업 등이 이미 켜져 있으므로
-            화면에서는 컬럼 정의만 하면 된다.
-            
-            한 줄은 1초치 요약이다. 프레임마다 한 줄씩 넣으면 UI 가 못 버틴다.
-        -->
-            <controls:BaseGridControl
-                Grid.Row="2"
-                AutoGenerateColumns="None"
-                ItemsSource="{Binding Rows}">
-            <dxg:GridControl.View>
-                <controls:BaseTableView AllowEditing="False" ShowGroupPanel="False" />
-            </dxg:GridControl.View>
+                <!--
+                    Stretch=Uniform 이라 원본 비율을 지킨다. 축소해서 보여 주는 용도이므로
+                    BitmapScalingMode 는 LowQuality(선형 보간)로 둔다 — 60fps 로 갱신할 때
+                    HighQuality 로 두면 축소 비용이 UI 스레드를 잡아먹는다.
+                -->
+                <Border Background="#202020">
+                    <Image
+                        RenderOptions.BitmapScalingMode="LowQuality"
+                        Source="{Binding PreviewImage}"
+                        Stretch="Uniform" />
+                </Border>
+            </dxlc:LayoutGroup>
 
-            <dxg:GridColumn
-                Width="160"
-                FieldName="Timestamp"
-                Header="시각">
-                <dxg:GridColumn.EditSettings>
-                    <dxe:TextEditSettings DisplayFormat="yyyy-MM-dd HH:mm:ss" />
-                </dxg:GridColumn.EditSettings>
-            </dxg:GridColumn>
-            <dxg:GridColumn
-                Width="70"
-                FieldName="Fps"
-                Header="fps">
-                <dxg:GridColumn.EditSettings>
-                    <dxe:TextEditSettings DisplayFormat="n0" />
-                </dxg:GridColumn.EditSettings>
-            </dxg:GridColumn>
-            <dxg:GridColumn
-                Width="110"
-                FieldName="AvgLatencyMs"
-                Header="지연 평균(ms)">
-                <dxg:GridColumn.EditSettings>
-                    <dxe:TextEditSettings DisplayFormat="n2" />
-                </dxg:GridColumn.EditSettings>
-            </dxg:GridColumn>
-            <dxg:GridColumn
-                Width="110"
-                FieldName="MaxLatencyMs"
-                Header="지연 최대(ms)">
-                <dxg:GridColumn.EditSettings>
-                    <dxe:TextEditSettings DisplayFormat="n2" />
-                </dxg:GridColumn.EditSettings>
-            </dxg:GridColumn>
-            <dxg:GridColumn
-                Width="100"
-                FieldName="AvgReadbackMs"
-                Header="리드백(ms)">
-                <dxg:GridColumn.EditSettings>
-                    <dxe:TextEditSettings DisplayFormat="n2" />
-                </dxg:GridColumn.EditSettings>
-            </dxg:GridColumn>
-            <dxg:GridColumn
-                Width="110"
-                FieldName="Resolution"
-                Header="해상도" />
-            <dxg:GridColumn
-                Width="100"
-                FieldName="FrameId"
-                Header="누적 프레임" />
-            <dxg:GridColumn FieldName="Note" Header="비고" />
-            </controls:BaseGridControl>
-        </Grid>
+            <dxlc:LayoutGroup
+                ItemSpace="0"
+                Orientation="Vertical"
+                View="Group">
+                <controls:BaseGridControl
+                    AutoGenerateColumns="None"
+                    ItemsSource="{Binding Rows}">
+
+                    <dxmvvm:Interaction.Behaviors>
+                        <!--
+                            열 너비·순서·정렬·필터를 문자열로 뽑고 되돌린다.
+                            ViewModel 이 ServiceContainer 에서 이 이름으로 꺼내 쓴다.
+                        -->
+                        <dxmvvm:LayoutSerializationService x:Name="GridLayoutService" />
+                    </dxmvvm:Interaction.Behaviors>
+
+                <dxg:GridControl.View>
+                    <!--
+                        TamsTools 와 같은 구성. 행 번호는 항상 켜고, 열 자동 너비는 토글로 둔다.
+                        (GridControlDependency 가 언바운드 열을 만들고 너비를 계산해 준다)
+                    -->
+                    <controls:BaseTableView
+                        AllowEditing="False"
+                        ShowGroupPanel="False"
+                        dependency:GridControlDependency.IsColumnAutoWidth="{Binding IsColumnAutoWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=False}"
+                        dependency:GridControlDependency.IsRowNumber="True" />
+                </dxg:GridControl.View>
+
+                <dxg:GridColumn
+                    Width="160"
+                    FieldName="Timestamp"
+                    Header="시각">
+                    <dxg:GridColumn.EditSettings>
+                        <dxe:TextEditSettings DisplayFormat="yyyy-MM-dd HH:mm:ss" />
+                    </dxg:GridColumn.EditSettings>
+                </dxg:GridColumn>
+                <dxg:GridColumn
+                    Width="70"
+                    FieldName="Fps"
+                    Header="fps">
+                    <dxg:GridColumn.EditSettings>
+                        <dxe:TextEditSettings DisplayFormat="n0" />
+                    </dxg:GridColumn.EditSettings>
+                </dxg:GridColumn>
+                <dxg:GridColumn
+                    Width="110"
+                    FieldName="AvgLatencyMs"
+                    Header="지연 평균(ms)">
+                    <dxg:GridColumn.EditSettings>
+                        <dxe:TextEditSettings DisplayFormat="n2" />
+                    </dxg:GridColumn.EditSettings>
+                </dxg:GridColumn>
+                <dxg:GridColumn
+                    Width="110"
+                    FieldName="MaxLatencyMs"
+                    Header="지연 최대(ms)">
+                    <dxg:GridColumn.EditSettings>
+                        <dxe:TextEditSettings DisplayFormat="n2" />
+                    </dxg:GridColumn.EditSettings>
+                </dxg:GridColumn>
+                <dxg:GridColumn
+                    Width="100"
+                    FieldName="AvgReadbackMs"
+                    Header="리드백(ms)">
+                    <dxg:GridColumn.EditSettings>
+                        <dxe:TextEditSettings DisplayFormat="n2" />
+                    </dxg:GridColumn.EditSettings>
+                </dxg:GridColumn>
+                <dxg:GridColumn
+                    Width="110"
+                    FieldName="Resolution"
+                    Header="해상도" />
+                <dxg:GridColumn
+                    Width="100"
+                    FieldName="FrameId"
+                    Header="누적 프레임" />
+                <dxg:GridColumn FieldName="Note" Header="비고" />
+                </controls:BaseGridControl>
+            </dxlc:LayoutGroup>
+        </dxlc:LayoutControl>
+
     </DockPanel>
 </UserControl>
