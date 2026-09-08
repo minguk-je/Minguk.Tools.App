@@ -121,7 +121,8 @@ public sealed class PreviewInputRouter
         => InputAdapter.MoveMouseTo((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y));
 
     /// <summary>어디를 눌렀는지 화면 좌표로 푼다. 못 풀면 그 이유를 돌려준다.</summary>
-    private InputForwardResult TryResolveScreenPoint(
+    /// <summary>입력을 보내지 않고 좌표만 알고 싶을 때도 쓴다(요소 검사 등).</summary>
+    public InputForwardResult TryResolveScreenPoint(
         Point pointInControl,
         Size controlSize,
         Size sourceSize,

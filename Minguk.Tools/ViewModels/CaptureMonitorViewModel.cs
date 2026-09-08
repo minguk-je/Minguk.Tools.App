@@ -18,6 +18,7 @@ using System.Windows.Media;
 using System.Windows;
 using System.Diagnostics;
 using DevExpress.Xpf.LayoutControl;
+using Minguk.Tools.Automation;
 using Minguk.Tools.Capture.Input;
 using System.Windows.Input;
 
@@ -130,6 +131,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     /// <summary>미리보기에서 일어난 입력을 대상 창으로 흘려보내는 쪽.</summary>
     private PreviewInputRouter? _inputRouter;
+
+    /// <summary>요소 검사에 쓰는 UI 자동화 경로.</summary>
+    private IUiAutomationAdapter? _uiAutomation;
 
     /// <summary>
     /// GPU 경로. 캡처 텍스처를 CPU 를 거치지 않고 바로 화면에 올린다.
@@ -287,6 +291,18 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         set => SetProperty(() => IsReturnFocusAfterClickEnabled, value);
     }
 
+    /// <summary>
+    /// 미리보기를 누르면 그 자리의 UI 요소가 무엇인지 알아본다.
+    ///
+    /// 켜져 있는 동안은 입력을 전달하지 않는다. 자동화를 짜기 전에
+    /// "이 버튼의 식별자가 뭐지" 를 눈으로 확인하는 용도다.
+    /// </summary>
+    public bool IsElementInspectEnabled
+    {
+        get => GetProperty(() => IsElementInspectEnabled);
+        set => SetProperty(() => IsElementInspectEnabled, value);
+    }
+
     /// <summary>콤보에 채울 입력 경로 목록.</summary>
     public virtual ObservableCollection<InputBackend> InputBackends { get; set; }
         = new((InputBackend[])Enum.GetValues(typeof(InputBackend)));
@@ -362,6 +378,8 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             () => SelectedTarget,
             InputAdapterFactory.Create(SelectedInputBackend, GetTargetWindowHandle));
 
+        _uiAutomation = UiAutomationAdapterFactory.Create();
+
         // 돌아오기는 켜 둔다. 꺼져 있으면 한 번 클릭한 뒤 이 앱이 대상 창 뒤로 숨는다.
         IsReturnFocusAfterClickEnabled = true;
     }
@@ -396,6 +414,8 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         CaptureTargetFps = GetSetting(nameof(CaptureTargetFps), 60);
         PreviewTargetFps = GetSetting(nameof(PreviewTargetFps), 60);
+
+        IsElementInspectEnabled = GetSetting(nameof(IsElementInspectEnabled), false);
 
         SelectedInputBackend = Enum.TryParse<InputBackend>(
             GetSetting(nameof(SelectedInputBackend), nameof(InputBackend.SendInput)), out var backend)
@@ -469,6 +489,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
         SetSetting(nameof(IsColumnAutoWidth), IsColumnAutoWidth);
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
+        SetSetting(nameof(IsElementInspectEnabled), IsElementInspectEnabled);
 
         if (SelectedTarget is not null)
             SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));
@@ -960,6 +981,14 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         // Image 는 Focusable 이 아니라서 여기가 아니라 Border 를 잡아야 한다.
         _previewSurface?.Focus();
 
+        // 요소 검사가 켜져 있으면 입력을 보내지 않고 무엇인지만 알아본다.
+        if (IsElementInspectEnabled)
+        {
+            InspectElementAt(args.GetPosition(_previewImage));
+            args.Handled = true;
+            return;
+        }
+
         if (!CanForwardInput)
             return;
 
@@ -1040,6 +1069,39 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         ReportInputForward(_inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: true));
         args.Handled = true;
+    }
+
+    /// <summary>
+    /// 미리보기에서 누른 자리에 무엇이 있는지 알아본다.
+    ///
+    /// 좌표를 화면 좌표로 바꾼 다음 UI Automation 에 묻는다.
+    /// 한 번 부를 때마다 프로세스 경계를 넘어가므로 클릭했을 때만 부른다 —
+    /// 주기적으로 훑으면 미리보기 fps 가 떨어진다(실측으로 확인했다).
+    /// </summary>
+    private void InspectElementAt(System.Windows.Point pointInControl)
+    {
+        if (_inputRouter is null || _uiAutomation is null || _previewImage is null)
+            return;
+
+        var (control, source) = PreviewSizes;
+
+        var mapped = _inputRouter.TryResolveScreenPoint(pointInControl, control, source, out var screenPoint);
+        if (mapped != Capture.Input.InputForwardResult.Sent)
+        {
+            ReportInputForward(mapped);
+            return;
+        }
+
+        if (!_uiAutomation.TryGetElementAt((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y), out var element))
+        {
+            StatusText = $"요소를 못 찾았다 ({screenPoint.X:n0}, {screenPoint.Y:n0}) - 접근성 정보를 내놓지 않는 화면이다";
+            return;
+        }
+
+        StatusText = $"요소: {element}  ({element.Bounds.Width:n0}×{element.Bounds.Height:n0}"
+                     + (element.IsEnabled ? string.Empty : ", 비활성") + ")";
+
+        Logger.Debug($"요소 검사: {element} bounds={element.Bounds} enabled={element.IsEnabled}");
     }
 
     /// <summary>

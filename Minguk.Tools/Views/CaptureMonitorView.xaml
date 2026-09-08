@@ -175,6 +175,16 @@
                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!--
+                켜 두면 미리보기 클릭이 입력이 아니라 "여기 뭐가 있나" 조회가 된다.
+            -->
+            <dxe:CheckEdit
+                Margin="0,0,12,0"
+                Content="요소 검사"
+                IsChecked="{Binding IsElementInspectEnabled}"
+                ToolTip="미리보기를 누르면 그 자리의 UI 요소(종류·식별자·이름)를 상태 줄에 보여 준다. 켜져 있는 동안은 입력을 전달하지 않는다."
+                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+            <!--
                 입력 경로. SendInput 은 커서와 포커스를 옮기고, PostMessage 는 안 옮긴다.
             -->
             <dxe:ComboBoxEdit
