@@ -238,6 +238,7 @@
                             ViewModel 이 ServiceContainer 에서 이 이름으로 꺼내 쓴다.
                         -->
                         <dxmvvm:LayoutSerializationService x:Name="GridLayoutService" />
+                    <dxmvvm:UIObjectService x:Name="GridObjectService" />
                     </dxmvvm:Interaction.Behaviors>
 
                 <dxg:GridControl.View>
@@ -245,7 +246,14 @@
                         TamsTools 와 같은 구성. 행 번호는 항상 켜고, 열 자동 너비는 토글로 둔다.
                         (GridControlDependency 가 언바운드 열을 만들고 너비를 계산해 준다)
                     -->
+                    <!--
+                        AllowBestFit 를 끈다. BaseTableView 는 기본으로 켜 두는데, 그러면
+                        ItemsSource 가 붙는 시점에 열 너비를 내용에 맞춰 다시 계산해서
+                        저장해 둔 너비를 덮어쓴다. 이 화면은 너비를 직접 저장·복구하므로 끈다.
+                        (내용에 맞추고 싶으면 툴바의 "열 자동 너비" 를 쓴다)
+                    -->
                     <controls:BaseTableView
+                        AllowBestFit="False"
                         AllowEditing="False"
                         ShowGroupPanel="False"
                         dependency:GridControlDependency.IsColumnAutoWidth="{Binding IsColumnAutoWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=False}"

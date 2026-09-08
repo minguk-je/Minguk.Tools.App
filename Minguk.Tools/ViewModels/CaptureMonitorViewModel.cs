@@ -305,14 +305,34 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (_previewGroup is not null)
             _previewGroup.Height = _lastPreviewHeight;
 
-        _lastTargetDisplay = GetSetting(nameof(SelectedTarget), string.Empty);
+        // 한글을 그대로 넣으면 설정 파일에서 되읽을 때 깨진다(실측으로 "[紐⑤땲.." 로 나왔다).
+        // Base64 로 감싸서 ASCII 로만 저장한다.
+        // 이 방식 이전에 저장된 값은 생 문자열이므로 그때는 그대로 쓴다.
+        var savedTarget = GetSetting(nameof(SelectedTarget), string.Empty);
+
+        _lastTargetDisplay = Base64Utility.IsBase64(savedTarget)
+            ? Base64Utility.Decode(savedTarget)
+            : savedTarget;
 
         CaptureTargetFps = GetSetting(nameof(CaptureTargetFps), 60);
         PreviewTargetFps = GetSetting(nameof(PreviewTargetFps), 60);
-        IsColumnAutoWidth = GetSetting(nameof(IsColumnAutoWidth), false);
         ShowPreview = GetSetting(nameof(ShowPreview), false);
 
-        RestoreGridLayout();
+        // 자동 너비와 배치 복원은 반드시 이 순서로, 그리드가 자리를 잡은 뒤에 넣는다.
+        //
+        // IsColumnAutoWidth 는 첨부 속성을 거쳐 ApplyColumnAutoWidth 를 부르는데,
+        // 그게 모든 열의 Width 를 "지금 그려진 너비(ActualWidth)"로 고정해 버린다.
+        // 배치를 먼저 복원해도 이게 나중에 돌면 복원한 너비가 그대로 지워진다.
+        // ContextIdle 은 Background 보다 낮다. 그리드 로딩과 그에 딸린 바인딩 적용
+        // (IsColumnAutoWidth -> ApplyColumnAutoWidth, 이게 열 너비를 다시 쓴다)이
+        // 모두 끝난 뒤에 우리 배치를 얹기 위해 이 우선순위를 쓴다.
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.ContextIdle,
+            new Action(() =>
+            {
+                IsColumnAutoWidth = GetSetting(nameof(IsColumnAutoWidth), false);
+                RestoreGridLayout();
+            }));
     }
 
     /// <summary>
@@ -336,6 +356,15 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         try
         {
             GridLayoutService.Deserialize(layout);
+
+            var grid = FindControl<DevExpress.Xpf.Grid.GridControl>("GridObjectService");
+            var widths = grid is null
+                ? "(그리드 못 잡음)"
+                : string.Join(", ", grid.Columns.Select(column =>
+                    $"{column.FieldName}:{column.Width.Value}/{column.Width.UnitType}/실제{column.ActualWidth:n0}"));
+
+            Logger.Debug($"그리드 상태 복원 완료. 너비=[{widths}]");
+
         }
         catch (Exception ex)
         {
@@ -356,7 +385,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         SetSetting(nameof(IsColumnAutoWidth), IsColumnAutoWidth);
 
         if (SelectedTarget is not null)
-            SetSetting(nameof(SelectedTarget), SelectedTarget.Display);
+            SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));
 
         try
         {
@@ -402,6 +431,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             SelectedTarget = Targets.FirstOrDefault(x => x.Handle == previous?.Handle && x.Kind == previous.Kind)
                              ?? Targets.FirstOrDefault(x => x.Display == _lastTargetDisplay)
                              ?? Targets.FirstOrDefault();
+
+            var matched = Targets.Any(x => x.Display == _lastTargetDisplay);
+            Logger.Debug($"대상 복구: 저장='{_lastTargetDisplay}' / 후보 {Targets.Count}개 / 일치 {matched} / 선택='{SelectedTarget?.Display}'");
 
             StatusText = $"대상 {Targets.Count}개 (모니터 + 창)";
         }
