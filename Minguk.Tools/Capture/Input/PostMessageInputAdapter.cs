@@ -92,7 +92,7 @@ public sealed class PostMessageInputAdapter : IInputAdapter
         // 화면 좌표는 맞는데 창 좌표가 이상하면 변환이,
         // 창 자체가 다르면 자식 컨트롤 탐색이 문제다.
         Logger.Debug($"PostMessage 0x{message:X} → 창 0x{window.ToInt64():X}"
-                     + $" (최상위 0x{_targetWindowProvider().ToInt64():X})"
+                     + $" (최상위 0x{ResolveRootWindow().ToInt64():X})"
                      + $", 화면 {_lastScreenPoint.X},{_lastScreenPoint.Y}"
                      + $" → 창 기준 {clientPoint.X},{clientPoint.Y}");
 
@@ -109,7 +109,7 @@ public sealed class PostMessageInputAdapter : IInputAdapter
     {
         clientPoint = default;
 
-        var root = _targetWindowProvider();
+        var root = ResolveRootWindow();
         if (root == IntPtr.Zero)
             return IntPtr.Zero;
 
@@ -190,12 +190,34 @@ public sealed class PostMessageInputAdapter : IInputAdapter
     }
 
     /// <summary>
+    /// 메시지를 넣을 최상위 창.
+    ///
+    /// 대상이 창이면 그 핸들을 그대로 쓴다.
+    /// 대상이 모니터면 핸들이 모니터라 보낼 곳이 없으므로, 마지막 좌표 아래에 있는
+    /// 창을 찾아 쓴다. 그렇게 하지 않으면 모니터를 보고 있을 때 아무것도 안 나간다.
+    /// </summary>
+    private IntPtr ResolveRootWindow()
+    {
+        var target = _targetWindowProvider();
+        if (target != IntPtr.Zero)
+            return target;
+
+        var hit = NativeMethods.WindowFromPoint(new NativeMethods.ScreenPoint
+        {
+            X = _lastScreenPoint.X,
+            Y = _lastScreenPoint.Y
+        });
+
+        return hit == IntPtr.Zero ? IntPtr.Zero : NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT);
+    }
+
+    /// <summary>
     /// 키를 받을 창. 대상 스레드에서 지금 포커스를 가진 HWND 를 쓴다.
     /// 못 알아내면 최상위 창으로 보낸다 — WPF 는 그게 곧 같은 곳이다.
     /// </summary>
     private IntPtr ResolveKeyboardTarget()
     {
-        var root = _targetWindowProvider();
+        var root = ResolveRootWindow();
         if (root == IntPtr.Zero)
             return IntPtr.Zero;
 
@@ -247,6 +269,8 @@ public sealed class PostMessageInputAdapter : IInputAdapter
 
         public const uint MAPVK_VK_TO_VSC = 0;
 
+        public const uint GA_ROOT = 2;
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 
@@ -264,6 +288,12 @@ public sealed class PostMessageInputAdapter : IInputAdapter
 
         [DllImport("user32.dll")]
         public static extern uint MapVirtualKey(uint code, uint mapType);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr WindowFromPoint(ScreenPoint point);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetAncestor(IntPtr windowHandle, uint flags);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct ScreenPoint
