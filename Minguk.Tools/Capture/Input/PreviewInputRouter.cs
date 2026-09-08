@@ -75,9 +75,11 @@ public sealed class PreviewInputRouter
 
         LastScreenPoint = screenPoint;
 
-        // 창을 먼저 앞으로 가져온다. 옮기기 전에 해야 한다 —
-        // 커서가 이미 대상 위에 있는 상태에서 창이 올라와야 첫 클릭이 활성화로 먹히지 않는다.
-        FocusTargetWindow();
+        // 대상이 이미 그 자리에 드러나 있으면 창을 끌어올리지 않는다.
+        // 마우스 클릭은 "커서 아래에 있는 창" 으로 가지 포커스를 따라가지 않기 때문이다.
+        // 굳이 올리면 이 앱이 그 뒤로 숨어서 미리보기를 다시 누를 수 없게 된다.
+        if (!IsTargetUnderPoint(screenPoint))
+            FocusTargetWindow();
 
         if (!MoveTo(screenPoint))
             return InputForwardResult.Blocked;
@@ -137,6 +139,32 @@ public sealed class PreviewInputRouter
     }
 
     /// <summary>
+    /// 그 자리에 이미 대상이 드러나 있는지.
+    ///
+    /// 대상이 모니터면 그 화면에 무엇이 있든 그게 받는 게 맞으므로 항상 true 로 본다.
+    /// 창이면 그 점 아래에 있는 창의 최상위 조상이 대상인지 확인한다 —
+    /// 자식 컨트롤이 잡히므로 조상까지 올라가야 한다.
+    /// </summary>
+    private bool IsTargetUnderPoint(Point screenPoint)
+    {
+        var target = _targetProvider();
+
+        if (target is null || target.Kind != CaptureTargetKind.Window || target.Handle == IntPtr.Zero)
+            return true;
+
+        var hit = NativeMethods.WindowFromPoint(new NativeMethods.ScreenPoint
+        {
+            X = (int)Math.Round(screenPoint.X),
+            Y = (int)Math.Round(screenPoint.Y)
+        });
+
+        if (hit == IntPtr.Zero)
+            return false;
+
+        return NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT) == target.Handle;
+    }
+
+    /// <summary>
     /// 대상이 창이면 앞으로 가져온다. 모니터면 할 일이 없다 — 클릭이 알아서 포커스를 옮긴다.
     /// </summary>
     private void FocusTargetWindow()
@@ -154,10 +182,25 @@ public sealed class PreviewInputRouter
 
     private static class NativeMethods
     {
+        public const uint GA_ROOT = 2;
+
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
 
         [DllImport("user32.dll")]
         public static extern bool SetForegroundWindow(IntPtr windowHandle);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr WindowFromPoint(ScreenPoint point);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetAncestor(IntPtr windowHandle, uint flags);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ScreenPoint
+        {
+            public int X;
+            public int Y;
+        }
     }
 }

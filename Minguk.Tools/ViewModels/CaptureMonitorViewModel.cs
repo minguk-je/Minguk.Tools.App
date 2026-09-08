@@ -104,6 +104,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>미리보기 칸의 기본 높이(px).</summary>
     private const double DefaultPreviewHeight = 320;
 
+    /// <summary>클릭을 넘긴 뒤 이 앱으로 돌아오기까지 기다리는 시간(ms).</summary>
+    private const int ReturnToThisWindowDelayMs = 120;
+
     /// <summary>미리보기를 껐다 켤 때 되살릴 높이. 끄면 행이 0 으로 접히므로 따로 기억한다.</summary>
     private double _lastPreviewGroupHeight = DefaultPreviewHeight;
 
@@ -269,6 +272,21 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         set => SetProperty(() => IsInputForwardingEnabled, value);
     }
 
+    /// <summary>
+    /// 클릭을 넘긴 뒤 이 앱으로 돌아올지.
+    ///
+    /// 클릭은 커서를 대상 위로 옮겨 놓고 일어난다. 그대로 두면 커서도 포커스도
+    /// 대상 쪽에 남아서 미리보기를 다시 누를 수 없다. 켜 두면 클릭이 대상에 닿은 뒤
+    /// 커서를 제자리로 돌리고 이 창을 다시 앞으로 가져온다.
+    ///
+    /// 대상을 계속 조작하려면 끄면 된다 — 그때는 대상 창이 앞에 남는다.
+    /// </summary>
+    public bool IsReturnFocusAfterClickEnabled
+    {
+        get => GetProperty(() => IsReturnFocusAfterClickEnabled);
+        set => SetProperty(() => IsReturnFocusAfterClickEnabled, value);
+    }
+
     public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseDownCommand { get; private set; } = null!;
     public DelegateCommand<MouseWheelEventArgs> OnPreviewMouseWheelCommand { get; private set; } = null!;
     public DelegateCommand<KeyEventArgs> OnPreviewKeyDownCommand { get; private set; } = null!;
@@ -325,6 +343,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         OnPreviewKeyUpCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyUp, false);
 
         _inputRouter = new PreviewInputRouter(() => SelectedTarget, InputAdapterFactory.Create());
+
+        // 돌아오기는 켜 둔다. 꺼져 있으면 한 번 클릭한 뒤 이 앱이 대상 창 뒤로 숨는다.
+        IsReturnFocusAfterClickEnabled = true;
     }
 
     /// <summary>XAML 의 컨트롤을 잡아 온다. 베이스가 초기화 첫 단계에서 불러 준다.</summary>
@@ -920,13 +941,46 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         var (control, source) = PreviewSizes;
 
-        ReportInputForward(_inputRouter!.TryClickMouse(
+        // 커서를 옮기기 전에 지금 자리를 적어 둔다. 돌아올 때 쓴다.
+        var cursorBeforeClick = _inputRouter!.InputAdapter.GetCursorPosition();
+
+        var result = _inputRouter.TryClickMouse(
             args.GetPosition(_previewImage),
             control,
             source,
-            ToBackendButton(args.ChangedButton)));
+            ToBackendButton(args.ChangedButton));
+
+        ReportInputForward(result);
+
+        if (result == Capture.Input.InputForwardResult.Sent && IsReturnFocusAfterClickEnabled)
+            ReturnToThisWindowAsync(cursorBeforeClick);
 
         args.Handled = true;
+    }
+
+    /// <summary>
+    /// 클릭이 대상에 닿은 뒤 커서와 포커스를 이 앱으로 되돌린다.
+    ///
+    /// 곧바로 되돌리지 않고 조금 기다린다. 누름·뗌은 이미 커널 입력 큐에 들어가 있지만,
+    /// 대상 프로그램이 그것을 꺼내 처리하면서 커서 위치를 따로 읽는 경우가 있다.
+    /// 그 전에 커서를 빼 버리면 클릭이 엉뚱한 자리에 찍힌 것으로 보인다.
+    /// </summary>
+    private async void ReturnToThisWindowAsync((int X, int Y)? cursorBeforeClick)
+    {
+        try
+        {
+            await System.Threading.Tasks.Task.Delay(ReturnToThisWindowDelayMs);
+
+            if (cursorBeforeClick is { } cursor)
+                _inputRouter?.InputAdapter.MoveMouseTo(cursor.X, cursor.Y);
+
+            Application.Current?.MainWindow?.Activate();
+            _previewSurface?.Focus();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(JsonConvert.SerializeObject(ex));
+        }
     }
 
     /// <summary>

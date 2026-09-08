@@ -28,6 +28,12 @@ public interface IInputAdapter
     /// <summary>사람이 읽을 이름. 어느 경로로 나가는지 화면에 보여 주려고 둔다.</summary>
     string Name { get; }
 
+    /// <summary>
+    /// 지금 커서가 있는 화면 좌표. 못 읽으면 null.
+    /// 입력을 넘긴 뒤 커서를 제자리로 돌려놓으려고 둔다.
+    /// </summary>
+    (int X, int Y)? GetCursorPosition();
+
     bool MoveMouseTo(int screenX, int screenY);
 
     bool PressMouseButton(MouseButton button);

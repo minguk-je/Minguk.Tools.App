@@ -174,6 +174,17 @@
                 ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 대상 창이 앞으로 나온다."
                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
+            <!--
+                클릭을 넘긴 뒤 이 앱으로 돌아온다. 꺼 두면 대상 창이 앞에 남는다.
+            -->
+            <dxe:CheckEdit
+                Margin="0,0,12,0"
+                Content="클릭 후 돌아오기"
+                IsChecked="{Binding IsReturnFocusAfterClickEnabled}"
+                IsEnabled="{Binding IsInputForwardingEnabled}"
+                ToolTip="클릭이 대상에 닿은 뒤 커서와 포커스를 이 창으로 되돌린다. 끄면 대상 창이 앞에 남는다."
+                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
             <dxe:CheckEdit
                 Margin="0,0,12,0"
                 Content="열 자동 너비"

@@ -23,6 +23,9 @@ public sealed class SendInputAdapter : IInputAdapter
 
     public string Name => "SendInput";
 
+    public (int X, int Y)? GetCursorPosition()
+        => NativeMethods.GetCursorPos(out var point) ? (point.X, point.Y) : null;
+
     /// <summary>
     /// 마우스를 화면 절대 좌표로 옮긴다.
     ///
@@ -153,6 +156,16 @@ public sealed class SendInputAdapter : IInputAdapter
 
         [DllImport("user32.dll")]
         public static extern int GetSystemMetrics(int index);
+
+        [DllImport("user32.dll")]
+        public static extern bool GetCursorPos(out ScreenPoint point);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ScreenPoint
+        {
+            public int X;
+            public int Y;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         public struct Input
