@@ -18,6 +18,8 @@ using System.Windows.Media;
 using System.Windows;
 using System.Diagnostics;
 using DevExpress.Xpf.LayoutControl;
+using Minguk.Tools.Capture.Input;
+using System.Windows.Input;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -57,7 +59,11 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     private readonly object _statisticsLock = new();
 
-    private WgcCaptureSession? _captureSession;
+    /// <summary>
+    /// 지금 돌고 있는 캡처 어댑터. 구체 타입이 아니라 인터페이스로 들고 있어서
+    /// 캡처 방식을 바꿔도 이 화면은 손댈 것이 없다.
+    /// </summary>
+    private IScreenCaptureAdapter? _captureSession;
     private Timer? _statisticsFlushTimer;
 
     /// <summary>타이머 스레드에서 서비스 컨테이너를 뒤지지 않도록, 시작할 때 UI 스레드에서 한 번 꺼내 둔다.</summary>
@@ -112,6 +118,12 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     /// <summary>미리보기 칸. 높이를 직접 넣고 빼려고 들고 있는다.</summary>
     private LayoutGroup? _previewLayoutGroup;
+
+    /// <summary>미리보기 Image 컨트롤. 누른 자리를 원본 좌표로 바꾸려면 컨트롤 크기가 필요하다.</summary>
+    private System.Windows.Controls.Image? _previewImage;
+
+    /// <summary>미리보기에서 일어난 입력을 대상 창으로 흘려보내는 쪽.</summary>
+    private PreviewInputRouter? _inputRouter;
 
     /// <summary>
     /// GPU 경로. 캡처 텍스처를 CPU 를 거치지 않고 바로 화면에 올린다.
@@ -242,6 +254,25 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>캡처/미리보기 상한 콤보에 함께 쓰는 값들. 5 단위로 60 까지.</summary>
     public virtual ObservableCollection<int> FpsOptions { get; set; } = new(new[] { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 });
 
+    /// <summary>
+    /// 미리보기에서 누른 것을 대상 창으로 넘길지.
+    ///
+    /// 기본은 꺼 둔다. 켜져 있으면 미리보기를 클릭하는 순간 실제 창이 눌리므로,
+    /// 화면만 보려던 참에 잘못 누르는 일이 생긴다.
+    /// </summary>
+    public bool IsInputForwardingEnabled
+    {
+        get => GetProperty(() => IsInputForwardingEnabled);
+        set => SetProperty(() => IsInputForwardingEnabled, value);
+    }
+
+    public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseDownCommand { get; private set; } = null!;
+    public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseUpCommand { get; private set; } = null!;
+    public DelegateCommand<MouseEventArgs> OnPreviewMouseMoveCommand { get; private set; } = null!;
+    public DelegateCommand<MouseWheelEventArgs> OnPreviewMouseWheelCommand { get; private set; } = null!;
+    public DelegateCommand<KeyEventArgs> OnPreviewKeyDownCommand { get; private set; } = null!;
+    public DelegateCommand<KeyEventArgs> OnPreviewKeyUpCommand { get; private set; } = null!;
+
     /// <summary>미리보기 갱신 상한(fps). 캡처 상한과 별개다 — 캡처는 받고 화면에만 덜 올릴 수 있다.</summary>
     public int PreviewTargetFps
     {
@@ -286,12 +317,22 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         DoStopCommand = new DelegateCommand(DoStop, () => IsRunning, false);
         DoClearCommand = new DelegateCommand(DoClear, false);
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning && EnableCpuReadback, false);
+
+        OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
+        OnPreviewMouseUpCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseUp, false);
+        OnPreviewMouseMoveCommand = new DelegateCommand<MouseEventArgs>(OnPreviewMouseMove, false);
+        OnPreviewMouseWheelCommand = new DelegateCommand<MouseWheelEventArgs>(OnPreviewMouseWheel, false);
+        OnPreviewKeyDownCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyDown, false);
+        OnPreviewKeyUpCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyUp, false);
+
+        _inputRouter = new PreviewInputRouter(() => SelectedTarget, InputAdapterFactory.Create());
     }
 
     /// <summary>XAML 의 컨트롤을 잡아 온다. 베이스가 초기화 첫 단계에서 불러 준다.</summary>
     protected override void InitializeControls()
     {
         _previewLayoutGroup = FindControl<LayoutGroup>("PreviewGroupObjectService");
+        _previewImage = FindControl<System.Windows.Controls.Image>("PreviewImageObjectService");
     }
 
     /// <summary>지난번에 쓰던 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.</summary>
@@ -460,10 +501,8 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
                 return;
             }
 
-            _captureSession = new WgcCaptureSession(SelectedTarget, EnableCpuReadback)
-            {
-                TargetFps = CaptureTargetFps
-            };
+            _captureSession = ScreenCaptureAdapterFactory.Create(SelectedTarget, EnableCpuReadback);
+            _captureSession.TargetFps = CaptureTargetFps;
             _captureSession.FrameArrived += OnFrameArrived;
             _captureSession.Notice += OnSessionNotice;
             _captureSession.Start();
@@ -849,6 +888,90 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (_captureSession is not null)
             _captureSession.TargetFps = CaptureTargetFps;
     }
+
+    // ── 미리보기 입력 전달 ────────────────────────────────────────────────
+
+    /// <summary>
+    /// 미리보기에서 일어난 마우스 이벤트를 넘겨도 되는 상태인지.
+    /// 전달이 꺼져 있거나, 캡처 중이 아니거나, 컨트롤을 못 잡았으면 아무것도 하지 않는다.
+    /// </summary>
+    private bool CanForwardInput => IsInputForwardingEnabled && IsRunning && _previewImage is not null && _inputRouter is not null;
+
+    /// <summary>미리보기 Image 컨트롤의 현재 크기와 캡처 원본 크기.</summary>
+    private (System.Windows.Size Control, System.Windows.Size Source) PreviewSizes => (
+        new System.Windows.Size(_previewImage!.ActualWidth, _previewImage.ActualHeight),
+        new System.Windows.Size(_lastFrameWidth, _lastFrameHeight));
+
+    private void OnPreviewMouseDown(MouseButtonEventArgs args)
+    {
+        if (!CanForwardInput)
+            return;
+
+        var (control, source) = PreviewSizes;
+        var point = args.GetPosition(_previewImage);
+
+        if (_inputRouter!.TryPressMouse(point, control, source, ToBackendButton(args.ChangedButton)))
+            args.Handled = true;
+
+        // 키 입력을 받으려면 미리보기가 포커스를 가지고 있어야 한다.
+        _previewImage!.Focus();
+    }
+
+    private void OnPreviewMouseUp(MouseButtonEventArgs args)
+    {
+        if (!CanForwardInput)
+            return;
+
+        var (control, source) = PreviewSizes;
+
+        if (_inputRouter!.TryReleaseMouse(args.GetPosition(_previewImage), control, source, ToBackendButton(args.ChangedButton)))
+            args.Handled = true;
+    }
+
+    private void OnPreviewMouseMove(MouseEventArgs args)
+    {
+        if (!CanForwardInput)
+            return;
+
+        var (control, source) = PreviewSizes;
+        _inputRouter!.TryMoveMouse(args.GetPosition(_previewImage), control, source);
+    }
+
+    private void OnPreviewMouseWheel(MouseWheelEventArgs args)
+    {
+        if (!CanForwardInput)
+            return;
+
+        var (control, source) = PreviewSizes;
+
+        if (_inputRouter!.TryScroll(args.GetPosition(_previewImage), control, source, args.Delta))
+            args.Handled = true;
+    }
+
+    private void OnPreviewKeyDown(KeyEventArgs args)
+    {
+        if (!CanForwardInput)
+            return;
+
+        _inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: false);
+        args.Handled = true;
+    }
+
+    private void OnPreviewKeyUp(KeyEventArgs args)
+    {
+        if (!CanForwardInput)
+            return;
+
+        _inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: true);
+        args.Handled = true;
+    }
+
+    private static Capture.Input.MouseButton ToBackendButton(System.Windows.Input.MouseButton button) => button switch
+    {
+        System.Windows.Input.MouseButton.Right => Capture.Input.MouseButton.Right,
+        System.Windows.Input.MouseButton.Middle => Capture.Input.MouseButton.Middle,
+        _ => Capture.Input.MouseButton.Left
+    };
 
     private void OnShowPreviewChanged()
     {

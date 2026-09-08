@@ -32,7 +32,7 @@ namespace Minguk.Tools.Capture;
 ///   - 커서 합성 끔. 그릴 비용도 들고, 비전 입력에는 노이즈다.
 /// </summary>
 [SupportedOSPlatform("windows10.0.19041.0")]
-public sealed class WgcCaptureSession : IDisposable
+public sealed class WgcCaptureSession : IScreenCaptureAdapter
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -68,6 +68,9 @@ public sealed class WgcCaptureSession : IDisposable
     }
 
     /// <summary>프레임 한 장이 도착할 때마다. 워커 스레드에서 불린다 — UI 를 직접 만지면 안 된다.</summary>
+    /// <summary>어느 방식으로 잡는지. IScreenCaptureAdapter 규약.</summary>
+    public string Name => "Windows.Graphics.Capture";
+
     public event EventHandler<CapturedFrameEventArgs>? FrameArrived;
 
     /// <summary>대상이 사라졌거나 폴백이 일어났을 때. 사람이 읽을 한 줄.</summary>

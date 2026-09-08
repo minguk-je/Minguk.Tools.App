@@ -163,6 +163,17 @@
                 ToolTip="지금 화면에 올라가고 있는 실제 fps. 위 콤보가 상한이다."
                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
+            <!--
+                미리보기에서 누른 것을 실제 대상 창으로 넘긴다.
+                기본은 꺼 둔다 - 켜져 있으면 화면만 보려다 실제로 눌러 버린다.
+            -->
+            <dxe:CheckEdit
+                Margin="0,0,12,0"
+                Content="입력 전달"
+                IsChecked="{Binding IsInputForwardingEnabled}"
+                ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 대상 창이 앞으로 나온다."
+                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
             <dxe:CheckEdit
                 Margin="0,0,12,0"
                 Content="열 자동 너비"
@@ -218,11 +229,52 @@
                     BitmapScalingMode 는 LowQuality(선형 보간)로 둔다 — 60fps 로 갱신할 때
                     HighQuality 로 두면 축소 비용이 UI 스레드를 잡아먹는다.
                 -->
-                <Border Background="#202020">
+                <!--
+                    입력은 Border 가 받는다. Image 에는 Background 가 없어서 그림 바깥(검은 띠)이
+                    히트 테스트에 안 걸리는데, Border 는 배경이 칠해져 있어 전 영역이 잡힌다.
+                    Focusable 이 있어야 키 입력이 들어온다 — 마우스로 누르면 포커스가 온다.
+                    좌표는 Image 기준으로 재므로 UIObjectService 는 Image 에 둔다.
+                -->
+                <Border
+                    Background="#202020"
+                    Focusable="True">
+
+                    <dxmvvm:Interaction.Behaviors>
+                        <dxmvvm:EventToCommand
+                            Command="{Binding OnPreviewMouseDownCommand}"
+                            EventName="MouseDown"
+                            PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand
+                            Command="{Binding OnPreviewMouseUpCommand}"
+                            EventName="MouseUp"
+                            PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand
+                            Command="{Binding OnPreviewMouseMoveCommand}"
+                            EventName="MouseMove"
+                            PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand
+                            Command="{Binding OnPreviewMouseWheelCommand}"
+                            EventName="MouseWheel"
+                            PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand
+                            Command="{Binding OnPreviewKeyDownCommand}"
+                            EventName="KeyDown"
+                            PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand
+                            Command="{Binding OnPreviewKeyUpCommand}"
+                            EventName="KeyUp"
+                            PassEventArgsToCommand="True" />
+                    </dxmvvm:Interaction.Behaviors>
+
                     <Image
                         RenderOptions.BitmapScalingMode="LowQuality"
                         Source="{Binding PreviewImage}"
-                        Stretch="Uniform" />
+                        Stretch="Uniform">
+
+                        <dxmvvm:Interaction.Behaviors>
+                            <dxmvvm:UIObjectService x:Name="PreviewImageObjectService" />
+                        </dxmvvm:Interaction.Behaviors>
+                    </Image>
                 </Border>
             </dxlc:LayoutGroup>
 
