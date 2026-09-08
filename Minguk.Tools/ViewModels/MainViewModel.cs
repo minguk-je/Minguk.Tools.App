@@ -358,8 +358,8 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
             var activeDocument = Minguk.Tools.Properties.Settings.Default.ActiveDocument;
 
             // 활성이던 탭은 맨 뒤로 돌린다. 마지막에 Show 한 문서가 선택된 채로 남는다.
-            foreach (var viewName in openDocuments.Where(x => x != activeDocument).Concat(
-                         openDocuments.Where(x => x == activeDocument)))
+            foreach (var viewName in openDocuments.Where(viewName => viewName != activeDocument).Concat(
+                         openDocuments.Where(viewName => viewName == activeDocument)))
             {
                 // 메뉴에 없는 화면(이름이 바뀌었거나 지워진 경우)은 조용히 건너뛴다.
                 if (MainMenu.FindMenuItem(viewName) is null)

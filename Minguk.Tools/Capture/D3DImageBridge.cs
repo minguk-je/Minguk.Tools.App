@@ -33,13 +33,13 @@ public sealed class D3DImageBridge : IDisposable
     [DllImport("user32.dll")]
     private static extern IntPtr GetDesktopWindow();
 
-    private IDirect3D9Ex? _d3d9;
-    private IDirect3DDevice9Ex? _device9;
-    private IDirect3DSurface9? _surface9;
+    private IDirect3D9Ex? _direct3D9;
+    private IDirect3DDevice9Ex? _direct3D9Device;
+    private IDirect3DSurface9? _sharedSurface;
     private ID3D11Texture2D? _sharedTexture;
 
-    private int _width;
-    private int _height;
+    private int _surfaceWidth;
+    private int _surfaceHeight;
 
     /// <summary>마지막 GPU 복사에 걸린 시간(ms). 어디가 느린지 가르는 용도.</summary>
     public double LastCopyMs { get; private set; }
@@ -57,7 +57,7 @@ public sealed class D3DImageBridge : IDisposable
     public D3DImage Image { get; } = new();
 
     /// <summary>공유 표면이 준비됐는지. 준비 전에는 <see cref="CopyFrom"/> 이 아무것도 하지 않는다.</summary>
-    public bool IsReady => _surface9 is not null && _sharedTexture is not null;
+    public bool IsReady => _sharedSurface is not null && _sharedTexture is not null;
 
     /// <summary>
     /// 주어진 크기의 공유 표면을 준비한다. 크기가 그대로면 아무것도 하지 않는다.
@@ -65,16 +65,16 @@ public sealed class D3DImageBridge : IDisposable
     /// </summary>
     public bool EnsureSurface(ID3D11Device device11, int width, int height)
     {
-        if (IsReady && _width == width && _height == height)
+        if (IsReady && _surfaceWidth == width && _surfaceHeight == height)
             return true;
 
         ReleaseSurface();
 
-        _d3d9 ??= D3D9.Direct3DCreate9Ex();
+        _direct3D9 ??= D3D9.Direct3DCreate9Ex();
 
         // 화면에 아무것도 내보내지 않는 더미 디바이스다. 백버퍼는 1x1 로 충분하다.
         // Multithreaded 는 필수 — 캡처 스레드와 UI 스레드가 같은 표면을 만진다.
-        _device9 ??= _d3d9.CreateDeviceEx(
+        _direct3D9Device ??= _direct3D9.CreateDeviceEx(
             adapter: 0,
             deviceType: DeviceType.Hardware,
             focusWindow: GetDesktopWindow(),
@@ -93,7 +93,7 @@ public sealed class D3DImageBridge : IDisposable
         // 공유 핸들을 달아 렌더 타깃을 만든다. A8R8G8B8 은 DXGI 의 B8G8R8A8_UNORM 과 같은 배치라
         // WGC 프레임(BGRA)을 CopyResource 로 그대로 옮길 수 있다.
         IntPtr sharedHandle = IntPtr.Zero;
-        _surface9 = _device9.CreateRenderTarget(
+        _sharedSurface = _direct3D9Device.CreateRenderTarget(
             (uint)width,
             (uint)height,
             Format.A8R8G8B8,
@@ -111,13 +111,13 @@ public sealed class D3DImageBridge : IDisposable
         // 같은 메모리를 D3D11 쪽에서 연다.
         _sharedTexture = device11.OpenSharedResource<ID3D11Texture2D>(sharedHandle);
 
-        _width = width;
-        _height = height;
+        _surfaceWidth = width;
+        _surfaceHeight = height;
 
         Image.Lock();
         try
         {
-            Image.SetBackBuffer(D3DResourceType.IDirect3DSurface9, _surface9.NativePointer);
+            Image.SetBackBuffer(D3DResourceType.IDirect3DSurface9, _sharedSurface.NativePointer);
         }
         finally
         {
@@ -165,7 +165,7 @@ public sealed class D3DImageBridge : IDisposable
         Image.Lock();
         try
         {
-            Image.AddDirtyRect(new Int32Rect(0, 0, _width, _height));
+            Image.AddDirtyRect(new Int32Rect(0, 0, _surfaceWidth, _surfaceHeight));
         }
         finally
         {
@@ -181,21 +181,21 @@ public sealed class D3DImageBridge : IDisposable
         _sharedTexture?.Dispose();
         _sharedTexture = null;
 
-        _surface9?.Dispose();
-        _surface9 = null;
+        _sharedSurface?.Dispose();
+        _sharedSurface = null;
 
-        _width = 0;
-        _height = 0;
+        _surfaceWidth = 0;
+        _surfaceHeight = 0;
     }
 
     public void Dispose()
     {
         ReleaseSurface();
 
-        _device9?.Dispose();
-        _device9 = null;
+        _direct3D9Device?.Dispose();
+        _direct3D9Device = null;
 
-        _d3d9?.Dispose();
-        _d3d9 = null;
+        _direct3D9?.Dispose();
+        _direct3D9 = null;
     }
 }

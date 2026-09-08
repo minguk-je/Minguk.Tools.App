@@ -55,26 +55,26 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>그리드에 남겨 둘 줄 수. 오래 켜 두면 메모리를 먹으니 잘라 낸다.</summary>
     private const int MaxRows = 600;
 
-    private readonly object _statsGate = new();
+    private readonly object _statisticsLock = new();
 
-    private WgcCaptureSession? _session;
-    private Timer? _flushTimer;
+    private WgcCaptureSession? _captureSession;
+    private Timer? _statisticsFlushTimer;
 
     /// <summary>타이머 스레드에서 서비스 컨테이너를 뒤지지 않도록, 시작할 때 UI 스레드에서 한 번 꺼내 둔다.</summary>
-    private IDispatcherService? _dispatcher;
+    private IDispatcherService? _uiDispatcher;
 
     // 콜백에서 쌓고 1초마다 비우는 통계
-    private int _frames;
+    private int _frameCountInSecond;
     private long _lastFrameId;
-    private double _latencySum;
-    private double _latencyMax;
-    private double _readbackSum;
-    private int _width;
-    private int _height;
-    private string? _pendingNote;
+    private double _latencyMsSum;
+    private double _latencyMsMax;
+    private double _readbackMsSum;
+    private int _lastFrameWidth;
+    private int _lastFrameHeight;
+    private string? _pendingNoteText;
 
     // 저장 요청. 다음 프레임 한 장만 파일로 떨어뜨린다.
-    private int _saveRequested;
+    private int _isSaveFrameRequested;
 
     // ── 미리보기 ─────────────────────────────────────────────────────────
 
@@ -85,7 +85,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// 60fps 캡처와 주기가 겹쳐서, 프레임이 경계 직전에 도착할 때마다 버려지고
     /// 다음 장까지 33ms 를 기다리게 된다. 실측으로 미리보기가 35fps 에 묶였다.
     /// </summary>
-    private long _previewIntervalTicks = Stopwatch.Frequency * 9 / (60 * 10);
+    private long _previewMinimumIntervalTicks = Stopwatch.Frequency * 9 / (60 * 10);
 
     /// <summary>
     /// 미리보기로 만들 최대 높이.
@@ -99,7 +99,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     private const double DefaultPreviewHeight = 320;
 
     /// <summary>미리보기를 껐다 켤 때 되살릴 높이. 끄면 행이 0 으로 접히므로 따로 기억한다.</summary>
-    private double _lastPreviewHeight = DefaultPreviewHeight;
+    private double _lastPreviewGroupHeight = DefaultPreviewHeight;
 
     /// <summary>
     /// 지난번에 고른 대상의 표시 이름.
@@ -108,42 +108,42 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// 사람이 보는 이름으로 되찾는다 — 모니터는 "[모니터] 디스플레이 1 (2560×1440)" 처럼
     /// 구성이 그대로면 같은 문자열이 나온다.
     /// </summary>
-    private string _lastTargetDisplay = string.Empty;
+    private string _lastSelectedTargetDisplay = string.Empty;
 
     /// <summary>미리보기 칸. 높이를 직접 넣고 빼려고 들고 있는다.</summary>
-    private LayoutGroup? _previewGroup;
+    private LayoutGroup? _previewLayoutGroup;
 
     /// <summary>
     /// GPU 경로. 캡처 텍스처를 CPU 를 거치지 않고 바로 화면에 올린다.
-    /// 만들기가 실패하면(원격 데스크톱 등) <see cref="_gpuPreviewFailed"/> 를 세우고
+    /// 만들기가 실패하면(원격 데스크톱 등) <see cref="_isGpuPreviewUnavailable"/> 를 세우고
     /// 아래 WriteableBitmap 경로로 떨어진다.
     /// </summary>
-    private D3DImageBridge? _previewBridge;
-    private bool _gpuPreviewFailed;
-    private bool _previewSurfacePending;
+    private D3DImageBridge? _gpuPreviewBridge;
+    private bool _isGpuPreviewUnavailable;
+    private bool _isPreviewSurfaceRequestPending;
 
     /// <summary>공유 표면에 새 프레임이 들어왔으면 1. 캡처 스레드가 세우고 렌더 콜백이 내린다.</summary>
-    private int _gpuFrameReady;
+    private int _hasUnpresentedGpuFrame;
 
     /// <summary>화면 반영을 이미 걸어 두었으면 1. 같은 요청을 겹쳐 쌓지 않는다.</summary>
-    private int _presentScheduled;
+    private int _isPresentScheduled;
 
     /// <summary>화면 반영 시도가 초당 몇 번 있었는지.</summary>
-    private int _renderCallbacks;
+    private int _presentAttemptCountInSecond;
 
     /// <summary>CompositionTarget.Rendering 구독 여부. UI 스레드에서만 만진다.</summary>
-    private bool _previewRenderHooked;
+    private bool _isRenderLoopHooked;
 
-    private WriteableBitmap? _previewBitmap;
-    private byte[]? _previewBuffer;
-    private int _previewWidth;
-    private int _previewHeight;
+    private WriteableBitmap? _cpuPreviewBitmap;
+    private byte[]? _cpuPreviewBuffer;
+    private int _cpuPreviewWidth;
+    private int _cpuPreviewHeight;
 
     /// <summary>UI 가 앞 장을 아직 그리는 중이면 1. 그동안 들어온 프레임은 버린다.</summary>
-    private int _previewBusy;
+    private int _isCpuPreviewBlitInProgress;
 
-    private long _lastPreviewTicks;
-    private int _previewFrames;
+    private long _lastPreviewTimestamp;
+    private int _presentedFrameCountInSecond;
 
     // CommandManager 의 자동 재조회는 사용자 입력 때만 돈다. 여기 상태는 캡처 스레드/타이머에서 바뀌므로
     // useCommandManager: false 로 만들고 RaiseCanExecuteChanged 를 직접 부른다.
@@ -291,26 +291,26 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>XAML 의 컨트롤을 잡아 온다. 베이스가 초기화 첫 단계에서 불러 준다.</summary>
     protected override void InitializeControls()
     {
-        _previewGroup = FindControl<LayoutGroup>("PreviewGroupObjectService");
+        _previewLayoutGroup = FindControl<LayoutGroup>("PreviewGroupObjectService");
     }
 
     /// <summary>지난번에 쓰던 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.</summary>
     protected override void RestoreSettings()
     {
-        _lastPreviewHeight = GetSetting(nameof(_lastPreviewHeight), DefaultPreviewHeight);
+        _lastPreviewGroupHeight = GetSetting(nameof(_lastPreviewGroupHeight), DefaultPreviewHeight);
 
-        if (_lastPreviewHeight < 80)
-            _lastPreviewHeight = DefaultPreviewHeight;
+        if (_lastPreviewGroupHeight < 80)
+            _lastPreviewGroupHeight = DefaultPreviewHeight;
 
-        if (_previewGroup is not null)
-            _previewGroup.Height = _lastPreviewHeight;
+        if (_previewLayoutGroup is not null)
+            _previewLayoutGroup.Height = _lastPreviewGroupHeight;
 
         // 한글을 그대로 넣으면 설정 파일에서 되읽을 때 깨진다(실측으로 "[紐⑤땲.." 로 나왔다).
         // Base64 로 감싸서 ASCII 로만 저장한다.
         // 이 방식 이전에 저장된 값은 생 문자열이므로 그때는 그대로 쓴다.
         var savedTarget = GetSetting(nameof(SelectedTarget), string.Empty);
 
-        _lastTargetDisplay = Base64Utility.IsBase64(savedTarget)
+        _lastSelectedTargetDisplay = Base64Utility.IsBase64(savedTarget)
             ? Base64Utility.Decode(savedTarget)
             : savedTarget;
 
@@ -375,10 +375,10 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     protected override void SaveSettings()
     {
         // 켜져 있을 때의 높이만 의미가 있다. 꺼져 있으면 그룹이 숨겨져 있어 값이 미덥지 않다.
-        if (ShowPreview && _previewGroup is { Height: > 0 })
-            _lastPreviewHeight = _previewGroup.Height;
+        if (ShowPreview && _previewLayoutGroup is { Height: > 0 })
+            _lastPreviewGroupHeight = _previewLayoutGroup.Height;
 
-        SetSetting(nameof(_lastPreviewHeight), _lastPreviewHeight);
+        SetSetting(nameof(_lastPreviewGroupHeight), _lastPreviewGroupHeight);
         SetSetting(nameof(ShowPreview), ShowPreview);
         SetSetting(nameof(CaptureTargetFps), CaptureTargetFps);
         SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
@@ -416,7 +416,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     {
         try
         {
-            var previous = SelectedTarget;
+            var previouslySelected = SelectedTarget;
 
             Targets.Clear();
 
@@ -424,16 +424,16 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             foreach (var monitor in CaptureTarget.EnumerateMonitors())
                 Targets.Add(monitor);
 
-            foreach (var window in CaptureTarget.EnumerateWindows().OrderBy(x => x.ProcessName).ThenBy(x => x.Title))
+            foreach (var window in CaptureTarget.EnumerateWindows().OrderBy(target => target.ProcessName).ThenBy(target => target.Title))
                 Targets.Add(window);
 
             // ① 방금 전까지 보던 것 → ② 지난 실행에서 고른 것 → ③ 목록의 첫 번째
-            SelectedTarget = Targets.FirstOrDefault(x => x.Handle == previous?.Handle && x.Kind == previous.Kind)
-                             ?? Targets.FirstOrDefault(x => x.Display == _lastTargetDisplay)
+            SelectedTarget = Targets.FirstOrDefault(target => target.Handle == previouslySelected?.Handle && target.Kind == previouslySelected.Kind)
+                             ?? Targets.FirstOrDefault(target => target.Display == _lastSelectedTargetDisplay)
                              ?? Targets.FirstOrDefault();
 
-            var matched = Targets.Any(x => x.Display == _lastTargetDisplay);
-            Logger.Debug($"대상 복구: 저장='{_lastTargetDisplay}' / 후보 {Targets.Count}개 / 일치 {matched} / 선택='{SelectedTarget?.Display}'");
+            var hasSavedTarget = Targets.Any(target => target.Display == _lastSelectedTargetDisplay);
+            Logger.Debug($"대상 복구: 저장='{_lastSelectedTargetDisplay}' / 후보 {Targets.Count}개 / 일치 {hasSavedTarget} / 선택='{SelectedTarget?.Display}'");
 
             StatusText = $"대상 {Targets.Count}개 (모니터 + 창)";
         }
@@ -453,26 +453,26 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         {
             ResetStats();
 
-            _dispatcher = GetService<IDispatcherService>();
-            if (_dispatcher is null)
+            _uiDispatcher = GetService<IDispatcherService>();
+            if (_uiDispatcher is null)
             {
                 StatusText = "IDispatcherService 가 없다. View 에 dxmvvm:DispatcherService 를 등록할 것.";
                 return;
             }
 
-            _session = new WgcCaptureSession(SelectedTarget, EnableCpuReadback)
+            _captureSession = new WgcCaptureSession(SelectedTarget, EnableCpuReadback)
             {
                 TargetFps = CaptureTargetFps
             };
-            _session.FrameArrived += OnFrameArrived;
-            _session.Notice += OnSessionNotice;
-            _session.Start();
+            _captureSession.FrameArrived += OnFrameArrived;
+            _captureSession.Notice += OnSessionNotice;
+            _captureSession.Start();
 
             // 통계를 그리드로 옮기는 건 1초에 한 번. 콜백에서 직접 하면 UI 가 캡처를 붙잡는다.
-            _flushTimer = new Timer(_ => FlushStats(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            _statisticsFlushTimer = new Timer(_ => FlushStats(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
 
             IsRunning = true;
-            StatusText = $"캡처 중: {_session.Target.Display}";
+            StatusText = $"캡처 중: {_captureSession.Target.Display}";
             MessengerUtility.SendMainMessage("캡처를 시작했습니다.");
         }
         catch (Exception ex)
@@ -503,27 +503,27 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     private void DoClear() => Rows.Clear();
 
     /// <summary>다음 프레임 한 장을 PNG 로 떨어뜨린다. 캡처 내용을 눈으로 확인하는 용도.</summary>
-    private void DoSaveFrame() => Interlocked.Exchange(ref _saveRequested, 1);
+    private void DoSaveFrame() => Interlocked.Exchange(ref _isSaveFrameRequested, 1);
 
     // ── 캡처 콜백. 여기는 스레드풀이다 ────────────────────────────────────────
 
     private void OnFrameArrived(object? sender, CapturedFrameEventArgs e)
     {
-        lock (_statsGate)
+        lock (_statisticsLock)
         {
-            _frames++;
+            _frameCountInSecond++;
             _lastFrameId = e.FrameId;
-            _latencySum += e.LatencyMs;
-            _readbackSum += e.ReadbackMs;
+            _latencyMsSum += e.LatencyMs;
+            _readbackMsSum += e.ReadbackMs;
 
-            if (e.LatencyMs > _latencyMax)
-                _latencyMax = e.LatencyMs;
+            if (e.LatencyMs > _latencyMsMax)
+                _latencyMsMax = e.LatencyMs;
 
-            _width = e.Width;
-            _height = e.Height;
+            _lastFrameWidth = e.Width;
+            _lastFrameHeight = e.Height;
         }
 
-        if (Interlocked.CompareExchange(ref _saveRequested, 0, 1) == 1)
+        if (Interlocked.CompareExchange(ref _isSaveFrameRequested, 0, 1) == 1)
             TrySaveFrame(e);
 
         if (ShowPreview)
@@ -543,13 +543,13 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     private void TryPushPreview(CapturedFrameEventArgs e)
     {
         var now = Stopwatch.GetTimestamp();
-        if (now - _lastPreviewTicks < _previewIntervalTicks)
+        if (now - _lastPreviewTimestamp < _previewMinimumIntervalTicks)
             return;
 
         // GPU 경로는 복사가 GPU 안에서 끝나므로 UI 상태를 볼 필요가 없다.
-        if (!_gpuPreviewFailed)
+        if (!_isGpuPreviewUnavailable)
         {
-            _lastPreviewTicks = now;
+            _lastPreviewTimestamp = now;
             PushPreviewOnGpu(e);
             return;
         }
@@ -558,10 +558,10 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (!e.HasPixels)
             return;
 
-        if (Interlocked.CompareExchange(ref _previewBusy, 1, 0) != 0)
+        if (Interlocked.CompareExchange(ref _isCpuPreviewBlitInProgress, 1, 0) != 0)
             return;
 
-        _lastPreviewTicks = now;
+        _lastPreviewTimestamp = now;
         PushPreviewOnCpu(e);
     }
 
@@ -573,7 +573,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     {
         try
         {
-            var bridge = _previewBridge;
+            var bridge = _gpuPreviewBridge;
 
             // 표면이 아직 없거나 해상도가 바뀌었으면 UI 스레드에서 만들어야 한다.
             // 만드는 동안 들어오는 프레임은 건너뛴다 — 한두 장이다.
@@ -583,13 +583,13 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
                 return;
             }
 
-            var context = _session?.Context;
+            var context = _captureSession?.Context;
             if (context is null || !bridge.CopyFrom(context, e.Texture))
                 return;
 
             // 렌더 이벤트 안에서 화면 반영을 하면 WPF 가 쥔 잠금과 부딪힌다.
             // Render 우선순위로 따로 넣어 그리기 직전에 처리되게 한다.
-            Interlocked.Exchange(ref _gpuFrameReady, 1);
+            Interlocked.Exchange(ref _hasUnpresentedGpuFrame, 1);
             SchedulePresent();
         }
         catch (Exception ex)
@@ -601,24 +601,24 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>UI 스레드에서 공유 표면을 만든다. 겹쳐 요청하지 않는다.</summary>
     private void RequestPreviewSurface(int width, int height)
     {
-        if (_previewSurfacePending)
+        if (_isPreviewSurfaceRequestPending)
             return;
 
-        _previewSurfacePending = true;
+        _isPreviewSurfaceRequestPending = true;
 
-        _dispatcher?.BeginInvoke(() =>
+        _uiDispatcher?.BeginInvoke(() =>
         {
             try
             {
-                var device = _session?.Device;
+                var device = _captureSession?.Device;
                 if (device is null)
                     return;
 
-                _previewBridge ??= new D3DImageBridge();
+                _gpuPreviewBridge ??= new D3DImageBridge();
 
-                if (_previewBridge.EnsureSurface(device, width, height))
+                if (_gpuPreviewBridge.EnsureSurface(device, width, height))
                 {
-                    PreviewImage = _previewBridge.Image;
+                    PreviewImage = _gpuPreviewBridge.Image;
                     HookPreviewRendering(true);
                 }
                 else
@@ -632,7 +632,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             }
             finally
             {
-                _previewSurfacePending = false;
+                _isPreviewSurfaceRequestPending = false;
             }
         });
     }
@@ -647,13 +647,13 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>
     /// 화면 반영을 UI 스레드에 건다. 이미 걸려 있으면 겹쳐 넣지 않는다.
     ///
-    /// 데이터 표시(_gpuFrameReady)와 스케줄 여부(_presentScheduled)를 따로 둔 이유가 있다.
+    /// 데이터 표시(_hasUnpresentedGpuFrame)와 스케줄 여부(_isPresentScheduled)를 따로 둔 이유가 있다.
     /// 하나로 합쳤더니, TryLock 이 한 번 실패해 표시를 되돌려 놓는 순간
     /// "이미 표시가 서 있으니 새로 걸지 않는다"가 되어 루프가 영구히 멈췄다(60fps -> 0).
     /// </summary>
     private void SchedulePresent()
     {
-        if (Interlocked.Exchange(ref _presentScheduled, 1) != 0)
+        if (Interlocked.Exchange(ref _isPresentScheduled, 1) != 0)
             return;
 
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(
@@ -663,17 +663,17 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     private void PresentPreview()
     {
-        Interlocked.Exchange(ref _presentScheduled, 0);
-        Interlocked.Increment(ref _renderCallbacks);
+        Interlocked.Exchange(ref _isPresentScheduled, 0);
+        Interlocked.Increment(ref _presentAttemptCountInSecond);
 
-        if (Interlocked.Exchange(ref _gpuFrameReady, 0) == 0)
+        if (Interlocked.Exchange(ref _hasUnpresentedGpuFrame, 0) == 0)
             return;
 
         try
         {
-            if (_previewBridge?.Present() == true)
+            if (_gpuPreviewBridge?.Present() == true)
             {
-                Interlocked.Increment(ref _previewFrames);
+                Interlocked.Increment(ref _presentedFrameCountInSecond);
                 return;
             }
 
@@ -706,10 +706,10 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// </summary>
     private void HookPreviewRendering(bool hook)
     {
-        if (hook == _previewRenderHooked)
+        if (hook == _isRenderLoopHooked)
             return;
 
-        _previewRenderHooked = hook;
+        _isRenderLoopHooked = hook;
 
         if (hook)
             CompositionTarget.Rendering += OnKeepRendering;
@@ -723,10 +723,10 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// </summary>
     private void FallBackToCpuPreview(Exception? ex)
     {
-        if (_gpuPreviewFailed)
+        if (_isGpuPreviewUnavailable)
             return;
 
-        _gpuPreviewFailed = true;
+        _isGpuPreviewUnavailable = true;
 
         HookPreviewRendering(false);
 
@@ -739,8 +739,8 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         PreviewImage = null;
 
-        _previewBridge?.Dispose();
-        _previewBridge = null;
+        _gpuPreviewBridge?.Dispose();
+        _gpuPreviewBridge = null;
 
         if (!EnableCpuReadback)
             Note("CPU 리드백을 켜고 다시 시작해야 미리보기가 나온다.");
@@ -760,15 +760,15 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             int stride = width * 4;
             int required = stride * height;
 
-            if (_previewBuffer is null || _previewBuffer.Length < required)
-                _previewBuffer = new byte[required];
+            if (_cpuPreviewBuffer is null || _cpuPreviewBuffer.Length < required)
+                _cpuPreviewBuffer = new byte[required];
 
             // RowPitch 는 Width*4 보다 클 수 있다(GPU 정렬). 원본에서 step 간격으로 집어 온다.
             unsafe
             {
                 var source = (byte*)e.PixelData;
 
-                fixed (byte* destinationStart = _previewBuffer)
+                fixed (byte* destinationStart = _cpuPreviewBuffer)
                 {
                     if (step == 1 && e.RowPitch == stride)
                     {
@@ -788,14 +788,14 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
                 }
             }
 
-            _previewWidth = width;
-            _previewHeight = height;
+            _cpuPreviewWidth = width;
+            _cpuPreviewHeight = height;
 
-            _dispatcher?.BeginInvoke(BlitPreview);
+            _uiDispatcher?.BeginInvoke(BlitPreview);
         }
         catch (Exception ex)
         {
-            Interlocked.Exchange(ref _previewBusy, 0);
+            Interlocked.Exchange(ref _isCpuPreviewBlitInProgress, 0);
             Logger.Error(ex, "미리보기 프레임 복사 실패");
         }
     }
@@ -805,24 +805,24 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     {
         try
         {
-            var buffer = _previewBuffer;
+            var buffer = _cpuPreviewBuffer;
             if (buffer is null)
                 return;
 
-            int width = _previewWidth;
-            int height = _previewHeight;
+            int width = _cpuPreviewWidth;
+            int height = _cpuPreviewHeight;
 
             // 해상도가 바뀌면(대상 변경 등) 비트맵을 새로 만든다.
-            if (_previewBitmap is null ||
-                _previewBitmap.PixelWidth != width ||
-                _previewBitmap.PixelHeight != height)
+            if (_cpuPreviewBitmap is null ||
+                _cpuPreviewBitmap.PixelWidth != width ||
+                _cpuPreviewBitmap.PixelHeight != height)
             {
-                _previewBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
-                PreviewImage = _previewBitmap;
+                _cpuPreviewBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+                PreviewImage = _cpuPreviewBitmap;
             }
 
-            _previewBitmap.WritePixels(new Int32Rect(0, 0, width, height), buffer, width * 4, 0);
-            Interlocked.Increment(ref _previewFrames);
+            _cpuPreviewBitmap.WritePixels(new Int32Rect(0, 0, width, height), buffer, width * 4, 0);
+            Interlocked.Increment(ref _presentedFrameCountInSecond);
         }
         catch (Exception ex)
         {
@@ -830,7 +830,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         }
         finally
         {
-            Interlocked.Exchange(ref _previewBusy, 0);
+            Interlocked.Exchange(ref _isCpuPreviewBlitInProgress, 0);
         }
     }
 
@@ -840,14 +840,14 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         var fps = Math.Clamp(PreviewTargetFps, 1, 240);
 
         // 목표 주기의 90%. 캡처 주기와 경계가 겹쳐 절반이 버려지는 것을 막는다.
-        _previewIntervalTicks = Stopwatch.Frequency * 9 / (fps * 10);
+        _previewMinimumIntervalTicks = Stopwatch.Frequency * 9 / (fps * 10);
     }
 
     /// <summary>캡처 상한이 바뀌면 돌고 있는 세션에 바로 반영한다.</summary>
     private void OnCaptureTargetFpsChanged()
     {
-        if (_session is not null)
-            _session.TargetFps = CaptureTargetFps;
+        if (_captureSession is not null)
+            _captureSession.TargetFps = CaptureTargetFps;
     }
 
     private void OnShowPreviewChanged()
@@ -856,24 +856,24 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         {
             // GPU 경로는 픽셀을 CPU 로 내리지 않으므로 리드백이 필요 없다.
             // 그 경로를 못 쓰는 환경에서만 FallBackToCpuPreview 가 리드백을 요구한다.
-            if (_previewGroup is not null)
-                _previewGroup.Height = _lastPreviewHeight;
+            if (_previewLayoutGroup is not null)
+                _previewLayoutGroup.Height = _lastPreviewGroupHeight;
 
             return;
         }
 
         // 끄기 전에 지금 높이를 기억해 둔다. 다시 켜면 그 높이로 돌아온다.
-        if (_previewGroup is { Height: > 0 })
-            _lastPreviewHeight = _previewGroup.Height;
+        if (_previewLayoutGroup is { Height: > 0 })
+            _lastPreviewGroupHeight = _previewLayoutGroup.Height;
 
         HookPreviewRendering(false);
 
         PreviewImage = null;
-        _previewBitmap = null;
+        _cpuPreviewBitmap = null;
         PreviewFps = 0;
 
-        _previewBridge?.Dispose();
-        _previewBridge = null;
+        _gpuPreviewBridge?.Dispose();
+        _gpuPreviewBridge = null;
     }
 
     private void TrySaveFrame(CapturedFrameEventArgs e)
@@ -900,9 +900,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>다음 1초 요약 줄에 붙일 메모. 어느 스레드에서 불려도 된다.</summary>
     private void Note(string message)
     {
-        lock (_statsGate)
+        lock (_statisticsLock)
         {
-            _pendingNote = _pendingNote is null ? message : $"{_pendingNote} / {message}";
+            _pendingNoteText = _pendingNoteText is null ? message : $"{_pendingNoteText} / {message}";
         }
     }
 
@@ -916,22 +916,22 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         int width, height;
         string? note;
 
-        lock (_statsGate)
+        lock (_statisticsLock)
         {
-            frames = _frames;
+            frames = _frameCountInSecond;
             frameId = _lastFrameId;
-            latencySum = _latencySum;
-            latencyMax = _latencyMax;
-            readbackSum = _readbackSum;
-            width = _width;
-            height = _height;
-            note = _pendingNote;
+            latencySum = _latencyMsSum;
+            latencyMax = _latencyMsMax;
+            readbackSum = _readbackMsSum;
+            width = _lastFrameWidth;
+            height = _lastFrameHeight;
+            note = _pendingNoteText;
 
-            _frames = 0;
-            _latencySum = 0;
-            _latencyMax = 0;
-            _readbackSum = 0;
-            _pendingNote = null;
+            _frameCountInSecond = 0;
+            _latencyMsSum = 0;
+            _latencyMsMax = 0;
+            _readbackMsSum = 0;
+            _pendingNoteText = null;
         }
 
         // 프레임도 없고 알릴 것도 없으면 굳이 줄을 만들지 않는다.
@@ -952,7 +952,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             Note = note
         };
 
-        _dispatcher?.BeginInvoke(() => AddRow(row));
+        _uiDispatcher?.BeginInvoke(() => AddRow(row));
     }
 
     private void AddRow(FrameLogRow row)
@@ -962,17 +962,17 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         while (Rows.Count > MaxRows)
             Rows.RemoveAt(Rows.Count - 1);
 
-        PreviewFps = Interlocked.Exchange(ref _previewFrames, 0);
+        PreviewFps = Interlocked.Exchange(ref _presentedFrameCountInSecond, 0);
         row.PreviewFps = PreviewFps;
 
         if (ShowPreview)
-            Logger.Debug($"미리보기 {PreviewFps}fps (캡처 {row.Fps:n0}fps, 경로 {(_gpuPreviewFailed ? "CPU" : "GPU")}" +
-                         $", 반영시도 {Interlocked.Exchange(ref _renderCallbacks, 0)}회" +
-                         $", 프론트버퍼 {_previewBridge?.IsFrontBufferAvailable}" +
-                         $", GPU복사 {_previewBridge?.LastCopyMs:n2}ms, 화면반영 {_previewBridge?.LastPresentMs:n2}ms)");
+            Logger.Debug($"미리보기 {PreviewFps}fps (캡처 {row.Fps:n0}fps, 경로 {(_isGpuPreviewUnavailable ? "CPU" : "GPU")}" +
+                         $", 반영시도 {Interlocked.Exchange(ref _presentAttemptCountInSecond, 0)}회" +
+                         $", 프론트버퍼 {_gpuPreviewBridge?.IsFrontBufferAvailable}" +
+                         $", GPU복사 {_gpuPreviewBridge?.LastCopyMs:n2}ms, 화면반영 {_gpuPreviewBridge?.LastPresentMs:n2}ms)");
 
-        if (_session is not null)
-            StatusText = $"캡처 중: {_session.Target.Display} — {row.Fps:n0} fps, 지연 {row.AvgLatencyMs:n2} ms";
+        if (_captureSession is not null)
+            StatusText = $"캡처 중: {_captureSession.Target.Display} — {row.Fps:n0} fps, 지연 {row.AvgLatencyMs:n2} ms";
     }
 
     // ── 정리 ─────────────────────────────────────────────────────────────────
@@ -991,43 +991,43 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     private void ResetStats()
     {
-        lock (_statsGate)
+        lock (_statisticsLock)
         {
-            _frames = 0;
+            _frameCountInSecond = 0;
             _lastFrameId = 0;
-            _latencySum = 0;
-            _latencyMax = 0;
-            _readbackSum = 0;
-            _width = 0;
-            _height = 0;
-            _pendingNote = null;
+            _latencyMsSum = 0;
+            _latencyMsMax = 0;
+            _readbackMsSum = 0;
+            _lastFrameWidth = 0;
+            _lastFrameHeight = 0;
+            _pendingNoteText = null;
         }
 
-        Interlocked.Exchange(ref _saveRequested, 0);
+        Interlocked.Exchange(ref _isSaveFrameRequested, 0);
     }
 
     private void DisposeSession()
     {
-        Interlocked.Exchange(ref _previewFrames, 0);
+        Interlocked.Exchange(ref _presentedFrameCountInSecond, 0);
         PreviewFps = 0;
 
         // 공유 표면은 세션의 D3D11 디바이스에 묶여 있다. 세션이 죽으면 같이 버린다.
         HookPreviewRendering(false);
-        Interlocked.Exchange(ref _gpuFrameReady, 0);
-        Interlocked.Exchange(ref _presentScheduled, 0);
+        Interlocked.Exchange(ref _hasUnpresentedGpuFrame, 0);
+        Interlocked.Exchange(ref _isPresentScheduled, 0);
         PreviewImage = null;
-        _previewBridge?.Dispose();
-        _previewBridge = null;
+        _gpuPreviewBridge?.Dispose();
+        _gpuPreviewBridge = null;
 
-        _flushTimer?.Dispose();
-        _flushTimer = null;
+        _statisticsFlushTimer?.Dispose();
+        _statisticsFlushTimer = null;
 
-        if (_session is not null)
+        if (_captureSession is not null)
         {
-            _session.FrameArrived -= OnFrameArrived;
-            _session.Notice -= OnSessionNotice;
-            _session.Dispose();
-            _session = null;
+            _captureSession.FrameArrived -= OnFrameArrived;
+            _captureSession.Notice -= OnSessionNotice;
+            _captureSession.Dispose();
+            _captureSession = null;
         }
     }
 

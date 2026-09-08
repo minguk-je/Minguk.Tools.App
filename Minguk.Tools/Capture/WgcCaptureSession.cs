@@ -39,23 +39,23 @@ public sealed class WgcCaptureSession : IDisposable
     /// <summary>창 캡처가 시작 후 이 시간 동안 한 장도 못 받으면 모니터 캡처로 갈아탄다.</summary>
     private static readonly TimeSpan FallbackDelay = TimeSpan.FromMilliseconds(1500);
 
-    private readonly object _gate = new();
+    private readonly object _sessionLock = new();
     private readonly bool _cpuReadback;
 
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
     private IDirect3DDevice? _winrtDevice;
 
-    private GraphicsCaptureItem? _item;
+    private GraphicsCaptureItem? _captureItem;
     private Direct3D11CaptureFramePool? _framePool;
     private GraphicsCaptureSession? _session;
 
-    private ID3D11Texture2D? _staging;
+    private ID3D11Texture2D? _stagingTexture;
     private int _stagingWidth;
     private int _stagingHeight;
     private SizeInt32 _lastSize;
 
-    private Timer? _fallbackWatchdog;
+    private Timer? _monitorFallbackWatchdog;
     private long _frameId;
     private bool _running;
     private bool _disposed;
@@ -83,8 +83,8 @@ public sealed class WgcCaptureSession : IDisposable
     public bool AutoFallbackToMonitor { get; }
 
     private int _targetFps;
-    private long _targetIntervalTicks;
-    private long _lastProcessedTicks;
+    private long _minimumFrameIntervalTicks;
+    private long _lastProcessedTimestamp;
 
     /// <summary>
     /// 캡처 상한(fps). 0 이면 제한하지 않는다.
@@ -103,13 +103,13 @@ public sealed class WgcCaptureSession : IDisposable
             _targetFps = value;
 
             // 목표 주기의 90%. 딱 1/N 로 두면 주사율과 경계가 겹쳐 절반이 버려진다.
-            _targetIntervalTicks = value > 0 ? Stopwatch.Frequency * 9 / (value * 10L) : 0;
+            _minimumFrameIntervalTicks = value > 0 ? Stopwatch.Frequency * 9 / (value * 10L) : 0;
         }
     }
 
     public bool IsRunning
     {
-        get { lock (_gate) return _running; }
+        get { lock (_sessionLock) return _running; }
     }
 
     /// <summary>
@@ -118,7 +118,7 @@ public sealed class WgcCaptureSession : IDisposable
     /// </summary>
     public ID3D11Device? Device
     {
-        get { lock (_gate) return _device; }
+        get { lock (_sessionLock) return _device; }
     }
 
     /// <summary>
@@ -127,7 +127,7 @@ public sealed class WgcCaptureSession : IDisposable
     /// </summary>
     public ID3D11DeviceContext? Context
     {
-        get { lock (_gate) return _context; }
+        get { lock (_sessionLock) return _context; }
     }
 
     /// <summary>이 PC 에서 WGC 를 쓸 수 있는지. Windows 10 1903 미만이면 false.</summary>
@@ -136,7 +136,7 @@ public sealed class WgcCaptureSession : IDisposable
 
     public void Start()
     {
-        lock (_gate)
+        lock (_sessionLock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -152,7 +152,7 @@ public sealed class WgcCaptureSession : IDisposable
 
     public void Stop()
     {
-        lock (_gate)
+        lock (_sessionLock)
         {
             if (!_running)
                 return;
@@ -168,15 +168,15 @@ public sealed class WgcCaptureSession : IDisposable
     {
         Stop();
 
-        lock (_gate)
+        lock (_sessionLock)
         {
             if (_disposed)
                 return;
 
             _disposed = true;
 
-            _staging?.Dispose();
-            _staging = null;
+            _stagingTexture?.Dispose();
+            _stagingTexture = null;
 
             _context?.Dispose();
             _context = null;
@@ -187,7 +187,7 @@ public sealed class WgcCaptureSession : IDisposable
         }
     }
 
-    // ── 시작/정지 본체. 반드시 _gate 를 쥔 채로 부른다 ───────────────────────
+    // ── 시작/정지 본체. 반드시 _sessionLock 를 쥔 채로 부른다 ───────────────────────
 
     private void StartCore(CaptureTarget target)
     {
@@ -196,19 +196,19 @@ public sealed class WgcCaptureSession : IDisposable
 
         EnsureDevice();
 
-        _item = CaptureInterop.CreateItem(target);
-        _item.Closed += OnItemClosed;
+        _captureItem = CaptureInterop.CreateItem(target);
+        _captureItem.Closed += OnItemClosed;
 
         // 버퍼 2장 = 최소 지연. free-threaded 라 콜백이 스레드풀에서 돈다.
         _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             _winrtDevice,
             DirectXPixelFormat.B8G8R8A8UIntNormalized,
             numberOfBuffers: 2,
-            size: _item.Size);
+            size: _captureItem.Size);
 
         _framePool.FrameArrived += OnFrameArrived;
 
-        _session = _framePool.CreateCaptureSession(_item);
+        _session = _framePool.CreateCaptureSession(_captureItem);
         _session.IsCursorCaptureEnabled = false;
 
         // 캡처 중임을 알리는 노란 테두리. Windows 11 부터 끌 수 있다.
@@ -227,7 +227,7 @@ public sealed class WgcCaptureSession : IDisposable
         }
 
         _frameId = 0;
-        _lastSize = _item.Size;
+        _lastSize = _captureItem.Size;
         _session.StartCapture();
 
         Logger.Info($"캡처 시작: {target.Display} (리드백 {(_cpuReadback ? "켬" : "끔")})");
@@ -238,8 +238,8 @@ public sealed class WgcCaptureSession : IDisposable
         if (_framePool is not null)
             _framePool.FrameArrived -= OnFrameArrived;
 
-        if (_item is not null)
-            _item.Closed -= OnItemClosed;
+        if (_captureItem is not null)
+            _captureItem.Closed -= OnItemClosed;
 
         _session?.Dispose();
         _session = null;
@@ -247,7 +247,7 @@ public sealed class WgcCaptureSession : IDisposable
         _framePool?.Dispose();
         _framePool = null;
 
-        _item = null;
+        _captureItem = null;
     }
 
     private void EnsureDevice()
@@ -295,13 +295,13 @@ public sealed class WgcCaptureSession : IDisposable
 
     private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
     {
-        var t0 = Stopwatch.GetTimestamp();
+        var frameArrivedTimestamp = Stopwatch.GetTimestamp();
         SizeInt32 newSize = default;
         var resized = false;
 
         try
         {
-            lock (_gate)
+            lock (_sessionLock)
             {
                 if (!_running || _disposed || _framePool is null)
                     return;
@@ -324,12 +324,12 @@ public sealed class WgcCaptureSession : IDisposable
                 // 상한에 걸리면 이 프레임은 버린다.
                 // using 이 frame 을 놓아 주므로 프레임 풀은 그대로 돈다 —
                 // 여기서 return 해도 다음 프레임은 정상적으로 들어온다.
-                if (_targetIntervalTicks > 0 && t0 - _lastProcessedTicks < _targetIntervalTicks)
+                if (_minimumFrameIntervalTicks > 0 && frameArrivedTimestamp - _lastProcessedTimestamp < _minimumFrameIntervalTicks)
                     return;
 
-                _lastProcessedTicks = t0;
+                _lastProcessedTimestamp = frameArrivedTimestamp;
 
-                ProcessFrame(frame, t0);
+                ProcessFrame(frame, frameArrivedTimestamp);
             }
         }
         catch (Exception ex)
@@ -341,7 +341,7 @@ public sealed class WgcCaptureSession : IDisposable
         // Recreate 는 프레임을 놓아준 뒤에 해야 한다.
         if (resized)
         {
-            lock (_gate)
+            lock (_sessionLock)
             {
                 if (_running && !_disposed && _framePool is not null)
                     _framePool.Recreate(_winrtDevice, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, newSize);
@@ -349,12 +349,12 @@ public sealed class WgcCaptureSession : IDisposable
         }
     }
 
-    private void ProcessFrame(Direct3D11CaptureFrame frame, long t0)
+    private void ProcessFrame(Direct3D11CaptureFrame frame, long frameArrivedTimestamp)
     {
         var frameId = ++_frameId;
 
         // SystemRelativeTime 은 QPC 기준이라 Stopwatch 와 같은 시계다. 그래서 그냥 빼면 지연이 나온다.
-        var now = TimeSpan.FromSeconds((double)t0 / Stopwatch.Frequency);
+        var now = TimeSpan.FromSeconds((double)frameArrivedTimestamp / Stopwatch.Frequency);
         var latencyMs = Math.Max(0d, (now - frame.SystemRelativeTime).TotalMilliseconds);
 
         using var texture = CaptureInterop.GetTexture(frame.Surface);
@@ -369,16 +369,16 @@ public sealed class WgcCaptureSession : IDisposable
 
         if (_cpuReadback)
         {
-            var r0 = Stopwatch.GetTimestamp();
+            var readbackStartTimestamp = Stopwatch.GetTimestamp();
             EnsureStaging(width, height);
 
-            _context!.CopyResource(_staging!, texture);
+            _context!.CopyResource(_stagingTexture!, texture);
 
-            var map = _context.Map(_staging!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+            var map = _context.Map(_stagingTexture!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
             mapped = true;
             pixels = map.DataPointer;
             rowPitch = (int)map.RowPitch;
-            readbackMs = Elapsed(r0);
+            readbackMs = Elapsed(readbackStartTimestamp);
         }
 
         try
@@ -390,7 +390,7 @@ public sealed class WgcCaptureSession : IDisposable
                 Height = height,
                 LatencyMs = latencyMs,
                 ReadbackMs = readbackMs,
-                ProcessMs = Elapsed(t0),
+                ProcessMs = Elapsed(frameArrivedTimestamp),
                 Texture = texture,
                 PixelData = pixels,
                 RowPitch = rowPitch
@@ -399,7 +399,7 @@ public sealed class WgcCaptureSession : IDisposable
         finally
         {
             if (mapped)
-                _context!.Unmap(_staging!, 0);
+                _context!.Unmap(_stagingTexture!, 0);
         }
     }
 
@@ -409,12 +409,12 @@ public sealed class WgcCaptureSession : IDisposable
     /// </summary>
     private void EnsureStaging(int width, int height)
     {
-        if (_staging is not null && _stagingWidth == width && _stagingHeight == height)
+        if (_stagingTexture is not null && _stagingWidth == width && _stagingHeight == height)
             return;
 
-        _staging?.Dispose();
+        _stagingTexture?.Dispose();
 
-        _staging = _device!.CreateTexture2D(new Texture2DDescription
+        _stagingTexture = _device!.CreateTexture2D(new Texture2DDescription
         {
             Width = (uint)width,
             Height = (uint)height,
@@ -446,20 +446,20 @@ public sealed class WgcCaptureSession : IDisposable
         if (!AutoFallbackToMonitor || Target.Kind != CaptureTargetKind.Window)
             return;
 
-        _fallbackWatchdog = new Timer(_ => TryFallbackToMonitor(), null, FallbackDelay, Timeout.InfiniteTimeSpan);
+        _monitorFallbackWatchdog = new Timer(_ => TryFallbackToMonitor(), null, FallbackDelay, Timeout.InfiniteTimeSpan);
     }
 
     private void DisarmFallbackWatchdog()
     {
-        _fallbackWatchdog?.Dispose();
-        _fallbackWatchdog = null;
+        _monitorFallbackWatchdog?.Dispose();
+        _monitorFallbackWatchdog = null;
     }
 
     private void TryFallbackToMonitor()
     {
         CaptureTarget? monitor;
 
-        lock (_gate)
+        lock (_sessionLock)
         {
             if (!_running || _disposed || _frameId > 0 || Target.Kind != CaptureTargetKind.Window)
                 return;
