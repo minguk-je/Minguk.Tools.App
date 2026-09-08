@@ -32,7 +32,11 @@ public class FrameLogRow
     public DateTime Timestamp { get; set; }
     public long FrameId { get; set; }
     public int Frames { get; set; }
+    /// <summary>캡처가 초당 몇 장 들어왔는지. 미리보기 상한과 무관하다 — WGC 가 주는 속도 그대로다.</summary>
     public double Fps { get; set; }
+
+    /// <summary>그중 실제로 화면에 올린 장수. 미리보기 상한(PreviewTargetFps)에 걸린다.</summary>
+    public int PreviewFps { get; set; }
     public double AvgLatencyMs { get; set; }
     public double MaxLatencyMs { get; set; }
     public double AvgReadbackMs { get; set; }
@@ -210,6 +214,14 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     private ILayoutSerializationService GridLayoutService
         => ServiceContainer.GetService<ILayoutSerializationService>("GridLayoutService");
 
+    /// <summary>
+    /// 그리드 열 구성의 판 번호. 열을 추가·삭제·개명하면 올린다.
+    ///
+    /// 저장된 레이아웃은 그때의 열 구성을 담고 있어서, 열이 바뀐 뒤 그대로 되돌리면
+    /// 새 열이 숨겨진 채로 나온다. 판이 다르면 저장본을 버리고 기본 배치로 시작한다.
+    /// </summary>
+    private const int GridLayoutVersion = 2;
+
     /// <summary>열 너비를 내용에 맞춘다. 끄면 사용자가 조절한 너비가 유지된다.</summary>
     public bool IsColumnAutoWidth
     {
@@ -231,7 +243,17 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     public int PreviewFps
     {
         get => GetProperty(() => PreviewFps);
-        set => SetProperty(() => PreviewFps, value);
+        set => SetProperty(() => PreviewFps, value, () => PreviewFpsText = $"실제 {value} fps");
+    }
+
+    /// <summary>
+    /// 툴바에 그대로 뿌리는 문자열.
+    /// DevExpress TextEdit 은 StringFormat 이 먹지 않아서 문자열을 만들어 넘긴다.
+    /// </summary>
+    public string? PreviewFpsText
+    {
+        get => GetProperty(() => PreviewFpsText);
+        set => SetProperty(() => PreviewFpsText, value);
     }
 
     public virtual ObservableCollection<CaptureTarget> Targets { get; set; } = new();
@@ -289,6 +311,12 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// </summary>
     private void RestoreGridLayout()
     {
+        if (GetSetting(nameof(GridLayoutVersion), 0) != GridLayoutVersion)
+        {
+            Logger.Debug("그리드 열 구성이 바뀌었다. 저장된 배치를 버리고 기본으로 시작한다.");
+            return;
+        }
+
         var layout = GetSetting(nameof(GridLayoutService), string.Empty);
         if (string.IsNullOrEmpty(layout))
             return;
@@ -320,6 +348,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         try
         {
             SetSetting(nameof(GridLayoutService), GridLayoutService.Serialize());
+            SetSetting(nameof(GridLayoutVersion), GridLayoutVersion);
         }
         catch (Exception ex)
         {
@@ -879,6 +908,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             Rows.RemoveAt(Rows.Count - 1);
 
         PreviewFps = Interlocked.Exchange(ref _previewFrames, 0);
+        row.PreviewFps = PreviewFps;
 
         if (ShowPreview)
             Logger.Debug($"미리보기 {PreviewFps}fps (캡처 {row.Fps:n0}fps, 경로 {(_gpuPreviewFailed ? "CPU" : "GPU")}" +
