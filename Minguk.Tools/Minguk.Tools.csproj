@@ -72,6 +72,23 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Minguk.Base\Minguk.Base.csproj" />
 	</ItemGroup>
+	<!--
+	  DevExpress 한국어 리소스(위성 어셈블리).
+
+	  .NET 은 CurrentUICulture 에 맞춰 실행 파일 옆의 <문화권> 폴더에서 이것들을 찾는다.
+	  없으면 조용히 영어로 나온다 - 그리드 검색창이 "Search" 로 나오던 것이 그 증상이다.
+
+	  DevExpress 설치본(Components/Bin/NetCore/ko)에서 통째로 가져와 저장소에 넣었다.
+	  3MB 남짓이라, 이렇게 두면 빌드 머신에 DevExpress 가 없어도 되고 배포본에도 그대로 들어간다.
+	  DevExpress 버전을 올릴 때 이 폴더도 같이 갱신할 것.
+	-->
+	<ItemGroup>
+		<None Include="..\Libs\DevExpress\ko\*.resources.dll">
+			<Link>ko\%(Filename)%(Extension)</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
 
 	<!-- App.xaml 에 x:Class 진입점을 두지 않으므로 ApplicationDefinition 이 아니라 Page 로 넣는다 -->
 	<ItemGroup>
