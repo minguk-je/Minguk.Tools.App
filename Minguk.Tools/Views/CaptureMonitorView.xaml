@@ -1,27 +1,26 @@
-﻿<UserControl
-    x:Class="Minguk.Tools.Views.CaptureMonitorView"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
-    xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
-    xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
-    xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
-    xmlns:dependency="clr-namespace:Minguk.Base.Dependency;assembly=Minguk.Base"
-    xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
-    xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-    xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
-    d:DataContext="{d:DesignInstance {x:Type viewModels:CaptureMonitorViewModel},
-                                     IsDesignTimeCreatable=False}"
-    d:DesignHeight="500"
-    d:DesignWidth="900"
-    DataContext="{dxmvvm:ViewModelSource Type={x:Type viewModels:CaptureMonitorViewModel}}"
-    FontFamily="{DynamicResource BaseFontFamily}"
-    FontSize="{DynamicResource BaseFontSize}"
-    Style="{DynamicResource BaseControlStyle}"
-    mc:Ignorable="d">
+﻿<UserControl x:Class="Minguk.Tools.Views.CaptureMonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+             xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+             xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
+             xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
+             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
+             xmlns:dependency="clr-namespace:Minguk.Base.Dependency;assembly=Minguk.Base"
+             xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
+             xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+             Style="{DynamicResource BaseControlStyle}"
+             FontFamily="{DynamicResource BaseFontFamily}"
+             FontSize="{DynamicResource BaseFontSize}"
+             DataContext="{dxmvvm:ViewModelSource Type={x:Type viewModels:CaptureMonitorViewModel}}"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance {x:Type viewModels:CaptureMonitorViewModel},
+                                              IsDesignTimeCreatable=False}"
+             d:DesignHeight="500"
+             d:DesignWidth="900">
 
     <UserControl.Resources>
         <ResourceDictionary>
@@ -43,216 +42,198 @@
         -->
         <dxmvvm:DispatcherService />
 
-        <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}" EventName="Loaded" />
-        <dxmvvm:EventToCommand Command="{Binding OnUnloadedCommand}" EventName="Unloaded" />
+        <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
+                               EventName="Loaded" />
+        <dxmvvm:EventToCommand Command="{Binding OnUnloadedCommand}"
+                               EventName="Unloaded" />
     </dxmvvm:Interaction.Behaviors>
 
     <DockPanel LastChildFill="True">
 
-        <!--  ── 툴바 ─────────────────────────────────────────────────────  -->
+        <!-- ── 툴바 ───────────────────────────────────────────────────── -->
         <!--
             WrapPanel 이다. StackPanel 로 두면 창이 좁을 때 오른쪽 버튼이 그냥 잘려 나간다.
             항목이 늘어나도 줄바꿈으로 흡수된다.
         -->
-        <WrapPanel Margin="4" DockPanel.Dock="Top">
-            <dxe:TextEdit
-                Width="60"
-                Margin="0,0,4,0"
-                EditValue="대상"
-                IsReadOnly="True"
-                ShowBorder="False" />
+        <WrapPanel Margin="4"
+                   DockPanel.Dock="Top">
+            <dxe:TextEdit Width="60"
+                          Margin="0,0,4,0"
+                          EditValue="대상"
+                          IsReadOnly="True"
+                          ShowBorder="False" />
 
-            <dxe:ComboBoxEdit
-                Width="520"
-                Margin="0,0,4,0"
-                DisplayMember="Display"
-                IsEnabled="{Binding IsNotRunning}"
-                IsTextEditable="False"
-                ItemsSource="{Binding Targets}"
-                SelectedItem="{Binding SelectedTarget}" />
+            <dxe:ComboBoxEdit Width="520"
+                              Margin="0,0,4,0"
+                              DisplayMember="Display"
+                              IsEnabled="{Binding IsNotRunning}"
+                              IsTextEditable="False"
+                              ItemsSource="{Binding Targets}"
+                              SelectedItem="{Binding SelectedTarget}" />
 
-            <dx:SimpleButton
-                Width="110"
-                Margin="0,0,12,0"
-                Command="{Binding RefreshTargetsCommand}"
-                Content="새로 고침"
-                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
-                GlyphHeight="16"
-                GlyphWidth="16" />
+            <dx:SimpleButton Width="110"
+                             Margin="0,0,12,0"
+                             Command="{Binding RefreshTargetsCommand}"
+                             Content="새로 고침"
+                             Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                             GlyphHeight="16"
+                             GlyphWidth="16" />
 
-            <dxe:TextEdit
-                Width="70"
-                Margin="0,0,4,0"
-                EditValue="캡처 fps"
-                IsReadOnly="True"
-                ShowBorder="False" />
+            <dxe:TextEdit Width="70"
+                          Margin="0,0,4,0"
+                          EditValue="캡처 fps"
+                          IsReadOnly="True"
+                          ShowBorder="False" />
 
             <!-- 상한을 넘는 프레임은 세션이 아예 처리하지 않는다. 리드백도 건너뛴다. -->
-            <dxe:ComboBoxEdit
-                Width="70"
-                Margin="0,0,12,0"
-                IsTextEditable="False"
-                ItemsSource="{Binding FpsOptions}"
-                SelectedItem="{Binding CaptureTargetFps}"
-                ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다." />
+            <dxe:ComboBoxEdit Width="70"
+                              Margin="0,0,12,0"
+                              IsTextEditable="False"
+                              ItemsSource="{Binding FpsOptions}"
+                              SelectedItem="{Binding CaptureTargetFps}"
+                              ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다." />
 
-            <dx:SimpleButton
-                Width="100"
-                Margin="0,0,4,0"
-                Command="{Binding DoStartCommand}"
-                Content="시작"
-                Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}"
-                GlyphHeight="16"
-                GlyphWidth="16" />
+            <dx:SimpleButton Width="100"
+                             Margin="0,0,4,0"
+                             Command="{Binding DoStartCommand}"
+                             Content="시작"
+                             Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}"
+                             GlyphHeight="16"
+                             GlyphWidth="16" />
 
-            <dx:SimpleButton
-                Width="100"
-                Margin="0,0,4,0"
-                Command="{Binding DoStopCommand}"
-                Content="중지"
-                Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}"
-                GlyphHeight="16"
-                GlyphWidth="16" />
+            <dx:SimpleButton Width="100"
+                             Margin="0,0,4,0"
+                             Command="{Binding DoStopCommand}"
+                             Content="중지"
+                             Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}"
+                             GlyphHeight="16"
+                             GlyphWidth="16" />
 
-            <dx:SimpleButton
-                Width="100"
-                Margin="0,0,12,0"
-                Command="{Binding DoClearCommand}"
-                Content="지우기"
-                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
-                GlyphHeight="16"
-                GlyphWidth="16" />
+            <dx:SimpleButton Width="100"
+                             Margin="0,0,12,0"
+                             Command="{Binding DoClearCommand}"
+                             Content="지우기"
+                             Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
+                             GlyphHeight="16"
+                             GlyphWidth="16" />
 
             <!--
                 리드백을 켜면 프레임마다 GPU→CPU 복사가 붙는다. 캡처만 재는 게 목적이면 꺼 두고,
                 CPU 추론이나 화면 저장이 필요하면 켠다. 세션을 새로 시작해야 반영된다.
             -->
-            <dxe:CheckEdit
-                Margin="0,0,12,0"
-                Content="CPU 리드백"
-                IsChecked="{Binding EnableCpuReadback}"
-                IsEnabled="{Binding IsNotRunning}"
-                ToolTip="GPU 프레임을 CPU 메모리로 내린다. 켜야 프레임 저장이 된다." />
+            <dxe:CheckEdit Margin="0,0,12,0"
+                           Content="CPU 리드백"
+                           IsChecked="{Binding EnableCpuReadback}"
+                           IsEnabled="{Binding IsNotRunning}"
+                           ToolTip="GPU 프레임을 CPU 메모리로 내린다. 켜야 프레임 저장이 된다." />
 
             <!--
                 미리보기는 CPU 리드백을 강제한다. 켜면 프레임마다 GPU→CPU 복사가 붙으므로
                 순수 캡처 성능을 잴 때는 꺼 두는 것이 맞다.
             -->
-            <dxe:CheckEdit
-                Margin="0,0,4,0"
-                Content="미리보기"
-                IsChecked="{Binding ShowPreview}"
-                ToolTip="캡처 중인 화면을 그대로 보여 준다. 초당 60장까지만 올린다." />
+            <dxe:CheckEdit Margin="0,0,4,0"
+                           Content="미리보기"
+                           IsChecked="{Binding ShowPreview}"
+                           ToolTip="캡처 중인 화면을 그대로 보여 준다. 초당 60장까지만 올린다." />
 
-            <dxe:ComboBoxEdit
-                Width="70"
-                Margin="0,0,4,0"
-                IsTextEditable="False"
-                ItemsSource="{Binding FpsOptions}"
-                SelectedItem="{Binding PreviewTargetFps}"
-                ToolTip="미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다."
-                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <dxe:ComboBoxEdit Width="70"
+                              Margin="0,0,4,0"
+                              IsTextEditable="False"
+                              ItemsSource="{Binding FpsOptions}"
+                              SelectedItem="{Binding PreviewTargetFps}"
+                              ToolTip="미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다."
+                              Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!-- 지금 화면에 실제로 올라가는 속도. 위 콤보는 상한일 뿐이다. -->
-            <dxe:TextEdit
-                Width="110"
-                Margin="0,0,12,0"
-                EditValue="{Binding PreviewFpsText, Mode=OneWay}"
-                IsReadOnly="True"
-                ShowBorder="False"
-                ToolTip="지금 화면에 올라가고 있는 실제 fps. 위 콤보가 상한이다."
-                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <dxe:TextEdit Width="110"
+                          Margin="0,0,12,0"
+                          EditValue="{Binding PreviewFpsText, Mode=OneWay}"
+                          IsReadOnly="True"
+                          ShowBorder="False"
+                          ToolTip="지금 화면에 올라가고 있는 실제 fps. 위 콤보가 상한이다."
+                          Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!--
                 미리보기에서 누른 것을 실제 대상 창으로 넘긴다.
                 기본은 꺼 둔다 - 켜져 있으면 화면만 보려다 실제로 눌러 버린다.
             -->
-            <dxe:CheckEdit
-                Margin="0,0,12,0"
-                Content="입력 전달"
-                IsChecked="{Binding IsInputForwardingEnabled}"
-                ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 대상 창이 앞으로 나온다."
-                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <dxe:CheckEdit Margin="0,0,12,0"
+                           Content="입력 전달"
+                           IsChecked="{Binding IsInputForwardingEnabled}"
+                           ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 대상 창이 앞으로 나온다."
+                           Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!--
                 켜 두면 미리보기 클릭이 입력이 아니라 "여기 뭐가 있나" 조회가 된다.
             -->
-            <dxe:CheckEdit
-                Margin="0,0,12,0"
-                Content="요소 검사"
-                IsChecked="{Binding IsElementInspectEnabled}"
-                ToolTip="미리보기를 누르면 그 자리의 UI 요소(종류·식별자·이름)를 상태 줄에 보여 준다. 켜져 있는 동안은 입력을 전달하지 않는다."
-                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <dxe:CheckEdit Margin="0,0,12,0"
+                           Content="요소 검사"
+                           IsChecked="{Binding IsElementInspectEnabled}"
+                           ToolTip="미리보기를 누르면 그 자리의 UI 요소(종류·식별자·이름)를 상태 줄에 보여 준다. 켜져 있는 동안은 입력을 전달하지 않는다."
+                           Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!--
                 입력 경로. SendInput 은 커서와 포커스를 옮기고, PostMessage 는 안 옮긴다.
             -->
-            <dxe:ComboBoxEdit
-                Width="130"
-                Margin="0,0,12,0"
-                IsEnabled="{Binding IsInputForwardingEnabled}"
-                IsTextEditable="False"
-                ItemsSource="{Binding InputBackends}"
-                SelectedItem="{Binding SelectedInputBackend}"
-                ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다. PostMessage: 포커스를 안 뺏지만 창 메시지를 보는 대상에만 통한다."
-                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <dxe:ComboBoxEdit Width="130"
+                              Margin="0,0,12,0"
+                              IsEnabled="{Binding IsInputForwardingEnabled}"
+                              IsTextEditable="False"
+                              ItemsSource="{Binding InputBackends}"
+                              SelectedItem="{Binding SelectedInputBackend}"
+                              ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다. PostMessage: 포커스를 안 뺏지만 창 메시지를 보는 대상에만 통한다."
+                              Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!--
                 클릭을 넘긴 뒤 이 앱으로 돌아온다. 꺼 두면 대상 창이 앞에 남는다.
             -->
-            <dxe:CheckEdit
-                Margin="0,0,12,0"
-                Content="클릭 후 돌아오기"
-                IsChecked="{Binding IsReturnFocusAfterClickEnabled}"
-                IsEnabled="{Binding IsInputForwardingEnabled}"
-                ToolTip="클릭이 대상에 닿은 뒤 커서와 포커스를 이 창으로 되돌린다. 끄면 대상 창이 앞에 남는다."
-                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <dxe:CheckEdit Margin="0,0,12,0"
+                           Content="클릭 후 돌아오기"
+                           IsChecked="{Binding IsReturnFocusAfterClickEnabled}"
+                           IsEnabled="{Binding IsInputForwardingEnabled}"
+                           ToolTip="클릭이 대상에 닿은 뒤 커서와 포커스를 이 창으로 되돌린다. 끄면 대상 창이 앞에 남는다."
+                           Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-            <dxe:CheckEdit
-                Margin="0,0,12,0"
-                Content="열 자동 너비"
-                IsChecked="{Binding IsColumnAutoWidth}"
-                ToolTip="열 너비를 내용에 맞춘다. 끄면 직접 조절한 너비가 유지된다." />
+            <dxe:CheckEdit Margin="0,0,12,0"
+                           Content="열 자동 너비"
+                           IsChecked="{Binding IsColumnAutoWidth}"
+                           ToolTip="열 너비를 내용에 맞춘다. 끄면 직접 조절한 너비가 유지된다." />
 
-            <dx:SimpleButton
-                Width="110"
-                Command="{Binding SaveFrameCommand}"
-                Content="프레임 저장"
-                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
-                GlyphHeight="16"
-                GlyphWidth="16"
-                ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
+            <dx:SimpleButton Width="110"
+                             Command="{Binding SaveFrameCommand}"
+                             Content="프레임 저장"
+                             Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
+                             GlyphHeight="16"
+                             GlyphWidth="16"
+                             ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
         </WrapPanel>
 
-        <!--  ── 상태 줄 ───────────────────────────────────────────────────  -->
-        <dxe:TextEdit
-            Margin="4,0,4,4"
-            DockPanel.Dock="Bottom"
-            EditValue="{Binding StatusText, Mode=OneWay}"
-            IsReadOnly="True"
-            ShowBorder="False" />
+        <!-- ── 상태 줄 ─────────────────────────────────────────────────── -->
+        <dxe:TextEdit Margin="4,0,4,4"
+                      DockPanel.Dock="Bottom"
+                      EditValue="{Binding StatusText, Mode=OneWay}"
+                      IsReadOnly="True"
+                      ShowBorder="False" />
 
         <!--
             미리보기(위) / 통계 그리드(아래). DevExpress LayoutControl 로 나눈다.
             AllowVerticalSizing 이 그룹 사이에 드래그 가능한 경계를 만들어 준다 —
             표준 WPF GridSplitter 는 경량 테마에서 테마가 먹지 않아 쓰지 않는다.
-
+            
             높이는 바인딩하지 않고 ViewModel 이 UIObjectService 로 그룹을 잡아
             직접 넣고 뺀다(TamsTools 와 같은 방식).
         -->
-        <dxlc:LayoutControl
-            Margin="4,0,4,4"
-            ItemSpace="0"
-            Orientation="Vertical"
-            Padding="0">
+        <dxlc:LayoutControl Margin="4,0,4,4"
+                            Padding="0"
+                            ItemSpace="0"
+                            Orientation="Vertical">
 
-            <dxlc:LayoutGroup
-                Height="320"
-                dxlc:LayoutControl.AllowVerticalSizing="True"
-                ItemSpace="0"
-                Orientation="Vertical"
-                View="Group"
-                Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <dxlc:LayoutGroup Height="320"
+                              dxlc:LayoutControl.AllowVerticalSizing="True"
+                              ItemSpace="0"
+                              Orientation="Vertical"
+                              View="Group"
+                              Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
 
                 <dxmvvm:Interaction.Behaviors>
                     <dxmvvm:UIObjectService x:Name="PreviewGroupObjectService" />
@@ -270,35 +251,29 @@
                     누를 때 이 Border 에 포커스를 준다. 그래서 여기에도 UIObjectService 를 둔다.
                     좌표는 Image 기준으로 재므로 Image 에도 하나 있다.
                 -->
-                <Border
-                    Background="#202020"
-                    Focusable="True">
+                <Border Background="#202020"
+                        Focusable="True">
 
                     <dxmvvm:Interaction.Behaviors>
                         <dxmvvm:UIObjectService x:Name="PreviewSurfaceObjectService" />
 
-                        <dxmvvm:EventToCommand
-                            Command="{Binding OnPreviewMouseDownCommand}"
-                            EventName="MouseDown"
-                            PassEventArgsToCommand="True" />
-                        <dxmvvm:EventToCommand
-                            Command="{Binding OnPreviewMouseWheelCommand}"
-                            EventName="MouseWheel"
-                            PassEventArgsToCommand="True" />
-                        <dxmvvm:EventToCommand
-                            Command="{Binding OnPreviewKeyDownCommand}"
-                            EventName="KeyDown"
-                            PassEventArgsToCommand="True" />
-                        <dxmvvm:EventToCommand
-                            Command="{Binding OnPreviewKeyUpCommand}"
-                            EventName="KeyUp"
-                            PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseDownCommand}"
+                                               EventName="MouseDown"
+                                               PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseWheelCommand}"
+                                               EventName="MouseWheel"
+                                               PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand Command="{Binding OnPreviewKeyDownCommand}"
+                                               EventName="KeyDown"
+                                               PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand Command="{Binding OnPreviewKeyUpCommand}"
+                                               EventName="KeyUp"
+                                               PassEventArgsToCommand="True" />
                     </dxmvvm:Interaction.Behaviors>
 
-                    <Image
-                        RenderOptions.BitmapScalingMode="LowQuality"
-                        Source="{Binding PreviewImage}"
-                        Stretch="Uniform">
+                    <Image RenderOptions.BitmapScalingMode="LowQuality"
+                           Source="{Binding PreviewImage}"
+                           Stretch="Uniform">
 
                         <dxmvvm:Interaction.Behaviors>
                             <dxmvvm:UIObjectService x:Name="PreviewImageObjectService" />
@@ -307,137 +282,112 @@
                 </Border>
             </dxlc:LayoutGroup>
 
-            <dxlc:LayoutGroup
-                ItemSpace="0"
-                Orientation="Vertical"
-                View="Group">
+            <dxlc:LayoutGroup ItemSpace="0"
+                              Orientation="Vertical"
+                              View="Group">
 
                 <!--
                     행 번호 칸(인디케이터) 폭을 행 수에 맞춰 늘리기 위한 틀. TamsTools 와 같은 구성이다.
-
+                    
                     행 번호는 DataTemplate.xaml 의 RowIndicator 템플릿이 그리는데, 그 안의 열이
                     SharedSizeGroup="RowNumberGroup" 에 참여한다. 아래 숨은 Border 를 같은 그룹의
                     열에 두면 Border 가 "가장 넓은 행 번호" 만큼 넓어지고, 그 폭을 TableView 의
                     IndicatorWidth 로 되돌려 준다.
-
+                    
                     이게 없으면 인디케이터가 DevExpress 기본 폭에 머물러서 세 자리 행 번호가
                     앞에서 잘린다(실제로 600행까지 쌓였을 때 ".11" 처럼 보였다).
                 -->
                 <Grid Grid.IsSharedSizeScope="True">
 
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" SharedSizeGroup="RowNumberGroup" />
+                        <ColumnDefinition Width="Auto"
+                                          SharedSizeGroup="RowNumberGroup" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <!--  폭만 재는 자리. 눈에 보이지 않는다. Margin 은 셀 여백 보정.  -->
-                    <Border
-                        x:Name="GridRowNumberSizeProxy"
-                        Margin="-4"
-                        Visibility="Hidden" />
+                    <!-- 폭만 재는 자리. 눈에 보이지 않는다. Margin 은 셀 여백 보정. -->
+                    <Border x:Name="GridRowNumberSizeProxy"
+                            Margin="-4"
+                            Visibility="Hidden" />
 
-                    <controls:BaseGridControl
-                        Grid.Column="0"
-                        Grid.ColumnSpan="2"
-                        AutoGenerateColumns="None"
-                        ItemsSource="{Binding Rows}"
-                        dependency:GridControlDependency.IsRowNumber="True">
+                    <controls:BaseGridControl Grid.Column="0"
+                                              Grid.ColumnSpan="2"
+                                              dependency:GridControlDependency.IsRowNumber="True"
+                                              AutoGenerateColumns="None"
+                                              ItemsSource="{Binding Rows}">
 
-                    <dxmvvm:Interaction.Behaviors>
+                        <dxmvvm:Interaction.Behaviors>
+                            <!--
+                                열 너비·순서·정렬·필터를 문자열로 뽑고 되돌린다.
+                                ViewModel 이 ServiceContainer 에서 이 이름으로 꺼내 쓴다.
+                            -->
+                            <dxmvvm:LayoutSerializationService x:Name="GridLayoutService" />
+                            <dxmvvm:UIObjectService x:Name="GridObjectService" />
+                        </dxmvvm:Interaction.Behaviors>
+
+                        <dxg:GridControl.View>
+                            <!--
+                                TamsTools 와 같은 구성. 행 번호는 항상 켜고, 열 자동 너비는 토글로 둔다.
+                                (GridControlDependency 가 언바운드 열을 만들고 너비를 계산해 준다)
+                            -->
+                            <!--
+                                AllowBestFit 은 BaseTableView 기본값(켜짐)을 그대로 쓴다.
+                                열 머리글 오른쪽 메뉴의 "최적 너비" 가 여기서 나온다.
+
+                                한동안 꺼 두었는데, 저장한 열 너비가 복원되지 않는 원인으로
+                                이걸 의심했기 때문이다. 실제 원인은 "열 자동 너비" 였다 —
+                                그게 켜지면 모든 열의 너비 단위가 Auto(내용에 맞춤)가 되어
+                                끌어도 값이 안 남는다. best fit 과는 무관했다.
+                            -->
+                            <controls:BaseTableView dependency:GridControlDependency.IsColumnAutoWidth="{Binding IsColumnAutoWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=False}"
+                                                    AllowEditing="False"
+                                                    IndicatorWidth="{Binding Path=(Border.ActualWidth), ElementName=GridRowNumberSizeProxy, Mode=OneWay}"
+                                                    ShowGroupPanel="False" />
+                        </dxg:GridControl.View>
+
                         <!--
-                            열 너비·순서·정렬·필터를 문자열로 뽑고 되돌린다.
-                            ViewModel 이 ServiceContainer 에서 이 이름으로 꺼내 쓴다.
+                            행 번호용 숨은 언바운드 열. 화면에는 안 보이고 왼쪽 인디케이터가 이 값을 쓴다.
+                            (GridControlDependency 가 CustomUnboundColumnData 에서 채운다)
                         -->
-                        <dxmvvm:LayoutSerializationService x:Name="GridLayoutService" />
-                    <dxmvvm:UIObjectService x:Name="GridObjectService" />
-                    </dxmvvm:Interaction.Behaviors>
+                        <dxg:GridColumn Style="{StaticResource GridColumn.RowNumber.Style}" />
 
-                <dxg:GridControl.View>
-                    <!--
-                        TamsTools 와 같은 구성. 행 번호는 항상 켜고, 열 자동 너비는 토글로 둔다.
-                        (GridControlDependency 가 언바운드 열을 만들고 너비를 계산해 준다)
-                    -->
-                    <!--
-                        AllowBestFit 를 끈다. BaseTableView 는 기본으로 켜 두는데, 그러면
-                        ItemsSource 가 붙는 시점에 열 너비를 내용에 맞춰 다시 계산해서
-                        저장해 둔 너비를 덮어쓴다. 이 화면은 너비를 직접 저장·복구하므로 끈다.
-                        (내용에 맞추고 싶으면 툴바의 "열 자동 너비" 를 쓴다)
-                    -->
-                    <controls:BaseTableView
-                        AllowBestFit="False"
-                        AllowEditing="False"
-                        IndicatorWidth="{Binding Path=(Border.ActualWidth), ElementName=GridRowNumberSizeProxy, Mode=OneWay}"
-                        ShowGroupPanel="False"
-                        dependency:GridControlDependency.IsColumnAutoWidth="{Binding IsColumnAutoWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=False}" />
-                </dxg:GridControl.View>
-
-                <!--
-                    행 번호용 숨은 언바운드 열. 화면에는 안 보이고 왼쪽 인디케이터가 이 값을 쓴다.
-                    (GridControlDependency 가 CustomUnboundColumnData 에서 채운다)
-                -->
-                <dxg:GridColumn Style="{StaticResource GridColumn.RowNumber.Style}" />
-
-                <dxg:GridColumn
-                    Width="160"
-                    FieldName="Timestamp"
-                    Header="시각">
-                    <dxg:GridColumn.EditSettings>
-                        <dxe:TextEditSettings DisplayFormat="yyyy-MM-dd HH:mm:ss" />
-                    </dxg:GridColumn.EditSettings>
-                </dxg:GridColumn>
-                <!--
-                    캡처 fps 는 WGC 가 주는 속도, 미리보기 fps 는 그중 화면에 올린 장수다.
-                    미리보기 상한을 30 으로 두면 캡처는 60 인데 미리보기만 30 이 된다.
-                -->
-                <dxg:GridColumn
-                    Width="80"
-                    FieldName="Fps"
-                    Header="캡처 fps">
-                    <dxg:GridColumn.EditSettings>
-                        <dxe:TextEditSettings DisplayFormat="n0" />
-                    </dxg:GridColumn.EditSettings>
-                </dxg:GridColumn>
-                <dxg:GridColumn
-                    Width="90"
-                    FieldName="PreviewFps"
-                    Header="미리보기 fps">
-                    <dxg:GridColumn.EditSettings>
-                        <dxe:TextEditSettings DisplayFormat="n0" />
-                    </dxg:GridColumn.EditSettings>
-                </dxg:GridColumn>
-                <dxg:GridColumn
-                    Width="110"
-                    FieldName="AvgLatencyMs"
-                    Header="지연 평균(ms)">
-                    <dxg:GridColumn.EditSettings>
-                        <dxe:TextEditSettings DisplayFormat="n2" />
-                    </dxg:GridColumn.EditSettings>
-                </dxg:GridColumn>
-                <dxg:GridColumn
-                    Width="110"
-                    FieldName="MaxLatencyMs"
-                    Header="지연 최대(ms)">
-                    <dxg:GridColumn.EditSettings>
-                        <dxe:TextEditSettings DisplayFormat="n2" />
-                    </dxg:GridColumn.EditSettings>
-                </dxg:GridColumn>
-                <dxg:GridColumn
-                    Width="100"
-                    FieldName="AvgReadbackMs"
-                    Header="리드백(ms)">
-                    <dxg:GridColumn.EditSettings>
-                        <dxe:TextEditSettings DisplayFormat="n2" />
-                    </dxg:GridColumn.EditSettings>
-                </dxg:GridColumn>
-                <dxg:GridColumn
-                    Width="110"
-                    FieldName="Resolution"
-                    Header="해상도" />
-                <dxg:GridColumn
-                    Width="100"
-                    FieldName="FrameId"
-                    Header="누적 프레임" />
-                <dxg:GridColumn FieldName="Note" Header="비고" />
+                        <dxg:GridColumn Width="160" FieldName="Timestamp" Header="시각">
+                            <dxg:GridColumn.EditSettings>
+                                <dxe:TextEditSettings DisplayFormat="yyyy-MM-dd HH:mm:ss" />
+                            </dxg:GridColumn.EditSettings>
+                        </dxg:GridColumn>
+                        <!--
+                            캡처 fps 는 WGC 가 주는 속도, 미리보기 fps 는 그중 화면에 올린 장수다.
+                            미리보기 상한을 30 으로 두면 캡처는 60 인데 미리보기만 30 이 된다.
+                        -->
+                        <dxg:GridColumn Width="80" FieldName="Fps" Header="캡처 fps">
+                            <dxg:GridColumn.EditSettings>
+                                <dxe:TextEditSettings DisplayFormat="n0" />
+                            </dxg:GridColumn.EditSettings>
+                        </dxg:GridColumn>
+                        <dxg:GridColumn Width="90" FieldName="PreviewFps" Header="미리보기 fps">
+                            <dxg:GridColumn.EditSettings>
+                                <dxe:TextEditSettings DisplayFormat="n0" />
+                            </dxg:GridColumn.EditSettings>
+                        </dxg:GridColumn>
+                        <dxg:GridColumn Width="110" FieldName="AvgLatencyMs" Header="지연 평균(ms)">
+                            <dxg:GridColumn.EditSettings>
+                                <dxe:TextEditSettings DisplayFormat="n2" />
+                            </dxg:GridColumn.EditSettings>
+                        </dxg:GridColumn>
+                        <dxg:GridColumn Width="110" FieldName="MaxLatencyMs" Header="지연 최대(ms)">
+                            <dxg:GridColumn.EditSettings>
+                                <dxe:TextEditSettings DisplayFormat="n2" />
+                            </dxg:GridColumn.EditSettings>
+                        </dxg:GridColumn>
+                        <dxg:GridColumn Width="100" FieldName="AvgReadbackMs" Header="리드백(ms)">
+                            <dxg:GridColumn.EditSettings>
+                                <dxe:TextEditSettings DisplayFormat="n2" />
+                            </dxg:GridColumn.EditSettings>
+                        </dxg:GridColumn>
+                        <dxg:GridColumn Width="110" FieldName="Resolution" Header="해상도" />
+                        <dxg:GridColumn Width="100" FieldName="FrameId" Header="누적 프레임" />
+                        <dxg:GridColumn FieldName="Note" Header="비고" />
                     </controls:BaseGridControl>
                 </Grid>
             </dxlc:LayoutGroup>
