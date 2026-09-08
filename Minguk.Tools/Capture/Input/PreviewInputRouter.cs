@@ -75,12 +75,17 @@ public sealed class PreviewInputRouter
 
         LastScreenPoint = screenPoint;
 
-        // 대상이 이미 그 자리에 드러나 있으면 창을 끌어올리지 않는다.
-        // 마우스 클릭은 "커서 아래에 있는 창" 으로 가지 포커스를 따라가지 않기 때문이다.
-        // 굳이 올리면 이 앱이 그 뒤로 숨어서 미리보기를 다시 누를 수 없게 된다.
-        // 창 메시지를 직접 넣는 경로는 애초에 끌어올릴 이유가 없다.
-        if (InputAdapter.RequiresForegroundTarget && !IsTargetUnderPoint(screenPoint))
-            FocusTargetWindow();
+        // 누를 자리의 창을 먼저 활성화한다.
+        //
+        // 활성화되어 있지 않은 창의 첫 클릭은 "창을 앞으로 가져오는 클릭" 으로 소비되고
+        // 실제 동작으로는 이어지지 않는 프로그램이 많다. 이 화면은 클릭을 넘긴 뒤
+        // 포커스를 이 앱으로 되돌리므로, 그대로 두면 매번 첫 클릭이 되어
+        // 아무리 눌러도 아무 일도 안 일어난다.
+        //
+        // 대상이 모니터일 때도 같다. 그 자리에 어느 창이 있는지 좌표로 찾아 올린다.
+        // 창 메시지를 직접 넣는 경로는 활성화와 무관하므로 건너뛴다.
+        if (InputAdapter.RequiresForegroundTarget)
+            ActivateWindowAt(screenPoint);
 
         if (!MoveTo(screenPoint))
             return InputForwardResult.Blocked;
@@ -143,19 +148,14 @@ public sealed class PreviewInputRouter
     }
 
     /// <summary>
-    /// 그 자리에 이미 대상이 드러나 있는지.
+    /// 그 좌표에 있는 창을 앞으로 가져온다. 이미 앞에 있으면 아무것도 하지 않는다.
     ///
-    /// 대상이 모니터면 그 화면에 무엇이 있든 그게 받는 게 맞으므로 항상 true 로 본다.
-    /// 창이면 그 점 아래에 있는 창의 최상위 조상이 대상인지 확인한다 —
-    /// 자식 컨트롤이 잡히므로 조상까지 올라가야 한다.
+    /// 대상 핸들이 아니라 좌표로 찾는 이유는 대상이 모니터일 수도 있어서다.
+    /// 그때는 활성화할 창을 좌표에서 알아내는 수밖에 없다.
+    /// WindowFromPoint 는 자식 컨트롤을 돌려주므로 최상위 조상까지 올라간다.
     /// </summary>
-    private bool IsTargetUnderPoint(Point screenPoint)
+    private void ActivateWindowAt(Point screenPoint)
     {
-        var target = _targetProvider();
-
-        if (target is null || target.Kind != CaptureTargetKind.Window || target.Handle == IntPtr.Zero)
-            return true;
-
         var hit = NativeMethods.WindowFromPoint(new NativeMethods.ScreenPoint
         {
             X = (int)Math.Round(screenPoint.X),
@@ -163,9 +163,14 @@ public sealed class PreviewInputRouter
         });
 
         if (hit == IntPtr.Zero)
-            return false;
+            return;
 
-        return NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT) == target.Handle;
+        var root = NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT);
+
+        if (root == IntPtr.Zero || root == NativeMethods.GetForegroundWindow())
+            return;
+
+        NativeMethods.SetForegroundWindow(root);
     }
 
     /// <summary>

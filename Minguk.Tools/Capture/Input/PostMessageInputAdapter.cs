@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace Minguk.Tools.Capture.Input;
@@ -88,6 +88,14 @@ public sealed class PostMessageInputAdapter : IInputAdapter
         if (window == IntPtr.Zero)
             return false;
 
+        // 좌표가 어긋날 때 어디서 틀어졌는지 보려면 이 세 가지가 필요하다.
+        // 화면 좌표는 맞는데 창 좌표가 이상하면 변환이,
+        // 창 자체가 다르면 자식 컨트롤 탐색이 문제다.
+        Logger.Debug($"PostMessage 0x{message:X} → 창 0x{window.ToInt64():X}"
+                     + $" (최상위 0x{_targetWindowProvider().ToInt64():X})"
+                     + $", 화면 {_lastScreenPoint.X},{_lastScreenPoint.Y}"
+                     + $" → 창 기준 {clientPoint.X},{clientPoint.Y}");
+
         return Post(window, message, wParam, MakeParam(clientPoint.X, clientPoint.Y));
     }
 
@@ -129,7 +137,10 @@ public sealed class PostMessageInputAdapter : IInputAdapter
             window = child;
         }
 
-        return window;
+        // 여기까지 왔으면 자식을 16겹 넘게 파고든 것이다. 정상적인 화면에서는 안 나온다.
+        // 좌표를 안 채운 채로 내보내면 (0,0) 을 누른 것이 되므로 실패로 처리한다.
+        Logger.Warn("자식 컨트롤이 너무 깊다. 좌표를 확정하지 못했다.");
+        return IntPtr.Zero;
     }
 
     private static uint DownMessage(MouseButton button) => button switch

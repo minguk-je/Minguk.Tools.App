@@ -129,6 +129,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>입력을 받는 Border. 키를 받으려면 여기에 포커스가 있어야 한다.</summary>
     private System.Windows.Controls.Border? _previewSurface;
 
+    /// <summary>통계 그리드의 뷰. 새 줄이 들어올 때 맨 위를 유지하려고 들고 있는다.</summary>
+    private DevExpress.Xpf.Grid.TableView? _gridView;
+
     /// <summary>미리보기에서 일어난 입력을 대상 창으로 흘려보내는 쪽.</summary>
     private PreviewInputRouter? _inputRouter;
 
@@ -390,6 +393,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         _previewLayoutGroup = FindControl<LayoutGroup>("PreviewGroupObjectService");
         _previewImage = FindControl<System.Windows.Controls.Image>("PreviewImageObjectService");
         _previewSurface = FindControl<System.Windows.Controls.Border>("PreviewSurfaceObjectService");
+        _gridView = FindControl<DevExpress.Xpf.Grid.GridControl>("GridObjectService")?.View as DevExpress.Xpf.Grid.TableView;
     }
 
     /// <summary>지난번에 쓰던 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.</summary>
@@ -606,6 +610,28 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     }
 
     private void DoClear() => Rows.Clear();
+
+    /// <summary>
+    /// 그리드를 항상 맨 위가 보이게 유지한다.
+    ///
+    /// 새 줄은 0번 자리에 끼워 넣는다. 그러면 보고 있던 줄이 한 칸씩 아래로 밀리고
+    /// 포커스도 그 줄을 따라 내려가서, 가만히 둬도 화면이 계속 흘러내린다.
+    /// 최신 줄을 보는 화면이므로 맨 위에 붙여 둔다.
+    ///
+    /// 값이 이미 0 일 때는 건드리지 않는다. 1초마다 같은 값을 다시 넣으면
+    /// 그때마다 포커스 변경이 돌아 사용자가 고른 셀이 풀린다.
+    /// </summary>
+    private void KeepGridAtTop()
+    {
+        if (_gridView is null)
+            return;
+
+        if (_gridView.TopRowIndex != 0)
+            _gridView.TopRowIndex = 0;
+
+        if (_gridView.FocusedRowHandle != 0)
+            _gridView.FocusedRowHandle = 0;
+    }
 
     /// <summary>다음 프레임 한 장을 PNG 로 떨어뜨린다. 캡처 내용을 눈으로 확인하는 용도.</summary>
     private void DoSaveFrame() => Interlocked.Exchange(ref _isSaveFrameRequested, 1);
@@ -1261,6 +1287,8 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         while (Rows.Count > MaxRows)
             Rows.RemoveAt(Rows.Count - 1);
+
+        KeepGridAtTop();
 
         PreviewFps = Interlocked.Exchange(ref _presentedFrameCountInSecond, 0);
         row.PreviewFps = PreviewFps;
