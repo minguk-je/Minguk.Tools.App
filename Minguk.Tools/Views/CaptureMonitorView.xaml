@@ -288,10 +288,37 @@
                 ItemSpace="0"
                 Orientation="Vertical"
                 View="Group">
-                <controls:BaseGridControl
-                    AutoGenerateColumns="None"
-                    ItemsSource="{Binding Rows}"
-                    dependency:GridControlDependency.IsRowNumber="True">
+
+                <!--
+                    행 번호 칸(인디케이터) 폭을 행 수에 맞춰 늘리기 위한 틀. TamsTools 와 같은 구성이다.
+
+                    행 번호는 DataTemplate.xaml 의 RowIndicator 템플릿이 그리는데, 그 안의 열이
+                    SharedSizeGroup="RowNumberGroup" 에 참여한다. 아래 숨은 Border 를 같은 그룹의
+                    열에 두면 Border 가 "가장 넓은 행 번호" 만큼 넓어지고, 그 폭을 TableView 의
+                    IndicatorWidth 로 되돌려 준다.
+
+                    이게 없으면 인디케이터가 DevExpress 기본 폭에 머물러서 세 자리 행 번호가
+                    앞에서 잘린다(실제로 600행까지 쌓였을 때 ".11" 처럼 보였다).
+                -->
+                <Grid Grid.IsSharedSizeScope="True">
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="RowNumberGroup" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!--  폭만 재는 자리. 눈에 보이지 않는다. Margin 은 셀 여백 보정.  -->
+                    <Border
+                        x:Name="GridRowNumberSizeProxy"
+                        Margin="-4"
+                        Visibility="Hidden" />
+
+                    <controls:BaseGridControl
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        AutoGenerateColumns="None"
+                        ItemsSource="{Binding Rows}"
+                        dependency:GridControlDependency.IsRowNumber="True">
 
                     <dxmvvm:Interaction.Behaviors>
                         <!--
@@ -316,6 +343,7 @@
                     <controls:BaseTableView
                         AllowBestFit="False"
                         AllowEditing="False"
+                        IndicatorWidth="{Binding Path=(Border.ActualWidth), ElementName=GridRowNumberSizeProxy, Mode=OneWay}"
                         ShowGroupPanel="False"
                         dependency:GridControlDependency.IsColumnAutoWidth="{Binding IsColumnAutoWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=False}" />
                 </dxg:GridControl.View>
@@ -387,7 +415,8 @@
                     FieldName="FrameId"
                     Header="누적 프레임" />
                 <dxg:GridColumn FieldName="Note" Header="비고" />
-                </controls:BaseGridControl>
+                    </controls:BaseGridControl>
+                </Grid>
             </dxlc:LayoutGroup>
         </dxlc:LayoutControl>
 
