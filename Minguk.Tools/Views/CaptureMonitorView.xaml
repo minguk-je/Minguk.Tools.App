@@ -232,25 +232,20 @@
                 <!--
                     입력은 Border 가 받는다. Image 에는 Background 가 없어서 그림 바깥(검은 띠)이
                     히트 테스트에 안 걸리는데, Border 는 배경이 칠해져 있어 전 영역이 잡힌다.
-                    Focusable 이 있어야 키 입력이 들어온다 — 마우스로 누르면 포커스가 온다.
-                    좌표는 Image 기준으로 재므로 UIObjectService 는 Image 에 둔다.
+                    Focusable 이 있어야 키 입력이 들어온다 — Image 는 Focusable 이 아니므로
+                    누를 때 이 Border 에 포커스를 준다. 그래서 여기에도 UIObjectService 를 둔다.
+                    좌표는 Image 기준으로 재므로 Image 에도 하나 있다.
                 -->
                 <Border
                     Background="#202020"
                     Focusable="True">
 
                     <dxmvvm:Interaction.Behaviors>
+                        <dxmvvm:UIObjectService x:Name="PreviewSurfaceObjectService" />
+
                         <dxmvvm:EventToCommand
                             Command="{Binding OnPreviewMouseDownCommand}"
                             EventName="MouseDown"
-                            PassEventArgsToCommand="True" />
-                        <dxmvvm:EventToCommand
-                            Command="{Binding OnPreviewMouseUpCommand}"
-                            EventName="MouseUp"
-                            PassEventArgsToCommand="True" />
-                        <dxmvvm:EventToCommand
-                            Command="{Binding OnPreviewMouseMoveCommand}"
-                            EventName="MouseMove"
                             PassEventArgsToCommand="True" />
                         <dxmvvm:EventToCommand
                             Command="{Binding OnPreviewMouseWheelCommand}"

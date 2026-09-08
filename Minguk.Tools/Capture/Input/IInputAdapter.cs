@@ -17,22 +17,36 @@ public enum MouseButton
 ///
 /// 좌표 규약
 ///   화면 절대 좌표(픽셀)를 받는다. 정규화는 각 구현이 알아서 한다.
+///
+/// 반환값 규약
+///   실제로 입력이 들어갔으면 true. false 는 OS 가 거부했다는 뜻이다 —
+///   대개 대상이 관리자 권한으로 떠 있어서(UIPI) 막힌 경우다.
+///   부르는 쪽이 사용자에게 이유를 알려 줄 수 있어야 해서 void 로 두지 않았다.
 /// </summary>
 public interface IInputAdapter
 {
     /// <summary>사람이 읽을 이름. 어느 경로로 나가는지 화면에 보여 주려고 둔다.</summary>
     string Name { get; }
 
-    void MoveMouseTo(int screenX, int screenY);
+    bool MoveMouseTo(int screenX, int screenY);
 
-    void PressMouseButton(MouseButton button);
+    bool PressMouseButton(MouseButton button);
 
-    void ReleaseMouseButton(MouseButton button);
+    bool ReleaseMouseButton(MouseButton button);
+
+    /// <summary>
+    /// 누르고 떼기를 한 번에.
+    ///
+    /// 미리보기에서는 이걸 쓴다. 누름과 뗌을 따로 보내면 뗌이 영영 안 온다 —
+    /// 누르는 순간 진짜 커서가 대상 창 위로 옮겨 가서, 사용자가 버튼을 떼는 것을
+    /// 이 앱이 못 보기 때문이다. 그러면 대상 창에서는 버튼이 눌린 채로 남는다.
+    /// </summary>
+    bool ClickMouseButton(MouseButton button);
 
     /// <summary>휠. 120 이 한 칸이다(WHEEL_DELTA).</summary>
-    void ScrollWheel(int delta);
+    bool ScrollWheel(int delta);
 
-    void PressKey(ushort virtualKey);
+    bool PressKey(ushort virtualKey);
 
-    void ReleaseKey(ushort virtualKey);
+    bool ReleaseKey(ushort virtualKey);
 }

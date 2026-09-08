@@ -19,6 +19,8 @@ namespace Minguk.Tools.Capture.Input;
 /// </summary>
 public sealed class SendInputAdapter : IInputAdapter
 {
+    private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+
     public string Name => "SendInput";
 
     /// <summary>
@@ -27,7 +29,7 @@ public sealed class SendInputAdapter : IInputAdapter
     /// SendInput 의 절대 좌표는 픽셀이 아니라 0~65535 로 정규화된 값이다.
     /// 여러 모니터를 함께 쓰려면 가상 화면(모든 모니터를 감싸는 사각형) 기준으로 환산해야 한다.
     /// </summary>
-    public void MoveMouseTo(int screenX, int screenY)
+    public bool MoveMouseTo(int screenX, int screenY)
     {
         var virtualLeft = NativeMethods.GetSystemMetrics(NativeMethods.SM_XVIRTUALSCREEN);
         var virtualTop = NativeMethods.GetSystemMetrics(NativeMethods.SM_YVIRTUALSCREEN);
@@ -35,33 +37,33 @@ public sealed class SendInputAdapter : IInputAdapter
         var virtualHeight = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYVIRTUALSCREEN);
 
         if (virtualWidth <= 0 || virtualHeight <= 0)
-            return;
+            return false;
 
         // -1 을 빼는 이유: 65535 는 마지막 픽셀의 "오른쪽 끝" 이라 그대로 쓰면 한 칸 넘어간다.
         var normalizedX = (int)Math.Round((screenX - virtualLeft) * 65535.0 / (virtualWidth - 1));
         var normalizedY = (int)Math.Round((screenY - virtualTop) * 65535.0 / (virtualHeight - 1));
 
-        Send(NativeMethods.MouseInput(
+        return Send(NativeMethods.MouseInput(
             NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE | NativeMethods.MOUSEEVENTF_VIRTUALDESK,
             normalizedX,
             normalizedY));
     }
 
-    public void PressMouseButton(MouseButton button) => Send(NativeMethods.MouseInput(DownFlag(button)));
+    public bool PressMouseButton(MouseButton button) => Send(NativeMethods.MouseInput(DownFlag(button)));
 
-    public void ReleaseMouseButton(MouseButton button) => Send(NativeMethods.MouseInput(UpFlag(button)));
+    public bool ReleaseMouseButton(MouseButton button) => Send(NativeMethods.MouseInput(UpFlag(button)));
 
     /// <summary>누르고 떼기를 한 번에. 두 이벤트를 한 번의 SendInput 으로 보내 사이에 끼어들 틈을 줄인다.</summary>
-    public void ClickMouseButton(MouseButton button)
+    public bool ClickMouseButton(MouseButton button)
         => Send(NativeMethods.MouseInput(DownFlag(button)), NativeMethods.MouseInput(UpFlag(button)));
 
     /// <summary>휠. <paramref name="delta"/> 는 120 이 한 칸이다(WHEEL_DELTA).</summary>
-    public void ScrollWheel(int delta)
+    public bool ScrollWheel(int delta)
         => Send(NativeMethods.MouseInput(NativeMethods.MOUSEEVENTF_WHEEL, mouseData: delta));
 
-    public void PressKey(ushort virtualKey) => Send(NativeMethods.KeyInput(virtualKey, isKeyUp: false));
+    public bool PressKey(ushort virtualKey) => Send(NativeMethods.KeyInput(virtualKey, isKeyUp: false));
 
-    public void ReleaseKey(ushort virtualKey) => Send(NativeMethods.KeyInput(virtualKey, isKeyUp: true));
+    public bool ReleaseKey(ushort virtualKey) => Send(NativeMethods.KeyInput(virtualKey, isKeyUp: true));
 
     private static uint DownFlag(MouseButton button) => button switch
     {
@@ -77,8 +79,23 @@ public sealed class SendInputAdapter : IInputAdapter
         _ => NativeMethods.MOUSEEVENTF_LEFTUP
     };
 
-    private static void Send(params NativeMethods.Input[] inputs)
-        => NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.Input>());
+    /// <summary>
+    /// 실제로 커널 입력 큐에 넣는다.
+    ///
+    /// SendInput 은 넣은 개수를 돌려준다. 요청한 것보다 적으면 OS 가 막은 것이다.
+    /// 거의 항상 UIPI — 대상 창이 이 앱보다 높은 권한으로 떠 있는 경우다(오류 코드 5).
+    /// 조용히 넘기면 "클릭이 안 된다" 는 것만 보이고 이유를 알 수 없어서 남긴다.
+    /// </summary>
+    private static bool Send(params NativeMethods.Input[] inputs)
+    {
+        var sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.Input>());
+
+        if (sent == inputs.Length)
+            return true;
+
+        Logger.Warn($"SendInput 이 막혔다. 보낸 것 {sent}/{inputs.Length}, 오류 코드 {Marshal.GetLastWin32Error()}");
+        return false;
+    }
 
     private static class NativeMethods
     {

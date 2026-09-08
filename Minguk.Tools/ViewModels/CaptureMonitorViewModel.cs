@@ -122,6 +122,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>미리보기 Image 컨트롤. 누른 자리를 원본 좌표로 바꾸려면 컨트롤 크기가 필요하다.</summary>
     private System.Windows.Controls.Image? _previewImage;
 
+    /// <summary>입력을 받는 Border. 키를 받으려면 여기에 포커스가 있어야 한다.</summary>
+    private System.Windows.Controls.Border? _previewSurface;
+
     /// <summary>미리보기에서 일어난 입력을 대상 창으로 흘려보내는 쪽.</summary>
     private PreviewInputRouter? _inputRouter;
 
@@ -267,8 +270,6 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     }
 
     public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseDownCommand { get; private set; } = null!;
-    public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseUpCommand { get; private set; } = null!;
-    public DelegateCommand<MouseEventArgs> OnPreviewMouseMoveCommand { get; private set; } = null!;
     public DelegateCommand<MouseWheelEventArgs> OnPreviewMouseWheelCommand { get; private set; } = null!;
     public DelegateCommand<KeyEventArgs> OnPreviewKeyDownCommand { get; private set; } = null!;
     public DelegateCommand<KeyEventArgs> OnPreviewKeyUpCommand { get; private set; } = null!;
@@ -319,8 +320,6 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning && EnableCpuReadback, false);
 
         OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
-        OnPreviewMouseUpCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseUp, false);
-        OnPreviewMouseMoveCommand = new DelegateCommand<MouseEventArgs>(OnPreviewMouseMove, false);
         OnPreviewMouseWheelCommand = new DelegateCommand<MouseWheelEventArgs>(OnPreviewMouseWheel, false);
         OnPreviewKeyDownCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyDown, false);
         OnPreviewKeyUpCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyUp, false);
@@ -333,6 +332,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     {
         _previewLayoutGroup = FindControl<LayoutGroup>("PreviewGroupObjectService");
         _previewImage = FindControl<System.Windows.Controls.Image>("PreviewImageObjectService");
+        _previewSurface = FindControl<System.Windows.Controls.Border>("PreviewSurfaceObjectService");
     }
 
     /// <summary>지난번에 쓰던 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.</summary>
@@ -902,41 +902,39 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         new System.Windows.Size(_previewImage!.ActualWidth, _previewImage.ActualHeight),
         new System.Windows.Size(_lastFrameWidth, _lastFrameHeight));
 
+    /// <summary>
+    /// 미리보기를 눌렀다. 대상 창의 같은 자리를 누르고 뗀다.
+    ///
+    /// 누름과 뗌을 나눠 보내지 않는다. 누르는 순간 진짜 커서가 대상 창으로 옮겨 가서
+    /// 사용자가 버튼을 떼는 것을 이 화면이 못 보기 때문이다. 그러면 대상 창에서는
+    /// 버튼이 눌린 채로 남는다.
+    /// </summary>
     private void OnPreviewMouseDown(MouseButtonEventArgs args)
     {
-        if (!CanForwardInput)
-            return;
+        // 전달이 꺼져 있어도 포커스는 준다. 켜자마자 키가 들어오게 하려는 것이다.
+        // Image 는 Focusable 이 아니라서 여기가 아니라 Border 를 잡아야 한다.
+        _previewSurface?.Focus();
 
-        var (control, source) = PreviewSizes;
-        var point = args.GetPosition(_previewImage);
-
-        if (_inputRouter!.TryPressMouse(point, control, source, ToBackendButton(args.ChangedButton)))
-            args.Handled = true;
-
-        // 키 입력을 받으려면 미리보기가 포커스를 가지고 있어야 한다.
-        _previewImage!.Focus();
-    }
-
-    private void OnPreviewMouseUp(MouseButtonEventArgs args)
-    {
         if (!CanForwardInput)
             return;
 
         var (control, source) = PreviewSizes;
 
-        if (_inputRouter!.TryReleaseMouse(args.GetPosition(_previewImage), control, source, ToBackendButton(args.ChangedButton)))
-            args.Handled = true;
+        ReportInputForward(_inputRouter!.TryClickMouse(
+            args.GetPosition(_previewImage),
+            control,
+            source,
+            ToBackendButton(args.ChangedButton)));
+
+        args.Handled = true;
     }
 
-    private void OnPreviewMouseMove(MouseEventArgs args)
-    {
-        if (!CanForwardInput)
-            return;
-
-        var (control, source) = PreviewSizes;
-        _inputRouter!.TryMoveMouse(args.GetPosition(_previewImage), control, source);
-    }
-
+    /// <summary>
+    /// 휠은 그 자리로 옮긴 뒤 굴린다.
+    ///
+    /// 마우스 이동은 전달하지 않는다. 전달하면 미리보기 위를 지나가기만 해도 진짜 커서가
+    /// 대상 화면으로 끌려가서 이 앱을 조작할 수 없게 된다. 누른 순간에만 옮긴다.
+    /// </summary>
     private void OnPreviewMouseWheel(MouseWheelEventArgs args)
     {
         if (!CanForwardInput)
@@ -944,8 +942,8 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         var (control, source) = PreviewSizes;
 
-        if (_inputRouter!.TryScroll(args.GetPosition(_previewImage), control, source, args.Delta))
-            args.Handled = true;
+        ReportInputForward(_inputRouter!.TryScroll(args.GetPosition(_previewImage), control, source, args.Delta));
+        args.Handled = true;
     }
 
     private void OnPreviewKeyDown(KeyEventArgs args)
@@ -953,7 +951,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (!CanForwardInput)
             return;
 
-        _inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: false);
+        ReportInputForward(_inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: false));
         args.Handled = true;
     }
 
@@ -962,8 +960,23 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (!CanForwardInput)
             return;
 
-        _inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: true);
+        ReportInputForward(_inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: true));
         args.Handled = true;
+    }
+
+    /// <summary>
+    /// 전달이 안 됐으면 왜 안 됐는지 상태 줄에 띄운다.
+    /// 조용히 넘기면 "클릭이 안 된다" 는 것만 보이고 이유를 알 수 없다.
+    /// </summary>
+    private void ReportInputForward(Capture.Input.InputForwardResult result)
+    {
+        if (result == Capture.Input.InputForwardResult.Sent)
+            return;
+
+        var reason = Capture.Input.InputForwardResultText.Describe(result);
+
+        StatusText = $"입력 전달 안 됨 - {reason}";
+        Logger.Debug($"입력 전달 안 됨: {result}");
     }
 
     private static Capture.Input.MouseButton ToBackendButton(System.Windows.Input.MouseButton button) => button switch

@@ -10,16 +10,22 @@ namespace Minguk.Tools.Capture.Input;
 /// 앞의 셋을 엮는 자리다.
 ///   <see cref="CaptureTargetBounds"/> 로 대상이 화면 어디에 있는지 구하고,
 ///   <see cref="PreviewInputMapper"/> 로 누른 자리를 화면 좌표로 바꾸고,
-///   <see cref="VirtualInput"/> 으로 그 자리에 실제 입력을 만들어 넣는다.
+///   <see cref="IInputAdapter"/> 로 그 자리에 실제 입력을 만들어 넣는다.
 ///
 /// 포커스에 대하여
 ///   SendInput 은 "지금 포커스를 가진 창" 으로 간다. 그래서 입력을 보내기 전에
 ///   대상 창을 앞으로 가져온다. 대상이 모니터면 그 자리에 있는 창이 알아서 받는다 —
 ///   클릭 자체가 포커스를 옮기므로 따로 할 일이 없다.
 ///
+/// 클릭은 왜 한 번에 보내는가
+///   누름과 뗌을 나눠 보내면 뗌이 영영 안 온다. 누르는 순간 진짜 커서가 대상 창 위로
+///   옮겨 가 버려서, 사용자가 버튼을 떼는 것을 이 앱이 못 보기 때문이다.
+///   그러면 대상 창에서는 버튼이 눌린 채로 남아 화면이 끌려다닌다.
+///   그래서 <see cref="TryClickMouse"/> 하나로 누르고 떼는 것까지 끝낸다.
+///
 /// 안 되는 경우
 ///   관리자 권한으로 뜬 창에는 일반 권한 프로세스가 입력을 넣을 수 없다(UIPI).
-///   그때는 조용히 아무 일도 일어나지 않는다 — 오류도 나지 않는다.
+///   그때는 <see cref="InputForwardResult.Blocked"/> 가 돌아온다.
 ///   그런 창을 다루려면 이 앱도 관리자로 띄워야 한다.
 /// </summary>
 public sealed class PreviewInputRouter
@@ -46,75 +52,88 @@ public sealed class PreviewInputRouter
     /// <summary>마지막으로 옮긴 화면 좌표. 키 입력은 좌표가 없어서 이걸 기준으로 삼는다.</summary>
     public Point? LastScreenPoint { get; private set; }
 
-    /// <summary>
-    /// 미리보기 좌표를 화면 좌표로 바꿔 마우스를 옮긴다.
-    /// 대상 위가 아니거나 대상을 못 찾으면 false.
-    /// </summary>
-    public bool TryMoveMouse(Point pointInControl, Size controlSize, Size sourceSize)
+    /// <summary>미리보기 좌표로 마우스만 옮긴다.</summary>
+    public InputForwardResult TryMoveMouse(Point pointInControl, Size controlSize, Size sourceSize)
     {
-        if (!TryResolveScreenPoint(pointInControl, controlSize, sourceSize, out var screenPoint))
-            return false;
+        var resolved = TryResolveScreenPoint(pointInControl, controlSize, sourceSize, out var screenPoint);
+        if (resolved != InputForwardResult.Sent)
+            return resolved;
 
         LastScreenPoint = screenPoint;
-        InputAdapter.MoveMouseTo((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y));
 
-        return true;
+        return MoveTo(screenPoint) ? InputForwardResult.Sent : InputForwardResult.Blocked;
     }
 
-    /// <summary>그 자리로 옮긴 뒤 버튼을 누른다.</summary>
-    public bool TryPressMouse(Point pointInControl, Size controlSize, Size sourceSize, MouseButton button)
+    /// <summary>
+    /// 그 자리로 옮긴 뒤 누르고 뗀다. 미리보기에서 쓰는 것은 이것이다.
+    /// </summary>
+    public InputForwardResult TryClickMouse(Point pointInControl, Size controlSize, Size sourceSize, MouseButton button)
     {
-        if (!TryMoveMouse(pointInControl, controlSize, sourceSize))
-            return false;
+        var resolved = TryResolveScreenPoint(pointInControl, controlSize, sourceSize, out var screenPoint);
+        if (resolved != InputForwardResult.Sent)
+            return resolved;
 
+        LastScreenPoint = screenPoint;
+
+        // 창을 먼저 앞으로 가져온다. 옮기기 전에 해야 한다 —
+        // 커서가 이미 대상 위에 있는 상태에서 창이 올라와야 첫 클릭이 활성화로 먹히지 않는다.
         FocusTargetWindow();
-        InputAdapter.PressMouseButton(button);
 
-        return true;
+        if (!MoveTo(screenPoint))
+            return InputForwardResult.Blocked;
+
+        return InputAdapter.ClickMouseButton(button) ? InputForwardResult.Sent : InputForwardResult.Blocked;
     }
 
-    public bool TryReleaseMouse(Point pointInControl, Size controlSize, Size sourceSize, MouseButton button)
+    public InputForwardResult TryScroll(Point pointInControl, Size controlSize, Size sourceSize, int delta)
     {
-        if (!TryMoveMouse(pointInControl, controlSize, sourceSize))
-            return false;
+        var moved = TryMoveMouse(pointInControl, controlSize, sourceSize);
+        if (moved != InputForwardResult.Sent)
+            return moved;
 
-        InputAdapter.ReleaseMouseButton(button);
-        return true;
-    }
-
-    public bool TryScroll(Point pointInControl, Size controlSize, Size sourceSize, int delta)
-    {
-        if (!TryMoveMouse(pointInControl, controlSize, sourceSize))
-            return false;
-
-        InputAdapter.ScrollWheel(delta);
-        return true;
+        return InputAdapter.ScrollWheel(delta) ? InputForwardResult.Sent : InputForwardResult.Blocked;
     }
 
     /// <summary>
     /// 키를 보낸다. 좌표가 없으므로 대상 창을 앞으로 가져온 뒤 넣는다.
     /// 대상이 모니터면 그 화면에서 마지막으로 클릭한 창이 받는다.
     /// </summary>
-    public void SendKey(ushort virtualKey, bool isKeyUp)
+    public InputForwardResult SendKey(ushort virtualKey, bool isKeyUp)
     {
+        if (_targetProvider() is null)
+            return InputForwardResult.NoTarget;
+
         FocusTargetWindow();
 
-        if (isKeyUp)
-            InputAdapter.ReleaseKey(virtualKey);
-        else
-            InputAdapter.PressKey(virtualKey);
+        var sent = isKeyUp
+            ? InputAdapter.ReleaseKey(virtualKey)
+            : InputAdapter.PressKey(virtualKey);
+
+        return sent ? InputForwardResult.Sent : InputForwardResult.Blocked;
     }
 
-    private bool TryResolveScreenPoint(Point pointInControl, Size controlSize, Size sourceSize, out Point screenPoint)
+    private bool MoveTo(Point screenPoint)
+        => InputAdapter.MoveMouseTo((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y));
+
+    /// <summary>어디를 눌렀는지 화면 좌표로 푼다. 못 풀면 그 이유를 돌려준다.</summary>
+    private InputForwardResult TryResolveScreenPoint(
+        Point pointInControl,
+        Size controlSize,
+        Size sourceSize,
+        out Point screenPoint)
     {
         screenPoint = default;
 
         var target = _targetProvider();
         if (target is null)
-            return false;
+            return InputForwardResult.NoTarget;
 
-        return CaptureTargetBounds.TryGet(target, out var bounds)
-               && PreviewInputMapper.TryMapToScreen(pointInControl, controlSize, sourceSize, bounds, out screenPoint);
+        if (!CaptureTargetBounds.TryGet(target, out var bounds))
+            return InputForwardResult.TargetGone;
+
+        return PreviewInputMapper.TryMapToScreen(pointInControl, controlSize, sourceSize, bounds, out screenPoint)
+            ? InputForwardResult.Sent
+            : InputForwardResult.OutsideImage;
     }
 
     /// <summary>
