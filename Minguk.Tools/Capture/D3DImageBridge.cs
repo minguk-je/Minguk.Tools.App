@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -40,6 +40,18 @@ public sealed class D3DImageBridge : IDisposable
 
     private int _width;
     private int _height;
+
+    /// <summary>마지막 GPU 복사에 걸린 시간(ms). 어디가 느린지 가르는 용도.</summary>
+    public double LastCopyMs { get; private set; }
+
+    /// <summary>마지막 화면 반영에 걸린 시간(ms).</summary>
+    public double LastPresentMs { get; private set; }
+
+    /// <summary>
+    /// WPF 가 이 표면을 실제로 쓸 수 있는 상태인지.
+    /// false 면 TryLock 이 즉시 실패한다 — 표면이 WPF 가 그리는 어댑터에 없을 때 그렇다.
+    /// </summary>
+    public bool IsFrontBufferAvailable => Image.IsFrontBufferAvailable;
 
     /// <summary>XAML 의 Image 가 무는 소스. D3DImage 도 ImageSource 다.</summary>
     public D3DImage Image { get; } = new();
@@ -124,21 +136,31 @@ public sealed class D3DImageBridge : IDisposable
         if (!IsReady)
             return false;
 
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+
         context.CopyResource(_sharedTexture!, source);
 
         // 복사를 GPU 에 밀어 넣는다. 이게 없으면 UI 가 이전 프레임을 보게 된다.
         context.Flush();
+
+        LastCopyMs = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 
         return true;
     }
 
     /// <summary>
     /// 바뀐 영역을 WPF 에 알린다. UI 스레드에서 부를 것.
+    ///
+    /// TryLock 은 쓰지 않는다. 타임아웃을 0 으로 두든 4ms 로 두든 매번 즉시 실패했다
+    /// (프론트버퍼가 살아 있는데도 0fps). Lock() 은 실측으로 57~60fps 를 안정적으로 냈다.
     /// </summary>
-    public void Present()
+    /// <returns>화면에 반영했으면 true.</returns>
+    public bool Present()
     {
         if (!IsReady)
-            return;
+            return false;
+
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
 
         Image.Lock();
         try
@@ -149,6 +171,9 @@ public sealed class D3DImageBridge : IDisposable
         {
             Image.Unlock();
         }
+
+        LastPresentMs = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        return true;
     }
 
     private void ReleaseSurface()

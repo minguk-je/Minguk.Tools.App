@@ -104,6 +104,12 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>공유 표면에 새 프레임이 들어왔으면 1. 캡처 스레드가 세우고 렌더 콜백이 내린다.</summary>
     private int _gpuFrameReady;
 
+    /// <summary>화면 반영을 이미 걸어 두었으면 1. 같은 요청을 겹쳐 쌓지 않는다.</summary>
+    private int _presentScheduled;
+
+    /// <summary>화면 반영 시도가 초당 몇 번 있었는지.</summary>
+    private int _renderCallbacks;
+
     /// <summary>CompositionTarget.Rendering 구독 여부. UI 스레드에서만 만진다.</summary>
     private bool _previewRenderHooked;
 
@@ -389,8 +395,10 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             if (context is null || !bridge.CopyFrom(context, e.Texture))
                 return;
 
-            // UI 를 깨우지 않는다. 표시만 세워 두면 다음 렌더에서 가져간다.
+            // 렌더 이벤트 안에서 화면 반영을 하면 WPF 가 쥔 잠금과 부딪힌다.
+            // Render 우선순위로 따로 넣어 그리기 직전에 처리되게 한다.
             Interlocked.Exchange(ref _gpuFrameReady, 1);
+            SchedulePresent();
         }
         catch (Exception ex)
         {
@@ -444,20 +452,59 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// 갱신 주기를 화면 주사율에 맞추는 것이 요점이다. 캡처 프레임마다 디스패처로
     /// 밀어 넣으면 그 대기가 곧 상한이 된다 — 그 방식으로는 55fps 에서 막혔다.
     /// </summary>
-    private void OnPreviewRendering(object? sender, EventArgs e)
+    /// <summary>
+    /// 화면 반영을 UI 스레드에 건다. 이미 걸려 있으면 겹쳐 넣지 않는다.
+    ///
+    /// 데이터 표시(_gpuFrameReady)와 스케줄 여부(_presentScheduled)를 따로 둔 이유가 있다.
+    /// 하나로 합쳤더니, TryLock 이 한 번 실패해 표시를 되돌려 놓는 순간
+    /// "이미 표시가 서 있으니 새로 걸지 않는다"가 되어 루프가 영구히 멈췄다(60fps -> 0).
+    /// </summary>
+    private void SchedulePresent()
     {
+        if (Interlocked.Exchange(ref _presentScheduled, 1) != 0)
+            return;
+
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Render,
+            new Action(PresentPreview));
+    }
+
+    private void PresentPreview()
+    {
+        Interlocked.Exchange(ref _presentScheduled, 0);
+        Interlocked.Increment(ref _renderCallbacks);
+
         if (Interlocked.Exchange(ref _gpuFrameReady, 0) == 0)
             return;
 
         try
         {
-            _previewBridge?.Present();
-            Interlocked.Increment(ref _previewFrames);
+            if (_previewBridge?.Present() == true)
+            {
+                Interlocked.Increment(ref _previewFrames);
+                return;
+            }
+
+            // WPF 가 표면을 쓰는 중이었다. 이 장은 버린다.
+            //
+            // 여기서 곧바로 다시 걸면 라이브락이 된다. 실제로 그렇게 만들었더니
+            // 화면 반영 시도가 초당 49,000회까지 치솟았다 — Render 우선순위로 꽉 채우는 바람에
+            // WPF 가 정작 그리질 못하고, 그래서 표면도 영영 안 풀려서 미리보기가 0fps 로 죽었다.
+            //
+            // 다음 캡처 프레임(16.7ms 뒤)이 어차피 새로 걸어 준다. 그 박자에 맡긴다.
         }
         catch (Exception ex)
         {
             FallBackToCpuPreview(ex);
         }
+    }
+
+    /// <summary>
+    /// 화면이 계속 그려지도록 붙잡아 두는 빈 핸들러.
+    /// D3DImage 의 갱신만으로는 WPF 가 렌더 루프를 계속 돌린다는 보장이 없다.
+    /// </summary>
+    private void OnKeepRendering(object? sender, EventArgs e)
+    {
     }
 
     /// <summary>
@@ -473,9 +520,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         _previewRenderHooked = hook;
 
         if (hook)
-            CompositionTarget.Rendering += OnPreviewRendering;
+            CompositionTarget.Rendering += OnKeepRendering;
         else
-            CompositionTarget.Rendering -= OnPreviewRendering;
+            CompositionTarget.Rendering -= OnKeepRendering;
     }
 
     /// <summary>
@@ -703,7 +750,10 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         PreviewFps = Interlocked.Exchange(ref _previewFrames, 0);
 
         if (ShowPreview)
-            Logger.Debug($"미리보기 {PreviewFps}fps (캡처 {row.Fps:n0}fps, 경로 {(_gpuPreviewFailed ? "CPU" : "GPU")})");
+            Logger.Debug($"미리보기 {PreviewFps}fps (캡처 {row.Fps:n0}fps, 경로 {(_gpuPreviewFailed ? "CPU" : "GPU")}" +
+                         $", 반영시도 {Interlocked.Exchange(ref _renderCallbacks, 0)}회" +
+                         $", 프론트버퍼 {_previewBridge?.IsFrontBufferAvailable}" +
+                         $", GPU복사 {_previewBridge?.LastCopyMs:n2}ms, 화면반영 {_previewBridge?.LastPresentMs:n2}ms)");
 
         if (_session is not null)
             StatusText = $"캡처 중: {_session.Target.Display} — {row.Fps:n0} fps, 지연 {row.AvgLatencyMs:n2} ms";
@@ -748,6 +798,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         // 공유 표면은 세션의 D3D11 디바이스에 묶여 있다. 세션이 죽으면 같이 버린다.
         HookPreviewRendering(false);
         Interlocked.Exchange(ref _gpuFrameReady, 0);
+        Interlocked.Exchange(ref _presentScheduled, 0);
         PreviewImage = null;
         _previewBridge?.Dispose();
         _previewBridge = null;
