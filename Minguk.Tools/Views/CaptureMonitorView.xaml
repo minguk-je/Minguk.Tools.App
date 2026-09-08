@@ -28,6 +28,8 @@
             <dxmvvm:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
             <ResourceDictionary.MergedDictionaries>
+                <!-- 행 번호가 그려지는 RowIndicator 템플릿이 DataTemplate.xaml 에 있다 -->
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/DataTemplate.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/GridColumnStyle.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
             </ResourceDictionary.MergedDictionaries>
@@ -230,7 +232,8 @@
                 View="Group">
                 <controls:BaseGridControl
                     AutoGenerateColumns="None"
-                    ItemsSource="{Binding Rows}">
+                    ItemsSource="{Binding Rows}"
+                    dependency:GridControlDependency.IsRowNumber="True">
 
                     <dxmvvm:Interaction.Behaviors>
                         <!--
@@ -256,9 +259,14 @@
                         AllowBestFit="False"
                         AllowEditing="False"
                         ShowGroupPanel="False"
-                        dependency:GridControlDependency.IsColumnAutoWidth="{Binding IsColumnAutoWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=False}"
-                        dependency:GridControlDependency.IsRowNumber="True" />
+                        dependency:GridControlDependency.IsColumnAutoWidth="{Binding IsColumnAutoWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=False}" />
                 </dxg:GridControl.View>
+
+                <!--
+                    행 번호용 숨은 언바운드 열. 화면에는 안 보이고 왼쪽 인디케이터가 이 값을 쓴다.
+                    (GridControlDependency 가 CustomUnboundColumnData 에서 채운다)
+                -->
+                <dxg:GridColumn Style="{StaticResource GridColumn.RowNumber.Style}" />
 
                 <dxg:GridColumn
                     Width="160"
