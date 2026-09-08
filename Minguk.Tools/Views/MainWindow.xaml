@@ -1,9 +1,10 @@
-<dx:ThemedWindow x:Class="Minguk.Tools.Views.MainWindow"
+﻿<dx:ThemedWindow x:Class="Minguk.Tools.Views.MainWindow"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
                  xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+                 xmlns:native="clr-namespace:DevExpress.Xpf.Core.Native;assembly=DevExpress.Xpf.Core.v26.1"
                  xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
                  xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
                  xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
@@ -63,6 +64,34 @@
                                PassEventArgsToCommand="True" />
         <dxmvvm:EventToCommand Command="{Binding OnActivatedCommand}"
                                EventName="Activated" />
+
+        <!--
+            설정 대화상자. ViewModel 은 MainWindowViewModel 이 만들어 넘긴다.
+            SizeToContent 로 두어 내용에 맞게 열린다 - 항목이 늘어도 잘리지 않는다.
+        -->
+        <dx:DialogService x:Name="ConfigDialogService"
+                          DialogWindowStartupLocation="CenterOwner">
+            <dx:DialogService.ViewTemplate>
+                <DataTemplate>
+                    <views:ConfigView />
+                </DataTemplate>
+            </dx:DialogService.ViewTemplate>
+
+            <dx:DialogService.DialogStyle>
+                <Style TargetType="dx:ThemedWindow">
+                    <Setter Property="ResizeMode" Value="NoResize" />
+                    <Setter Property="ShowIcon" Value="False" />
+                    <Setter Property="WindowStyle" Value="ToolWindow" />
+                    <Setter Property="SizeToContent" Value="WidthAndHeight" />
+
+                    <!--
+                        기본 푸터를 끈다. 안 끄면 화면 안의 "확인/취소" 아래에
+                        DevExpress 가 만든 버튼이 하나 더 붙어서 확인 버튼이 둘이 된다.
+                    -->
+                    <Setter Property="native:ThemedWindowOptions.UseCustomDialogFooter" Value="True" />
+                </Style>
+            </dx:DialogService.DialogStyle>
+        </dx:DialogService>
     </dxmvvm:Interaction.Behaviors>
 
     <!-- 좌측 캡션 영역 버튼들 -->

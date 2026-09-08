@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Reactive.Disposables;
 using System.Reflection;
@@ -27,6 +27,9 @@ public class MainWindowViewModel : ViewModelBase
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
     public IDispatcherService DispatcherService => this.GetService<IDispatcherService>();
+
+    /// <summary>설정 대화상자. MainWindow.xaml 의 ConfigDialogService 가 실체다.</summary>
+    protected IDialogService ConfigDialogService => this.GetService<IDialogService>("ConfigDialogService");
 
     public ICommand OnInitializedCommand { get; set; }
     public ICommand OnLoadedCommand { get; set; }
@@ -176,10 +179,14 @@ public class MainWindowViewModel : ViewModelBase
         {
             Logger.Trace(string.Empty);
 
-            // TODO: 설정 화면(ConfigView)을 만들면 여기서 IDialogService 로 띄운다.
-            //       TamsTools 는 ThemedWindow 스타일을 지정한 dx:DialogService 를
-            //       MainWindow.xaml 의 Interaction.Behaviors 에 두고 이 자리에서 ShowDialog 를 호출한다.
-            Minguk.Base.Utility.MessageBox("설정 화면은 아직 만들지 않았습니다.", "설정");
+            var viewModel = ConfigViewModel.Create();
+
+            ConfigDialogService.ShowDialog(dialogButtons: MessageButton.OK, title: "설정", viewModel: viewModel);
+
+            // 초기화는 대화상자가 닫힌 뒤에 처리한다.
+            // 대화상자 안에서 바로 재시작하면 창이 닫히기 전에 프로세스가 죽는다.
+            if (viewModel.IsResetRequested)
+                DoRestart();
         }
         catch (Exception ex)
         {
