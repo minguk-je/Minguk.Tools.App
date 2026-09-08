@@ -187,6 +187,7 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
     {
         try
         {
+            SaveOpenDocumentSettings();
             SaveLayout();
             SaveNavigationWidth();
 
@@ -424,6 +425,24 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
             // 저장본 형식이 바뀌었더라도 복원 자체는 시도해 본다.
             Logger.Warn(ex, "레이아웃에서 창 크기 항목을 떼어 내지 못했다. 원본 그대로 쓴다.");
             return layout;
+        }
+    }
+
+    /// <summary>
+    /// 열려 있는 문서들에게 "지금 설정을 저장하라"고 알린다.
+    ///
+    /// 탭을 닫으면 문서가 스스로 저장하지만, 앱을 그냥 닫으면 문서는 파기되지 않는다.
+    /// 그래서 셸이 종료할 때 한 번 대신 불러 준다.
+    /// </summary>
+    private void SaveOpenDocumentSettings()
+    {
+        foreach (var document in DocumentManagerService.Documents)
+        {
+            // Content 가 ViewModel 인 경우와 View 인 경우 둘 다 대응한다.
+            var viewModel = document.Content as DocumentViewModelBase
+                            ?? (document.Content as FrameworkElement)?.DataContext as DocumentViewModelBase;
+
+            viewModel?.SaveSettingsNow();
         }
     }
 

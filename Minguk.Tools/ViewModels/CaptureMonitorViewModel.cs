@@ -92,6 +92,12 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// </summary>
     private const int PreviewMaxHeight = 400;
 
+    /// <summary>미리보기 칸의 기본 높이(px).</summary>
+    private const double DefaultPreviewHeight = 320;
+
+    /// <summary>미리보기를 껐다 켤 때 되살릴 높이. 끄면 행이 0 으로 접히므로 따로 기억한다.</summary>
+    private double _lastPreviewHeight = DefaultPreviewHeight;
+
     /// <summary>
     /// GPU 경로. 캡처 텍스처를 CPU 를 거치지 않고 바로 화면에 올린다.
     /// 만들기가 실패하면(원격 데스크톱 등) <see cref="_gpuPreviewFailed"/> 를 세우고
@@ -186,6 +192,16 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         set => SetProperty(() => PreviewImage, value);
     }
 
+    /// <summary>
+    /// 미리보기 칸의 높이. XAML 의 RowDefinition.Height 와 TwoWay 로 물려 있어서
+    /// 스플리터를 끌면 이 값이 따라 바뀌고, 그 값을 저장해 다음에 되살린다.
+    /// </summary>
+    public GridLength PreviewRowHeight
+    {
+        get => GetProperty(() => PreviewRowHeight);
+        set => SetProperty(() => PreviewRowHeight, value);
+    }
+
     /// <summary>미리보기가 실제로 초당 몇 장 올라갔는지.</summary>
     public int PreviewFps
     {
@@ -202,6 +218,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     public CaptureMonitorViewModel()
     {
         Caption = "캡처 모니터";
+        PreviewRowHeight = new GridLength(0);
         CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/screen.png");
 
         // 탭을 닫으면 화면은 사라져도 캡처 세션은 남는다. 여기서 끊어 준다.
@@ -211,6 +228,30 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         DoStopCommand = new DelegateCommand(DoStop, () => IsRunning, false);
         DoClearCommand = new DelegateCommand(DoClear, false);
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning && EnableCpuReadback, false);
+    }
+
+    /// <summary>
+    /// 지난번에 쓰던 미리보기 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.
+    /// 높이를 먼저 넣어야 한다 — ShowPreview 를 켜는 순간 그 높이로 칸이 펴지기 때문이다.
+    /// </summary>
+    protected override void RestoreSettings()
+    {
+        _lastPreviewHeight = GetSetting(nameof(PreviewRowHeight), DefaultPreviewHeight);
+
+        if (_lastPreviewHeight < 80)
+            _lastPreviewHeight = DefaultPreviewHeight;
+
+        ShowPreview = GetSetting(nameof(ShowPreview), false);
+    }
+
+    protected override void SaveSettings()
+    {
+        // 켜져 있는 상태의 높이만 의미가 있다. 꺼져 있으면 행이 0 이라 그대로 저장하면 안 된다.
+        if (ShowPreview && PreviewRowHeight.Value > 0)
+            _lastPreviewHeight = PreviewRowHeight.Value;
+
+        SetSetting(nameof(PreviewRowHeight), _lastPreviewHeight);
+        SetSetting(nameof(ShowPreview), ShowPreview);
     }
 
     protected override void OnLoaded()
@@ -648,8 +689,15 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         {
             // GPU 경로는 픽셀을 CPU 로 내리지 않으므로 리드백이 필요 없다.
             // 그 경로를 못 쓰는 환경에서만 FallBackToCpuPreview 가 리드백을 요구한다.
+            PreviewRowHeight = new GridLength(_lastPreviewHeight);
             return;
         }
+
+        // 끄기 전에 지금 높이를 기억해 둔다. 다시 켜면 그 높이로 돌아온다.
+        if (PreviewRowHeight.Value > 0)
+            _lastPreviewHeight = PreviewRowHeight.Value;
+
+        PreviewRowHeight = new GridLength(0);
 
         HookPreviewRendering(false);
 

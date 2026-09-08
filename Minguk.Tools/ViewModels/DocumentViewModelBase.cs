@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Reactive.Disposables;
 using System.Windows.Media;
 using DevExpress.Mvvm;
@@ -196,6 +196,14 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
             Messenger.Default.Unregister(this);
         });
     }
+
+    /// <summary>
+    /// 지금 설정을 저장한다. 앱이 종료될 때 셸이 열려 있는 문서마다 불러 준다.
+    ///
+    /// 탭을 닫으면 OnDestroy 가 돌면서 저장되지만, 앱을 그냥 닫으면 문서는 파기되지 않는다.
+    /// 그래서 이 경로가 없으면 "탭을 안 닫고 앱을 껐을 때만 설정이 안 남는" 상태가 된다.
+    /// </summary>
+    public void SaveSettingsNow() => Guard(SaveSettings);
 
     /// <summary>창으로 띄웠을 때의 닫힘. 문서 탭은 OnClose/OnDestroy 를 탄다.</summary>
     protected virtual void OnClosing(CancelEventArgs e) => OnDestroy();
