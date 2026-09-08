@@ -229,15 +229,25 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         set => SetProperty(() => IsColumnAutoWidth, value);
     }
 
-    /// <summary>미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다.</summary>
+    /// <summary>
+    /// 캡처 상한(fps). 이 값을 넘는 프레임은 세션이 아예 처리하지 않는다 —
+    /// 리드백도 미리보기도 타지 않으므로 그만큼 일이 준다.
+    /// </summary>
+    public int CaptureTargetFps
+    {
+        get => GetProperty(() => CaptureTargetFps);
+        set => SetProperty(() => CaptureTargetFps, value, OnCaptureTargetFpsChanged);
+    }
+
+    /// <summary>캡처/미리보기 상한 콤보에 함께 쓰는 값들. 5 단위로 60 까지.</summary>
+    public virtual ObservableCollection<int> FpsOptions { get; set; } = new(new[] { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 });
+
+    /// <summary>미리보기 갱신 상한(fps). 캡처 상한과 별개다 — 캡처는 받고 화면에만 덜 올릴 수 있다.</summary>
     public int PreviewTargetFps
     {
         get => GetProperty(() => PreviewTargetFps);
         set => SetProperty(() => PreviewTargetFps, value, OnPreviewTargetFpsChanged);
     }
-
-    /// <summary>fps 콤보에 넣을 값들. 5 단위로 60 까지.</summary>
-    public virtual ObservableCollection<int> PreviewFpsOptions { get; set; } = new(new[] { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 });
 
     /// <summary>미리보기가 실제로 초당 몇 장 올라갔는지.</summary>
     public int PreviewFps
@@ -266,6 +276,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     {
         Caption = "캡처 모니터";
         PreviewTargetFps = 60;
+        CaptureTargetFps = 60;
         CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/screen.png");
 
         // 탭을 닫으면 화면은 사라져도 캡처 세션은 남는다. 여기서 끊어 준다.
@@ -296,6 +307,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         _lastTargetDisplay = GetSetting(nameof(SelectedTarget), string.Empty);
 
+        CaptureTargetFps = GetSetting(nameof(CaptureTargetFps), 60);
         PreviewTargetFps = GetSetting(nameof(PreviewTargetFps), 60);
         IsColumnAutoWidth = GetSetting(nameof(IsColumnAutoWidth), false);
         ShowPreview = GetSetting(nameof(ShowPreview), false);
@@ -339,6 +351,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         SetSetting(nameof(_lastPreviewHeight), _lastPreviewHeight);
         SetSetting(nameof(ShowPreview), ShowPreview);
+        SetSetting(nameof(CaptureTargetFps), CaptureTargetFps);
         SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
         SetSetting(nameof(IsColumnAutoWidth), IsColumnAutoWidth);
 
@@ -415,7 +428,10 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
                 return;
             }
 
-            _session = new WgcCaptureSession(SelectedTarget, EnableCpuReadback);
+            _session = new WgcCaptureSession(SelectedTarget, EnableCpuReadback)
+            {
+                TargetFps = CaptureTargetFps
+            };
             _session.FrameArrived += OnFrameArrived;
             _session.Notice += OnSessionNotice;
             _session.Start();
@@ -793,6 +809,13 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         // 목표 주기의 90%. 캡처 주기와 경계가 겹쳐 절반이 버려지는 것을 막는다.
         _previewIntervalTicks = Stopwatch.Frequency * 9 / (fps * 10);
+    }
+
+    /// <summary>캡처 상한이 바뀌면 돌고 있는 세션에 바로 반영한다.</summary>
+    private void OnCaptureTargetFpsChanged()
+    {
+        if (_session is not null)
+            _session.TargetFps = CaptureTargetFps;
     }
 
     private void OnShowPreviewChanged()

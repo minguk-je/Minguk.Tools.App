@@ -78,6 +78,22 @@
                 GlyphHeight="16"
                 GlyphWidth="16" />
 
+            <dxe:TextEdit
+                Width="70"
+                Margin="0,0,4,0"
+                EditValue="캡처 fps"
+                IsReadOnly="True"
+                ShowBorder="False" />
+
+            <!-- 상한을 넘는 프레임은 세션이 아예 처리하지 않는다. 리드백도 건너뛴다. -->
+            <dxe:ComboBoxEdit
+                Width="70"
+                Margin="0,0,12,0"
+                IsTextEditable="False"
+                ItemsSource="{Binding FpsOptions}"
+                SelectedItem="{Binding CaptureTargetFps}"
+                ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다." />
+
             <dx:SimpleButton
                 Width="100"
                 Margin="0,0,4,0"
@@ -130,7 +146,7 @@
                 Width="70"
                 Margin="0,0,4,0"
                 IsTextEditable="False"
-                ItemsSource="{Binding PreviewFpsOptions}"
+                ItemsSource="{Binding FpsOptions}"
                 SelectedItem="{Binding PreviewTargetFps}"
                 ToolTip="미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다."
                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />

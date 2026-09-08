@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -81,6 +81,31 @@ public sealed class WgcCaptureSession : IDisposable
     /// 게임이 진짜 독점 전체화면으로 넘어가면 창 캡처가 멎는데, 그때 살아남는 경로가 모니터 캡처다.
     /// </summary>
     public bool AutoFallbackToMonitor { get; }
+
+    private int _targetFps;
+    private long _targetIntervalTicks;
+    private long _lastProcessedTicks;
+
+    /// <summary>
+    /// 캡처 상한(fps). 0 이면 제한하지 않는다.
+    ///
+    /// WGC 는 화면 주사율만큼 프레임을 준다. 그보다 느리게 받고 싶으면 여기서 솎아 낸다.
+    /// 솎아 낸 프레임은 리드백도 이벤트도 타지 않으므로 그만큼 실제 일이 준다.
+    /// (WGC 가 프레임을 만드는 것 자체는 막을 수 없다 — 그건 시스템이 하는 일이다.)
+    ///
+    /// 돌아가는 중에 바꿔도 곧바로 반영된다.
+    /// </summary>
+    public int TargetFps
+    {
+        get => _targetFps;
+        set
+        {
+            _targetFps = value;
+
+            // 목표 주기의 90%. 딱 1/N 로 두면 주사율과 경계가 겹쳐 절반이 버려진다.
+            _targetIntervalTicks = value > 0 ? Stopwatch.Frequency * 9 / (value * 10L) : 0;
+        }
+    }
 
     public bool IsRunning
     {
@@ -295,6 +320,14 @@ public sealed class WgcCaptureSession : IDisposable
 
                 if (size.Width <= 0 || size.Height <= 0)
                     return;
+
+                // 상한에 걸리면 이 프레임은 버린다.
+                // using 이 frame 을 놓아 주므로 프레임 풀은 그대로 돈다 —
+                // 여기서 return 해도 다음 프레임은 정상적으로 들어온다.
+                if (_targetIntervalTicks > 0 && t0 - _lastProcessedTicks < _targetIntervalTicks)
+                    return;
+
+                _lastProcessedTicks = t0;
 
                 ProcessFrame(frame, t0);
             }
