@@ -1,7 +1,20 @@
-###############################################################################
+﻿###############################################################################
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
 * text=auto
+
+# 이 저장소는 윈도우 전용(WPF)이다. 소스는 작업 트리에서도 CRLF 로 둔다.
+# text=auto 만으로는 작업 트리 줄 끝이 도구마다 달라져서, 한 파일 안에
+# CRLF 와 LF 가 섞이면 Visual Studio 가 "일관성 없는 줄 끝" 을 물어본다.
+*.cs      text eol=crlf
+*.xaml    text eol=crlf
+*.csproj  text eol=crlf
+*.sln     text eol=crlf
+*.config  text eol=crlf
+*.json    text eol=crlf
+*.md      text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
 
 ###############################################################################
 # Set default behavior for command prompt diff.
