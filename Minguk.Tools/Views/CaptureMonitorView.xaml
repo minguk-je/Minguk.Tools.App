@@ -160,7 +160,8 @@
             <dxe:CheckEdit Margin="0,0,12,0"
                            Content="입력 전달"
                            IsChecked="{Binding IsInputForwardingEnabled}"
-                           ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 대상 창이 앞으로 나온다."
+                           IsEnabled="{Binding IsInputForwardingAvailable}"
+                           ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 요소 검사가 켜져 있으면 쓸 수 없다 - 그때는 클릭이 조회로만 쓰인다."
                            Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!--

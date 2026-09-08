@@ -108,6 +108,15 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>클릭을 넘긴 뒤 이 앱으로 돌아오기까지 기다리는 시간(ms).</summary>
     private const int ReturnToThisWindowDelayMs = 120;
 
+    /// <summary>
+    /// 대상 창을 앞으로 가져온 뒤 클릭을 보내기까지 기다리는 시간(ms).
+    ///
+    /// SetForegroundWindow 는 바로 돌아오지만 포그라운드 전환은 창 관리자가 나중에 처리한다.
+    /// 그 전에 클릭을 보내면 대상이 그것을 활성화 클릭으로 먹어서 아무 일도 안 일어난다.
+    /// 이미 앞에 있던 창이면 기다리지 않는다.
+    /// </summary>
+    private const int ActivationSettleDelayMs = 80;
+
     /// <summary>미리보기를 껐다 켤 때 되살릴 높이. 끄면 행이 0 으로 접히므로 따로 기억한다.</summary>
     private double _lastPreviewGroupHeight = DefaultPreviewHeight;
 
@@ -137,6 +146,15 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     /// <summary>요소 검사에 쓰는 UI 자동화 경로.</summary>
     private IUiAutomationAdapter? _uiAutomation;
+
+    /// <summary>
+    /// 클릭 한 번이 아직 처리 중인지.
+    ///
+    /// 클릭 경로가 비동기라서(활성화 대기 → 클릭 → 돌아오기) 그 사이에 들어온 클릭을
+    /// 그대로 받으면 같은 자리를 여러 번 누르게 된다. 실제로 로그에 같은 좌표가
+    /// 밀리초 단위로 수십 번 찍혔다.
+    /// </summary>
+    private bool _isForwardingClick;
 
     /// <summary>
     /// GPU 경로. 캡처 텍스처를 CPU 를 거치지 않고 바로 화면에 올린다.
@@ -303,7 +321,24 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     public bool IsElementInspectEnabled
     {
         get => GetProperty(() => IsElementInspectEnabled);
-        set => SetProperty(() => IsElementInspectEnabled, value);
+        set => SetProperty(() => IsElementInspectEnabled, value, OnElementInspectEnabledChanged);
+    }
+
+    /// <summary>
+    /// 입력 전달을 켤 수 있는 상태인지.
+    ///
+    /// 요소 검사가 켜져 있으면 클릭이 조회로 가로채여 입력이 나가지 않는다.
+    /// 그 사실이 화면에 안 보이면 "입력 전달을 켰는데 왜 안 되지" 로 헤매게 된다.
+    /// 실제로 그렇게 헤맸다.
+    /// </summary>
+    public bool IsInputForwardingAvailable => !IsElementInspectEnabled;
+
+    private void OnElementInspectEnabledChanged()
+    {
+        RaisePropertyChanged(() => IsInputForwardingAvailable);
+
+        if (IsElementInspectEnabled)
+            StatusText = "요소 검사 중 - 미리보기 클릭은 조회로만 쓰인다. 입력을 보내려면 요소 검사를 끈다.";
     }
 
     /// <summary>콤보에 채울 입력 경로 목록.</summary>
@@ -997,11 +1032,19 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>
     /// 미리보기를 눌렀다. 대상 창의 같은 자리를 누르고 뗀다.
     ///
-    /// 누름과 뗌을 나눠 보내지 않는다. 누르는 순간 진짜 커서가 대상 창으로 옮겨 가서
-    /// 사용자가 버튼을 떼는 것을 이 화면이 못 보기 때문이다. 그러면 대상 창에서는
-    /// 버튼이 눌린 채로 남는다.
+    /// 세 단계로 나뉜다.
+    ///   ① 좌표를 풀고 그 자리의 창을 앞으로 가져온다
+    ///   ② 포그라운드 전환이 반영될 때까지 잠깐 기다린다
+    ///   ③ 누르고 뗀다 (한 번의 SendInput 으로 같이 보낸다)
+    ///
+    /// ②가 필요한 이유는 SetForegroundWindow 가 바로 돌아오기 때문이다. 전환이
+    /// 끝나기 전에 클릭이 도착하면 대상은 그것을 활성화 클릭으로 먹고 아무 일도 안 한다.
+    /// 실제로 이것 때문에 아무리 눌러도 반응이 없었다.
+    ///
+    /// 누름과 뗌을 나눠 보내지 않는 이유는, 누르는 순간 진짜 커서가 대상 창으로
+    /// 옮겨 가서 사용자가 버튼을 떼는 것을 이 화면이 못 보기 때문이다.
     /// </summary>
-    private void OnPreviewMouseDown(MouseButtonEventArgs args)
+    private async void OnPreviewMouseDown(MouseButtonEventArgs args)
     {
         // 전달이 꺼져 있어도 포커스는 준다. 켜자마자 키가 들어오게 하려는 것이다.
         // Image 는 Focusable 이 아니라서 여기가 아니라 Border 를 잡아야 한다.
@@ -1015,26 +1058,49 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
             return;
         }
 
-        if (!CanForwardInput)
+        if (!CanForwardInput || _isForwardingClick)
             return;
 
-        var (control, source) = PreviewSizes;
-
-        // 커서를 옮기기 전에 지금 자리를 적어 둔다. 돌아올 때 쓴다.
-        var cursorBeforeClick = _inputRouter!.InputAdapter.GetCursorPosition();
-
-        var result = _inputRouter.TryClickMouse(
-            args.GetPosition(_previewImage),
-            control,
-            source,
-            ToBackendButton(args.ChangedButton));
-
-        ReportInputForward(result);
-
-        if (result == Capture.Input.InputForwardResult.Sent && IsReturnFocusAfterClickEnabled)
-            ReturnToThisWindowAsync(cursorBeforeClick);
-
         args.Handled = true;
+
+        var (control, source) = PreviewSizes;
+        var button = ToBackendButton(args.ChangedButton);
+        var pointInControl = args.GetPosition(_previewImage);
+
+        _isForwardingClick = true;
+
+        try
+        {
+            var prepared = _inputRouter!.PrepareClick(
+                pointInControl, control, source, out var screenPoint, out var didActivate);
+
+            if (prepared != Capture.Input.InputForwardResult.Sent)
+            {
+                ReportInputForward(prepared, "클릭");
+                return;
+            }
+
+            // 커서를 옮기기 전에 지금 자리를 적어 둔다. 돌아올 때 쓴다.
+            var cursorBeforeClick = _inputRouter.InputAdapter.GetCursorPosition();
+
+            // 창을 새로 끌어올렸을 때만 기다린다. 이미 앞에 있었으면 곧바로 누른다.
+            if (didActivate)
+                await System.Threading.Tasks.Task.Delay(ActivationSettleDelayMs);
+
+            var result = _inputRouter.ClickAt(screenPoint, button);
+            ReportInputForward(result, "클릭");
+
+            if (result == Capture.Input.InputForwardResult.Sent && IsReturnFocusAfterClickEnabled)
+                await ReturnToThisWindowAsync(cursorBeforeClick);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(JsonConvert.SerializeObject(ex));
+        }
+        finally
+        {
+            _isForwardingClick = false;
+        }
     }
 
     /// <summary>
@@ -1044,22 +1110,15 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// 대상 프로그램이 그것을 꺼내 처리하면서 커서 위치를 따로 읽는 경우가 있다.
     /// 그 전에 커서를 빼 버리면 클릭이 엉뚱한 자리에 찍힌 것으로 보인다.
     /// </summary>
-    private async void ReturnToThisWindowAsync((int X, int Y)? cursorBeforeClick)
+    private async System.Threading.Tasks.Task ReturnToThisWindowAsync((int X, int Y)? cursorBeforeClick)
     {
-        try
-        {
-            await System.Threading.Tasks.Task.Delay(ReturnToThisWindowDelayMs);
+        await System.Threading.Tasks.Task.Delay(ReturnToThisWindowDelayMs);
 
-            if (cursorBeforeClick is { } cursor)
-                _inputRouter?.InputAdapter.MoveMouseTo(cursor.X, cursor.Y);
+        if (cursorBeforeClick is { } cursor)
+            _inputRouter?.InputAdapter.MoveMouseTo(cursor.X, cursor.Y);
 
-            Application.Current?.MainWindow?.Activate();
-            _previewSurface?.Focus();
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(JsonConvert.SerializeObject(ex));
-        }
+        Application.Current?.MainWindow?.Activate();
+        _previewSurface?.Focus();
     }
 
     /// <summary>
@@ -1075,7 +1134,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         var (control, source) = PreviewSizes;
 
-        ReportInputForward(_inputRouter!.TryScroll(args.GetPosition(_previewImage), control, source, args.Delta));
+        ReportInputForward(_inputRouter!.TryScroll(args.GetPosition(_previewImage), control, source, args.Delta), "휠");
         args.Handled = true;
     }
 
@@ -1084,7 +1143,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (!CanForwardInput)
             return;
 
-        ReportInputForward(_inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: false));
+        ReportInputForward(_inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: false), $"키↓ {args.Key}");
         args.Handled = true;
     }
 
@@ -1093,7 +1152,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (!CanForwardInput)
             return;
 
-        ReportInputForward(_inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: true));
+        ReportInputForward(_inputRouter!.SendKey((ushort)KeyInterop.VirtualKeyFromKey(args.Key), isKeyUp: true), $"키↑ {args.Key}");
         args.Handled = true;
     }
 
@@ -1114,7 +1173,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         var mapped = _inputRouter.TryResolveScreenPoint(pointInControl, control, source, out var screenPoint);
         if (mapped != Capture.Input.InputForwardResult.Sent)
         {
-            ReportInputForward(mapped);
+            ReportInputForward(mapped, "요소 검사");
             return;
         }
 
@@ -1152,21 +1211,25 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// 전달이 안 됐으면 왜 안 됐는지 상태 줄에 띄운다.
     /// 조용히 넘기면 "클릭이 안 된다" 는 것만 보이고 이유를 알 수 없다.
     /// </summary>
-    private void ReportInputForward(Capture.Input.InputForwardResult result)
+    private void ReportInputForward(Capture.Input.InputForwardResult result, string inputKind)
     {
         if (result == Capture.Input.InputForwardResult.Sent)
         {
             // 성공도 남긴다. 이게 없으면 "보냈는데 대상이 안 받은" 것과
             // "애초에 안 보낸" 것을 로그로 구분할 수 없다.
+            // 종류를 함께 남기는 이유는, 좌표가 같은 줄이 쏟아졌을 때 그게
+            // 클릭이 여러 번인지 키가 반복된 것인지 구분하지 못했기 때문이다.
             var point = _inputRouter?.LastScreenPoint;
-            Logger.Debug($"입력 전달함. 경로 {_inputRouter?.AdapterName}, 화면 좌표 {point?.X:n0},{point?.Y:n0}");
+
+            Logger.Debug($"입력 전달함({inputKind}). 경로 {_inputRouter?.AdapterName}"
+                         + $", 화면 좌표 {point?.X:f0},{point?.Y:f0}");
             return;
         }
 
         var reason = Capture.Input.InputForwardResultText.Describe(result);
 
-        StatusText = $"입력 전달 안 됨 - {reason}";
-        Logger.Debug($"입력 전달 안 됨: {result}");
+        StatusText = $"입력 전달 안 됨({inputKind}) - {reason}";
+        Logger.Debug($"입력 전달 안 됨({inputKind}): {result}");
     }
 
     private static Capture.Input.MouseButton ToBackendButton(System.Windows.Input.MouseButton button) => button switch
