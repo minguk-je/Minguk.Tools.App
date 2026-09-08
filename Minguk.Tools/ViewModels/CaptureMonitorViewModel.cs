@@ -1129,7 +1129,13 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     private void ReportInputForward(Capture.Input.InputForwardResult result)
     {
         if (result == Capture.Input.InputForwardResult.Sent)
+        {
+            // 성공도 남긴다. 이게 없으면 "보냈는데 대상이 안 받은" 것과
+            // "애초에 안 보낸" 것을 로그로 구분할 수 없다.
+            var point = _inputRouter?.LastScreenPoint;
+            Logger.Debug($"입력 전달함. 경로 {_inputRouter?.AdapterName}, 화면 좌표 {point?.X:n0},{point?.Y:n0}");
             return;
+        }
 
         var reason = Capture.Input.InputForwardResultText.Describe(result);
 
