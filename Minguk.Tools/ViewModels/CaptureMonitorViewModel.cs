@@ -92,6 +92,21 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// </summary>
     private const int PreviewMaxHeight = 400;
 
+    /// <summary>
+    /// GPU 경로. 캡처 텍스처를 CPU 를 거치지 않고 바로 화면에 올린다.
+    /// 만들기가 실패하면(원격 데스크톱 등) <see cref="_gpuPreviewFailed"/> 를 세우고
+    /// 아래 WriteableBitmap 경로로 떨어진다.
+    /// </summary>
+    private D3DImageBridge? _previewBridge;
+    private bool _gpuPreviewFailed;
+    private bool _previewSurfacePending;
+
+    /// <summary>공유 표면에 새 프레임이 들어왔으면 1. 캡처 스레드가 세우고 렌더 콜백이 내린다.</summary>
+    private int _gpuFrameReady;
+
+    /// <summary>CompositionTarget.Rendering 구독 여부. UI 스레드에서만 만진다.</summary>
+    private bool _previewRenderHooked;
+
     private WriteableBitmap? _previewBitmap;
     private byte[]? _previewBuffer;
     private int _previewWidth;
@@ -155,8 +170,11 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         set => SetProperty(() => ShowPreview, value, OnShowPreviewChanged);
     }
 
-    /// <summary>화면에 올리고 있는 프레임. XAML 의 Image 가 이걸 문다.</summary>
-    public WriteableBitmap? PreviewImage
+    /// <summary>
+    /// 화면에 올리고 있는 프레임. XAML 의 Image 가 이걸 문다.
+    /// GPU 경로면 D3DImage, 폴백이면 WriteableBitmap 이 들어온다 — 둘 다 ImageSource 다.
+    /// </summary>
+    public ImageSource? PreviewImage
     {
         get => GetProperty(() => PreviewImage);
         set => SetProperty(() => PreviewImage, value);
@@ -309,7 +327,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (Interlocked.CompareExchange(ref _saveRequested, 0, 1) == 1)
             TrySaveFrame(e);
 
-        if (ShowPreview && e.HasPixels)
+        if (ShowPreview)
             TryPushPreview(e);
     }
 
@@ -325,6 +343,19 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// </summary>
     private void TryPushPreview(CapturedFrameEventArgs e)
     {
+        // GPU 경로는 프레임마다 그냥 복사한다.
+        // 복사는 GPU 안에서 끝나고, 화면 갱신은 WPF 가 그릴 때 알아서 가져간다(OnPreviewRendering).
+        // 프레임마다 디스패처를 왕복하던 때는 그 대기 때문에 55fps 언저리에서 막혔다.
+        if (!_gpuPreviewFailed)
+        {
+            PushPreviewOnGpu(e);
+            return;
+        }
+
+        // 폴백 경로는 CPU 로 옮기는 비용이 크므로 간격과 UI 상태를 본다.
+        if (!e.HasPixels)
+            return;
+
         var now = Stopwatch.GetTimestamp();
         if (now - _lastPreviewTicks < PreviewIntervalTicks)
             return;
@@ -332,9 +363,155 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (Interlocked.CompareExchange(ref _previewBusy, 1, 0) != 0)
             return;
 
+        _lastPreviewTicks = now;
+        PushPreviewOnCpu(e);
+    }
+
+    /// <summary>
+    /// GPU 경로. 캡처 텍스처를 공유 표면으로 복사하고 UI 에는 "바뀌었다"만 알린다.
+    /// 픽셀이 CPU 로 내려오지 않으므로 CPU 리드백이 꺼져 있어도 된다.
+    /// </summary>
+    private void PushPreviewOnGpu(CapturedFrameEventArgs e)
+    {
         try
         {
-            _lastPreviewTicks = now;
+            var bridge = _previewBridge;
+
+            // 표면이 아직 없거나 해상도가 바뀌었으면 UI 스레드에서 만들어야 한다.
+            // 만드는 동안 들어오는 프레임은 건너뛴다 — 한두 장이다.
+            if (bridge is null || !bridge.IsReady)
+            {
+                RequestPreviewSurface(e.Width, e.Height);
+                return;
+            }
+
+            var context = _session?.Context;
+            if (context is null || !bridge.CopyFrom(context, e.Texture))
+                return;
+
+            // UI 를 깨우지 않는다. 표시만 세워 두면 다음 렌더에서 가져간다.
+            Interlocked.Exchange(ref _gpuFrameReady, 1);
+        }
+        catch (Exception ex)
+        {
+            FallBackToCpuPreview(ex);
+        }
+    }
+
+    /// <summary>UI 스레드에서 공유 표면을 만든다. 겹쳐 요청하지 않는다.</summary>
+    private void RequestPreviewSurface(int width, int height)
+    {
+        if (_previewSurfacePending)
+            return;
+
+        _previewSurfacePending = true;
+
+        _dispatcher?.BeginInvoke(() =>
+        {
+            try
+            {
+                var device = _session?.Device;
+                if (device is null)
+                    return;
+
+                _previewBridge ??= new D3DImageBridge();
+
+                if (_previewBridge.EnsureSurface(device, width, height))
+                {
+                    PreviewImage = _previewBridge.Image;
+                    HookPreviewRendering(true);
+                }
+                else
+                {
+                    FallBackToCpuPreview(null);
+                }
+            }
+            catch (Exception ex)
+            {
+                FallBackToCpuPreview(ex);
+            }
+            finally
+            {
+                _previewSurfacePending = false;
+            }
+        });
+    }
+
+    /// <summary>
+    /// WPF 가 한 프레임 그릴 때마다 불린다(모니터 주사율, 보통 초당 60회).
+    /// 새 프레임이 와 있으면 그때 화면에 반영한다.
+    ///
+    /// 갱신 주기를 화면 주사율에 맞추는 것이 요점이다. 캡처 프레임마다 디스패처로
+    /// 밀어 넣으면 그 대기가 곧 상한이 된다 — 그 방식으로는 55fps 에서 막혔다.
+    /// </summary>
+    private void OnPreviewRendering(object? sender, EventArgs e)
+    {
+        if (Interlocked.Exchange(ref _gpuFrameReady, 0) == 0)
+            return;
+
+        try
+        {
+            _previewBridge?.Present();
+            Interlocked.Increment(ref _previewFrames);
+        }
+        catch (Exception ex)
+        {
+            FallBackToCpuPreview(ex);
+        }
+    }
+
+    /// <summary>
+    /// 렌더 시점 구독을 붙였다 뗀다. UI 스레드에서만 만진다.
+    /// 떼는 것을 빠뜨리면 미리보기를 꺼도 매 프레임 핸들러가 돌고,
+    /// ViewModel 이 CompositionTarget 에 붙들려 탭을 닫아도 살아남는다.
+    /// </summary>
+    private void HookPreviewRendering(bool hook)
+    {
+        if (hook == _previewRenderHooked)
+            return;
+
+        _previewRenderHooked = hook;
+
+        if (hook)
+            CompositionTarget.Rendering += OnPreviewRendering;
+        else
+            CompositionTarget.Rendering -= OnPreviewRendering;
+    }
+
+    /// <summary>
+    /// GPU 경로를 못 쓰는 환경(원격 데스크톱, 하드웨어 가속 없음)에서 느린 경로로 돌아간다.
+    /// 그쪽은 CPU 리드백이 있어야 하므로 켜 준다.
+    /// </summary>
+    private void FallBackToCpuPreview(Exception? ex)
+    {
+        if (_gpuPreviewFailed)
+            return;
+
+        _gpuPreviewFailed = true;
+
+        HookPreviewRendering(false);
+
+        if (ex is not null)
+            Logger.Warn(ex, "GPU 미리보기를 쓸 수 없다. CPU 경로로 전환한다.");
+        else
+            Logger.Warn("GPU 미리보기를 쓸 수 없다. CPU 경로로 전환한다.");
+
+        Note("GPU 미리보기를 못 써서 CPU 경로로 전환했다.");
+
+        PreviewImage = null;
+
+        _previewBridge?.Dispose();
+        _previewBridge = null;
+
+        if (!EnableCpuReadback)
+            Note("CPU 리드백을 켜고 다시 시작해야 미리보기가 나온다.");
+    }
+
+    /// <summary>폴백 경로. 픽셀을 CPU 에서 옮겨 WriteableBitmap 에 올린다.</summary>
+    private void PushPreviewOnCpu(CapturedFrameEventArgs e)
+    {
+        try
+        {
 
             // 정수 배수로만 솎아 낸다. 인덱스 계산이 곱셈 하나로 끝나고 화질도 충분하다.
             int step = Math.Max(1, (int)Math.Ceiling(e.Height / (double)PreviewMaxHeight));
@@ -422,21 +599,19 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     {
         if (ShowPreview)
         {
-            // 미리보기는 CPU 로 내려온 픽셀이 있어야 한다.
-            if (!EnableCpuReadback)
-            {
-                EnableCpuReadback = true;
+            // GPU 경로는 픽셀을 CPU 로 내리지 않으므로 리드백이 필요 없다.
+            // 그 경로를 못 쓰는 환경에서만 FallBackToCpuPreview 가 리드백을 요구한다.
+            return;
+        }
 
-                if (IsRunning)
-                    Note("미리보기는 CPU 리드백이 필요하다. 중지 후 다시 시작해야 나온다.");
-            }
-        }
-        else
-        {
-            PreviewImage = null;
-            _previewBitmap = null;
-            PreviewFps = 0;
-        }
+        HookPreviewRendering(false);
+
+        PreviewImage = null;
+        _previewBitmap = null;
+        PreviewFps = 0;
+
+        _previewBridge?.Dispose();
+        _previewBridge = null;
     }
 
     private void TrySaveFrame(CapturedFrameEventArgs e)
@@ -527,6 +702,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         PreviewFps = Interlocked.Exchange(ref _previewFrames, 0);
 
+        if (ShowPreview)
+            Logger.Debug($"미리보기 {PreviewFps}fps (캡처 {row.Fps:n0}fps, 경로 {(_gpuPreviewFailed ? "CPU" : "GPU")})");
+
         if (_session is not null)
             StatusText = $"캡처 중: {_session.Target.Display} — {row.Fps:n0} fps, 지연 {row.AvgLatencyMs:n2} ms";
     }
@@ -566,6 +744,13 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     {
         Interlocked.Exchange(ref _previewFrames, 0);
         PreviewFps = 0;
+
+        // 공유 표면은 세션의 D3D11 디바이스에 묶여 있다. 세션이 죽으면 같이 버린다.
+        HookPreviewRendering(false);
+        Interlocked.Exchange(ref _gpuFrameReady, 0);
+        PreviewImage = null;
+        _previewBridge?.Dispose();
+        _previewBridge = null;
 
         _flushTimer?.Dispose();
         _flushTimer = null;

@@ -46,6 +46,8 @@
 		<PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
 		<!-- 전처리 컴퓨트 셰이더를 런타임에 컴파일한다 (d3dcompiler_47.dll 은 Windows 기본 탑재) -->
 		<PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+		<!-- WPF 의 D3DImage 는 D3D9 표면만 받는다. 캡처는 D3D11 이라 공유 표면으로 다리를 놓는다. -->
+		<PackageReference Include="Vortice.Direct3D9" Version="3.8.3" />
 		<!-- 추론. DirectML EP 라 GPU 벤더를 안 가린다 -->
 		<PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
 	</ItemGroup>
