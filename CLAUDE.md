@@ -1,4 +1,4 @@
-﻿DevExpress WPF 컨트롤, WPF 개발자
+DevExpress WPF 컨트롤, WPF 개발자
 
 ## 이 프로젝트
 
@@ -64,8 +64,9 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 | 인터페이스 | 구현 | 고르는 곳 |
 |---|---|---|
 | `IScreenCaptureAdapter` | `WgcCaptureSession` | `ScreenCaptureAdapterFactory` |
-| `IInputAdapter` | `SendInputAdapter` · `PostMessageInputAdapter` | `InputAdapterFactory` |
+| `IInputAdapter` | `SendInputAdapter` · `PostMessageInputAdapter` · `InterceptionInputAdapter` | `InputAdapterFactory` |
 | `IUiAutomationAdapter` | `WindowsUiAutomationAdapter` | `UiAutomationAdapterFactory` |
+| `IGlobalHotkeyAdapter` | `GlobalHotkeyAdapter` | `GlobalHotkeyAdapterFactory` |
 
 입력 어댑터는 `Input/` 에 있다. `Capture/Input/` 에는 미리보기 좌표 계산만 남는다
 (`PreviewInputRouter`, `PreviewInputMapper`, `CaptureTargetBounds`, `InputForwardResult`).
@@ -76,12 +77,47 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 돌려주는 빈 메서드로 두면 부르는 쪽이 되는 줄 알고 쓰기 때문이다.
 필요한 쪽은 `adapter is IScanCodeInput` 으로 물어보고, 아니면 못 한다고 말한다.
 
+`InputAdapterFactory.CreateWithFallback` 은 고른 경로를 못 쓸 때 다른 경로로 내려앉되
+`FellBackFrom` · `Reason` 을 함께 돌려준다. 조용히 다른 길로 보내면 안 된다 - 화면에 적는다.
+
 지키는 것:
 
 - 구현이 하나뿐이어도 인터페이스를 만든다. 둘째가 필요해질 때 부르는 쪽을 안 고치려는 것이다.
 - 새 구현을 넣을 때 **팩터리만** 고친다. 부르는 쪽이 구체 타입을 알면 어댑터로 나눈 뜻이 없다.
 - 인터페이스에 `Name` 을 둔다. 지금 어느 경로로 도는지 로그·화면에 보여 줄 수 있어야 한다.
 - 돌아가는 중에 갈아끼울 수 있으면 그렇게 만든다 (`PreviewInputRouter.InputAdapter` 처럼).
+
+## 입력 시퀀스
+
+무엇을 어떤 순서로 보낼지는 **데이터**(`Input/Sequencing/SequencePlan` + `SequenceStepDefinition`)이고,
+실제로 도는 것은 델리게이트(`InputSequence` → `InputStep`)다. 둘을 나눈 이유:
+
+- 계획은 경로(`InputService`)를 고르기 전에도 적어 둘 수 있고, JSON 으로 저장된다.
+- 시퀀스는 서비스를 물고 있어서 저장할 수 없고, 돌릴 때 `plan.Build(service, holdMs)` 로 만든다.
+- 경로를 바꿔도 계획은 그대로다.
+
+`SequenceStepKind` 는 늘리기만 한다. 이름을 바꾸거나 빼면 저장해 둔 시퀀스를 못 읽는다
+(종류는 숫자가 아니라 **이름**으로 저장한다 - 열거형 순서를 바꿔도 뜻이 안 변하게).
+
+시퀀스를 굳히는 시점은 **시작할 때 한 번**이다. 도는 중에 설정이 바뀌어도 그 바퀴는 영향받지 않는다.
+
+## 검증
+
+`Minguk.Tools.Tests` 는 단위 테스트가 아니라 **실행형 하네스**다. 실제 커서와 살아 있는 창을
+확인하므로 목으로는 대신할 수 없다. 자세한 것은 `Minguk.Tools.Tests/README.md`.
+
+```
+dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 경로별 전체
+dotnet run --project Minguk.Tools.Tests -c Debug -- --views               # 화면 생성만 (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --fallback            # 드라이버 없는 상황
+dotnet run --project Minguk.Tools.Tests -c Debug -- --calibrate           # 정규화 규칙 실측
+```
+
+- `--views` 외에는 **커서와 키보드를 가져간다.** 돌리는 동안 손을 떼야 한다.
+- 화면을 고쳤으면 `--views` 를 돌린다. XAML 은 빌드를 통과하고 런타임에만 터진다.
+- 입력 쪽을 고쳤으면 **세 경로 모두** 돌린다. 한 경로만 통과하는 변경이 흔하다.
+- 한글 쪽을 고쳤으면 하네스만으로 부족하다. 대상이 WPF 라 최상위 창과 포커스 창이 같아서,
+  Win32 대상에서만 드러나는 IME 문제를 못 잡는다. 메모장으로도 한 번 쳐 볼 것.
 
 ## 규칙
 

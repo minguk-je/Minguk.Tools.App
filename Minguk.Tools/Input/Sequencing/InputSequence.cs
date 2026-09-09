@@ -142,6 +142,20 @@ public sealed class InputSequence
         return this;
     }
 
+    /// <summary>
+    /// 아무것도 보내지 않고 쉰다.
+    /// </summary>
+    /// <remarks>
+    /// 단계 간격과는 다르다. 간격은 모든 단계 사이에 똑같이 들어가지만, 이것은 한 자리에만 넣는다.
+    /// 대상 창이 반응할 틈(메뉴가 열리고 나서 고르기 같은 것)을 줘야 할 때 쓴다.
+    /// </remarks>
+    public InputSequence Wait(int milliseconds)
+    {
+        var ms = Math.Max(0, milliseconds);
+        _steps.Add(InputStep.Of($"{ms}ms 쉬기", () => Task.Delay(_service.Jitter(ms))));
+        return this;
+    }
+
     /// <summary>직접 만든 단계를 담는다.</summary>
     public InputSequence Add(InputStep step)
     {

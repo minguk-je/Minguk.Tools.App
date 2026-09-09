@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Minguk.Base.Utilities;
@@ -57,25 +60,128 @@ public partial class InputAutomationViewModel
     }
 
     /// <summary>
-    /// 지금 설정으로 시퀀스를 만든다.
+    /// 지금 적어 둔 단계들로 시퀀스를 만든다.
     /// 시작할 때 한 번 굳혀 두므로, 도는 도중에 설정이 바뀌어도 그 바퀴에는 영향이 없다.
     /// </summary>
-    private InputSequence BuildSequence()
-    {
-        var sequence = new InputSequence(_service!, HoldTimeMs);
+    private InputSequence BuildSequence() => new SequencePlan { Steps = [.. Steps] }.Build(_service!, HoldTimeMs);
 
-        if (!string.IsNullOrEmpty(Text))
+    // ── 단계 편집 ────────────────────────────────────────────────────────
+
+    private void DoAddStep(SequenceStepKind kind) => Guard(() =>
+    {
+        var step = new SequenceStepDefinition { Kind = kind };
+
+        // 이동은 지금 커서 자리에서 시작하는 편이 낫다. (0,0) 은 쓸 일이 거의 없다.
+        if (kind == SequenceStepKind.MoveTo && _adapter?.GetCursorPosition() is { } p)
         {
-            if (IncludeEnter) sequence.Enter();
-            sequence.Type(Text);
-            if (IncludeEnter) sequence.Enter();
+            step.X = p.X;
+            step.Y = p.Y;
         }
 
-        if (IncludeClick) sequence.Click();
-        if (IncludeMove) sequence.MoveTo(MoveX, MoveY);
-        if (IncludeScroll) sequence.Scroll(ScrollNotches);
+        // 고른 줄이 있으면 그 아래에 넣는다. 끝에만 붙으면 중간에 끼우려고 매번 옮겨야 한다.
+        var at = SelectedStep is null ? Steps.Count : Steps.IndexOf(SelectedStep) + 1;
+        Steps.Insert(at, step);
+        SelectedStep = step;
+    });
 
-        return sequence;
+    private void DoRemoveStep() => Guard(() =>
+    {
+        if (SelectedStep is not { } step) return;
+
+        var at = Steps.IndexOf(step);
+        Steps.Remove(step);
+
+        // 지운 자리를 이어서 고르게 둔다. 매번 끝으로 튀면 여러 줄을 지울 때 성가시다.
+        SelectedStep = Steps.Count == 0 ? null : Steps[Math.Min(at, Steps.Count - 1)];
+    });
+
+    private void DoDuplicateStep() => Guard(() =>
+    {
+        if (SelectedStep is not { } step) return;
+
+        var copy = step.Clone();
+        Steps.Insert(Steps.IndexOf(step) + 1, copy);
+        SelectedStep = copy;
+    });
+
+    private void DoMoveStepUp() => MoveSelected(-1);
+
+    private void DoMoveStepDown() => MoveSelected(+1);
+
+    private void MoveSelected(int delta) => Guard(() =>
+    {
+        if (SelectedStep is not { } step) return;
+
+        var from = Steps.IndexOf(step);
+        var to = from + delta;
+
+        if (to < 0 || to >= Steps.Count) return;
+
+        Steps.Move(from, to);
+        SelectedStep = step;
+    });
+
+    private void DoResetSteps() => Guard(() =>
+    {
+        Steps.Clear();
+
+        foreach (var step in SequencePlan.CreateDefault().Steps) Steps.Add(step);
+
+        SelectedStep = Steps.Count > 0 ? Steps[0] : null;
+    });
+
+    private void OnSelectedStepChanged()
+    {
+        RaiseStepCommands();
+        RaiseStepShape();
+    }
+
+    /// <summary>고른 단계가 어떤 칸을 쓰는지 화면에 다시 묻게 한다.</summary>
+    private void RaiseStepShape()
+    {
+        RaisePropertyChanged(nameof(HasSelectedStep));
+        RaisePropertyChanged(nameof(IsTypeStep));
+        RaisePropertyChanged(nameof(IsClickStep));
+        RaisePropertyChanged(nameof(IsMoveStep));
+        RaisePropertyChanged(nameof(IsScrollStep));
+        RaisePropertyChanged(nameof(IsWaitStep));
+    }
+
+    private void RaiseStepCommands()
+    {
+        DoRemoveStepCommand.RaiseCanExecuteChanged();
+        DoDuplicateStepCommand.RaiseCanExecuteChanged();
+        DoMoveStepUpCommand.RaiseCanExecuteChanged();
+        DoMoveStepDownCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// 단계 목록이나 그 안의 값이 바뀌면 순서 문구를 다시 만든다.
+    /// </summary>
+    /// <remarks>
+    /// 줄을 넣고 빼는 것은 컬렉션이 알려 주지만, 줄 <b>안의</b> 좌표를 고친 것은 알려 주지 않는다.
+    /// 그래서 들어오는 줄마다 따로 구독하고 나가는 줄은 풀어 준다.
+    /// 안 풀면 지운 줄이 화면이 닫힐 때까지 구독에 남는다.
+    /// </remarks>
+    private void OnStepsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        foreach (var item in e.OldItems?.Cast<SequenceStepDefinition>() ?? [])
+            item.PropertyChanged -= OnStepEdited;
+
+        foreach (var item in e.NewItems?.Cast<SequenceStepDefinition>() ?? [])
+            item.PropertyChanged += OnStepEdited;
+
+        RaiseStepCommands();
+        UpdateSequenceText();
+    }
+
+    private void OnStepEdited(object? sender, PropertyChangedEventArgs e)
+    {
+        UpdateSequenceText();
+
+        // 그리드에서 종류를 바꾸면 아래 편집 칸도 따라 바뀌어야 한다.
+        if (e.PropertyName == nameof(SequenceStepDefinition.Kind) && ReferenceEquals(sender, SelectedStep))
+            RaiseStepShape();
     }
 
     private void UpdateSequenceText() => Guard(() =>
@@ -136,7 +242,7 @@ public partial class InputAutomationViewModel
     }
 
     /// <summary>
-    /// 지금 커서 자리를 이동 좌표에 담는다.
+    /// 지금 커서 자리를 고른 이동 단계에 담는다. 고른 것이 이동 단계가 아니면 새로 만든다.
     /// </summary>
     /// <remarks>
     /// 버튼으로 두면 쓸모가 없다. 버튼을 누르는 순간 커서가 그 버튼 위에 있기 때문이다.
@@ -148,8 +254,15 @@ public partial class InputAutomationViewModel
 
         if (_adapter.GetCursorPosition() is not { } p) return;
 
-        MoveX = p.X;
-        MoveY = p.Y;
+        if (SelectedStep is not { Kind: SequenceStepKind.MoveTo } target)
+        {
+            target = new SequenceStepDefinition { Kind = SequenceStepKind.MoveTo };
+            Steps.Insert(SelectedStep is null ? Steps.Count : Steps.IndexOf(SelectedStep) + 1, target);
+            SelectedStep = target;
+        }
+
+        target.X = p.X;
+        target.Y = p.Y;
         CurrentStep = $"좌표 담음 ({p.X}, {p.Y})";
     });
 

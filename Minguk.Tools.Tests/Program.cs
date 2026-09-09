@@ -158,7 +158,9 @@ internal static partial class Program
         TestKeyboardDetection();
         await TestHangulTypingAsync(ui);
 
+        TestSequencePlan();
         await TestSequenceAsync(ui);
+        await TestPlanRunAsync(ui);
         await TestMouseMoveAsync();
         await TestClickAsync(ui);
         await TestWheelAsync(ui);
