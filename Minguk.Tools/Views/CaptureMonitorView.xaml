@@ -51,16 +51,15 @@
 
     <DockPanel LastChildFill="True">
 
-        <!-- ── 동작 툴바 ────────────────────────────────────────────── -->
+        <!-- ── 동작 (메뉴 한 줄) ────────────────────────────────────── -->
         <!--
-            메뉴를 두지 않는다. 화면 안에서 쓰는 동작이라 툴바가 맞고,
-            TAMS Tools 도 같은 방식이다 - 한 줄에 구분선으로 묶는다.
+            동작만 메뉴 줄에 둔다. 하위 메뉴로 접지 않고 한 줄에 펼친다 -
+            다섯 개뿐이라 접으면 한 번 더 눌러야 닿는다.
         -->
-        <dxb:ToolBarControl DockPanel.Dock="Top"
-                            AllowCustomizationMenu="False"
-                            AllowQuickCustomization="False"
-                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+        <dxb:MainMenuControl DockPanel.Dock="Top"
+                             AllowCustomizationMenu="False"
+                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                             TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding RefreshTargetsCommand}"
@@ -91,19 +90,18 @@
                                Content="프레임 저장"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
                                ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
-        </dxb:ToolBarControl>
-        <!-- ── 설정 툴바 ────────────────────────────────────────────── -->
+        </dxb:MainMenuControl>
+
+        <!-- ── 설정 첫 줄 ──────────────────────────────────────────── -->
         <!--
-            묶음마다 툴바를 따로 둔다. 한 줄에 몰면 창이 좁을 때 어디까지가 한 묶음인지 사라진다.
-            맨 앞 BarStaticItem 이 묶음 이름이다 - 도킹된 툴바는 Caption 을 보여 주지 않는다.
+            "미리보기" 체크는 반드시 이 줄에 둔다. 아래 줄은 통째로 ShowPreview 에
+            걸려 있어서, 같은 줄에 두면 끄는 순간 자기 자신이 사라져 다시 켤 수 없다.
         -->
         <dxb:ToolBarControl DockPanel.Dock="Top"
                             AllowCustomizationMenu="False"
                             AllowQuickCustomization="False"
                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                             TextBlock.FontSize="{DynamicResource BaseFontSize}">
-            <dxb:BarStaticItem Content="캡처" />
-            <dxb:BarItemSeparator />
 
             <dxb:BarEditItem Content="대상"
                              EditValue="{Binding SelectedTarget}"
@@ -130,15 +128,23 @@
                               IsChecked="{Binding EnableCpuReadback}"
                               IsEnabled="{Binding IsNotRunning}"
                               ToolTip="GPU 프레임을 CPU 메모리로 내린다. 켜야 프레임 저장이 된다." />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarCheckItem Content="미리보기"
+                              IsChecked="{Binding ShowPreview}"
+                              ToolTip="캡처 중인 화면을 그대로 보여 준다. 켜면 프레임마다 GPU→CPU 복사가 붙는다." />
+            <dxb:BarCheckItem Content="열 자동 너비"
+                              IsChecked="{Binding IsColumnAutoWidth}"
+                              ToolTip="통계 열 너비를 내용에 맞춘다. 끄면 직접 조절한 너비가 유지된다." />
         </dxb:ToolBarControl>
+        <!--  미리보기를 켰을 때만 쓰는 것들. 툴바째 숨겨 조건을 한 군데로 모은다.  -->
         <dxb:ToolBarControl DockPanel.Dock="Top"
                             AllowCustomizationMenu="False"
                             AllowQuickCustomization="False"
                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                             TextBlock.FontSize="{DynamicResource BaseFontSize}"
                             Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <dxb:BarStaticItem Content="미리보기" />
-            <dxb:BarItemSeparator />
 
             <dxb:BarEditItem Content="갱신 상한"
                              EditValue="{Binding PreviewTargetFps}"
@@ -152,18 +158,10 @@
 
             <dxb:BarStaticItem Content="{Binding PreviewFpsText, Mode=OneWay}"
                                ToolTip="지금 화면에 올라가고 있는 실제 fps. 왼쪽 값은 상한일 뿐이다." />
-        </dxb:ToolBarControl>
 
-        <dxb:ToolBarControl DockPanel.Dock="Top"
-                            AllowCustomizationMenu="False"
-                            AllowQuickCustomization="False"
-                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                            TextBlock.FontSize="{DynamicResource BaseFontSize}"
-                            Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <dxb:BarStaticItem Content="입력 전달" />
             <dxb:BarItemSeparator />
 
-            <dxb:BarCheckItem Content="켜기"
+            <dxb:BarCheckItem Content="입력 전달"
                               IsChecked="{Binding IsInputForwardingEnabled}"
                               IsEnabled="{Binding IsInputForwardingAvailable}"
                               ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 요소 검사가 켜져 있으면 쓸 수 없다." />
@@ -187,20 +185,6 @@
                               IsChecked="{Binding IsReturnFocusAfterClickEnabled}"
                               IsEnabled="{Binding IsInputForwardingEnabled}"
                               ToolTip="클릭이 대상에 닿은 뒤 커서와 포커스를 이 창으로 되돌린다. 끄면 대상 창이 앞에 남는다." />
-        </dxb:ToolBarControl>
-
-        <dxb:ToolBarControl DockPanel.Dock="Top"
-                            AllowCustomizationMenu="False"
-                            AllowQuickCustomization="False"
-                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                            TextBlock.FontSize="{DynamicResource BaseFontSize}"
-                            >
-            <dxb:BarStaticItem Content="통계" />
-            <dxb:BarItemSeparator />
-
-            <dxb:BarCheckItem Content="열 자동 너비"
-                              IsChecked="{Binding IsColumnAutoWidth}"
-                              ToolTip="열 너비를 내용에 맞춘다. 끄면 직접 조절한 너비가 유지된다." />
         </dxb:ToolBarControl>
         <!-- ── 상태 줄 ─────────────────────────────────────────────────── -->
         <dxe:TextEdit Margin="4,0,4,4"
