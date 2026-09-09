@@ -92,6 +92,58 @@ public static class KoreanKeyboardInfo
     [DllImport("imm32.dll")]
     private static extern IntPtr ImmGetDefaultIMEWnd(IntPtr hwnd);
 
+    /// <summary>
+    /// 입력이 실제로 들어갈 창. 최상위 창이 아니라 그 안에서 포커스를 가진 창이다.
+    /// </summary>
+    /// <remarks>
+    /// 최상위 창으로 읽으면 안 되는 이유
+    ///   Win32·WinForms 는 컨트롤마다 HWND 가 따로다. 메모장이 그렇다.
+    ///   최상위 창에 물으면 IME 상태가 늘 0(영문)으로 돌아온다 - 실제로 한글 모드여도 그렇다.
+    ///   그 값을 믿으면 이미 한글인데도 한/영 을 눌러 영문으로 뒤집고, 글자마다 이것을 반복해
+    ///   "안sud하tp요" 처럼 한 글자 걸러 한 글자가 영문으로 찍힌다.
+    ///
+    ///   WPF 는 창 하나가 전부라 최상위와 포커스 창이 같다. 그래서 WPF 대상만 보면 멀쩡해 보인다.
+    /// </remarks>
+    private static IntPtr GetFocusedWindow()
+    {
+        IntPtr foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero) return IntPtr.Zero;
+
+        var info = new GuiThreadInfo { Size = Marshal.SizeOf<GuiThreadInfo>() };
+
+        // AttachThreadInput 없이도 다른 스레드의 포커스 창을 알 수 있다.
+        if (!GetGUIThreadInfo(GetWindowThreadProcessId(foreground, IntPtr.Zero), ref info))
+            return foreground;
+
+        return info.FocusWindow != IntPtr.Zero ? info.FocusWindow : foreground;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GuiThreadInfo
+    {
+        public int Size;
+        public int Flags;
+        public IntPtr ActiveWindow;
+        public IntPtr FocusWindow;
+        public IntPtr CaptureWindow;
+        public IntPtr MenuOwnerWindow;
+        public IntPtr MoveSizeWindow;
+        public IntPtr CaretWindow;
+        public Rect CaretRect;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, IntPtr processId);
+
     [DllImport("user32.dll")]
     private static extern IntPtr SendMessageTimeout(
         IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
@@ -105,7 +157,7 @@ public static class KoreanKeyboardInfo
     {
         isHangul = false;
 
-        IntPtr target = GetForegroundWindow();
+        IntPtr target = GetFocusedWindow();
         if (target == IntPtr.Zero) return false;
 
         // IME 상태는 창의 기본 IME 윈도우에 물어봐야 하며, 다른 프로세스에도 통합니다.
