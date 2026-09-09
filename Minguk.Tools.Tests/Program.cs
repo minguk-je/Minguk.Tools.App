@@ -8,6 +8,8 @@ using System.Windows;
 using System.Windows.Interop;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Korean;
+using Minguk.Tools.Input.Sequencing;
+using System.Threading;
 
 namespace Minguk.Tools.Tests;
 
@@ -150,6 +152,7 @@ internal static partial class Program
         }
 
         await TestVirtualKeyAsync(ui);
+        await TestSequenceAsync(ui);
         await TestMouseMoveAsync();
         await TestClickAsync(ui);
         await TestWheelAsync(ui);
@@ -228,6 +231,63 @@ internal static partial class Program
 
         var actual = Read(() => ui.Input.Text);
         Check("가상 키 입력", actual == "ab", $"기대 \"ab\" / 실제 \"{actual}\"");
+    }
+
+    /// <summary>
+    /// 시퀀스 엔진: 담은 순서대로 나가는지, 진행 보고가 오는지, 반복과 취소가 도는지.
+    /// </summary>
+    private static async Task TestSequenceAsync(TestWindow ui)
+    {
+        if (!_service.SupportsTyping)
+        {
+            Skip("시퀀스 한 바퀴", $"{_adapter.Name} 은 스캔코드를 넣지 못한다");
+            Skip("시퀀스 반복·취소", $"{_adapter.Name} 은 스캔코드를 넣지 못한다");
+            return;
+        }
+
+        // ── 한 바퀴 ──
+        var reported = new List<string>();
+        var progress = new Progress<string>(reported.Add);
+
+        var sequence = new InputSequence(_service, holdTimeMs: 12)
+            .Type("ok")
+            .Enter();
+
+        Post(ui.Input.Clear);
+        var finished = await SequenceRunner.RunOnceAsync(sequence.Steps, intervalMs: 20, progress);
+        await Task.Delay(400);
+
+        var typed = Read(() => ui.Input.Text);
+        Check("시퀀스 한 바퀴",
+              finished && typed.StartsWith("ok") && typed.Contains((char)10),
+              $"순서 \"{sequence.Describe()}\" / 입력란 {Describe(typed)} / 끝까지 {finished}");
+
+        // Progress<T> 는 동기화 컨텍스트로 넘겨 보고하므로 조금 늦게 도착한다.
+        await Task.Delay(200);
+        Check("진행 보고", reported.Count >= sequence.Steps.Count,
+              $"단계 {sequence.Steps.Count}개, 보고 {reported.Count}건: {string.Join(",", reported)}");
+
+        // ── 반복과 취소 ──
+        var loop = new InputSequence(_service, holdTimeMs: 8).Type("x");
+        using var cts = new CancellationTokenSource();
+
+        Post(ui.Input.Clear);
+        var loopTask = SequenceRunner.RunLoopAsync(loop.Steps, intervalMs: 15, token: cts.Token);
+
+        await Task.Delay(400);
+        cts.Cancel();
+        await loopTask;
+        await Task.Delay(300);
+
+        var repeated = Read(() => ui.Input.Text);
+
+        // 몇 번 돌았는지는 타이밍에 달렸다. 두 번 이상 돌았고 멈췄는지만 본다.
+        var stopped = repeated.Length;
+        await Task.Delay(300);
+        var afterStop = Read(() => ui.Input.Text).Length;
+
+        Check("시퀀스 반복·취소", repeated.Length >= 2 && afterStop == stopped,
+              $"400ms 동안 {repeated.Length}회 반복, 취소 뒤 {stopped} -> {afterStop} (늘지 않아야 한다)");
     }
 
     private static string Describe(string s)

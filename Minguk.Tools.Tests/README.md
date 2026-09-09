@@ -35,6 +35,9 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=Interception
 | 부드러운 이동 | 여러 단계를 거쳐도 목적지에 정확히 도착하는지 |
 | 마우스 좌클릭 | 버튼의 Click 이벤트가 오르는지 |
 | 휠 스크롤 | ScrollViewer 의 세로 오프셋이 실제로 움직이는지 |
+| 시퀀스 한 바퀴 | 담은 순서대로 나가고 끝까지 도는지 |
+| 진행 보고 | 단계마다 `IProgress` 로 이름이 오는지 |
+| 시퀀스 반복·취소 | 반복이 돌고, 취소한 뒤 더 나가지 않는지 |
 
 ## 알아 둘 것
 
@@ -52,6 +55,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=Interception
 |---|---|---|---|
 | 스캔코드 문자 입력 · Enter | PASS | PASS | N/A — 스캔코드를 넣지 못한다 |
 | 가상 키 입력 | PASS | PASS | **PASS** |
+| 시퀀스 (한 바퀴·반복·취소) | PASS | PASS | N/A — 스캔코드를 넣지 못한다 |
 | 절대 좌표 이동 · 부드러운 이동 | PASS | PASS | N/A — 진짜 커서를 안 움직인다 |
 | 마우스 좌클릭 | PASS | PASS | N/A — 메시지는 도착하나 WPF 가 안 넘긴다 |
 | 휠 스크롤 | PASS | PASS | **PASS** |
