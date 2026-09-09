@@ -20,6 +20,7 @@ using System.Diagnostics;
 using DevExpress.Xpf.LayoutControl;
 using Minguk.Tools.Automation;
 using Minguk.Tools.Capture.Input;
+using Minguk.Tools.Input;
 using System.Windows.Input;
 
 namespace Minguk.Tools.ViewModels;
@@ -1232,11 +1233,11 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         Logger.Debug($"입력 전달 안 됨({inputKind}): {result}");
     }
 
-    private static Capture.Input.MouseButton ToBackendButton(System.Windows.Input.MouseButton button) => button switch
+    private static Minguk.Tools.Input.MouseButton ToBackendButton(System.Windows.Input.MouseButton button) => button switch
     {
-        System.Windows.Input.MouseButton.Right => Capture.Input.MouseButton.Right,
-        System.Windows.Input.MouseButton.Middle => Capture.Input.MouseButton.Middle,
-        _ => Capture.Input.MouseButton.Left
+        System.Windows.Input.MouseButton.Right => Minguk.Tools.Input.MouseButton.Right,
+        System.Windows.Input.MouseButton.Middle => Minguk.Tools.Input.MouseButton.Middle,
+        _ => Minguk.Tools.Input.MouseButton.Left
     };
 
     private void OnShowPreviewChanged()

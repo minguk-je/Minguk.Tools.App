@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace Minguk.Tools.Capture.Input;
+namespace Minguk.Tools.Input.Adapters;
 
 /// <summary>
 /// Win32 <c>SendInput</c> 으로 입력을 만들어 넣는다. 드라이버 설치가 필요 없는 기본 경로다.

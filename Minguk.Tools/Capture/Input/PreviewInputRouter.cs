@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using Minguk.Tools.Input;
 
 namespace Minguk.Tools.Capture.Input;
 

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace Minguk.Tools.Capture.Input;
+namespace Minguk.Tools.Input.Adapters;
 
 /// <summary>
 /// 대상 창의 메시지 큐에 입력 메시지를 직접 넣는다.

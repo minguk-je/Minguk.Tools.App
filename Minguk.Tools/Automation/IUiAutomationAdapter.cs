@@ -48,7 +48,7 @@ public sealed class UiElement
 /// <summary>
 /// 창 안의 요소를 찾고 조작한다.
 ///
-/// <see cref="Capture.Input.IInputAdapter"/> 와 나눠 둔 이유
+/// <see cref="Minguk.Tools.Input.IInputAdapter"/> 와 나눠 둔 이유
 ///   저쪽은 "화면 어느 좌표를 누른다" 는 이야기고, 이쪽은 "어느 요소를 누른다" 는 이야기다.
 ///   창이 움직이거나 해상도가 바뀌면 좌표는 틀어지지만 요소는 그대로다.
 ///   자체 개발 중인 앱을 자동화할 때는 이쪽이 훨씬 안정적이다.

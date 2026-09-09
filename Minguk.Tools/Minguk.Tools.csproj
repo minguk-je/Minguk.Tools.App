@@ -69,6 +69,29 @@
 	  </Reference>
 	</ItemGroup>
 
+	<!--
+	  interception.dll 은 컴파일 시점에 참조하지 않는다. DllImport 로 실행 중에 이름으로 찾으므로
+	  Reference 가 아니라 "출력 폴더에 놓아 두는 파일" 이다. 그래서 Libs\Native\ 로 나눠 둔다 -
+	  Libs\ 바로 아래는 컴파일 시점에 물리는 관리 어셈블리(Minguk.Image, DevExpress) 자리다.
+	
+	  x64\ 로 한 번 더 나눈 이유
+	    Interception 은 x86 빌드도 배포한다. 비트수가 어긋나면 컴파일은 멀쩡히 통과하고
+	    실행할 때 BadImageFormatException 으로 터진다. 폴더 이름에 박아 두면 잘못 넣기 어렵다.
+	
+	  Link 를 주는 이유
+	    DllImport 는 실행 파일 옆을 찾는다. Link 가 없으면 출력에서도 Libs\Native\x64\ 밑으로
+	    들어가 버려 로드에 실패한다.
+	
+	  None 이 아니라 Content 인 이유
+	    Content 만 ProjectReference 를 타고 전파된다. 나중에 이 프로젝트를 참조하는
+	    테스트 프로젝트가 생겨도 복사 규칙을 다시 쓰지 않아도 된다.
+	-->
+	<ItemGroup>
+	  <Content Include="..\Libs\Native\x64\interception.dll" Link="interception.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
 	<ItemGroup>
 		<ProjectReference Include="..\Minguk.Base\Minguk.Base.csproj" />
 	</ItemGroup>

@@ -1,6 +1,8 @@
 using System;
 
-namespace Minguk.Tools.Capture.Input;
+using Minguk.Tools.Input.Adapters;
+
+namespace Minguk.Tools.Input;
 
 /// <summary>고를 수 있는 입력 경로.</summary>
 public enum InputBackend
