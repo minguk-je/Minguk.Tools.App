@@ -29,6 +29,7 @@ internal static partial class Program
 
         if (args.Contains("--calibrate")) return Calibrate.Run();
         if (args.Contains("--fallback")) return FallbackProbe.Run();
+        if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
         // 같은 검증을 경로만 바꿔 돌린다. 경로마다 실제로 입력이 나가는지 따로 봐야 한다.
         var backend = ParseBackend(args);

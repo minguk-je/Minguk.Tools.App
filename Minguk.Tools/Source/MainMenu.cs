@@ -68,6 +68,18 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             canSelect: true,
             icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/screen.png")));
 
+        // ── 입력 자동화 ───────────────────────────────────────────────────
+        rootItem.AddChildren(MenuItemModel.Create(
+            menu_cd: "1300",
+            menu_nm: "입력 자동화",
+            dll_nm: "Minguk.Tools.dll",
+            class_nm: "Minguk.Tools.Views.InputAutomationView",
+            is_enable: true,
+            isExpanded: true,
+            showInCollapsedMode: false,
+            canSelect: true,
+            icon: FreeImage.Instance?.CacheByteArray("axialis/hardwarenetwork/16x16/keyboard.png")));
+
         return menuItemList;
     }
 
