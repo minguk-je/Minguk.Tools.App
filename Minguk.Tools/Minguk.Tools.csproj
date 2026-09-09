@@ -158,9 +158,16 @@
 	  3MB 남짓이라, 이렇게 두면 빌드 머신에 DevExpress 가 없어도 되고 배포본에도 그대로 들어간다.
 	  DevExpress 버전을 올릴 때 이 폴더도 같이 갱신할 것.
 	-->
+	<!--
+	  Link 와 TargetPath 를 갈라 둔다.
+	    Link       솔루션 탐색기에 보이는 자리. 실제 파일 위치(Libs\) 그대로 둔다.
+	    TargetPath 출력에서의 자리. 위성 리소스는 반드시 ko\ 여야 .NET 이 찾는다.
+	  Link 하나만 쓰면 둘이 같은 값이 되어, 출력을 맞추면 트리에 ko 폴더가 따로 떠 버린다.
+	-->
 	<ItemGroup>
 		<None Include="..\Libs\DevExpress\ko\*.resources.dll">
-			<Link>ko\%(Filename)%(Extension)</Link>
+			<Link>Libs\DevExpress\ko\%(Filename)%(Extension)</Link>
+			<TargetPath>ko\%(Filename)%(Extension)</TargetPath>
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
