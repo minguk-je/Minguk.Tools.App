@@ -51,45 +51,47 @@
 
     <DockPanel LastChildFill="True">
 
-        <!-- ── 메뉴 ─────────────────────────────────────────────────── -->
+        <!-- ── 동작 툴바 ────────────────────────────────────────────── -->
         <!--
-            동작은 메뉴로 올린다. 아래 툴바에는 설정만 둔다.
-            섞어 두면 "지금 뭘 누를 수 있나" 와 "지금 어떤 상태인가" 가 한 줄에 뒤엉킨다.
+            메뉴를 두지 않는다. 화면 안에서 쓰는 동작이라 툴바가 맞고,
+            TAMS Tools 도 같은 방식이다 - 한 줄에 구분선으로 묶는다.
         -->
-        <dxb:MainMenuControl DockPanel.Dock="Top"
-                             AllowCustomizationMenu="False"
-                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                             TextBlock.FontSize="{DynamicResource BaseFontSize}">
+        <dxb:ToolBarControl DockPanel.Dock="Top"
+                            AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
-            <dxb:BarSubItem Content="대상">
-                <dxb:BarButtonItem Command="{Binding RefreshTargetsCommand}"
-                                   Content="새로 고침"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
-                                   ToolTip="캡처할 수 있는 창·모니터 목록을 다시 훑는다." />
-            </dxb:BarSubItem>
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding RefreshTargetsCommand}"
+                               Content="새로 고침"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                               ToolTip="캡처할 수 있는 창·모니터 목록을 다시 훑는다." />
 
-            <dxb:BarSubItem Content="캡처">
-                <dxb:BarButtonItem Command="{Binding DoStartCommand}"
-                                   Content="시작"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}" />
-                <dxb:BarButtonItem Command="{Binding DoStopCommand}"
-                                   Content="중지"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}" />
-                <dxb:BarItemSeparator />
-                <dxb:BarButtonItem Command="{Binding DoClearCommand}"
-                                   Content="통계 지우기"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
-                                   ToolTip="쌓인 통계 줄을 비운다." />
-            </dxb:BarSubItem>
+            <dxb:BarItemSeparator />
 
-            <dxb:BarSubItem Content="도구">
-                <dxb:BarButtonItem Command="{Binding SaveFrameCommand}"
-                                   Content="프레임 저장"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
-                                   ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
-            </dxb:BarSubItem>
-        </dxb:MainMenuControl>
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoStartCommand}"
+                               Content="시작"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}" />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoStopCommand}"
+                               Content="중지"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}" />
 
+            <dxb:BarItemSeparator />
+
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoClearCommand}"
+                               Content="통계 지우기"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
+                               ToolTip="쌓인 통계 줄을 비운다." />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding SaveFrameCommand}"
+                               Content="프레임 저장"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
+                               ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
+        </dxb:ToolBarControl>
         <!-- ── 설정 툴바 ────────────────────────────────────────────── -->
         <!--
             묶음마다 툴바를 따로 둔다. 한 줄에 몰면 창이 좁을 때 어디까지가 한 묶음인지 사라진다.
