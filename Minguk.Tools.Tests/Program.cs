@@ -28,8 +28,13 @@ internal static partial class Program
         if (args.Contains("--calibrate")) return Calibrate.Run();
         if (args.Contains("--fallback")) return FallbackProbe.Run();
 
+        // 같은 검증을 경로만 바꿔 돌린다. 경로마다 실제로 입력이 나가는지 따로 봐야 한다.
+        var backend = ParseBackend(args);
+
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         var ui = new TestWindow();
+
+        Console.WriteLine($"검증할 경로: {backend}");
 
         ui.ContentRendered += async (_, _) =>
         {
@@ -37,7 +42,7 @@ internal static partial class Program
             {
                 // 실제 앱과 같은 조건: 전송은 백그라운드 스레드에서 이뤄진다.
                 // 보내는 스레드와 받는 창의 UI 스레드가 같으면 연속 전송한 키가 유실된다.
-                await Task.Run(() => RunAllAsync(ui));
+                await Task.Run(() => RunAllAsync(ui, backend));
             }
             catch (Exception ex)
             {
@@ -78,12 +83,32 @@ internal static partial class Program
     private static IInputAdapter _adapter = null!;
     private static InputService _service = null!;
 
-    private static async Task RunAllAsync(TestWindow ui)
+    /// <summary>--backend=Interception 처럼 지정한다. 없으면 SendInput.</summary>
+    private static InputBackend ParseBackend(string[] args)
     {
-        _adapter = InputAdapterFactory.Create(InputBackend.SendInput, () => IntPtr.Zero);
+        var arg = args.FirstOrDefault(a => a.StartsWith("--backend=", StringComparison.OrdinalIgnoreCase));
+        if (arg is null) return InputBackend.SendInput;
+
+        var name = arg["--backend=".Length..];
+
+        if (!Enum.TryParse<InputBackend>(name, ignoreCase: true, out var backend))
+            throw new ArgumentException($"모르는 경로다: {name}. 쓸 수 있는 것: {string.Join(", ", Enum.GetNames<InputBackend>())}");
+
+        return backend;
+    }
+
+    private static async Task RunAllAsync(TestWindow ui, InputBackend backend)
+    {
+        _adapter = InputAdapterFactory.Create(backend, () => IntPtr.Zero);
         _service = new InputService(_adapter);
 
-        Check("어댑터 준비", _adapter.IsAvailable && _service.SupportsTyping,
+        if (!_adapter.IsAvailable)
+        {
+            Fail("어댑터 준비", $"{_adapter.Name} 을 쓸 수 없다 - {_adapter.UnavailableReason}");
+            return;
+        }
+
+        Check("어댑터 준비", _service.SupportsTyping,
               $"{_adapter.Name}, 스캔코드 {(_service.SupportsTyping ? "가능" : "불가")}");
 
         TestBackendSwitching();
