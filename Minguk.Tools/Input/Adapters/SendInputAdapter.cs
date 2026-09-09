@@ -52,6 +52,20 @@ public sealed class SendInputAdapter : IInputAdapter, IScanCodeInput
             normalizedY));
     }
 
+    /// <summary>
+    /// 0~65535 정규화 값을 환산 없이 그대로 보낸다.
+    /// </summary>
+    /// <remarks>
+    /// Windows 가 정규화 좌표를 픽셀로 되돌리는 규칙은 문서에 없다. 그 규칙을 실측하려면
+    /// 우리 환산을 거치지 않고 값을 그대로 넣어 봐야 해서 열어 둔다.
+    /// 평소 쓰는 것은 <see cref="MoveMouseTo"/> 다.
+    /// </remarks>
+    public bool MoveMouseToNormalized(int normalizedX, int normalizedY)
+        => Send(NativeMethods.MouseInput(
+            NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE | NativeMethods.MOUSEEVENTF_VIRTUALDESK,
+            normalizedX,
+            normalizedY));
+
     public bool PressMouseButton(MouseButton button) => Send(NativeMethods.MouseInput(DownFlag(button)));
 
     public bool ReleaseMouseButton(MouseButton button) => Send(NativeMethods.MouseInput(UpFlag(button)));

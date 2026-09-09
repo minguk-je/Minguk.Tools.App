@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Minguk.Tools", "Minguk.Tool
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Minguk.Base", "Minguk.Base\Minguk.Base.csproj", "{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Minguk.Tools.Tests", "Minguk.Tools.Tests\Minguk.Tools.Tests.csproj", "{6DFBD16D-ED87-40EF-AAC1-34CF98E6F60D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -24,6 +26,10 @@ Global
 		{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}.Debug|x64.Build.0 = Debug|x64
 		{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}.Release|x64.ActiveCfg = Release|x64
 		{455FE28D-08F7-4B93-9A65-CBE1B3ED56E1}.Release|x64.Build.0 = Release|x64
+		{6DFBD16D-ED87-40EF-AAC1-34CF98E6F60D}.Debug|x64.ActiveCfg = Debug|x64
+		{6DFBD16D-ED87-40EF-AAC1-34CF98E6F60D}.Debug|x64.Build.0 = Debug|x64
+		{6DFBD16D-ED87-40EF-AAC1-34CF98E6F60D}.Release|x64.ActiveCfg = Release|x64
+		{6DFBD16D-ED87-40EF-AAC1-34CF98E6F60D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
