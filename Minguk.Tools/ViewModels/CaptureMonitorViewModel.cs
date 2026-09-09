@@ -1198,7 +1198,23 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         if (_inputRouter is null)
             return;
 
-        _inputRouter.InputAdapter = InputAdapterFactory.Create(SelectedInputBackend, GetTargetWindowHandle);
+        // 드라이버가 있어야 도는 경로(Interception)는 만들어 봐야 쓸 수 있는지 알 수 있다.
+        var selection = InputAdapterFactory.CreateWithFallback(
+            SelectedInputBackend, InputBackend.SendInput, GetTargetWindowHandle);
+
+        // 이전 어댑터를 버리지 않으면 드라이버 컨텍스트가 그대로 샌다.
+        _inputRouter.InputAdapter.Dispose();
+        _inputRouter.InputAdapter = selection.Adapter;
+
+        if (selection.FellBack)
+        {
+            // 조용히 다른 경로로 보내면 안 된다. 무엇이 왜 밀려났는지 그대로 띄운다.
+            SelectedInputBackend = InputBackend.SendInput;
+            StatusText = $"{selection.FellBackFrom} 을 쓸 수 없다 - {selection.Reason} "
+                       + $"→ {_inputRouter.AdapterName} 으로 바꿨다";
+            Logger.Warn($"{selection.FellBackFrom} 사용 불가: {selection.Reason}");
+            return;
+        }
 
         StatusText = $"입력 경로: {_inputRouter.AdapterName}";
         Logger.Debug($"입력 경로를 {_inputRouter.AdapterName} 으로 바꿨다.");
@@ -1400,6 +1416,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     private void DisposeSession()
     {
+        // 어댑터가 든 자원(Interception 의 드라이버 컨텍스트)을 놓아 준다.
+        _inputRouter?.InputAdapter.Dispose();
+
         Interlocked.Exchange(ref _presentedFrameCountInSecond, 0);
         PreviewFps = 0;
 

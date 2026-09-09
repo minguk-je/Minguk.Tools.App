@@ -254,6 +254,11 @@ public sealed class PostMessageInputAdapter : IInputAdapter
         return false;
     }
 
+    /// <summary>창 메시지를 부치기만 하므로 놓아 줄 자원이 없다.</summary>
+    public void Dispose()
+    {
+    }
+
     private static class NativeMethods
     {
         public const uint WM_MOUSEMOVE = 0x0200;

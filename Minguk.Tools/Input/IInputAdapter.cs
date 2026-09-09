@@ -1,4 +1,6 @@
-﻿namespace Minguk.Tools.Input;
+﻿using System;
+
+namespace Minguk.Tools.Input;
 
 /// <summary>어느 마우스 버튼인지.</summary>
 public enum MouseButton
@@ -23,7 +25,7 @@ public enum MouseButton
 ///   대개 대상이 관리자 권한으로 떠 있어서(UIPI) 막힌 경우다.
 ///   부르는 쪽이 사용자에게 이유를 알려 줄 수 있어야 해서 void 로 두지 않았다.
 /// </summary>
-public interface IInputAdapter
+public interface IInputAdapter : IDisposable
 {
     /// <summary>사람이 읽을 이름. 어느 경로로 나가는지 화면에 보여 주려고 둔다.</summary>
     string Name { get; }
@@ -79,4 +81,9 @@ public interface IInputAdapter
     bool PressKey(ushort virtualKey);
 
     bool ReleaseKey(ushort virtualKey);
+
+    // IDisposable 을 무는 이유
+    //   드라이버 컨텍스트처럼 놓아 주어야 하는 자원을 든 구현이 있다(Interception).
+    //   경로를 갈아끼울 때 이전 것을 버리지 않으면 그대로 샌다.
+    //   자원이 없는 구현은 빈 Dispose 를 둔다.
 }

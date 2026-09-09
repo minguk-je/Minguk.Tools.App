@@ -42,17 +42,9 @@ public sealed class SendInputAdapter : IInputAdapter, IScanCodeInput
     /// </summary>
     public bool MoveMouseTo(int screenX, int screenY)
     {
-        var virtualLeft = NativeMethods.GetSystemMetrics(NativeMethods.SM_XVIRTUALSCREEN);
-        var virtualTop = NativeMethods.GetSystemMetrics(NativeMethods.SM_YVIRTUALSCREEN);
-        var virtualWidth = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXVIRTUALSCREEN);
-        var virtualHeight = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYVIRTUALSCREEN);
-
-        if (virtualWidth <= 0 || virtualHeight <= 0)
+        // 환산은 VirtualScreen 에 모여 있다. Interception 경로도 같은 계산을 쓴다.
+        if (!VirtualScreen.TryNormalize(screenX, screenY, out var normalizedX, out var normalizedY))
             return false;
-
-        // -1 을 빼는 이유: 65535 는 마지막 픽셀의 "오른쪽 끝" 이라 그대로 쓰면 한 칸 넘어간다.
-        var normalizedX = (int)Math.Round((screenX - virtualLeft) * 65535.0 / (virtualWidth - 1));
-        var normalizedY = (int)Math.Round((screenY - virtualTop) * 65535.0 / (virtualHeight - 1));
 
         return Send(NativeMethods.MouseInput(
             NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE | NativeMethods.MOUSEEVENTF_VIRTUALDESK,
@@ -138,12 +130,13 @@ public sealed class SendInputAdapter : IInputAdapter, IScanCodeInput
         return false;
     }
 
+    /// <summary>커널 입력 큐에 넣기만 하므로 놓아 줄 자원이 없다.</summary>
+    public void Dispose()
+    {
+    }
+
     private static class NativeMethods
     {
-        public const int SM_XVIRTUALSCREEN = 76;
-        public const int SM_YVIRTUALSCREEN = 77;
-        public const int SM_CXVIRTUALSCREEN = 78;
-        public const int SM_CYVIRTUALSCREEN = 79;
 
         public const uint INPUT_MOUSE = 0;
         public const uint INPUT_KEYBOARD = 1;
@@ -218,8 +211,6 @@ public sealed class SendInputAdapter : IInputAdapter, IScanCodeInput
         [DllImport("user32.dll", SetLastError = true)]
         public static extern uint SendInput(uint count, Input[] inputs, int size);
 
-        [DllImport("user32.dll")]
-        public static extern int GetSystemMetrics(int index);
 
         [DllImport("user32.dll")]
         public static extern bool GetCursorPos(out ScreenPoint point);
