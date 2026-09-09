@@ -99,6 +99,11 @@ public partial class InputAutomationViewModel
 
     // ── 표시 ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 어떤 단축키가 살아 있는지. 다른 프로그램이 쥐고 있어 등록에 실패한 것도 여기 적는다.
+    /// </summary>
+    public string? HotkeyStatus { get => GetProperty(() => HotkeyStatus); set => SetProperty(() => HotkeyStatus, value); }
+
     /// <summary>"Enter → 안 → 녕 → 좌클릭" 처럼 무엇이 어떤 순서로 나가는지.</summary>
     public string? SequenceText { get => GetProperty(() => SequenceText); set => SetProperty(() => SequenceText, value); }
 

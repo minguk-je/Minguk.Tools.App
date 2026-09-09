@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Minguk.Base.Utilities;
+using System.Windows.Input;
 using Minguk.Tools.Input;
+using Minguk.Tools.Input.Hotkeys;
 using Minguk.Tools.Input.Sequencing;
 
 namespace Minguk.Tools.ViewModels;
@@ -80,6 +83,68 @@ public partial class InputAutomationViewModel
         if (_service is null) return;
 
         SequenceText = BuildSequence().Describe();
+    });
+
+    /// <summary>
+    /// 다른 창이 앞에 있을 때도 시작·중지할 수 있게 단축키를 건다.
+    /// </summary>
+    /// <remarks>
+    /// 이 화면의 버튼은 이 앱이 앞에 있어야 누를 수 있는데, 입력은 대상 창이 앞에 있어야
+    /// 들어간다. 둘을 동시에 만족할 수 없어서 앱 밖에서 누를 수단이 필요하다.
+    ///
+    /// 등록은 흔하게 실패한다(다른 프로그램이 같은 조합을 먼저 쥐고 있으면).
+    /// 조용히 넘기면 사용자는 눌러도 아무 일이 없는 이유를 알 수 없으므로 화면에 적는다.
+    /// </remarks>
+    private void RegisterHotkeys() => Guard(() =>
+    {
+        _hotkeys = GlobalHotkeyAdapterFactory.Create();
+
+        (string Label, Key Key, Action Action)[] bindings =
+        [
+            ("F5 1회", Key.F5, () => { if (IsIdle) DoRunOnce(); }),
+            ("F6 반복/중지", Key.F6, ToggleLoop),
+            ("F4 좌표 담기", Key.F4, PickCursorPosition)
+        ];
+
+        var live = new List<string>();
+        var failed = new List<string>();
+
+        foreach (var (label, key, action) in bindings)
+        {
+            if (_hotkeys.TryRegister(key, ModifierKeys.None, action)) live.Add(label);
+            else failed.Add(label);
+        }
+
+        HotkeyStatus = failed.Count == 0
+            ? string.Join(" · ", live)
+            : string.Join(" · ", live) + $"  (다른 프로그램이 쥐고 있음: {string.Join(", ", failed)})";
+
+        Logger.Debug($"단축키 등록: 성공 {live.Count}, 실패 {failed.Count}");
+    });
+
+    /// <summary>F6 은 하나로 시작과 중지를 겸한다. 도는 중에 다시 누르면 멈춘다.</summary>
+    private void ToggleLoop()
+    {
+        if (IsRunning) DoStop();
+        else DoStartLoop();
+    }
+
+    /// <summary>
+    /// 지금 커서 자리를 이동 좌표에 담는다.
+    /// </summary>
+    /// <remarks>
+    /// 버튼으로 두면 쓸모가 없다. 버튼을 누르는 순간 커서가 그 버튼 위에 있기 때문이다.
+    /// 대상 창 위에 커서를 둔 채 눌러야 하므로 단축키로만 제공한다.
+    /// </remarks>
+    private void PickCursorPosition() => Guard(() =>
+    {
+        if (IsRunning || _adapter is null) return;
+
+        if (_adapter.GetCursorPosition() is not { } p) return;
+
+        MoveX = p.X;
+        MoveY = p.Y;
+        CurrentStep = $"좌표 담음 ({p.X}, {p.Y})";
     });
 
     private void DoRunOnce() => Start(loop: false);

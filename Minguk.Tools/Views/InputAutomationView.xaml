@@ -147,6 +147,12 @@
                           Orientation="Vertical"
                           View="GroupBox">
 
+            <dxlc:LayoutItem Label="단축키"
+                             ToolTip="다른 창이 앞에 있을 때도 눌린다. 대상 창을 앞으로 가져온 뒤 F5/F6 을 누르면 된다.">
+                <dxe:TextEdit EditValue="{Binding HotkeyStatus}"
+                              IsReadOnly="True" />
+            </dxlc:LayoutItem>
+
             <dxlc:LayoutItem Label="순서">
                 <dxe:TextEdit EditValue="{Binding SequenceText}"
                               IsReadOnly="True" />

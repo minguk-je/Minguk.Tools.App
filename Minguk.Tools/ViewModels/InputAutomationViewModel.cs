@@ -4,6 +4,7 @@ using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
 using Minguk.Image;
 using Minguk.Tools.Input;
+using Minguk.Tools.Input.Hotkeys;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -26,6 +27,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     private IInputAdapter? _adapter;
     private InputService? _service;
     private CancellationTokenSource? _cts;
+    private IGlobalHotkeyAdapter? _hotkeys;
 
     public InputAutomationViewModel()
     {
@@ -58,7 +60,8 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         HoldTimeMs = GetSetting(nameof(HoldTimeMs), 30);
         IntervalMs = GetSetting(nameof(IntervalMs), 60);
         JitterMs = GetSetting(nameof(JitterMs), 0);
-        StartDelaySeconds = GetSetting(nameof(StartDelaySeconds), 3);
+        // 손으로 대상 창을 앞으로 가져오려면 3초는 빠듯하다.
+        StartDelaySeconds = GetSetting(nameof(StartDelaySeconds), 5);
         MaxLoops = GetSetting(nameof(MaxLoops), 10);
 
         var screen = VirtualScreen.GetBounds();
@@ -70,6 +73,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     {
         ApplyBackend();
         UpdateSequenceText();
+        RegisterHotkeys();
     }
 
     protected override void SaveSettings()
@@ -101,5 +105,9 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         _adapter?.Dispose();
         _adapter = null;
         _service = null;
+
+        // 놓아 주지 않으면 앱이 살아 있는 동안 그 조합이 잠긴 채로 남는다.
+        _hotkeys?.Dispose();
+        _hotkeys = null;
     });
 }
