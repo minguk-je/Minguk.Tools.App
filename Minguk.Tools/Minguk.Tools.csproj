@@ -50,6 +50,20 @@
 		<PackageReference Include="Vortice.Direct3D9" Version="3.8.3" />
 		<!-- 추론. DirectML EP 라 GPU 벤더를 안 가린다 -->
 		<PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+
+		<!--
+		  DirectML 네이티브만 저장소에 두고 쓴다(Libs\DirectML\x64\).
+		  ExcludeAssets="all" 로 패키지 쪽 복사를 끄지 않으면 같은 파일을 둘이 각각 복사해
+		  어느 것이 출력에 남는지 빌드 순서에 달리게 된다.
+		
+		  관리 어셈블리(Microsoft.ML.OnnxRuntime.dll)는 건드리지 않는다.
+		  그쪽은 System.Numerics.Tensors 를 물고 있어서 NuGet 이 계속 맡아야 한다.
+		
+		  올릴 때는 Microsoft.AI.DirectML 버전을 바꾸는 것만으로 끝나지 않는다.
+		  새 버전 패키지의 bin\x64-win\ 에서 DLL 을 꺼내 Libs\DirectML\x64\ 를 덮어쓰고
+		  같이 커밋해야 한다. onnxruntime 과 DirectML 은 짝이 맞아야 한다.
+		-->
+		<PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" ExcludeAssets="all" />
 	</ItemGroup>
 
 	<!--
@@ -81,6 +95,30 @@
 	-->
 	<ItemGroup>
 	  <None Include="..\Libs\Minguk.Image.dll" Link="Libs\Minguk.Image.dll" />
+	</ItemGroup>
+
+	<!-- DirectML 네이티브. 출력 루트로 복사하고, 트리에는 Libs 아래로 보이게 한다. -->
+	<ItemGroup>
+	  <Content Include="..\Libs\DirectML\x64\DirectML.dll"
+	           Link="Libs\DirectML\x64\DirectML.dll"
+	           TargetPath="DirectML.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
+	<!--
+	  디버그 레이어는 Debug 구성에만 넣는다.
+	
+	  패키지의 targets 는 구성을 보지 않는다 - Microsoft_AI_DirectML_SkipDebugLayerCopy 를
+	  true 로 주지 않는 한 Release 에도 그대로 따라 들어간다. 여기서는 그 판단을 직접 한다.
+	  DirectML.Debug.dll 은 디버그 레이어를 켰을 때만 쓰이므로 배포본에 있을 이유가 없다.
+	-->
+	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+	  <Content Include="..\Libs\DirectML\x64\DirectML.Debug.dll"
+	           Link="Libs\DirectML\x64\DirectML.Debug.dll"
+	           TargetPath="DirectML.Debug.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
 	</ItemGroup>
 
 	<!--
