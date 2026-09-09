@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    입력 시퀀스 스크립트 강조 (어두운 테마).
+
+    명령은 늘 줄 맨 앞에 온다. 그래서 명령 규칙만 ^ 로 묶는다 -
+    그러지 않으면 "클릭 휠" 의 휠 이 명령으로 물든다.
+
+    밝은 테마용은 SequenceScript.Light.xshd 에 같은 규칙으로 색만 달리 두었다.
+    규칙을 고치면 두 파일을 같이 고쳐야 한다.
+-->
+<SyntaxDefinition name="SequenceScript"
+                  xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+
+    <Color name="Comment" foreground="#8B949E" fontStyle="italic" />
+    <Color name="Command" foreground="#79C0FF" fontWeight="bold" />
+    <Color name="Argument" foreground="#D2A8FF" />
+    <Color name="String" foreground="#CE9178" />
+    <Color name="Number" foreground="#4EC9B0" />
+
+    <RuleSet ignoreCase="false">
+
+        <!--  주석과 글자가 먼저다. 그 안에 든 것은 명령·숫자로 보지 않는다.  -->
+        <Span color="Comment" begin="#" />
+
+        <Span color="String" multiline="false">
+            <Begin>"</Begin>
+            <End>"</End>
+            <RuleSet>
+                <!--  \" 와 \\ 는 따옴표를 닫지 않는다.  -->
+                <Span begin="\\" end="." />
+            </RuleSet>
+        </Span>
+
+        <Rule color="Command">
+            ^\s*(?:글자|Enter|한/영|한영|클릭|이동|휠|쉬기|Type|ToggleHangul|Click|MoveTo|Scroll|Wait)(?=\s|$)
+        </Rule>
+
+        <Rule color="Argument">
+            (?&lt;=\s)(?:좌|우|휠|Left|Right|Middle)(?=\s|$)
+        </Rule>
+
+        <Rule color="Number">
+            [+-]?\d+
+        </Rule>
+    </RuleSet>
+</SyntaxDefinition>

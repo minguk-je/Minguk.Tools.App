@@ -65,6 +65,81 @@ internal static partial class Program
               json.Length > 160 ? json[..160] + "…" : json);
     }
 
+    /// <summary>
+    /// 스크립트가 계획과 온전히 오가는지, 틀린 줄을 제대로 짚는지.
+    /// </summary>
+    /// <remarks>
+    /// 이제 사용자가 손으로 쓰는 것이 이 글이다. 여기가 틀리면 적은 것과 나가는 것이
+    /// 어긋나는데, 어긋나도 그럴싸하게 나가서 눈으로는 알아채기 어렵다.
+    /// </remarks>
+    private static void TestSequenceScript()
+    {
+        // ── 한 바퀴 돌아 제자리로 ──
+        var plan = new SequencePlan
+        {
+            Steps =
+            [
+                new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = "안녕 \"큰따옴표\"" },
+                new SequenceStepDefinition { Kind = SequenceStepKind.Enter },
+                new SequenceStepDefinition { Kind = SequenceStepKind.ToggleHangul },
+                new SequenceStepDefinition { Kind = SequenceStepKind.Click, Button = MouseButton.Right },
+                new SequenceStepDefinition { Kind = SequenceStepKind.MoveTo, X = -1920, Y = 360 },
+                new SequenceStepDefinition { Kind = SequenceStepKind.Scroll, Notches = -3 },
+                new SequenceStepDefinition { Kind = SequenceStepKind.Wait, DelayMs = 250 }
+            ]
+        };
+
+        var text = SequenceScript.ToText(plan);
+        var ok = SequenceScript.TryParse(text, out var back, out var errors);
+
+        var same = ok
+                   && back.Steps.Count == plan.Steps.Count
+                   && back.Steps.Zip(plan.Steps).All(p => p.First.Describe() == p.Second.Describe());
+
+        Check("스크립트 왕복", same,
+              same ? $"{plan.Steps.Count}줄이 그대로 돌아왔다"
+                   : $"오류 {errors.Count}건 / 돌아온 것 {string.Join(" → ", back.Steps.Select(s => s.Describe()))}");
+
+        // ── 주석과 빈 줄은 세지 않는다 ──
+        const string withNoise = """
+                                 # 이건 주석
+                                 글자 "가"
+
+                                 Enter   # 뒤에 붙은 주석
+                                 """;
+
+        SequenceScript.TryParse(withNoise, out var trimmed, out _);
+        Check("주석·빈 줄 건너뛰기", trimmed.Steps.Count == 2,
+              $"{trimmed.Steps.Count}단계: {string.Join(" → ", trimmed.Steps.Select(s => s.Describe()))}");
+
+        // ── 따옴표 안의 # 은 주석이 아니다 ──
+        SequenceScript.TryParse("글자 \"값 #1\"", out var hashInside, out _);
+        Check("따옴표 안의 # 은 글자",
+              hashInside.Steps.Count == 1 && hashInside.Steps[0].Text == "값 #1",
+              hashInside.Steps.Count == 1 ? $"[{hashInside.Steps[0].Text}]" : "단계가 안 생겼다");
+
+        // ── 틀린 줄은 번호와 함께, 한 번에 모아서 ──
+        //     첫 오류에서 멈추면 열 줄 틀렸을 때 열 번을 돌아야 한다.
+        const string broken = """
+                              글자 "괜찮은 줄"
+                              이동 열
+                              춤춰
+                              쉬기 -5
+                              """;
+
+        var good = SequenceScript.TryParse(broken, out var partial, out var found);
+
+        Check("틀린 줄을 한 번에 모은다",
+              !good && found.Count == 3 && partial.Steps.Count == 1
+              && found[0].Line == 2 && found[1].Line == 3 && found[2].Line == 4,
+              $"오류 {found.Count}건 (줄 {string.Join(",", found.Select(e => e.Line))}), 살아남은 단계 {partial.Steps.Count}개");
+
+        // ── 닫히지 않은 따옴표 ──
+        SequenceScript.TryParse("글자 \"안 닫음", out _, out var unclosed);
+        Check("안 닫힌 따옴표를 잡는다", unclosed.Count == 1,
+              unclosed.Count == 1 ? unclosed[0].ToString() : $"오류 {unclosed.Count}건");
+    }
+
     /// <summary>계획으로 만든 시퀀스가 실제로 창에 닿는지. 순서 문구만 맞고 안 나가면 소용없다.</summary>
     private static async Task TestPlanRunAsync(TestWindow ui)
     {

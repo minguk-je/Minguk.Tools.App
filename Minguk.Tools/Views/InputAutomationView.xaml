@@ -6,10 +6,10 @@
              xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
              xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
              xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
-             xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
              xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
-             xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
+             xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
              xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
+             xmlns:markup="clr-namespace:Minguk.Tools.Markup"
              xmlns:sequencing="clr-namespace:Minguk.Tools.Input.Sequencing"
              xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
              Style="{DynamicResource BaseControlStyle}"
@@ -78,7 +78,7 @@
                           Orientation="Vertical"
                           View="GroupBox">
 
-            <!--  담기. 고른 줄 바로 아래에 들어간다.  -->
+            <!--  본보기 줄을 캐럿이 있는 줄 아래에 끼운다. 형식을 외우지 않아도 되게.  -->
             <dxlc:LayoutGroup HorizontalAlignment="Left"
                               Orientation="Horizontal"
                               VerticalAlignment="Top">
@@ -110,120 +110,46 @@
                                  Command="{Binding DoAddStepCommand}"
                                  CommandParameter="{x:Static sequencing:SequenceStepKind.Wait}"
                                  Content="쉬기" />
+
+                <dx:SimpleButton Width="80"
+                                 Command="{Binding DoResetStepsCommand}"
+                                 Content="처음으로"
+                                 ToolTip="적은 것을 모두 버리고 기본 스크립트로 되돌린다." />
             </dxlc:LayoutGroup>
 
-            <dxlc:LayoutGroup Orientation="Horizontal"
-                              VerticalAlignment="Top">
+            <!--
+                AvalonEdit. WPF 용이라 AvaloniaEdit 이 아니다.
+                Text 가 의존 속성이 아니어서 markup:AvalonEditText.Text 로 양방향을 잇는다.
 
-                <!--
-                    그리드에서는 고르기만 한다. 값은 아래 "고른 단계" 에서 고친다 -
-                    종류마다 쓰는 칸이 달라서 열로 펼치면 늘 대부분이 비어 있게 된다.
-                -->
-                <controls:BaseGridControl Height="170"
-                                          AutoGenerateColumns="None"
-                                          ItemsSource="{Binding Steps}"
-                                          SelectedItem="{Binding SelectedStep, Mode=TwoWay}">
-                    <dxg:GridControl.View>
-                        <!--  두 줄짜리 목록에 검색·그룹 패널은 자리만 먹는다.  -->
-                        <controls:BaseTableView AllowEditing="False"
-                                                NavigationStyle="Row"
-                                                ShowGroupPanel="False"
-                                                ShowSearchPanelMode="Never" />
-                    </dxg:GridControl.View>
+                DevExpress 경량 테마는 표준 WPF 컨트롤을 손대지 않으므로 색을 직접 준다 -
+                안 그러면 어두운 테마에서 이 편집기만 흰 판으로 남는다.
+            -->
+            <Border BorderBrush="{Binding EditorBorder}"
+                    BorderThickness="1">
+                <avalonEdit:TextEditor Height="200"
+                                       Background="{Binding EditorBackground}"
+                                       FontFamily="D2Coding, Consolas, Courier New"
+                                       FontSize="13"
+                                       Foreground="{Binding EditorForeground}"
+                                       LineNumbersForeground="{Binding EditorLineNumberForeground}"
+                                       ShowLineNumbers="True"
+                                       SyntaxHighlighting="{Binding Highlighting}"
+                                       WordWrap="False"
+                                       markup:AvalonEditText.Text="{Binding ScriptText, Mode=TwoWay}">
+                    <dxmvvm:Interaction.Behaviors>
+                        <!--  ViewModel 이 캐럿 자리에 줄을 끼우려면 편집기를 직접 잡아야 한다.  -->
+                        <dxmvvm:UIObjectService x:Name="EditorObjectService" />
+                    </dxmvvm:Interaction.Behaviors>
+                </avalonEdit:TextEditor>
+            </Border>
 
-                    <dxg:GridColumn Width="90"
-                                    AllowSorting="False"
-                                    FieldName="KindName"
-                                    Header="종류" />
-                    <dxg:GridColumn AllowSorting="False"
-                                    FieldName="Summary"
-                                    Header="내용" />
-                </controls:BaseGridControl>
-
-                <dxlc:LayoutGroup HorizontalAlignment="Left"
-                                  Orientation="Vertical"
-                                  VerticalAlignment="Top">
-                    <dx:SimpleButton Width="72"
-                                     Command="{Binding DoMoveStepUpCommand}"
-                                     Content="위로" />
-                    <dx:SimpleButton Width="72"
-                                     Command="{Binding DoMoveStepDownCommand}"
-                                     Content="아래로" />
-                    <dx:SimpleButton Width="72"
-                                     Command="{Binding DoDuplicateStepCommand}"
-                                     Content="복제" />
-                    <dx:SimpleButton Width="72"
-                                     Command="{Binding DoRemoveStepCommand}"
-                                     Content="삭제" />
-                    <dx:SimpleButton Width="72"
-                                     Command="{Binding DoResetStepsCommand}"
-                                     Content="처음으로"
-                                     ToolTip="담은 것을 모두 버리고 기본 시퀀스로 되돌린다." />
-                </dxlc:LayoutGroup>
-            </dxlc:LayoutGroup>
-
-            <dxlc:LayoutGroup Header="고른 단계"
-                              HorizontalAlignment="Left"
-                              Orientation="Horizontal"
-                              VerticalAlignment="Top"
-                              View="GroupBox"
-                              Visibility="{Binding HasSelectedStep, Converter={StaticResource BoolToVisibility}}">
-
-                <dxlc:LayoutItem Label="종류">
-                    <dxe:ComboBoxEdit Width="110"
-                                      DisplayMember="Name"
-                                      EditValue="{Binding SelectedStep.Kind, UpdateSourceTrigger=PropertyChanged}"
-                                      IsTextEditable="False"
-                                      ItemsSource="{Binding StepKinds}"
-                                      ValueMember="Value" />
-                </dxlc:LayoutItem>
-
-                <dxlc:LayoutItem Width="260"
-                                 Label="글자"
-                                 Visibility="{Binding IsTypeStep, Converter={StaticResource BoolToVisibility}}">
-                    <dxe:TextEdit EditValue="{Binding SelectedStep.Text, UpdateSourceTrigger=PropertyChanged}"
-                                  NullText="한글·영문·숫자·문장부호" />
-                </dxlc:LayoutItem>
-
-                <dxlc:LayoutItem Width="130"
-                                 Label="버튼"
-                                 Visibility="{Binding IsClickStep, Converter={StaticResource BoolToVisibility}}">
-                    <dxe:ComboBoxEdit DisplayMember="Name"
-                                      EditValue="{Binding SelectedStep.Button, UpdateSourceTrigger=PropertyChanged}"
-                                      IsTextEditable="False"
-                                      ItemsSource="{Binding MouseButtons}"
-                                      ValueMember="Value" />
-                </dxlc:LayoutItem>
-
-                <dxlc:LayoutItem Width="110"
-                                 Label="X"
-                                 Visibility="{Binding IsMoveStep, Converter={StaticResource BoolToVisibility}}">
-                    <dxe:SpinEdit EditValue="{Binding SelectedStep.X, UpdateSourceTrigger=PropertyChanged}" />
-                </dxlc:LayoutItem>
-
-                <dxlc:LayoutItem Width="110"
-                                 Label="Y"
-                                 Visibility="{Binding IsMoveStep, Converter={StaticResource BoolToVisibility}}">
-                    <dxe:SpinEdit EditValue="{Binding SelectedStep.Y, UpdateSourceTrigger=PropertyChanged}" />
-                </dxlc:LayoutItem>
-
-                <dxlc:LayoutItem Width="130"
-                                 Label="칸 수"
-                                 ToolTip="양수가 위, 음수가 아래."
-                                 Visibility="{Binding IsScrollStep, Converter={StaticResource BoolToVisibility}}">
-                    <dxe:SpinEdit EditValue="{Binding SelectedStep.Notches, UpdateSourceTrigger=PropertyChanged}"
-                                  MaxValue="10"
-                                  MinValue="-10" />
-                </dxlc:LayoutItem>
-
-                <dxlc:LayoutItem Width="130"
-                                 Label="쉬는 시간(ms)"
-                                 Visibility="{Binding IsWaitStep, Converter={StaticResource BoolToVisibility}}">
-                    <dxe:SpinEdit EditValue="{Binding SelectedStep.DelayMs, UpdateSourceTrigger=PropertyChanged}"
-                                  MaxValue="600000"
-                                  MinValue="0" />
-                </dxlc:LayoutItem>
-            </dxlc:LayoutGroup>
+            <!--  틀린 줄이 있을 때만 뜬다. 늘 자리를 차지하면 멀쩡할 때도 눈이 간다.  -->
+            <dxlc:LayoutItem Label="고칠 줄"
+                             Visibility="{Binding HasScriptError, Converter={StaticResource BoolToVisibility}}">
+                <dxe:TextEdit EditValue="{Binding ScriptError}"
+                              Foreground="#D1242F"
+                              IsReadOnly="True" />
+            </dxlc:LayoutItem>
         </dxlc:LayoutGroup>
 
         <dxlc:LayoutGroup Header="타이밍"

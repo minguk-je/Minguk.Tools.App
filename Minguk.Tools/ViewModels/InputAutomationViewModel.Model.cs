@@ -1,21 +1,13 @@
 using System;
 using System.Collections.ObjectModel;
-using System.Linq;
+using System.Windows.Media;
 using DevExpress.Mvvm;
+using ICSharpCode.AvalonEdit.Highlighting;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Input;
-
 using Minguk.Tools.Input.Sequencing;
 
 namespace Minguk.Tools.ViewModels;
-
-/// <summary>
-/// 콤보에 한글 이름으로 보이게 하려고 값과 이름을 짝지어 둔 것.
-/// </summary>
-/// <remarks>
-/// 열거형을 그대로 물리면 목록이 영문 식별자로 나온다. 표시 이름을 열거형에 붙일 수도 있지만
-/// (Description 특성 같은 것) 그러면 읽는 쪽마다 리플렉션을 돌려야 한다.
-/// </remarks>
-public sealed record NamedValue<T>(T Value, string Name);
 
 /// <summary>
 /// 화면이 들고 있는 상태와 커맨드 선언만 모은 쪽.
@@ -31,16 +23,8 @@ public partial class InputAutomationViewModel
 
     public DelegateCommand DoStopCommand { get; private set; } = null!;
 
-    /// <summary>고른 종류의 단계를 끝에 담는다.</summary>
+    /// <summary>고른 종류의 줄을 캐럿 자리에 끼워 넣는다. 형식을 외우지 않아도 되게.</summary>
     public DelegateCommand<SequenceStepKind> DoAddStepCommand { get; private set; } = null!;
-
-    public DelegateCommand DoRemoveStepCommand { get; private set; } = null!;
-
-    public DelegateCommand DoDuplicateStepCommand { get; private set; } = null!;
-
-    public DelegateCommand DoMoveStepUpCommand { get; private set; } = null!;
-
-    public DelegateCommand DoMoveStepDownCommand { get; private set; } = null!;
 
     public DelegateCommand DoResetStepsCommand { get; private set; } = null!;
 
@@ -61,49 +45,46 @@ public partial class InputAutomationViewModel
     // ── 보낼 것 ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 위에서 아래로 이 순서대로 나간다. 그리드에서 직접 고치고, 버튼으로 넣고 빼고 옮긴다.
+    /// 편집기에 든 스크립트. <b>이것이 원본이다</b> - 단계 목록은 여기서 읽어 낸다.
     /// </summary>
     /// <remarks>
-    /// 예전에는 체크박스 몇 개로 켜고 껐는데, 그러면 순서가 코드에 박혀서 바꿀 수가 없었다
-    /// (글자 → 클릭 → 이동 → 휠 고정). "이동한 다음 클릭" 같은 흔한 것도 못 했다.
+    /// 예전에는 그리드에 줄을 담았는데, 한 줄 고치는 데 마우스가 여러 번 필요하고 통째로
+    /// 복사하거나 남에게 주는 것이 안 됐다. 글로 두면 편집기가 이미 잘하는 일
+    /// (되돌리기·여러 줄 선택·찾아 바꾸기·붙여넣기)이 전부 따라온다.
+    /// 형식은 <see cref="SequenceScript"/> 에 적혀 있다.
     /// </remarks>
-    public ObservableCollection<SequenceStepDefinition> Steps { get; }
-        = [];
-
-    /// <summary>그리드에서 고른 줄. 삭제·복제·순서 바꾸기가 이것을 본다.</summary>
-    public SequenceStepDefinition? SelectedStep
+    public string? ScriptText
     {
-        get => GetProperty(() => SelectedStep);
-        set => SetProperty(() => SelectedStep, value, OnSelectedStepChanged);
+        get => GetProperty(() => ScriptText);
+        set => SetProperty(() => ScriptText, value, OnScriptTextChanged);
     }
 
-    /// <summary>단계 종류 콤보에 물린다.</summary>
-    public ObservableCollection<NamedValue<SequenceStepKind>> StepKinds { get; }
-        = [.. Enum.GetValues<SequenceStepKind>().Select(k => new NamedValue<SequenceStepKind>(k, SequenceStepKindNames.Of(k)))];
+    /// <summary>틀린 줄들을 한 번에 모아 둔 것. 없으면 null.</summary>
+    public string? ScriptError
+    {
+        get => GetProperty(() => ScriptError);
+        set => SetProperty(() => ScriptError, value, () => RaisePropertyChanged(nameof(HasScriptError)));
+    }
 
-    /// <summary>마우스 버튼 콤보에 물린다.</summary>
-    public ObservableCollection<NamedValue<MouseButton>> MouseButtons { get; }
-        = [.. Enum.GetValues<MouseButton>().Select(b => new NamedValue<MouseButton>(b, b switch
-        {
-            MouseButton.Right => "우클릭",
-            MouseButton.Middle => "휠클릭",
-            _ => "좌클릭"
-        }))];
+    public bool HasScriptError => !string.IsNullOrEmpty(ScriptError);
 
-    // ── 고른 단계가 쓰는 칸만 보여 주려고 화면이 묻는 것 ───────────────────
-    //    종류마다 쓰는 칸이 다르다. 안 쓰는 칸까지 늘 띄워 두면 무엇을 채워야 하는지 흐려진다.
+    /// <summary>
+    /// 구문 강조 정의. 화면이 편집기의 SyntaxHighlighting 에 그대로 물린다.
+    /// </summary>
+    /// <remarks>
+    /// 화면에서 직접 고르지 않고 ViewModel 이 들고 있는 이유는, 테마에 따라 다른 것을 줘야
+    /// 하는데 그 판단이 XAML 에서 할 일이 아니기 때문이다.
+    /// </remarks>
+    public IHighlightingDefinition Highlighting { get; } = SequenceScriptHighlighting.Current;
 
-    public bool HasSelectedStep => SelectedStep is not null;
+    /// <summary>편집기 색. AvalonEdit 은 DevExpress 테마를 안 타므로 여기서 준다.</summary>
+    public Brush EditorBackground { get; } = SequenceScriptHighlighting.Background;
 
-    public bool IsTypeStep => SelectedStep?.Kind == SequenceStepKind.Type;
+    public Brush EditorForeground { get; } = SequenceScriptHighlighting.Foreground;
 
-    public bool IsClickStep => SelectedStep?.Kind == SequenceStepKind.Click;
+    public Brush EditorLineNumberForeground { get; } = SequenceScriptHighlighting.LineNumberForeground;
 
-    public bool IsMoveStep => SelectedStep?.Kind == SequenceStepKind.MoveTo;
-
-    public bool IsScrollStep => SelectedStep?.Kind == SequenceStepKind.Scroll;
-
-    public bool IsWaitStep => SelectedStep?.Kind == SequenceStepKind.Wait;
+    public Brush EditorBorder { get; } = SequenceScriptHighlighting.Border;
 
     // ── 타이밍 ───────────────────────────────────────────────────────────
 

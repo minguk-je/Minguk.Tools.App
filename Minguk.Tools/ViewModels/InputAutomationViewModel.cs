@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
+using ICSharpCode.AvalonEdit;
 using Minguk.Image;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
@@ -13,7 +14,8 @@ namespace Minguk.Tools.ViewModels;
 /// 입력 시퀀스를 짜서 대상 창에 보내는 화면.
 ///
 /// 무엇을 하는 화면인가
-///   글자·클릭·이동·휠을 순서대로 묶어 한 바퀴 돌리거나 반복한다.
+///   글자·클릭·이동·휠을 <b>스크립트로 적어</b> 한 바퀴 돌리거나 반복한다.
+///   형식은 Input/Sequencing/SequenceScript 에 적혀 있다.
 ///   보내는 경로(SendInput · PostMessage · Interception)를 골라 같은 시퀀스를 다르게 흘릴 수 있다.
 ///
 /// 이 화면의 특별한 점
@@ -30,8 +32,23 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     private CancellationTokenSource? _cts;
     private IGlobalHotkeyAdapter? _hotkeys;
 
-    /// <summary>단계 목록이 통째로 들어가는 설정 키.</summary>
-    private const string StepsSettingKey = "Steps";
+    /// <summary>편집기. 줄을 캐럿 자리에 끼우려면 필요하다.</summary>
+    private TextEditor? _editor;
+
+    /// <summary>스크립트에서 읽어 낸 계획. 실행할 때 이것으로 시퀀스를 만든다.</summary>
+    private SequencePlan _plan = new();
+
+    /// <summary>스크립트가 통째로 들어가는 설정 키.</summary>
+    private const string ScriptSettingKey = "Script";
+
+    /// <summary>
+    /// 스크립트를 쓰기 전, 단계 목록을 JSON 으로 넣던 키.
+    /// </summary>
+    /// <remarks>
+    /// 예전에 저장해 둔 것을 한 번 읽어 글로 옮겨 주려고 남겨 둔다.
+    /// 옮기고 나면 <see cref="ScriptSettingKey"/> 만 쓴다.
+    /// </remarks>
+    private const string LegacyStepsSettingKey = "Steps";
 
     public InputAutomationViewModel()
     {
@@ -43,23 +60,22 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         DoStopCommand = new DelegateCommand(DoStop, () => IsRunning, false);
 
         DoAddStepCommand = new DelegateCommand<SequenceStepKind>(DoAddStep, _ => IsIdle, false);
-        DoRemoveStepCommand = new DelegateCommand(DoRemoveStep, () => SelectedStep is not null, false);
-        DoDuplicateStepCommand = new DelegateCommand(DoDuplicateStep, () => SelectedStep is not null, false);
-        DoMoveStepUpCommand = new DelegateCommand(DoMoveStepUp, () => SelectedStep is not null, false);
-        DoMoveStepDownCommand = new DelegateCommand(DoMoveStepDown, () => SelectedStep is not null, false);
         DoResetStepsCommand = new DelegateCommand(DoResetSteps, () => IsIdle, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
-    // InitializeControls() 는 잡을 컨트롤이 없어 비워 둔다.
-    // 타이밍 값이 바뀔 때 순서 문구를 갱신하는 것은 각 프로퍼티의 SetProperty 콜백이 한다.
+    // InitializeObservable() 은 구독할 이벤트가 없어 비워 둔다.
+    // 글이 바뀔 때 다시 읽는 것은 ScriptText 의 SetProperty 콜백이 한다.
 
     /// <remarks>
-    /// RestoreSettings 보다 먼저 돈다. 그래서 복구하며 담는 줄도 이 구독을 탄다.
+    /// 편집기를 못 잡아도 화면은 돈다 - 줄 담기가 캐럿 자리 대신 끝에 붙을 뿐이다.
+    /// 그래서 여기서 막지 않는다.
     /// </remarks>
-    protected override void InitializeObservable()
+    protected override void InitializeControls()
     {
-        Steps.CollectionChanged += OnStepsChanged;
+        _editor = FindControl<TextEditor>("EditorObjectService");
+
+        if (_editor is null) Logger.Warn("스크립트 편집기를 찾지 못했다. 줄 담기는 글 끝에 붙는다.");
     }
 
     protected override void RestoreSettings()
@@ -69,7 +85,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
             ? backend
             : InputBackend.SendInput;
 
-        RestoreSteps();
+        RestoreScript();
 
         HoldTimeMs = GetSetting(nameof(HoldTimeMs), 30);
         IntervalMs = GetSetting(nameof(IntervalMs), 60);
@@ -80,22 +96,36 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     }
 
     /// <summary>
-    /// 저장해 둔 단계들을 되읽는다.
+    /// 저장해 둔 스크립트를 되읽는다. 없으면 예전 JSON 을 글로 옮기고, 그것도 없으면 기본값.
     /// </summary>
     /// <remarks>
-    /// 설정 문자열 하나에 JSON 으로 넣는다. 단계마다 설정 키를 만들면 개수가 줄었을 때
+    /// 설정 문자열 하나에 글을 통째로 넣는다. 단계마다 설정 키를 만들면 개수가 줄었을 때
     /// 남는 키를 지워야 하는데, 그 뒤처리를 어디선가 빠뜨리면 예전 단계가 되살아난다.
     /// </remarks>
-    private void RestoreSteps()
+    private void RestoreScript()
     {
-        var plan = SequencePlan.FromJson(GetSetting(StepsSettingKey, string.Empty), out var error);
+        var saved = GetSetting(ScriptSettingKey, string.Empty);
 
-        if (error is not null)
-            Logger.Warn($"저장된 시퀀스를 읽지 못해 기본값으로 되돌린다: {error}");
+        if (!string.IsNullOrWhiteSpace(saved))
+        {
+            ScriptText = saved;
+            return;
+        }
 
-        foreach (var step in plan.Steps) Steps.Add(step);
+        var legacy = GetSetting(LegacyStepsSettingKey, string.Empty);
 
-        SelectedStep = Steps.Count > 0 ? Steps[0] : null;
+        if (!string.IsNullOrWhiteSpace(legacy))
+        {
+            var plan = SequencePlan.FromJson(legacy, out var error);
+
+            if (error is not null) Logger.Warn($"예전에 저장된 시퀀스를 읽지 못했다: {error}");
+
+            ScriptText = SequenceScript.ToText(plan);
+            Logger.Info("예전 JSON 시퀀스를 스크립트로 옮겼다.");
+            return;
+        }
+
+        ScriptText = SequenceScript.ToText(SequencePlan.CreateDefault());
     }
 
     protected override void OnLoaded()
@@ -108,7 +138,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     protected override void SaveSettings()
     {
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
-        SetSetting(StepsSettingKey, new SequencePlan { Steps = [.. Steps] }.ToJson());
+        SetSetting(ScriptSettingKey, ScriptText ?? string.Empty);
 
         SetSetting(nameof(HoldTimeMs), HoldTimeMs);
         SetSetting(nameof(IntervalMs), IntervalMs);
@@ -128,9 +158,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         _adapter = null;
         _service = null;
 
-        Steps.CollectionChanged -= OnStepsChanged;
-
-        foreach (var step in Steps) step.PropertyChanged -= OnStepEdited;
+        _editor = null;
 
         // 놓아 주지 않으면 앱이 살아 있는 동안 그 조합이 잠긴 채로 남는다.
         _hotkeys?.Dispose();

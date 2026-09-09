@@ -159,6 +159,7 @@ internal static partial class Program
         await TestHangulTypingAsync(ui);
 
         TestSequencePlan();
+        TestSequenceScript();
         await TestSequenceAsync(ui);
         await TestPlanRunAsync(ui);
         await TestMouseMoveAsync();
