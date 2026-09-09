@@ -38,6 +38,7 @@
 
         <!--  도는 동안에는 설정을 잠근다. 중간에 바뀌면 엉뚱한 것이 나간다.  -->
         <dxlc:LayoutGroup Header="보내는 경로"
+                          VerticalAlignment="Top"
                           IsEnabled="{Binding IsIdle}"
                           Orientation="Horizontal"
                           View="GroupBox">
@@ -54,6 +55,7 @@
         </dxlc:LayoutGroup>
 
         <dxlc:LayoutGroup Header="무엇을 보낼까"
+                          VerticalAlignment="Top"
                           IsEnabled="{Binding IsIdle}"
                           Orientation="Vertical"
                           View="GroupBox">
@@ -63,7 +65,8 @@
                               NullText="한글·영문·숫자·문장부호" />
             </dxlc:LayoutItem>
 
-            <dxlc:LayoutGroup Orientation="Horizontal">
+            <dxlc:LayoutGroup HorizontalAlignment="Left"
+                              Orientation="Horizontal">
                 <dxe:CheckEdit Content="글자 앞뒤에 Enter"
                                IsChecked="{Binding IncludeEnter}" />
                 <dxe:CheckEdit Content="좌클릭"
@@ -72,12 +75,14 @@
                                IsChecked="{Binding IncludeScroll}" />
                 <dxlc:LayoutItem Label="칸 수">
                     <dxe:SpinEdit EditValue="{Binding ScrollNotches}"
+                                  IsEnabled="{Binding IncludeScroll}"
                                   MaxValue="10"
                                   MinValue="-10" />
                 </dxlc:LayoutItem>
             </dxlc:LayoutGroup>
 
-            <dxlc:LayoutGroup Orientation="Horizontal">
+            <dxlc:LayoutGroup HorizontalAlignment="Left"
+                              Orientation="Horizontal">
                 <dxe:CheckEdit Content="좌표로 이동"
                                IsChecked="{Binding IncludeMove}" />
                 <dxlc:LayoutItem Label="X">
@@ -91,6 +96,7 @@
             </dxlc:LayoutGroup>
         </dxlc:LayoutGroup>
         <dxlc:LayoutGroup Header="타이밍"
+                          VerticalAlignment="Top"
                           IsEnabled="{Binding IsIdle}"
                           Orientation="Horizontal"
                           View="GroupBox">
@@ -130,6 +136,7 @@
         </dxlc:LayoutGroup>
 
         <dxlc:LayoutGroup Header="실행"
+                          VerticalAlignment="Top"
                           Orientation="Vertical"
                           View="GroupBox">
 
@@ -138,7 +145,8 @@
                               IsReadOnly="True" />
             </dxlc:LayoutItem>
 
-            <dxlc:LayoutGroup Orientation="Horizontal">
+            <dxlc:LayoutGroup Orientation="Horizontal"
+                              VerticalAlignment="Top">
                 <dxlc:LayoutItem Label="진행">
                     <dxe:TextEdit EditValue="{Binding CurrentStep}"
                                   IsReadOnly="True" />
@@ -151,8 +159,10 @@
             </dxlc:LayoutGroup>
 
             <dxlc:LayoutGroup HorizontalAlignment="Left"
-                              Orientation="Horizontal">
+                              Orientation="Horizontal"
+                              VerticalAlignment="Top">
                 <dx:SimpleButton Width="120"
+                                 Height="28"
                                  Command="{Binding DoRunOnceCommand}"
                                  Content="1회 실행"
                                  Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
@@ -160,6 +170,7 @@
                                  GlyphWidth="16" />
 
                 <dx:SimpleButton Width="120"
+                                 Height="28"
                                  Command="{Binding DoStartLoopCommand}"
                                  Content="반복 시작"
                                  Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play_forward.png'}"
@@ -167,6 +178,7 @@
                                  GlyphWidth="16" />
 
                 <dx:SimpleButton Width="120"
+                                 Height="28"
                                  Command="{Binding DoStopCommand}"
                                  Content="중지"
                                  Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
