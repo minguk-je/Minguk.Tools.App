@@ -32,7 +32,14 @@
                                EventName="Loaded" />
     </dxmvvm:Interaction.Behaviors>
 
+    <!--
+        AllowItemSizing="False" 로 사용자가 런타임에 칸 크기를 바꾸지 못하게 막는다.
+        (WinForms 의 AllowCustomization 에 해당하는 것은 WPF 에 없다.
+         드래그로 항목을 재배치하는 customization 모드는 IsCustomization 이 기본 False 라
+         코드에서 켜지 않는 한 애초에 들어갈 수 없다.)
+    -->
     <dxlc:LayoutControl Padding="8"
+                        AllowItemSizing="False"
                         Orientation="Vertical"
                         ScrollBars="Auto">
 
