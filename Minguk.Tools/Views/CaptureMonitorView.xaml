@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+             xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
              xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
              xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
              xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
@@ -50,165 +51,169 @@
 
     <DockPanel LastChildFill="True">
 
-        <!-- ── 툴바 ───────────────────────────────────────────────────── -->
+        <!-- ── 툴바 ─────────────────────────────────────────────────── -->
         <!--
-            WrapPanel 이다. StackPanel 로 두면 창이 좁을 때 오른쪽 버튼이 그냥 잘려 나간다.
-            항목이 늘어나도 줄바꿈으로 흡수된다.
+            동작(버튼)만 여기 둔다. 설정은 아래 LayoutControl 로 내렸다.
+            섞여 있으면 "지금 뭘 누를 수 있나" 가 한눈에 안 들어온다.
         -->
-        <WrapPanel Margin="4"
-                   DockPanel.Dock="Top">
-            <dxe:TextEdit Width="60"
-                          Margin="0,0,4,0"
-                          EditValue="대상"
-                          IsReadOnly="True"
-                          ShowBorder="False" />
+        <dxb:ToolBarControl DockPanel.Dock="Top"
+                            AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
-            <dxe:ComboBoxEdit Width="520"
-                              Margin="0,0,4,0"
-                              DisplayMember="Display"
-                              IsEnabled="{Binding IsNotRunning}"
-                              IsTextEditable="False"
-                              ItemsSource="{Binding Targets}"
-                              SelectedItem="{Binding SelectedTarget}" />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding RefreshTargetsCommand}"
+                               Content="새로 고침"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                               ToolTip="캡처할 수 있는 창·모니터 목록을 다시 훑는다." />
 
-            <dx:SimpleButton Width="110"
-                             Margin="0,0,12,0"
-                             Command="{Binding RefreshTargetsCommand}"
-                             Content="새로 고침"
-                             Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
-                             GlyphHeight="16"
-                             GlyphWidth="16" />
+            <dxb:BarItemSeparator />
 
-            <dxe:TextEdit Width="70"
-                          Margin="0,0,4,0"
-                          EditValue="캡처 fps"
-                          IsReadOnly="True"
-                          ShowBorder="False" />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoStartCommand}"
+                               Content="시작"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}" />
 
-            <!-- 상한을 넘는 프레임은 세션이 아예 처리하지 않는다. 리드백도 건너뛴다. -->
-            <dxe:ComboBoxEdit Width="70"
-                              Margin="0,0,12,0"
-                              IsTextEditable="False"
-                              ItemsSource="{Binding FpsOptions}"
-                              SelectedItem="{Binding CaptureTargetFps}"
-                              ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다." />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoStopCommand}"
+                               Content="중지"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}" />
 
-            <dx:SimpleButton Width="100"
-                             Margin="0,0,4,0"
-                             Command="{Binding DoStartCommand}"
-                             Content="시작"
-                             Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}"
-                             GlyphHeight="16"
-                             GlyphWidth="16" />
+            <dxb:BarItemSeparator />
 
-            <dx:SimpleButton Width="100"
-                             Margin="0,0,4,0"
-                             Command="{Binding DoStopCommand}"
-                             Content="중지"
-                             Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}"
-                             GlyphHeight="16"
-                             GlyphWidth="16" />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoClearCommand}"
+                               Content="지우기"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
+                               ToolTip="쌓인 통계 줄을 비운다." />
 
-            <dx:SimpleButton Width="100"
-                             Margin="0,0,12,0"
-                             Command="{Binding DoClearCommand}"
-                             Content="지우기"
-                             Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
-                             GlyphHeight="16"
-                             GlyphWidth="16" />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding SaveFrameCommand}"
+                               Content="프레임 저장"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
+                               ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
+        </dxb:ToolBarControl>
+        <!-- ── 설정 ─────────────────────────────────────────────────── -->
+        <!--
+            AllowItemSizing="False" - 사용자가 칸 크기를 바꿀 자리가 아니다.
+            그룹마다 VerticalAlignment="Top" 을 준다. 안 주면 LayoutControl 이 남는
+            세로 공간을 그룹들에 나눠 줘서 줄 사이가 텅 빈다.
+        -->
+        <dxlc:LayoutControl DockPanel.Dock="Top"
+                            Margin="4,4,4,0"
+                            Padding="0"
+                            AllowItemSizing="False"
+                            Orientation="Vertical">
 
-            <!--
-                리드백을 켜면 프레임마다 GPU→CPU 복사가 붙는다. 캡처만 재는 게 목적이면 꺼 두고,
-                CPU 추론이나 화면 저장이 필요하면 켠다. 세션을 새로 시작해야 반영된다.
-            -->
-            <dxe:CheckEdit Margin="0,0,12,0"
-                           Content="CPU 리드백"
-                           IsChecked="{Binding EnableCpuReadback}"
-                           IsEnabled="{Binding IsNotRunning}"
-                           ToolTip="GPU 프레임을 CPU 메모리로 내린다. 켜야 프레임 저장이 된다." />
+            <dxlc:LayoutGroup Header="캡처"
+                              Orientation="Horizontal"
+                              VerticalAlignment="Top"
+                              View="GroupBox">
+                <dxlc:LayoutItem Label="대상">
+                    <dxe:ComboBoxEdit DisplayMember="Display"
+                                      IsEnabled="{Binding IsNotRunning}"
+                                      IsTextEditable="False"
+                                      ItemsSource="{Binding Targets}"
+                                      SelectedItem="{Binding SelectedTarget}" />
+                </dxlc:LayoutItem>
 
-            <!--
-                미리보기는 CPU 리드백을 강제한다. 켜면 프레임마다 GPU→CPU 복사가 붙으므로
-                순수 캡처 성능을 잴 때는 꺼 두는 것이 맞다.
-            -->
-            <dxe:CheckEdit Margin="0,0,4,0"
-                           Content="미리보기"
-                           IsChecked="{Binding ShowPreview}"
-                           ToolTip="캡처 중인 화면을 그대로 보여 준다. 초당 60장까지만 올린다." />
+                <dxlc:LayoutItem Width="170"
+                                 Label="캡처 fps"
+                                 ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다.">
+                    <dxe:ComboBoxEdit IsTextEditable="False"
+                                      ItemsSource="{Binding FpsOptions}"
+                                      SelectedItem="{Binding CaptureTargetFps}" />
+                </dxlc:LayoutItem>
 
-            <dxe:ComboBoxEdit Width="70"
-                              Margin="0,0,4,0"
-                              IsTextEditable="False"
-                              ItemsSource="{Binding FpsOptions}"
-                              SelectedItem="{Binding PreviewTargetFps}"
-                              ToolTip="미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다."
-                              Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <dxlc:LayoutItem Width="130"
+                                 Label=""
+                                 ToolTip="GPU 프레임을 CPU 메모리로 내린다. 켜야 프레임 저장이 된다.">
+                    <dxe:CheckEdit Content="CPU 리드백"
+                                   IsChecked="{Binding EnableCpuReadback}"
+                                   IsEnabled="{Binding IsNotRunning}" />
+                </dxlc:LayoutItem>
+            </dxlc:LayoutGroup>
 
-            <!-- 지금 화면에 실제로 올라가는 속도. 위 콤보는 상한일 뿐이다. -->
-            <dxe:TextEdit Width="110"
-                          Margin="0,0,12,0"
-                          EditValue="{Binding PreviewFpsText, Mode=OneWay}"
-                          IsReadOnly="True"
-                          ShowBorder="False"
-                          ToolTip="지금 화면에 올라가고 있는 실제 fps. 위 콤보가 상한이다."
-                          Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <dxlc:LayoutGroup Header="미리보기"
+                              Orientation="Horizontal"
+                              VerticalAlignment="Top"
+                              View="GroupBox">
+                <dxlc:LayoutItem Width="120"
+                                 Label=""
+                                 ToolTip="캡처 중인 화면을 그대로 보여 준다. 켜면 프레임마다 GPU→CPU 복사가 붙는다.">
+                    <dxe:CheckEdit Content="미리보기"
+                                   IsChecked="{Binding ShowPreview}" />
+                </dxlc:LayoutItem>
 
-            <!--
-                미리보기에서 누른 것을 실제 대상 창으로 넘긴다.
-                기본은 꺼 둔다 - 켜져 있으면 화면만 보려다 실제로 눌러 버린다.
-            -->
-            <dxe:CheckEdit Margin="0,0,12,0"
-                           Content="입력 전달"
-                           IsChecked="{Binding IsInputForwardingEnabled}"
-                           IsEnabled="{Binding IsInputForwardingAvailable}"
-                           ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 요소 검사가 켜져 있으면 쓸 수 없다 - 그때는 클릭이 조회로만 쓰인다."
-                           Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <dxlc:LayoutItem Width="150"
+                                 Label="갱신 상한"
+                                 ToolTip="미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다."
+                                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <dxe:ComboBoxEdit IsTextEditable="False"
+                                      ItemsSource="{Binding FpsOptions}"
+                                      SelectedItem="{Binding PreviewTargetFps}" />
+                </dxlc:LayoutItem>
 
-            <!--
-                켜 두면 미리보기 클릭이 입력이 아니라 "여기 뭐가 있나" 조회가 된다.
-            -->
-            <dxe:CheckEdit Margin="0,0,12,0"
-                           Content="요소 검사"
-                           IsChecked="{Binding IsElementInspectEnabled}"
-                           ToolTip="미리보기를 누르면 그 자리의 UI 요소(종류·식별자·이름)를 상태 줄에 보여 준다. 켜져 있는 동안은 입력을 전달하지 않는다."
-                           Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <dxlc:LayoutItem Width="150"
+                                 Label="실제"
+                                 ToolTip="지금 화면에 올라가고 있는 실제 fps. 왼쪽 값은 상한일 뿐이다."
+                                 Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <dxe:TextEdit EditValue="{Binding PreviewFpsText, Mode=OneWay}"
+                                  IsReadOnly="True"
+                                  ShowBorder="False" />
+                </dxlc:LayoutItem>
+            </dxlc:LayoutGroup>
+            <dxlc:LayoutGroup Header="입력 전달"
+                              Orientation="Horizontal"
+                              VerticalAlignment="Top"
+                              View="GroupBox"
+                              Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <dxlc:LayoutItem Width="130"
+                                 Label=""
+                                 ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 요소 검사가 켜져 있으면 쓸 수 없다.">
+                    <dxe:CheckEdit Content="입력 전달"
+                                   IsChecked="{Binding IsInputForwardingEnabled}"
+                                   IsEnabled="{Binding IsInputForwardingAvailable}" />
+                </dxlc:LayoutItem>
 
-            <!--
-                입력 경로. SendInput 은 커서와 포커스를 옮기고, PostMessage 는 안 옮긴다.
-            -->
-            <dxe:ComboBoxEdit Width="130"
-                              Margin="0,0,12,0"
-                              IsEnabled="{Binding IsInputForwardingEnabled}"
-                              IsTextEditable="False"
-                              ItemsSource="{Binding InputBackends}"
-                              SelectedItem="{Binding SelectedInputBackend}"
-                              ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다. PostMessage: 포커스를 안 뺏지만 창 메시지를 보는 대상에만 통한다."
-                              Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <dxlc:LayoutItem Width="130"
+                                 Label=""
+                                 ToolTip="미리보기를 누르면 그 자리의 UI 요소를 상태 줄에 보여 준다. 켜져 있는 동안은 입력을 전달하지 않는다.">
+                    <dxe:CheckEdit Content="요소 검사"
+                                   IsChecked="{Binding IsElementInspectEnabled}" />
+                </dxlc:LayoutItem>
 
-            <!--
-                클릭을 넘긴 뒤 이 앱으로 돌아온다. 꺼 두면 대상 창이 앞에 남는다.
-            -->
-            <dxe:CheckEdit Margin="0,0,12,0"
-                           Content="클릭 후 돌아오기"
-                           IsChecked="{Binding IsReturnFocusAfterClickEnabled}"
-                           IsEnabled="{Binding IsInputForwardingEnabled}"
-                           ToolTip="클릭이 대상에 닿은 뒤 커서와 포커스를 이 창으로 되돌린다. 끄면 대상 창이 앞에 남는다."
-                           Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <dxlc:LayoutItem Width="230"
+                                 Label="경로"
+                                 ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다. PostMessage: 포커스를 안 뺏지만 창 메시지를 보는 대상에만 통한다.">
+                    <dxe:ComboBoxEdit IsEnabled="{Binding IsInputForwardingEnabled}"
+                                      IsTextEditable="False"
+                                      ItemsSource="{Binding InputBackends}"
+                                      SelectedItem="{Binding SelectedInputBackend}" />
+                </dxlc:LayoutItem>
 
-            <dxe:CheckEdit Margin="0,0,12,0"
-                           Content="열 자동 너비"
-                           IsChecked="{Binding IsColumnAutoWidth}"
-                           ToolTip="열 너비를 내용에 맞춘다. 끄면 직접 조절한 너비가 유지된다." />
+                <dxlc:LayoutItem Width="170"
+                                 Label=""
+                                 ToolTip="클릭이 대상에 닿은 뒤 커서와 포커스를 이 창으로 되돌린다. 끄면 대상 창이 앞에 남는다.">
+                    <dxe:CheckEdit Content="클릭 후 돌아오기"
+                                   IsChecked="{Binding IsReturnFocusAfterClickEnabled}"
+                                   IsEnabled="{Binding IsInputForwardingEnabled}" />
+                </dxlc:LayoutItem>
+            </dxlc:LayoutGroup>
 
-            <dx:SimpleButton Width="110"
-                             Command="{Binding SaveFrameCommand}"
-                             Content="프레임 저장"
-                             Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
-                             GlyphHeight="16"
-                             GlyphWidth="16"
-                             ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
-        </WrapPanel>
-
+            <dxlc:LayoutGroup Header="통계"
+                              Orientation="Horizontal"
+                              VerticalAlignment="Top"
+                              View="GroupBox">
+                <dxlc:LayoutItem Width="170"
+                                 Label=""
+                                 ToolTip="열 너비를 내용에 맞춘다. 끄면 직접 조절한 너비가 유지된다.">
+                    <dxe:CheckEdit Content="열 자동 너비"
+                                   IsChecked="{Binding IsColumnAutoWidth}" />
+                </dxlc:LayoutItem>
+            </dxlc:LayoutGroup>
+        </dxlc:LayoutControl>
         <!-- ── 상태 줄 ─────────────────────────────────────────────────── -->
         <dxe:TextEdit Margin="4,0,4,4"
                       DockPanel.Dock="Bottom"

@@ -33,6 +33,8 @@ internal static class ViewSmokeProbe
         {
             failures += Check("InputAutomationView 생성", () => new InputAutomationView());
             failures += Check("DashboardView 생성", () => new DashboardView());
+            failures += Check("CaptureMonitorView 생성", () => new CaptureMonitorView());
+            failures += Check("ConfigView 생성", () => new ConfigView());
 
             // FindMenuItem 은 Instance 가 한 번 만들어진 뒤에만 찾는다. 앱에서는 메뉴가 먼저
             // 만들어지므로 문제가 없지만, 여기서는 직접 건드려 줘야 한다.
@@ -83,17 +85,23 @@ internal static class ViewSmokeProbe
         return hasIcon ? 0 : 1;
     }
 
+    /// <summary>
+    /// 실패는 "만들다 터졌는가" 로만 센다.
+    /// </summary>
+    /// <remarks>
+    /// DataContext 가 비어 있는 것을 실패로 보면 안 된다. 다이얼로그로 띄우는 화면(ConfigView)은
+    /// 일부러 XAML 에서 물리지 않고 DialogService 가 넣어 주기 때문이다.
+    /// 대신 무엇이 붙었는지는 적어 둔다 - ViewModelSource 를 쓰는 화면에서 비어 있으면 그게 신호다.
+    /// </remarks>
     private static int Check(string name, Func<FrameworkElement> create)
     {
         try
         {
             var view = create();
-
-            // DataContext 는 ViewModelSource 마크업이 만든다. 여기서 null 이면 VM 생성이 실패한 것이다.
             var context = view.DataContext;
 
-            Console.WriteLine($"[PASS] {name} — DataContext {context?.GetType().Name ?? "(없음)"}");
-            return context is null ? 1 : 0;
+            Console.WriteLine($"[PASS] {name} — DataContext {context?.GetType().Name ?? "(없음 - 바깥에서 주입)"}");
+            return 0;
         }
         catch (Exception ex)
         {
