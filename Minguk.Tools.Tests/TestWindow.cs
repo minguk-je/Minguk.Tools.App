@@ -1,4 +1,6 @@
+using System;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Controls;
 
 namespace Minguk.Tools.Tests;
@@ -14,6 +16,34 @@ internal sealed class TestWindow : Window
 
     /// <summary>버튼이 실제로 눌린 횟수.</summary>
     public int ClickCount { get; set; }
+
+    /// <summary>
+    /// 창에 도착한 마우스 메시지 수. WPF 가 처리했는지와 무관하게 센다.
+    /// "메시지가 안 왔다" 와 "왔는데 WPF 가 무시했다" 를 가르려고 둔다 -
+    /// 앞은 어댑터 문제이고 뒤는 대상이 WPF 라서 생기는 성질이다.
+    /// </summary>
+    public int MouseDownMessages { get; private set; }
+
+    public int WheelMessages { get; private set; }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        if (PresentationSource.FromVisual(this) is HwndSource source)
+            source.AddHook(CountMessages);
+    }
+
+    private IntPtr CountMessages(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_LBUTTONDOWN = 0x0201;
+        const int WM_MOUSEWHEEL = 0x020A;
+
+        if (message == WM_LBUTTONDOWN) MouseDownMessages++;
+        if (message == WM_MOUSEWHEEL) WheelMessages++;
+
+        return IntPtr.Zero;
+    }
 
     public TestWindow()
     {

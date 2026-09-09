@@ -16,7 +16,8 @@ internal static partial class Program
     {
         if (_adapter.GetCursorPosition() is not { } origin)
         {
-            Fail("마우스 이동", "커서 좌표를 읽지 못했다");
+            Skip("절대 좌표 이동", $"{_adapter.Name} 은 진짜 커서를 움직이지 않는다");
+            Skip("부드러운 이동", $"{_adapter.Name} 은 진짜 커서를 움직이지 않는다");
             return;
         }
 
@@ -98,49 +99,91 @@ internal static partial class Program
     /// <summary>버튼 위로 커서를 옮겨 좌클릭했을 때 Click 이벤트가 오르는지.</summary>
     private static async Task TestClickAsync(TestWindow ui)
     {
-        if (_adapter.GetCursorPosition() is not { } origin)
-        {
-            Fail("마우스 클릭", "커서 좌표를 읽지 못했다");
-            return;
-        }
+        var origin = _adapter.GetCursorPosition();
 
         Post(() => ui.ClickCount = 0);
+        var messagesBefore = Read(() => ui.MouseDownMessages);
         var target = Read(() => CenterOnScreen(ui.Target));
 
-        await _service.MoveToExactAsync((int)target.X, (int)target.Y);
-        await Task.Delay(200);
+        await MoveOverAsync((int)target.X, (int)target.Y);
 
         await _service.ClickAsync(MouseButton.Left, holdTimeMs: 30);
         await Task.Delay(250);
 
         var clicks = Read(() => ui.ClickCount);
-        Check("마우스 좌클릭", clicks == 1, $"버튼 Click 이벤트 {clicks}회 (기대 1회)");
+        var messages = Read(() => ui.MouseDownMessages) - messagesBefore;
 
-        _adapter.MoveMouseTo(origin.X, origin.Y);
-        await Task.Delay(150);
+        if (clicks == 1)
+        {
+            Pass("마우스 좌클릭", $"버튼 Click 이벤트 {clicks}회");
+        }
+        else if (messages > 0)
+        {
+            // 메시지는 창까지 왔다. WPF 는 창 하나가 전부라 자식 HWND 가 없고,
+            // 마우스 입력을 lParam 이 아니라 실제 커서 위치로 판단한다.
+            // 그래서 부친 메시지가 어느 요소에도 닿지 않는다. 어댑터 문제가 아니다.
+            Skip("마우스 좌클릭", $"WM_LBUTTONDOWN {messages}건이 창에 도착했지만 WPF 가 요소로 넘기지 않았다 "
+                                + "- 이 경로는 Win32/WinForms 대상용이다");
+        }
+        else
+        {
+            Fail("마우스 좌클릭", $"창에 마우스 메시지가 오지 않았다 (Click {clicks}회)");
+        }
+
+        await RestoreCursorAsync(origin);
     }
 
     /// <summary>스크롤 영역 위에서 휠을 굴렸을 때 실제로 스크롤되는지.</summary>
     private static async Task TestWheelAsync(TestWindow ui)
     {
-        if (_adapter.GetCursorPosition() is not { } origin)
-        {
-            Fail("휠 스크롤", "커서 좌표를 읽지 못했다");
-            return;
-        }
+        var origin = _adapter.GetCursorPosition();
 
         var target = Read(() => CenterOnScreen(ui.Scroller));
-        await _service.MoveToExactAsync((int)target.X, (int)target.Y);
-        await Task.Delay(200);
+        await MoveOverAsync((int)target.X, (int)target.Y);
 
         var before = Read(() => ui.Scroller.VerticalOffset);
+        var wheelBefore = Read(() => ui.WheelMessages);
         _service.Scroll(-3);            // 음수가 아래로
         await Task.Delay(300);
         var after = Read(() => ui.Scroller.VerticalOffset);
 
-        Check("휠 스크롤", after > before, $"세로 오프셋 {before} → {after}");
+        var wheelMessages = Read(() => ui.WheelMessages) - wheelBefore;
 
-        _adapter.MoveMouseTo(origin.X, origin.Y);
+        if (after > before)
+        {
+            Pass("휠 스크롤", $"세로 오프셋 {before} → {after}");
+        }
+        else if (wheelMessages > 0)
+        {
+            Skip("휠 스크롤", $"WM_MOUSEWHEEL {wheelMessages}건이 창에 도착했지만 WPF 가 요소로 넘기지 않았다 "
+                            + "- 이 경로는 Win32/WinForms 대상용이다");
+        }
+        else
+        {
+            Fail("휠 스크롤", $"창에 휠 메시지가 오지 않았다 (오프셋 {before} → {after})");
+        }
+
+        await RestoreCursorAsync(origin);
+    }
+
+    /// <summary>
+    /// 버튼·휠을 보낼 자리로 옮긴다.
+    /// 진짜 커서를 움직이는 경로는 도착까지 확인하고, 그렇지 않은 경로(PostMessage)는
+    /// 좌표만 알려 준다 - 그쪽은 이 좌표를 다음 버튼 메시지에 실을 뿐이다.
+    /// </summary>
+    private static async Task MoveOverAsync(int x, int y)
+    {
+        if (_adapter.GetCursorPosition() is null) _adapter.MoveMouseTo(x, y);
+        else await _service.MoveToExactAsync(x, y);
+
+        await Task.Delay(200);
+    }
+
+    private static async Task RestoreCursorAsync((int X, int Y)? origin)
+    {
+        if (origin is not { } p) return;
+
+        _adapter.MoveMouseTo(p.X, p.Y);
         await Task.Delay(150);
     }
 

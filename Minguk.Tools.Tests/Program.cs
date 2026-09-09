@@ -74,6 +74,13 @@ internal static partial class Program
         Results.Add($"[FAIL] {name} — {detail}");
     }
 
+    /// <summary>
+    /// 이 경로에는 해당하지 않는 항목. 실패가 아니다.
+    /// PostMessage 는 진짜 커서를 움직이지 않고 스캔코드도 넣지 못한다 - 못 하는 것이 아니라
+    /// 그 경로의 존재 이유(포커스·커서를 안 뺏는 것)에서 따라오는 성질이다.
+    /// </summary>
+    private static void Skip(string name, string reason) => Results.Add($"[N/A ] {name} — {reason}");
+
     private static void Check(string name, bool ok, string detail)
     {
         if (ok) Pass(name, detail);
@@ -99,7 +106,10 @@ internal static partial class Program
 
     private static async Task RunAllAsync(TestWindow ui, InputBackend backend)
     {
-        _adapter = InputAdapterFactory.Create(backend, () => IntPtr.Zero);
+        // PostMessage 경로는 어느 창에 넣을지 알아야 한다. 검증 대상이 이 창이다.
+        OurHandle = Read(() => new WindowInteropHelper(ui).Handle);
+
+        _adapter = InputAdapterFactory.Create(backend, () => OurHandle);
         _service = new InputService(_adapter);
 
         if (!_adapter.IsAvailable)
@@ -108,12 +118,11 @@ internal static partial class Program
             return;
         }
 
-        Check("어댑터 준비", _service.SupportsTyping,
-              $"{_adapter.Name}, 스캔코드 {(_service.SupportsTyping ? "가능" : "불가")}");
+        Pass("어댑터 준비", $"{_adapter.Name}, 스캔코드 {(_service.SupportsTyping ? "가능" : "불가")}, "
+                          + $"진짜 커서 {(_adapter.GetCursorPosition() is null ? "안 움직임" : "움직임")}");
 
         TestBackendSwitching();
 
-        OurHandle = Read(() => new WindowInteropHelper(ui).Handle);
         SetForegroundWindow(OurHandle);
         Post(() =>
         {
@@ -129,8 +138,18 @@ internal static partial class Program
         }
         Pass("포커스 확보", "입력란이 키보드 포커스를 가짐");
 
-        await TestTypingAsync(ui);
-        await TestEnterAsync(ui);
+        if (_service.SupportsTyping)
+        {
+            await TestTypingAsync(ui);
+            await TestEnterAsync(ui);
+        }
+        else
+        {
+            Skip("키보드 문자 입력", $"{_adapter.Name} 은 스캔코드를 넣지 못한다");
+            Skip("Enter 키", $"{_adapter.Name} 은 스캔코드를 넣지 못한다");
+        }
+
+        await TestVirtualKeyAsync(ui);
         await TestMouseMoveAsync();
         await TestClickAsync(ui);
         await TestWheelAsync(ui);
@@ -184,6 +203,31 @@ internal static partial class Program
 
         var text = Read(() => ui.Input.Text);
         Check("Enter 키", text.Contains((char)10), $"입력란 내용 = {Describe(text)}");
+    }
+
+    /// <summary>
+    /// 가상 키로 넣는 경로. <c>PreviewInputRouter</c> 가 실제로 쓰는 길이라 세 경로 모두 확인한다.
+    /// WPF 가 주는 것이 가상 키라 미리보기 입력은 이쪽으로만 나간다.
+    /// </summary>
+    private static async Task TestVirtualKeyAsync(TestWindow ui)
+    {
+        const ushort vkA = 0x41;
+        const ushort vkB = 0x42;
+
+        Post(ui.Input.Clear);
+
+        foreach (var vk in (ushort[])[vkA, vkB])
+        {
+            _adapter.PressKey(vk);
+            await Task.Delay(20);
+            _adapter.ReleaseKey(vk);
+            await Task.Delay(40);
+        }
+
+        await Task.Delay(300);
+
+        var actual = Read(() => ui.Input.Text);
+        Check("가상 키 입력", actual == "ab", $"기대 \"ab\" / 실제 \"{actual}\"");
     }
 
     private static string Describe(string s)

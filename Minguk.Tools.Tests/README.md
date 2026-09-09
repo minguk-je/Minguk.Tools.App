@@ -44,7 +44,27 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=Interception
   어느 모니터에도 속하지 않는 빈 공간이 생긴다. 커서는 그 자리에 놓일 수 없어 Windows 가
   가장 가까운 화면으로 되돌리는데, 정상 동작이라 `표시 영역 밖(되튕김)` 으로만 표시하고 실패로 세지 않는다.
 
-## 경로별로 다른 것 (실측)
+## 경로별 결과 (실측)
+
+`[N/A ]` 는 실패가 아니다. 그 경로에 해당하지 않는 항목이다.
+
+| 항목 | SendInput | Interception | PostMessage |
+|---|---|---|---|
+| 스캔코드 문자 입력 · Enter | PASS | PASS | N/A — 스캔코드를 넣지 못한다 |
+| 가상 키 입력 | PASS | PASS | **PASS** |
+| 절대 좌표 이동 · 부드러운 이동 | PASS | PASS | N/A — 진짜 커서를 안 움직인다 |
+| 마우스 좌클릭 | PASS | PASS | N/A — 메시지는 도착하나 WPF 가 안 넘긴다 |
+| 휠 스크롤 | PASS | PASS | **PASS** |
+
+PostMessage 의 클릭은 `WM_LBUTTONDOWN` 이 창까지 **도착하는 것을 확인했다**(창에서 직접 센다).
+WPF 는 창 하나가 전부라 자식 HWND 가 없고 마우스 입력을 실제 커서 위치로 판단해서, 부친 메시지가
+어느 요소에도 닿지 않는다. 어댑터 문제가 아니라 대상이 WPF 라서 생기는 성질이고, 이 경로는
+원래 Win32/WinForms 대상용이다. 같은 이유로 휠은 통한다 - `WM_MOUSEWHEEL` 은 lParam 이
+화면 좌표라 WPF 가 그대로 쓴다.
+
+가상 키 입력은 세 경로 모두 통한다. `PreviewInputRouter` 가 실제로 쓰는 길이 이쪽이다.
+
+## 커서 좌표에서 경로별로 다른 것 (실측)
 
 같은 15개 지점을 두 경로로 재면 **모니터 이음매에 맞닿은 1px 열**에서 갈린다.
 
