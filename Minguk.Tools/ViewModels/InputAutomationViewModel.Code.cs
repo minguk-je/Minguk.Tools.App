@@ -277,12 +277,8 @@ public partial class InputAutomationViewModel
     });
 
     /// <summary>
-    /// 시퀀스를 굳히고 백그라운드에서 돌린다.
+    /// 시퀀스를 굳히고 돌리기 시작한다. 실제 전송은 <see cref="RunAsync"/> 가 백그라운드로 넘긴다.
     /// </summary>
-    /// <remarks>
-    /// 보내는 스레드와 받는 창의 UI 스레드가 같으면 연속 전송한 키가 유실된다.
-    /// 대상이 다른 창이라도 이 앱의 UI 스레드를 막으면 진행 표시가 멎으므로 백그라운드로 돌린다.
-    /// </remarks>
     private void Start(bool loop) => Guard(() =>
     {
         if (_service is null || IsRunning) return;
@@ -309,6 +305,30 @@ public partial class InputAutomationViewModel
         _ = RunAsync(steps, loop, progress, _cts.Token);
     });
 
+    /// <summary>
+    /// 대기를 마치고 시퀀스를 돌린다. 돌리는 일은 스레드풀로 넘긴다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜 Task.Run 인가</b>
+    ///
+    /// 이 메서드는 UI 스레드에서 시작되고, 안쪽 await 들이 UI 의 SynchronizationContext 를
+    /// 잡는다. 그냥 두면 전송 전체가 UI 스레드에서 돈다. 검증 하네스는 일부러 Task.Run 으로
+    /// 감싸 돌리는데, "실제 앱과 같은 조건" 이라고 적어 두고 정작 앱이 그렇지 않았다.
+    ///
+    /// <b>다만 이것은 눈에 보이는 버그를 고친 것이 아니다.</b> 단계 간격 1ms 로 26자를 보내는
+    /// 조건에서 대상이 메모장이든 이 앱 자신의 입력란이든(= 보내는 스레드와 받는 창의 UI
+    /// 스레드가 같은 경우) 유실은 없었다. 단계마다 await 이 있어 그 사이에 메시지 펌프가
+    /// 도는 덕이다. UI 스레드가 무언가에 막혔을 때 전송 간격이 끌려가지 않도록 떼어 놓는,
+    /// 예방에 가까운 변경이다.
+    ///
+    /// 대기(<see cref="CountDownAsync"/>)와 횟수 세기는 UI 스레드에 남겨 둔다 - 화면에 바로
+    /// 비치는 것들이고 넘겨 봐야 득이 없다. 진행 보고는 <see cref="Progress{T}"/> 가 UI
+    /// 컨텍스트를 잡아 두므로 그대로 UI 로 온다.
+    ///
+    /// 취소 토큰은 <see cref="Task.Run(Func{Task}, CancellationToken)"/> 에 넘기지 않는다.
+    /// 시작 전에 이미 취소돼 있으면 그 오버로드는 예외를 던지는데, 여기서는 취소가 정상
+    /// 경로다. <see cref="SequenceRunner"/> 가 토큰을 직접 보고 조용히 멈춘다.
+    /// </remarks>
     private async Task RunAsync(
         System.Collections.Generic.IReadOnlyList<InputStep> steps,
         bool loop,
@@ -323,8 +343,10 @@ public partial class InputAutomationViewModel
 
                 do
                 {
-                    if (!await SequenceRunner.RunOnceAsync(steps, IntervalMs, progress, _service!.Jitter, token))
-                        break;
+                    var finished = await Task.Run(
+                        () => SequenceRunner.RunOnceAsync(steps, IntervalMs, progress, _service!.Jitter, token));
+
+                    if (!finished) break;
 
                     LoopCount++;
                 }
