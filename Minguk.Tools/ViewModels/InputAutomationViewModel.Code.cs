@@ -99,11 +99,17 @@ public partial class InputAutomationViewModel
     {
         _hotkeys = GlobalHotkeyAdapterFactory.Create();
 
+        // 조합키를 쓰는 이유
+        //   RegisterHotKey 는 시스템 전역이다. 맨 F5 로 잡으면 이 화면이 열려 있는 동안
+        //   모든 앱에서 F5 를 빼앗는다 - Visual Studio 의 디버그 시작, 브라우저 새로고침까지.
+        //   Ctrl+Alt 조합은 다른 프로그램과 부딪힐 일이 훨씬 적다.
+        const ModifierKeys Combo = ModifierKeys.Control | ModifierKeys.Alt;
+
         (string Label, Key Key, Action Action)[] bindings =
         [
-            ("F5 1회", Key.F5, () => { if (IsIdle) DoRunOnce(); }),
-            ("F6 반복/중지", Key.F6, ToggleLoop),
-            ("F4 좌표 담기", Key.F4, PickCursorPosition)
+            ("Ctrl+Alt+F5 1회", Key.F5, () => { if (IsIdle) DoRunOnce(); }),
+            ("Ctrl+Alt+F6 반복/중지", Key.F6, ToggleLoop),
+            ("Ctrl+Alt+F4 좌표 담기", Key.F4, PickCursorPosition)
         ];
 
         var live = new List<string>();
@@ -111,7 +117,7 @@ public partial class InputAutomationViewModel
 
         foreach (var (label, key, action) in bindings)
         {
-            if (_hotkeys.TryRegister(key, ModifierKeys.None, action)) live.Add(label);
+            if (_hotkeys.TryRegister(key, Combo, action)) live.Add(label);
             else failed.Add(label);
         }
 
