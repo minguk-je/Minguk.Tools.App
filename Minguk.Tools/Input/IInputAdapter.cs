@@ -29,6 +29,21 @@ public interface IInputAdapter
     string Name { get; }
 
     /// <summary>
+    /// 지금 이 경로로 입력을 보낼 수 있는지.
+    ///
+    /// 대부분의 경로는 늘 true 다 — OS 가 항상 주는 API 를 쓰기 때문이다.
+    /// 드라이버가 있어야 도는 경로(Interception)는 설치·재부팅 전에는 false 가 된다.
+    /// 고른 경로가 안 되면 다른 경로로 내려앉아야 하므로, 만들어 보기 전에는 알 수 없다.
+    /// </summary>
+    bool IsAvailable { get; }
+
+    /// <summary>
+    /// 쓸 수 없는 이유. 쓸 수 있으면 null.
+    /// 조용히 다른 경로로 바꾸면 안 되므로 사용자에게 보여 줄 문장이 필요하다.
+    /// </summary>
+    string? UnavailableReason { get; }
+
+    /// <summary>
     /// 입력이 들어가려면 대상이 앞에 나와 있어야 하는지.
     ///
     /// 커널 입력 큐를 쓰는 경로(SendInput)는 true 다 — 입력이 포커스를 가진 창으로 가므로

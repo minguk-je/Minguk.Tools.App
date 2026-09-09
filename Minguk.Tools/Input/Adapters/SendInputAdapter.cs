@@ -17,11 +17,16 @@ namespace Minguk.Tools.Input.Adapters;
 ///   - 화면 좌표계로 움직인다. 대상 창의 클라이언트 좌표가 아니다.
 ///   - 관리자 권한으로 뜬 창에는 일반 권한 프로세스가 입력을 넣을 수 없다(UIPI).
 /// </summary>
-public sealed class SendInputAdapter : IInputAdapter
+public sealed class SendInputAdapter : IInputAdapter, IScanCodeInput
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
     public string Name => "SendInput";
+
+    /// <summary>OS 가 항상 주는 API 라 준비할 것이 없다.</summary>
+    public bool IsAvailable => true;
+
+    public string? UnavailableReason => null;
 
     /// <summary>커널 입력 큐는 포커스를 가진 창으로 간다. 그래서 대상을 앞으로 가져와야 한다.</summary>
     public bool RequiresForegroundTarget => true;
@@ -70,6 +75,36 @@ public sealed class SendInputAdapter : IInputAdapter
     public bool PressKey(ushort virtualKey) => Send(NativeMethods.KeyInput(virtualKey, isKeyUp: false));
 
     public bool ReleaseKey(ushort virtualKey) => Send(NativeMethods.KeyInput(virtualKey, isKeyUp: true));
+
+    public bool PressScanCode(ushort scanCode, bool extended) => SendScanCode(scanCode, extended, isKeyUp: false);
+
+    public bool ReleaseScanCode(ushort scanCode, bool extended) => SendScanCode(scanCode, extended, isKeyUp: true);
+
+    /// <summary>
+    /// 한/영(0xF2)·한자(0xF1)만 가상 키로 바꿔 보낸다.
+    ///
+    /// 이 둘은 스캔코드 표(0x00~0x7F) 바깥 값이라 스캔코드로 주입하면 키보드 레이아웃이
+    /// 가상 키로 번역하지 못한다. 드라이버 수준으로 넣는 경로(Interception)는 진짜 키보드가
+    /// 보내는 것과 같아서 그대로 통하지만, SendInput 은 레이아웃 번역을 거치므로 안 통한다.
+    /// </summary>
+    private static bool SendScanCode(ushort scanCode, bool extended, bool isKeyUp)
+    {
+        var virtualKey = scanCode switch
+        {
+            HangulScanCode => VK_HANGUL,
+            HanjaScanCode => VK_HANJA,
+            _ => (ushort)0
+        };
+
+        return virtualKey != 0
+            ? Send(NativeMethods.KeyInput(virtualKey, isKeyUp))
+            : Send(NativeMethods.ScanCodeInput(scanCode, extended, isKeyUp));
+    }
+
+    private const ushort HangulScanCode = 0xF2;
+    private const ushort HanjaScanCode = 0xF1;
+    private const ushort VK_HANGUL = 0x15;
+    private const ushort VK_HANJA = 0x19;
 
     private static uint DownFlag(MouseButton button) => button switch
     {
@@ -124,7 +159,9 @@ public sealed class SendInputAdapter : IInputAdapter
         public const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
         public const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;
 
+        public const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
         public const uint KEYEVENTF_KEYUP = 0x0002;
+        public const uint KEYEVENTF_SCANCODE = 0x0008;
 
         public static Input MouseInput(uint flags, int x = 0, int y = 0, int mouseData = 0) => new()
         {
@@ -153,6 +190,30 @@ public sealed class SendInputAdapter : IInputAdapter
                 }
             }
         };
+
+        /// <summary>
+        /// 가상 키 자리를 비우고 스캔코드로 보낸다. KEYEVENTF_SCANCODE 가 그 뜻이다.
+        /// </summary>
+        public static Input ScanCodeInput(ushort scanCode, bool extended, bool isKeyUp)
+        {
+            var flags = KEYEVENTF_SCANCODE;
+            if (extended) flags |= KEYEVENTF_EXTENDEDKEY;
+            if (isKeyUp) flags |= KEYEVENTF_KEYUP;
+
+            return new Input
+            {
+                Type = INPUT_KEYBOARD,
+                Data = new InputUnion
+                {
+                    Keyboard = new KeyboardInputData
+                    {
+                        VirtualKey = 0,
+                        ScanCode = scanCode,
+                        Flags = flags
+                    }
+                }
+            };
+        }
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern uint SendInput(uint count, Input[] inputs, int size);

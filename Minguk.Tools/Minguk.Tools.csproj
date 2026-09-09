@@ -70,24 +70,39 @@
 	</ItemGroup>
 
 	<!--
-	  interception.dll 은 컴파일 시점에 참조하지 않는다. DllImport 로 실행 중에 이름으로 찾으므로
-	  Reference 가 아니라 "출력 폴더에 놓아 두는 파일" 이다. 그래서 Libs\Native\ 로 나눠 둔다 -
-	  Libs\ 바로 아래는 컴파일 시점에 물리는 관리 어셈블리(Minguk.Image, DevExpress) 자리다.
+	  Libs\ 는 프로젝트 폴더 밖이라 솔루션 탐색기에 나오지 않는다.
+	  링크로 걸어 프로젝트 트리의 Libs\ 아래에 보이게만 한다.
 	
-	  x64\ 로 한 번 더 나눈 이유
+	  빌드 결과는 달라지지 않는다 - CopyToOutputDirectory 를 주지 않았고,
+	  Minguk.Image.dll 의 복사는 위의 Reference 가 Private=true 로 이미 하고 있다.
+	
+	  DevExpress\ko\ 의 위성 리소스 130 여 개는 넣지 않는다.
+	  손댈 일이 없는데 트리만 길어진다.
+	-->
+	<ItemGroup>
+	  <None Include="..\Libs\Minguk.Image.dll" Link="Libs\Minguk.Image.dll" />
+	</ItemGroup>
+
+	<!--
+	  interception.dll 은 이 프로젝트만 쓰므로 프로젝트 안에 둔다.
+	  Libs\ 는 여러 프로젝트가 나눠 쓰는 관리 어셈블리(Minguk.Image, DevExpress) 자리다.
+	
+	  x64\ 로 나눈 이유
 	    Interception 은 x86 빌드도 배포한다. 비트수가 어긋나면 컴파일은 멀쩡히 통과하고
 	    실행할 때 BadImageFormatException 으로 터진다. 폴더 이름에 박아 두면 잘못 넣기 어렵다.
 	
-	  Link 를 주는 이유
-	    DllImport 는 실행 파일 옆을 찾는다. Link 가 없으면 출력에서도 Libs\Native\x64\ 밑으로
-	    들어가 버려 로드에 실패한다.
+	  TargetPath 를 주는 이유
+	    DllImport 는 실행 파일 옆을 찾는다. 그냥 두면 출력에서도 Native\x64\ 밑으로 들어가
+	    로드에 실패한다. Link 대신 TargetPath 를 쓰면 솔루션 탐색기에는 실제 폴더 그대로 보이고
+	    출력만 루트로 간다.
 	
 	  None 이 아니라 Content 인 이유
 	    Content 만 ProjectReference 를 타고 전파된다. 나중에 이 프로젝트를 참조하는
 	    테스트 프로젝트가 생겨도 복사 규칙을 다시 쓰지 않아도 된다.
 	-->
 	<ItemGroup>
-	  <Content Include="..\Libs\Native\x64\interception.dll" Link="interception.dll">
+	  <None Remove="Native\x64\interception.dll" />
+	  <Content Include="Native\x64\interception.dll" TargetPath="interception.dll">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
 	</ItemGroup>

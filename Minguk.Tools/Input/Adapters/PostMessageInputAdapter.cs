@@ -38,6 +38,14 @@ public sealed class PostMessageInputAdapter : IInputAdapter
 
     public string Name => "PostMessage";
 
+    /// <summary>
+    /// 창 메시지는 OS 기본 기능이라 준비할 것이 없다.
+    /// 대상 창이 없는 상황은 이 값이 아니라 각 호출의 false 로 알린다 — 대상은 매번 바뀔 수 있다.
+    /// </summary>
+    public bool IsAvailable => true;
+
+    public string? UnavailableReason => null;
+
     /// <summary>대상을 앞으로 가져올 필요가 없다. 이 경로의 존재 이유가 그것이다.</summary>
     public bool RequiresForegroundTarget => false;
 
