@@ -107,6 +107,55 @@ public partial class LabelingViewModel
         set => SetProperty(() => NewClassName, value);
     }
 
+    // ── 학습 ─────────────────────────────────────────────────────────────
+
+    public DelegateCommand DoTrainCommand { get; private set; } = null!;
+
+    public DelegateCommand DoCancelTrainCommand { get; private set; } = null!;
+
+    /// <summary>몇 바퀴 돌릴지.</summary>
+    /// <remarks>
+    /// 기본 20 은 작은 데이터셋에서 흔히 쓰는 값이다. 적으면 아무것도 못 배우고 많으면
+    /// 외워 버린다(과적합). 얼마가 맞는지는 데이터마다 달라 화면에서 고치게 둔다.
+    /// </remarks>
+    public int TrainEpochs
+    {
+        get => GetProperty(() => TrainEpochs);
+        set => SetProperty(() => TrainEpochs, value);
+    }
+
+    public bool IsTraining
+    {
+        get => GetProperty(() => IsTraining);
+        set => SetProperty(() => IsTraining, value, () =>
+        {
+            DoTrainCommand.RaiseCanExecuteChanged();
+            DoCancelTrainCommand.RaiseCanExecuteChanged();
+        });
+    }
+
+    /// <summary>학습이 지금 무엇을 하는 중인지. 받는 진행률도 여기 뜬다.</summary>
+    public string? TrainingStatus
+    {
+        get => GetProperty(() => TrainingStatus);
+        set => SetProperty(() => TrainingStatus, value);
+    }
+
+    /// <summary>
+    /// 학습을 누르기 전에 알아야 할 것. 다 갖춰져 있으면 null.
+    /// </summary>
+    /// <remarks>
+    /// libtorch 를 아직 안 받았다거나 GPU 가 없다는 것을 <b>누르기 전에</b> 알려 준다.
+    /// 2.2GB 를 받고 나서 "CPU 로는 못 씁니다" 라고 하면 안 된다.
+    /// </remarks>
+    public string? TrainingNotice
+    {
+        get => GetProperty(() => TrainingNotice);
+        set => SetProperty(() => TrainingNotice, value, () => RaisePropertyChanged(nameof(HasTrainingNotice)));
+    }
+
+    public bool HasTrainingNotice => !string.IsNullOrEmpty(TrainingNotice);
+
     // ── 알림 ─────────────────────────────────────────────────────────────
 
     /// <summary>지금 무슨 일이 있었는지 한 줄. 자동 저장이 언제 돌았는지도 여기 뜬다.</summary>

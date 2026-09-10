@@ -83,6 +83,22 @@
 		  같이 커밋해야 한다. onnxruntime 과 DirectML 은 짝이 맞아야 한다.
 		-->
 		<PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" ExcludeAssets="all" />
+
+		<!--
+		  몹 검출 학습. TorchSharp 는 PyTorch 의 C++ 알맹이(libtorch)에 붙인 .NET 바인딩이라
+		  파이썬과는 무관하다.
+
+		  여기 넣는 것은 관리 어셈블리뿐이다. TorchSharp-cpu / TorchSharp-cuda-windows 는
+		  절대 넣지 않는다 - 넣으면 빌드 출력이 3.6GB 가 된다(torch_cuda.dll 863MB,
+		  cudnn_cnn_infer64_8.dll 578MB, cublasLt64_12.dll 514MB ...).
+		  libtorch 는 학습을 누를 때 받는다(Vision\Training\LibTorchRuntime).
+
+		  TorchSharp 판을 올리면 LibTorchRuntime.Version 도 같이 봐야 한다.
+		  0.102.7 은 libtorch 2.2.1 을 요구하고, 어긋나면 진입점을 못 찾아 터진다.
+		-->
+		<PackageReference Include="TorchSharp" Version="0.102.7" />
+		<PackageReference Include="Microsoft.ML.TorchSharp" Version="0.23.0" />
+		<PackageReference Include="Microsoft.ML.ImageAnalytics" Version="5.0.0" />
 	</ItemGroup>
 
 	<!--

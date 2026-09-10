@@ -26,6 +26,7 @@
             </ResourceDictionary.MergedDictionaries>
 
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+            <dxmvvm:BooleanNegationConverter x:Key="NotBool" />
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -36,12 +37,20 @@
         <!-- 폴더 고르기 · 알림 창. 선언하지 않으면 ViewModel 에서 부를 때 예외로 터진다. -->
         <dxmvvm:FolderBrowserDialogService />
         <dxmvvm:DispatcherService />
+
+        <!--
+            libtorch 2.2GB 를 받기 전에 물어보는 데 쓴다. 선언하지 않으면 GetService 가
+            null 이 아니라 예외로 터져, Guard 가 삼키고 아무 일도 안 일어난 것처럼 보인다.
+            실제로 그랬다 - 학습 시작을 눌러도 화면이 그대로였다.
+        -->
+        <dx:DXMessageBoxService />
     </dxmvvm:Interaction.Behaviors>
 
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -215,8 +224,50 @@
             </GroupBox>
         </Grid>
 
+        <!-- ── 학습 ──────────────────────────────────────────────────── -->
+        <dxlc:LayoutControl Grid.Row="2"
+                            Padding="0"
+                            Orientation="Vertical">
+            <dxlc:LayoutGroup Header="학습"
+                              Orientation="Vertical"
+                              View="GroupBox">
+                <dxlc:LayoutGroup Orientation="Horizontal">
+                    <dxlc:LayoutItem Width="150"
+                                     Label="바퀴(epoch)">
+                        <dxe:SpinEdit EditValue="{Binding TrainEpochs, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsTraining, Converter={StaticResource NotBool}}"
+                                      MaxValue="500"
+                                      MinValue="1"
+                                      ToolTip="적으면 아무것도 못 배우고 많으면 외워 버립니다." />
+                    </dxlc:LayoutItem>
+
+                    <dx:SimpleButton Width="110"
+                                     Command="{Binding DoTrainCommand}"
+                                     Content="학습 시작" />
+                    <dx:SimpleButton Width="80"
+                                     Command="{Binding DoCancelTrainCommand}"
+                                     Content="멈추기" />
+
+                    <dxlc:LayoutItem Label="진행">
+                        <dxe:TextEdit EditValue="{Binding TrainingStatus, Mode=OneWay}"
+                                      IsReadOnly="True"
+                                      NullText="아직 안 돌렸습니다." />
+                    </dxlc:LayoutItem>
+                </dxlc:LayoutGroup>
+
+                <!--
+                    libtorch 를 아직 안 받았거나 GPU 가 없을 때만 뜬다.
+                    2.2GB 를 받고 나서 "못 씁니다" 라고 하면 안 되므로 누르기 전에 말한다.
+                -->
+                <TextBlock Foreground="#BF6A02"
+                           Text="{Binding TrainingNotice}"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding HasTrainingNotice, Converter={StaticResource BoolToVisibility}}" />
+            </dxlc:LayoutGroup>
+        </dxlc:LayoutControl>
+
         <!-- ── 알림 ──────────────────────────────────────────────────── -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

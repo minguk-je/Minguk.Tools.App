@@ -50,6 +50,8 @@ public partial class LabelingViewModel : DocumentViewModelBase
         DoPreviousCommand = new DelegateCommand(DoPrevious, () => Items.Count > 0, false);
         DoNextCommand = new DelegateCommand(DoNext, () => Items.Count > 0, false);
         DoNextUnlabeledCommand = new DelegateCommand(DoNextUnlabeled, () => Items.Count > 0, false);
+        DoTrainCommand = new DelegateCommand(DoTrain, () => !IsTraining, false);
+        DoCancelTrainCommand = new DelegateCommand(DoCancelTrain, () => IsTraining, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
@@ -70,16 +72,21 @@ public partial class LabelingViewModel : DocumentViewModelBase
     protected override void RestoreSettings()
     {
         DatasetRoot = LabelDataset.ConfiguredRoot;
+
+        TrainEpochs = GetSetting(nameof(TrainEpochs), 20);
     }
 
     protected override void OnLoaded()
     {
         DoReload();
+        UpdateTrainingNotice();
     }
 
     protected override void SaveSettings()
     {
         if (!string.IsNullOrWhiteSpace(DatasetRoot)) LabelDataset.ConfiguredRoot = DatasetRoot;
+
+        SetSetting(nameof(TrainEpochs), TrainEpochs);
     }
 
     /// <summary>
@@ -93,6 +100,10 @@ public partial class LabelingViewModel : DocumentViewModelBase
     protected override void ReleaseResources()
     {
         SaveCurrentIfDirty();
+
+        // 학습을 돌려 둔 채 화면을 닫을 수 있다. 결과를 받을 화면이 없어진 뒤에도
+        // GPU 를 물고 있을 이유가 없어 취소는 걸어 둔다.
+        _trainingCts?.Cancel();
     }
 
     public ObservableCollection<LabelingRow> Items { get; }

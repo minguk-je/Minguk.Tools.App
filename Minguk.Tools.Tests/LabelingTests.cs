@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 
 using Minguk.Tools.Vision.Labeling;
+using Minguk.Tools.Vision.Training;
 
 namespace Minguk.Tools.Tests;
 
@@ -222,6 +223,8 @@ internal static partial class Program
             Check("몹 이름을 파일에 쓰고 다시 읽기",
                   reloaded.Names.SequenceEqual(classes.Names),
                   string.Join(", ", reloaded.Names));
+
+            TestTrainingShape(dataset, imagePath);
 
             Check("classes.txt 가 없으면 빈 목록",
                   LabelClasses.Load(Path.Combine(root, "없는파일.txt")).Count == 0,
