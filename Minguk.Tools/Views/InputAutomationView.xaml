@@ -54,10 +54,16 @@
                           IsEnabled="{Binding IsIdle}"
                           Orientation="Horizontal"
                           View="GroupBox">
+            <!--
+                EditValue 가 아니라 SelectedItem 으로 묶는다.
+                EditValue 로 두면 콤보에 고른 것이 보이는데 ViewModel 은 그대로여서,
+                화면은 PostMessage 라고 하면서 실제로는 SendInput 으로 나가는 일이 있었다.
+                ItemsSource 가 있는 콤보에서 "어느 항목인가" 를 그대로 말하는 것은 SelectedItem 이다.
+            -->
             <dxlc:LayoutItem Label="입력 경로">
-                <dxe:ComboBoxEdit EditValue="{Binding SelectedInputBackend}"
-                                  IsTextEditable="False"
-                                  ItemsSource="{Binding InputBackends}" />
+                <dxe:ComboBoxEdit IsTextEditable="False"
+                                  ItemsSource="{Binding InputBackends}"
+                                  SelectedItem="{Binding SelectedInputBackend, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </dxlc:LayoutItem>
 
             <dxlc:LayoutItem Label="상태">

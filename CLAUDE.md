@@ -157,6 +157,10 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --calibrate           # 정�
     (`Views/CaptureMonitorView.xaml` 이 예시다)
   - `GridControlDependency.IsColumnAutoWidth` 를 켜면 모든 열의 너비 단위가 `Auto`(내용에 맞춤)가 된다.
     그 상태에서는 열 경계를 끌어도 값이 남지 않는다. 사용자가 너비를 직접 잡게 하려면 꺼야 한다.
+- `ItemsSource` 가 있는 콤보는 **`SelectedItem` 으로 묶는다.** `EditValue` 로 묶으면 고른 것이
+  콤보에는 보이는데 ViewModel 은 그대로여서, **화면과 실제 동작이 어긋난다** —
+  입력 자동화 화면에서 콤보는 PostMessage 라고 하는데 실제로는 SendInput 으로 나가고 있었다.
+  `Mode=TwoWay, UpdateSourceTrigger=PropertyChanged` 를 함께 적는다.
 - ViewModel 간 통신은 직접 참조 대신 `MessengerUtility` 를 쓴다.
 - 예외는 `ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName())` 로 보여 주고 NLog 로 남긴다.
 - `Libs/DirectML/x64/` 의 DirectML 네이티브는 NuGet 이 아니라 저장소에서 나간다.
