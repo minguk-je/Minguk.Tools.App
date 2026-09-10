@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using DevExpress.Mvvm;
@@ -137,9 +137,10 @@ public partial class InputAutomationViewModel
     {
         get
         {
-            var name = string.IsNullOrEmpty(ScriptFilePath)
-                ? "(저장 안 함)"
-                : System.IO.Path.GetFileName(ScriptFilePath);
+            // 열어 둔 파일이 없으면 * 를 안 붙인다. 견줄 파일이 없는데 "다르다" 고 할 수 없다.
+            if (string.IsNullOrEmpty(ScriptFilePath)) return "(저장 안 함)";
+
+            var name = System.IO.Path.GetFileName(ScriptFilePath);
 
             return IsScriptDirty ? name + " *" : name;
         }

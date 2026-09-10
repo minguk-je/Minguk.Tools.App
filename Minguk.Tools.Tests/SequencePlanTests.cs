@@ -291,6 +291,20 @@ internal static partial class Program
               extensions.Distinct().Count() == extensions.Length,
               string.Join(" ", extensions));
 
+        // 언어마다 본보기가 달라야 "손대지 않은 본보기면 갈아 끼운다" 가 뜻을 갖는다.
+        // 같은 글이면 갈아 끼운 것을 알아볼 수 없다.
+        var samples = Enum.GetValues<ScriptLanguage>()
+            .Select(l =>
+            {
+                using var engine = ScriptEngineFactory.Create(l);
+                return engine.SampleSource;
+            })
+            .ToArray();
+
+        Check("언어마다 본보기가 다르다",
+              samples.All(s => !string.IsNullOrWhiteSpace(s)) && samples.Distinct().Count() == samples.Length,
+              string.Join(" / ", samples.Select(s => s.Split('\n')[0].Trim())));
+
         // 저장한 것을 다시 읽으면 같아야 한다. 한글이 든 글로 본다 - UTF-8 로 안 쓰면 여기서 깨진다.
         var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
                                           "minguk-script-" + Guid.NewGuid().ToString("N") + ".csx");

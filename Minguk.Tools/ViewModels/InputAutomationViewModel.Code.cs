@@ -285,21 +285,47 @@ public partial class InputAutomationViewModel
     private const int DebounceMs = 500;
 
     /// <summary>
-    /// 언어를 갈아 끼운다. 글은 그대로 두고, 비어 있을 때만 본보기를 넣는다.
+    /// 언어를 갈아 끼운다. 손대지 않은 본보기면 새 언어 본보기로 바꾸고, 쓰던 글은 그대로 둔다.
     /// </summary>
     /// <remarks>
-    /// 쓰던 글을 지우면 안 된다 - 잘못 골랐을 때 되돌릴 방법이 없어진다.
-    /// 대신 새 언어로는 컴파일되지 않을 테니 "고칠 줄" 에 그대로 뜬다.
+    /// 쓰던 글을 지우면 안 된다 - 잘못 골랐을 때 되돌릴 방법이 없어진다. 새 언어로는
+    /// 컴파일되지 않을 테니 "고칠 줄" 에 그대로 뜬다.
+    ///
+    /// 다만 <b>아직 손대지 않은 본보기</b>는 지울 것이 없다. 그대로 두면 파이썬을 골라 놓고
+    /// C# 본보기를 보게 되고, 그 상태로 저장하면 C# 이 든 .py 파일이 나온다.
+    /// 그래서 열어 둔 파일이 없고 "지금 글 == 예전 언어의 본보기" 일 때만 갈아 끼운다.
     /// </remarks>
     private void OnScriptLanguageChanged() => Guard(() =>
     {
+        // 갈아 끼우기 전에 예전 본보기를 챙긴다. Dispose 한 뒤에는 물어볼 데가 없다.
+        var previousSample = _engine?.SampleSource;
+
         _engine?.Dispose();
         _engine = ScriptEngineFactory.Create(SelectedScriptLanguage);
 
-        if (string.IsNullOrWhiteSpace(ScriptText)) ScriptText = _engine.SampleSource;
+        // 파일을 열어 둔 채면 그 글은 본보기가 아니라 그 파일의 것이다. 건드리지 않는다.
+        if (string.IsNullOrWhiteSpace(ScriptText)
+            || (string.IsNullOrEmpty(ScriptFilePath) && IsSame(ScriptText, previousSample)))
+            ScriptText = _engine.SampleSource;
 
         _ = PrepareEngineAsync();
     });
+
+    /// <summary>
+    /// 두 글이 같은 글인지. 줄 끝과 앞뒤 여백은 세지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 편집기를 거치면 줄 끝이 바뀔 수 있어 <c>==</c> 로는 손대지 않은 글도 달라 보인다.
+    /// </remarks>
+    private static bool IsSame(string? left, string? right)
+    {
+        if (left is null || right is null) return false;
+
+        return Normalize(left) == Normalize(right);
+
+        static string Normalize(string text)
+            => text.Replace("\r\n", "\n").Replace('\r', '\n').Trim();
+    }
 
     /// <summary>
     /// 엔진을 준비시키고, 끝나면 한 번 돌려 순서를 채운다.
