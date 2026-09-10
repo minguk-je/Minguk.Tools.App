@@ -79,12 +79,17 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 
 | 인터페이스 | 있는 경로 | 무엇 |
 |---|---|---|
-| `IScanCodeInput` | SendInput · Interception | 스캔코드. 한글 IME 전환이 이것으로만 된다 |
-| `ICharacterInput` | PostMessage | `WM_CHAR`. 글자를 그대로 넣는다 |
+| `IScanCodeInput` | SendInput · Interception | 스캔코드 |
+| `ICharacterInput` | PostMessage · SendMessage | `WM_CHAR`. 글자를 그대로 넣는다 |
+| `IImeControl` | PostMessage · SendMessage | `WM_IME_CONTROL`. 대상 IME 의 한/영 을 직접 바꾼다 |
 
-**PostMessage 는 영문·숫자·문장부호·Enter·한글을 다 넣는다.** 못 하는 것은 한/영 **전환**뿐이다
-(대상의 IME 상태를 바꾸는 것은 스캔코드로만 된다). 한글이 들어가는 것은 IME 를 거치는 것이
-아니라 완성된 음절을 그대로 주는 것이다.
+**창 메시지 경로는 영문·숫자·문장부호·Enter·한글을 다 넣고, 한/영 전환도 한다.**
+글자는 IME 를 거치지 않고 완성된 음절을 그대로 주고(`WM_CHAR`), 한/영 은 대상 창의 기본 IME
+윈도우에 `WM_IME_CONTROL` 을 보내 바꾼다. 키를 흉내 내는 것이 아니라 IME 에게 직접 말한다.
+못 하는 것은 진짜 커서를 움직이는 것과, 창 메시지를 안 보는 대상(WPF·WinUI 의 마우스 입력 등)이다.
+
+`WM_INPUTLANGCHANGE` 와 헷갈리지 않는다. 그쪽은 **입력 언어**(자판)를 바꾸는 것이고,
+한/영 은 그 언어 안에서의 **변환 모드**다.
 
 창 메시지를 넣는 경로는 **두 가지로 돈다.** `WindowMessageInputAdapter` 하나가 `PostMessage`
 (부치고 곧바로 돌아온다)와 `SendMessage`(`SendMessageTimeout` 으로 처리될 때까지 기다린다)를

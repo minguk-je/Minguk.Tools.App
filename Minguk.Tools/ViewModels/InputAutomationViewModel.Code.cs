@@ -246,23 +246,31 @@ public partial class InputAutomationViewModel
         // 창 메시지 경로는 대상 창의 "포커스를 가진 컨트롤" 로 들어간다. 버튼을 누르면
         // 그 순간 포커스가 버튼으로 옮겨 가서 글자가 갈 곳을 잃는다. 실측으로 겪었다.
         // 커널 입력 큐를 쓰는 경로(SendInput·Interception)는 이 문제가 없다.
+        // ── 창 메시지 경로에만 해당하는 것 ──
+        //    한 번에 판단한다. 능력별로 조기 반환을 두었더니 뒤에 있던 안내가 통째로 빠졌다.
         if (!_adapter.RequiresForegroundTarget)
+        {
+            // 대상 창의 "포커스를 가진 컨트롤" 로 들어간다. 버튼을 누르면 그 순간 포커스가
+            // 버튼으로 옮겨 가서 글자가 갈 곳을 잃는다. 실측으로 겪었다.
             lines.Add("버튼으로 시작하면 포커스가 버튼으로 옮겨 가 입력이 갈 곳을 잃습니다 - "
-                      + "대상에 포커스를 둔 채 Ctrl+Alt+F5(1회) · Ctrl+Alt+F6(반복) 으로 시작하세요.");
+                      + "대상에 포커스를 둔 채 F11(1회) · F12(반복) 으로 시작하세요.");
 
-        if (_service.SupportsTyping) return lines.Count == 0 ? null : string.Join(Environment.NewLine, lines);
+            // 대상 창을 안 고르면 마지막 좌표 아래 창으로 간다. 나가긴 나가는데 어디로
+            // 갔는지 알 수 없어서, "끝남" 을 보고 됐다고 믿게 된다. 그 전에 말해 준다.
+            if (SelectedWindowTarget is null && _plan.Steps.Count > 0)
+                lines.Add("대상 창을 고르지 않아 마지막 좌표 아래의 창으로 나갑니다 - "
+                          + "어디로 갈지 정하려면 창을 고르세요.");
+        }
 
-        var dropped = _plan.Steps.Count(SequenceStepKinds.NeedsScanCode);
+        // ── 이 경로가 못 보내는 단계 ──
+        if (!_service.SupportsHangulToggle)
+        {
+            var dropped = _plan.Steps.Count(SequenceStepKinds.NeedsScanCode);
 
-        if (dropped > 0)
-            lines.Add($"{_adapter?.Name} 경로는 한/영 전환을 하지 못해 한/영 단계 {dropped}개가 빠집니다. "
-                      + "글자는 한글까지 그대로 나갑니다 - 대상의 IME 상태를 바꿔야 할 때만 "
-                      + "입력 경로를 SendInput 이나 Interception 으로 바꾸세요.");
-
-        // 대상 창을 안 고르면 마지막 좌표 아래 창으로 간다. 나가긴 나가는데 어디로 갔는지
-        // 알 수 없어서, "끝남" 을 보고 됐다고 믿게 된다. 그 전에 말해 준다.
-        if (SelectedWindowTarget is null && _plan.Steps.Count > dropped)
-            lines.Add("대상 창을 고르지 않아 마지막 좌표 아래의 창으로 나갑니다 - 어디로 갈지 정하려면 창을 고르세요.");
+            if (dropped > 0)
+                lines.Add($"{_adapter.Name} 경로는 한/영 전환을 하지 못해 한/영 단계 {dropped}개가 빠집니다. "
+                          + "글자는 한글까지 그대로 나갑니다.");
+        }
 
         return lines.Count == 0 ? null : string.Join(Environment.NewLine, lines);
     }
@@ -281,26 +289,26 @@ public partial class InputAutomationViewModel
     {
         _hotkeys = GlobalHotkeyAdapterFactory.Create();
 
-        // 조합키를 쓰는 이유
-        //   RegisterHotKey 는 시스템 전역이다. 맨 F5 로 잡으면 이 화면이 열려 있는 동안
-        //   모든 앱에서 F5 를 빼앗는다 - Visual Studio 의 디버그 시작, 브라우저 새로고침까지.
-        //   Ctrl+Alt 조합은 다른 프로그램과 부딪힐 일이 훨씬 적다.
+        // RegisterHotKey 는 시스템 전역이다. 맨 키로 잡으면 이 화면이 열려 있는 동안
+        // 모든 앱에서 그 키를 빼앗는다 - F11 은 브라우저 전체화면, F12 는 개발자 도구다.
+        // 자주 눌러야 하는 실행 두 개는 맨 키로 두고(손이 덜 간다),
+        // 가끔 쓰는 집기 두 개는 조합키로 남긴다.
         const ModifierKeys Combo = ModifierKeys.Control | ModifierKeys.Alt;
 
-        (string Label, Key Key, Action Action)[] bindings =
+        (string Label, Key Key, ModifierKeys Modifiers, Action Action)[] bindings =
         [
-            ("Ctrl+Alt+F5 1회", Key.F5, () => { if (IsIdle) DoRunOnce(); }),
-            ("Ctrl+Alt+F6 반복/중지", Key.F6, ToggleLoop),
-            ("Ctrl+Alt+F4 좌표 담기", Key.F4, PickCursorPosition),
-            ("Ctrl+Alt+F3 대상 창 집기", Key.F3, PickWindowUnderCursor)
+            ("F11 1회", Key.F11, ModifierKeys.None, () => { if (IsIdle) DoRunOnce(); }),
+            ("F12 반복/중지", Key.F12, ModifierKeys.None, ToggleLoop),
+            ("Ctrl+Alt+F4 좌표 담기", Key.F4, Combo, PickCursorPosition),
+            ("Ctrl+Alt+F3 대상 창 집기", Key.F3, Combo, PickWindowUnderCursor)
         ];
 
         var live = new List<string>();
         var failed = new List<string>();
 
-        foreach (var (label, key, action) in bindings)
+        foreach (var (label, key, modifiers, action) in bindings)
         {
-            if (_hotkeys.TryRegister(key, Combo, action)) live.Add(label);
+            if (_hotkeys.TryRegister(key, modifiers, action)) live.Add(label);
             else failed.Add(label);
         }
 
@@ -311,7 +319,7 @@ public partial class InputAutomationViewModel
         Logger.Debug($"단축키 등록: 성공 {live.Count}, 실패 {failed.Count}");
     });
 
-    /// <summary>F6 은 하나로 시작과 중지를 겸한다. 도는 중에 다시 누르면 멈춘다.</summary>
+    /// <summary>F12 는 하나로 시작과 중지를 겸한다. 도는 중에 다시 누르면 멈춘다.</summary>
     private void ToggleLoop()
     {
         if (IsRunning) DoStop();

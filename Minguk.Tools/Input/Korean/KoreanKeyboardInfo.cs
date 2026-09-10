@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -83,6 +83,7 @@ public static class KoreanKeyboardInfo
 
     private const int WM_IME_CONTROL = 0x0283;
     private const int IMC_GETCONVERSIONMODE = 0x0001;
+    private const int IMC_SETCONVERSIONMODE = 0x0002;
     private const int IME_CMODE_NATIVE = 0x0001;   // 한글 모드 비트
     private const uint SMTO_ABORTIFHUNG = 0x0002;
 
@@ -173,6 +174,72 @@ public static class KoreanKeyboardInfo
 
         isHangul = (result.ToInt32() & IME_CMODE_NATIVE) != 0;
         return true;
+    }
+
+    /// <summary>
+    /// 정해진 창의 IME 가 한글 모드인지 읽습니다.
+    /// </summary>
+    /// <remarks>
+    /// 포커스가 아니라 <b>창을 지정해</b> 읽습니다. 창 메시지 경로는 대상을 직접 정하므로
+    /// 포커스를 기준으로 읽으면 엉뚱한 창의 상태를 보게 됩니다.
+    /// </remarks>
+    public static bool TryGetHangulMode(IntPtr window, out bool isHangul)
+    {
+        isHangul = false;
+
+        if (window == IntPtr.Zero) return false;
+
+        IntPtr ime = ImmGetDefaultIMEWnd(window);
+        if (ime == IntPtr.Zero) return false;
+
+        if (SendMessageTimeout(ime, WM_IME_CONTROL, IMC_GETCONVERSIONMODE, IntPtr.Zero,
+                               SMTO_ABORTIFHUNG, 300, out IntPtr result) == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        isHangul = (result.ToInt32() & IME_CMODE_NATIVE) != 0;
+        return true;
+    }
+
+    /// <summary>
+    /// 정해진 창의 IME 를 한글/영문 모드로 <b>바꿉니다</b>.
+    /// </summary>
+    /// <remarks>
+    /// 한/영 키를 누르는 것과 결과는 같지만 경로가 다릅니다. 키는 커널 입력 큐를 거쳐야
+    /// 하므로 스캔코드를 넣을 수 있는 경로에서만 되는데, 이것은 창의 기본 IME 윈도우에
+    /// 메시지를 보내는 것이라 창 메시지 경로에서도 됩니다.
+    ///
+    /// <c>WM_INPUTLANGCHANGE</c> 와 혼동하지 마십시오. 그쪽은 <b>입력 언어</b>(자판)를 바꾸는
+    /// 것이고, 이것은 그 언어 안에서의 <b>변환 모드</b>(한글이냐 영문이냐)입니다.
+    /// 한국어 자판을 쓰는 중에 한/영 을 누르는 것은 후자입니다.
+    ///
+    /// 이 메시지는 답을 받아야 하므로 부치면 안 되고 보내야 합니다. 대상이 멈춰 있을 때를
+    /// 대비해 타임아웃을 둡니다.
+    /// </remarks>
+    /// <returns>바꿨으면 true. 창이 IME 를 안 쓰거나 답이 없으면 false.</returns>
+    public static bool TrySetHangulMode(IntPtr window, bool hangul)
+    {
+        if (window == IntPtr.Zero) return false;
+
+        IntPtr ime = ImmGetDefaultIMEWnd(window);
+        if (ime == IntPtr.Zero) return false;
+
+        // 지금 값을 읽어 NATIVE 비트만 켜고 끕니다. 통째로 덮어쓰면 전각/한자 같은
+        // 다른 비트가 함께 날아갑니다.
+        if (SendMessageTimeout(ime, WM_IME_CONTROL, IMC_GETCONVERSIONMODE, IntPtr.Zero,
+                               SMTO_ABORTIFHUNG, 300, out IntPtr current) == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        int mode = current.ToInt32();
+        int wanted = hangul ? mode | IME_CMODE_NATIVE : mode & ~IME_CMODE_NATIVE;
+
+        if (wanted == mode) return true;
+
+        return SendMessageTimeout(ime, WM_IME_CONTROL, IMC_SETCONVERSIONMODE, (IntPtr)wanted,
+                                  SMTO_ABORTIFHUNG, 300, out _) != IntPtr.Zero;
     }
 
     public static string ModeLabel(HangulKeyMode mode) => mode switch

@@ -86,7 +86,13 @@ internal static class ViewSmokeProbe
             var quietOnSendInput = vm.PathWarning is null;
 
             Apply(vm, InputBackend.PostMessage);
-            var warned = vm.PathWarning is not null && vm.PathWarning.Contains("1개");
+
+            // 이제 이 경로도 한/영 을 뒤집는다. 빠지는 단계는 없어야 하고,
+            // 대신 이 경로에서만 필요한 안내(단축키로 시작 · 대상 창)가 떠야 한다.
+            var warned = vm.PathWarning is not null
+                         && !vm.PathWarning.Contains("빠집니다")
+                         && vm.PathWarning.Contains("F11")
+                         && vm.PathWarning.Contains("대상 창");
 
             if (quietOnSendInput && warned)
             {

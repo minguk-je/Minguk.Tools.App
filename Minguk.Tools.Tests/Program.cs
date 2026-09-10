@@ -164,6 +164,7 @@ internal static partial class Program
         TestSequenceScript();
         await TestSequenceAsync(ui);
         await TestPlanRunAsync(ui);
+        await TestImeToggleAsync();
         await TestMouseMoveAsync();
         await TestClickAsync(ui);
         await TestWheelAsync(ui);

@@ -95,11 +95,23 @@ public sealed class InputSequence
         return this;
     }
 
-    /// <summary>한/영 을 한 번 누른다.</summary>
+    /// <summary>
+    /// 한/영 을 한 번 뒤집는다.
+    /// </summary>
+    /// <remarks>
+    /// 스캔코드를 넣을 수 있으면 한/영 키를 누른다. 못 넣는 경로라도 대상 창의 IME 에게
+    /// 직접 말할 수 있으면(<see cref="IImeControl"/>) 그 길로 뒤집는다.
+    /// </remarks>
     public InputSequence ToggleHangul(HangulKeyMode mode = HangulKeyMode.HangulScanCode)
     {
         if (_service.SupportsTyping)
+        {
             _steps.Add(InputStep.Of("한/영", () => _service.ToggleHangulAsync(HoldTimeMs, mode)));
+            return this;
+        }
+
+        if (_service.SupportsHangulToggle)
+            _steps.Add(InputStep.Of("한/영", () => _service.ToggleHangulByImeAsync(HoldTimeMs)));
 
         return this;
     }

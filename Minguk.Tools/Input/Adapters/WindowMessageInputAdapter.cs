@@ -23,7 +23,7 @@ namespace Minguk.Tools.Input.Adapters;
 ///   (GetGUIThreadInfo 로 읽는다 — AttachThreadInput 없이 알 수 있다).
 ///   WPF 는 창 하나가 전부라 어느 쪽이든 같은 곳으로 간다.
 /// </summary>
-public sealed class WindowMessageInputAdapter : IInputAdapter, ICharacterInput
+public sealed class WindowMessageInputAdapter : IInputAdapter, ICharacterInput, IImeControl
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -322,6 +322,16 @@ public sealed class WindowMessageInputAdapter : IInputAdapter, ICharacterInput
     private const uint TimeoutMs = 300;
 
     private const int ErrorTimeout = 1460;
+
+    // ── IME ──────────────────────────────────────────────────────────────
+    //    키를 흉내 내는 것이 아니라 대상 창의 IME 에게 직접 말한다.
+    //    그래서 스캔코드를 못 넣는 이 경로에서도 한/영 전환이 된다.
+
+    public bool TryGetHangulMode(out bool isHangul)
+        => Korean.KoreanKeyboardInfo.TryGetHangulMode(ResolveKeyboardTarget(), out isHangul);
+
+    public bool TrySetHangulMode(bool hangul)
+        => Korean.KoreanKeyboardInfo.TrySetHangulMode(ResolveKeyboardTarget(), hangul);
 
     /// <summary>창 메시지를 부치기만 하므로 놓아 줄 자원이 없다.</summary>
     public void Dispose()

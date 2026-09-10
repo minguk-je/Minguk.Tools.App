@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Minguk.Tools.Input;
+using Minguk.Tools.Input.Korean;
 using Minguk.Tools.Input.Sequencing;
 
 namespace Minguk.Tools.Tests;
@@ -139,6 +140,57 @@ internal static partial class Program
         Check("안 닫힌 따옴표를 잡는다", unclosed.Count == 1,
               unclosed.Count == 1 ? unclosed[0].ToString() : $"오류 {unclosed.Count}건");
     }
+
+    /// <summary>
+    /// 한/영 전환이 실제로 뒤집히는지.
+    /// </summary>
+    /// <remarks>
+    /// 스캔코드 경로는 한/영 키를 누르고, 창 메시지 경로는 대상 창의 IME 에게 직접 말한다
+    /// (WM_IME_CONTROL). 길은 다르지만 결과는 같아야 한다.
+    ///
+    /// 입력 언어가 한국어가 아니면 IME 자체가 없어 읽지도 쓰지도 못한다. 그때는 건너뛴다 -
+    /// 환경 탓이지 코드 탓이 아니다.
+    /// </remarks>
+    private static async Task TestImeToggleAsync()
+    {
+        if (!_service.SupportsHangulToggle)
+        {
+            Skip("한/영 전환", $"{_adapter.Name} 은 한/영 을 뒤집지 못한다");
+            return;
+        }
+
+        var by = _adapter is IImeControl ? "IME 에 직접" : "한/영 키";
+
+        if (!KoreanKeyboardInfo.TryGetForegroundHangulMode(out var before))
+        {
+            Skip("한/영 전환", "이 창의 IME 상태를 읽지 못한다 - 입력 언어가 한국어가 아닐 수 있다");
+            return;
+        }
+
+        var sequence = new InputSequence(_service, holdTimeMs: 60).ToggleHangul();
+
+        if (sequence.Steps.Count == 0)
+        {
+            Fail("한/영 전환", $"{_adapter.Name} 이 한/영 을 뒤집는다고 했는데 단계가 안 담겼다");
+            return;
+        }
+
+        await SequenceRunner.RunOnceAsync(sequence.Steps, intervalMs: 0);
+        await Task.Delay(300);
+
+        KoreanKeyboardInfo.TryGetForegroundHangulMode(out var after);
+
+        // 뒤집은 뒤에는 원래대로 돌려놓는다. 다음 검증이 엉뚱한 모드에서 돌면 안 된다.
+        await SequenceRunner.RunOnceAsync(sequence.Steps, intervalMs: 0);
+        await Task.Delay(300);
+
+        KoreanKeyboardInfo.TryGetForegroundHangulMode(out var restored);
+
+        Check($"한/영 전환 ({by})", after != before && restored == before,
+              $"{Mode(before)} -> {Mode(after)} -> {Mode(restored)}");
+    }
+
+    private static string Mode(bool isHangul) => isHangul ? "한글" : "영문";
 
     /// <summary>
     /// 계획으로 만든 시퀀스가 실제로 창에 닿는지. 순서 문구만 맞고 안 나가면 소용없다.

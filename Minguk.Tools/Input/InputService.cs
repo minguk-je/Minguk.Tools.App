@@ -39,7 +39,7 @@ public sealed class InputService
     /// IME 를 건드리지 않고도 한글이 들어가지만, IME 의 상태 자체를 바꾸지는 못한다.
     /// 한/영 키는 스캔코드로만 통한다.
     /// </remarks>
-    public bool SupportsHangulToggle => SupportsTyping;
+    public bool SupportsHangulToggle => SupportsTyping || _adapter is IImeControl;
 
     public string AdapterName => _adapter.Name;
 
@@ -190,6 +190,27 @@ public sealed class InputService
         await Task.Delay(Jitter(holdTimeMs));
 
         return _adapter.ReleaseKey(virtualKey);
+    }
+
+    /// <summary>
+    /// 대상 창의 IME 에게 직접 말해 한/영 을 뒤집는다.
+    /// </summary>
+    /// <remarks>
+    /// 키를 흉내 내지 않으므로 스캔코드를 못 넣는 경로에서도 된다.
+    /// 지금 상태를 읽어 반대로 바꾼다 - 읽지 못하면 아무것도 하지 않는다.
+    /// 잘못 뒤집는 것보다 그대로 두는 편이 낫다.
+    /// </remarks>
+    public async Task<bool> ToggleHangulByImeAsync(int holdTimeMs)
+    {
+        if (_adapter is not IImeControl ime) return false;
+
+        if (!ime.TryGetHangulMode(out var isHangul)) return false;
+
+        if (!ime.TrySetHangulMode(!isHangul)) return false;
+
+        // IME 가 상태를 바꾸는 데 잠깐 걸린다. 곧바로 글자를 보내면 이전 모드로 들어간다.
+        await Task.Delay(Jitter(holdTimeMs));
+        return true;
     }
 
     /// <summary>두벌식 키 문자열을 차례로 누른다. 대문자는 Shift 를 함께 누른다(ㄲ, ㅒ 등).</summary>
