@@ -61,6 +61,9 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
         DoAddStepCommand = new DelegateCommand<SequenceStepKind>(DoAddStep, _ => IsIdle, false);
         DoResetStepsCommand = new DelegateCommand(DoResetSteps, () => IsIdle, false);
+
+        // 도는 동안에도 눌린다. 한 바퀴 돌려 보고 지우고 다시 돌리는 것이 흔한 흐름이다.
+        DoClearTestPadCommand = new DelegateCommand(() => TestPadText = string.Empty, () => true, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────

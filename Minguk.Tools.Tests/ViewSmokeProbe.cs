@@ -1,7 +1,9 @@
 using System;
 using System.Windows;
 using System.Windows.Threading;
+using Minguk.Tools.Input;
 using Minguk.Tools.Source;
+using Minguk.Tools.ViewModels;
 using Minguk.Tools.Views;
 
 namespace Minguk.Tools.Tests;
@@ -43,6 +45,8 @@ internal static class ViewSmokeProbe
             failures += CheckMenu("Minguk.Tools.Views.InputAutomationView");
             failures += CheckMenu("Minguk.Tools.Views.CaptureMonitorView");
 
+            failures += CheckPathWarning();
+
             app.Shutdown();
         });
 
@@ -52,6 +56,94 @@ internal static class ViewSmokeProbe
         Console.WriteLine(failures == 0 ? "== 화면 생성 통과 ==" : $"== 화면 생성 실패 {failures}건 ==");
 
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// 고른 경로가 못 보내는 단계가 있을 때 화면이 그 사실을 말하는지.
+    /// </summary>
+    /// <remarks>
+    /// PostMessage 는 스캔코드를 못 넣어 글자·Enter·한/영 단계가 통째로 빠진다.
+    /// 그것을 알려 주지 않으면 사용자는 "순서" 가 비고 실행해도 아무 일이 없는 이유를
+    /// 알 수 없다 - 실제로 그렇게 헤맨 적이 있어서 검사로 남긴다.
+    ///
+    /// 화면이 아니라 ViewModel 을 직접 만져서 본다. 콤보를 UI 로 돌리는 것은 DevExpress
+    /// 드롭다운이 별도 팝업으로 떠서 자동화가 불안정하다.
+    /// </remarks>
+    private static int CheckPathWarning()
+    {
+        try
+        {
+            var vm = InputAutomationViewModel.Create();
+
+            vm.ScriptText = """
+                            글자 "가"
+                            Enter
+                            이동 100 200
+                            """;
+
+            Apply(vm, InputBackend.SendInput);
+            var quietOnSendInput = vm.PathWarning is null;
+
+            Apply(vm, InputBackend.PostMessage);
+            var warned = vm.PathWarning is not null && vm.PathWarning.Contains("2개");
+
+            if (quietOnSendInput && warned)
+            {
+                Console.WriteLine($"[PASS] 못 보내는 단계 알림 — {vm.PathWarning}");
+                return 0;
+            }
+
+            Console.WriteLine("[FAIL] 못 보내는 단계 알림 — "
+                              + (quietOnSendInput ? "" : "SendInput 인데도 경고가 떴다. ")
+                              + $"PostMessage 경고: {vm.PathWarning ?? "(없음)"}");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 못 보내는 단계 알림 — {ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// 경로를 갈아 끼우고 순서 문구를 다시 만들게 한다.
+    /// </summary>
+    /// <remarks>
+    /// 화면에서는 OnLoaded 가 ApplyBackend 를 부르는데, 그 단계는 문서 탭 안에서만 돈다.
+    /// 검사용 공개 메서드를 제품에 새로 내는 대신 리플렉션으로 부른다 -
+    /// 이 하나를 위해 API 를 늘리면 그 API 가 제품 코드인 척 남는다.
+    /// </remarks>
+    private static void Apply(InputAutomationViewModel vm, InputBackend backend)
+    {
+        vm.SelectedInputBackend = backend;
+
+        var type = vm.GetType();
+
+        // ViewModelSource 가 만든 것은 파생 프록시라, 원본 타입까지 올라가며 찾는다.
+        while (type is not null)
+        {
+            var method = type.GetMethod("ApplyBackend",
+                System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.DeclaredOnly);
+
+            if (method is not null)
+            {
+                method.Invoke(vm, null);
+
+                var update = type.GetMethod("UpdateSequenceText",
+                    System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.DeclaredOnly);
+
+                update?.Invoke(vm, null);
+                return;
+            }
+
+            type = type.BaseType;
+        }
+
+        throw new MissingMethodException("ApplyBackend 를 찾지 못했다");
     }
 
     /// <summary>

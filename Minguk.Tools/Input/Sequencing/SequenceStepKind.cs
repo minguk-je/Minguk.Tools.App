@@ -40,6 +40,20 @@ public enum SequenceStepKind
 /// 이름은 저장 형식이라 함부로 못 바꾸므로, 보여 주는 이름은 여기서 따로 든다.
 /// <see cref="SequenceStepDefinition.Describe"/> 도 이미 한글로 말하므로 같은 결이다.
 /// </remarks>
+/// <summary>
+/// 이 종류가 스캔코드를 타는지.
+/// </summary>
+/// <remarks>
+/// 스캔코드를 못 넣는 경로(PostMessage)에서는 이런 단계가 시퀀스에 담기지 않는다.
+/// 부르는 쪽이 "몇 개가 빠질 것인지" 를 미리 말해 줄 수 있어야 해서 여기 둔다 -
+/// 만들고 나서 개수를 세면 왜 빠졌는지는 알 수 없다.
+/// </remarks>
+public static class SequenceStepKinds
+{
+    public static bool NeedsScanCode(SequenceStepKind kind)
+        => kind is SequenceStepKind.Type or SequenceStepKind.Enter or SequenceStepKind.ToggleHangul;
+}
+
 public static class SequenceStepKindNames
 {
     public static string Of(SequenceStepKind kind) => kind switch

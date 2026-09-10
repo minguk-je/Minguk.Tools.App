@@ -149,7 +149,23 @@ public partial class InputAutomationViewModel
         if (_service is null) return;
 
         SequenceText = BuildSequence().Describe();
+        PathWarning = DescribeDroppedSteps();
     });
+
+    /// <summary>
+    /// 고른 경로가 못 보내는 단계가 몇 개인지 세어 문장으로 만든다. 없으면 null.
+    /// </summary>
+    private string? DescribeDroppedSteps()
+    {
+        if (_service is null || _service.SupportsTyping) return null;
+
+        var dropped = _plan.Steps.Count(s => SequenceStepKinds.NeedsScanCode(s.Kind));
+
+        if (dropped == 0) return null;
+
+        return $"{_adapter?.Name} 경로는 스캔코드를 넣지 못해 글자·Enter·한/영 단계 {dropped}개가 빠집니다. "
+             + "그 단계를 보내려면 입력 경로를 SendInput 이나 Interception 으로 바꾸세요.";
+    }
 
     /// <summary>
     /// 다른 창이 앞에 있을 때도 시작·중지할 수 있게 단축키를 건다.
@@ -246,7 +262,9 @@ public partial class InputAutomationViewModel
 
         if (steps.Count == 0)
         {
-            MessengerUtility.SendMainMessage("보낼 것이 하나도 선택되지 않았습니다.");
+            // 적은 것이 없는 것과, 적었는데 이 경로가 못 보내는 것은 다르다.
+            // 뭉뚱그리면 사용자는 자기가 적은 것이 왜 안 나가는지 알 수 없다.
+            MessengerUtility.SendMainMessage(PathWarning ?? "보낼 것이 하나도 적혀 있지 않습니다.");
             return;
         }
 

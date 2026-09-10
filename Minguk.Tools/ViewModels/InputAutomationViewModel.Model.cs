@@ -28,6 +28,8 @@ public partial class InputAutomationViewModel
 
     public DelegateCommand DoResetStepsCommand { get; private set; } = null!;
 
+    public DelegateCommand DoClearTestPadCommand { get; private set; } = null!;
+
     // ── 입력 경로 ────────────────────────────────────────────────────────
 
     public ObservableCollection<InputBackend> InputBackends { get; set; }
@@ -69,6 +71,21 @@ public partial class InputAutomationViewModel
     public bool HasScriptError => !string.IsNullOrEmpty(ScriptError);
 
     /// <summary>
+    /// 고른 경로가 스크립트의 일부를 보내지 못할 때 무엇이 왜 빠지는지. 없으면 null.
+    /// </summary>
+    /// <remarks>
+    /// 이것이 없으면 PostMessage 를 골라 둔 사용자는 "순서" 가 비고 실행해도 아무 일이
+    /// 없는 이유를 알 수 없다. 조용히 빠지는 것을 화면에 적는다.
+    /// </remarks>
+    public string? PathWarning
+    {
+        get => GetProperty(() => PathWarning);
+        set => SetProperty(() => PathWarning, value, () => RaisePropertyChanged(nameof(HasPathWarning)));
+    }
+
+    public bool HasPathWarning => !string.IsNullOrEmpty(PathWarning);
+
+    /// <summary>
     /// 구문 강조 정의. 화면이 편집기의 SyntaxHighlighting 에 그대로 물린다.
     /// </summary>
     /// <remarks>
@@ -105,6 +122,22 @@ public partial class InputAutomationViewModel
 
     /// <summary>반복 최대 횟수. 0 이면 중지할 때까지.</summary>
     public int MaxLoops { get => GetProperty(() => MaxLoops); set => SetProperty(() => MaxLoops, value); }
+
+    // ── 시험 입력란 ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 보낸 입력을 받아 볼 자리.
+    /// </summary>
+    /// <remarks>
+    /// 대상 창을 따로 띄우지 않고 여기를 클릭해 두면 바로 확인할 수 있다.
+    /// 메모장 같은 남의 창을 쓰면 지난 내용이 섞여 있어 "이번에 무엇이 들어갔는지" 를
+    /// 매번 전후로 재야 한다.
+    ///
+    /// 저장하지 않는다. 시험용으로 친 글이 다음에 열 때 남아 있을 이유가 없다.
+    ///
+    /// 도는 동안에도 잠기지 않는다 - 잠그면 입력을 받을 수 없어 있으나 마나다.
+    /// </remarks>
+    public string? TestPadText { get => GetProperty(() => TestPadText); set => SetProperty(() => TestPadText, value); }
 
     // ── 표시 ─────────────────────────────────────────────────────────────
 
