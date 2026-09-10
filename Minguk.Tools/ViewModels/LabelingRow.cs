@@ -1,4 +1,4 @@
-using DevExpress.Mvvm;
+﻿using DevExpress.Mvvm;
 
 using Minguk.Tools.Vision.Labeling;
 
@@ -40,6 +40,26 @@ public sealed class LabelingRow : BindableBase
     public bool HasLabel
     {
         get => GetValue<bool>();
+        set => SetValue(value);
+    }
+
+    /// <summary>학습기가 지금 이 그림을 보고 있는지. 목록에서 표시가 따라 움직인다.</summary>
+    public bool IsTrainingNow
+    {
+        get => GetValue<bool>();
+        set => SetValue(value);
+    }
+
+    /// <summary>
+    /// 이 그림을 마지막으로 봤을 때의 loss.
+    /// </summary>
+    /// <remarks>
+    /// "이건 다시 찍어야겠다" 를 고르는 단서다. 다른 그림은 1 근처인데 혼자 3 이면 라벨이
+    /// 틀렸거나 장면이 애매한 것이다. 바퀴마다 새 값으로 덮인다.
+    /// </remarks>
+    public double? LastLoss
+    {
+        get => GetValue<double?>();
         set => SetValue(value);
     }
 }

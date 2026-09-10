@@ -171,6 +171,27 @@ public partial class LabelingViewModel
     public string TrainProgressLabel
         => TrainEpochsTotal <= 0 ? string.Empty : $"{TrainEpochsDone}/{TrainEpochsTotal} 바퀴";
 
+    /// <summary>학습기가 지금 보고 있는 그림 이름. 끝나면 비운다.</summary>
+    public string? TrainingImageName
+    {
+        get => GetProperty(() => TrainingImageName);
+        set => SetProperty(() => TrainingImageName, value);
+    }
+
+    /// <summary>
+    /// 학습기가 보는 그림을 가운데 화면에도 띄울지.
+    /// </summary>
+    /// <remarks>
+    /// 켜면 학습 중에는 목록 선택이 학습기를 따라다녀 라벨을 못 고친다. 그래서 기본은 끔이고,
+    /// 지켜보며 "이건 다시 찍어야겠다" 를 고르고 싶을 때만 켠다. 그림 한 장 그리는 데
+    /// 30~50ms 라 초당 두세 장은 부담이 없다.
+    /// </remarks>
+    public bool FollowTraining
+    {
+        get => GetProperty(() => FollowTraining);
+        set => SetProperty(() => FollowTraining, value);
+    }
+
     /// <summary>고를 수 있는 모델 크기들.</summary>
     public System.Collections.Generic.IReadOnlyList<string> InputSizes { get; } =
         [.. Vision.Training.DetectorTrainer.InputSizes.Select(s => $"{s.Width}x{s.Height}")];

@@ -93,6 +93,20 @@ public static class DetectorTrainer
 
     public const string ScoreColumn = "Score";
 
+    /// <summary>"Row: 5, Loss: 1.47" 에서 5 를 꺼낸다.</summary>
+    private static bool TryParseRow(string message, out int row)
+    {
+        row = 0;
+
+        var at = message.IndexOf("Row:", StringComparison.OrdinalIgnoreCase);
+        if (at < 0) return false;
+
+        var rest = message[(at + 4)..].TrimStart();
+        var end = rest.IndexOf(',');
+
+        return int.TryParse(end < 0 ? rest : rest[..end], NumberStyles.Integer, CultureInfo.InvariantCulture, out row);
+    }
+
     /// <summary>"Row: 5, Loss: 1.47" 에서 1.47 을 꺼낸다.</summary>
     private static bool TryParseLoss(string message, out double loss)
     {
@@ -199,7 +213,15 @@ public static class DetectorTrainer
                     }
                     else if (isLoss && TryParseLoss(e.Message, out var loss))
                     {
-                        steps.Report(new TrainingStep(epochsDone, maxEpoch, loss));
+                        // "Row: n" 의 n 은 이번 바퀴에서 n번째 그림이다(1부터). 학습기가 순서를
+                        // 안 섞으므로(실측: 1, 5, 9, 13 … 로 늘고 바퀴마다 1로 돌아온다) 우리가
+                        // 넘긴 samples 의 n-1 번째가 그 그림이다. 섞기 시작하면 이름이 어긋나겠지만
+                        // 그때는 로그의 Row 도 뒤죽박죽이라 금방 드러난다.
+                        var image = TryParseRow(e.Message, out var row) && row >= 1 && row <= samples.Count
+                            ? samples[row - 1].ImagePath
+                            : null;
+
+                        steps.Report(new TrainingStep(epochsDone, maxEpoch, loss, image));
                     }
                 }
 

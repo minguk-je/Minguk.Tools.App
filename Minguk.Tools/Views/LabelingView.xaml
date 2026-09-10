@@ -112,6 +112,15 @@
                                            Text="●"
                                            Visibility="{Binding HasLabel, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding Name}" />
+                                <!-- 마지막 loss. 혼자 높은 그림이 다시 찍거나 라벨을 볼 그림이다. -->
+                                <TextBlock Margin="6,0,0,0"
+                                           Foreground="#888888"
+                                           Text="{Binding LastLoss, StringFormat={}{0:0.00}}" />
+                                <!-- 학습기가 지금 보는 그림. 스텝마다 옮겨 다닌다. -->
+                                <TextBlock Margin="4,0,0,0"
+                                           Foreground="#BF6A02"
+                                           Text="◀"
+                                           Visibility="{Binding IsTrainingNow, Converter={StaticResource BoolToVisibility}}" />
                             </StackPanel>
                         </DataTemplate>
                     </dxe:ListBoxEdit.ItemTemplate>
@@ -264,12 +273,27 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0"
                                Width="80"
                                VerticalAlignment="Center"
                                Text="{Binding TrainProgressLabel}" />
+                    <!-- 지금 보는 그림. 목록의 "◀" 와 같은 것이다. -->
+                    <StackPanel Grid.Column="2"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal">
+                        <TextBlock Width="170"
+                                   VerticalAlignment="Center"
+                                   Foreground="#BF6A02"
+                                   Text="{Binding TrainingImageName}" />
+                        <dxe:CheckEdit Margin="6,0,0,0"
+                                       Content="따라가기"
+                                       IsChecked="{Binding FollowTraining, Mode=TwoWay}"
+                                       ToolTip="학습기가 보는 그림을 가운데에도 띄웁니다. 켜 두면 학습 중에는 라벨을 못 고칩니다. 목록의 loss 숫자가 혼자 높은 그림이 다시 찍을 그림입니다." />
+                    </StackPanel>
                     <dxe:ProgressBarEdit Grid.Column="1"
                                          Height="18"
                                          Margin="0,0,6,0"
@@ -278,7 +302,7 @@
                                          Maximum="100"
                                          Minimum="0"
                                          ToolTip="끝난 바퀴 수. 한 바퀴 안에서는 안 움직입니다." />
-                    <markup:LossSparkline Grid.Column="2"
+                    <markup:LossSparkline Grid.Column="3"
                                           Height="44"
                                           ToolTip="학습 loss. 내려가면 배우는 중, 제자리면 학습률이나 데이터를 봐야 합니다. 로그 눈금입니다."
                                           Values="{Binding LossHistory}" />

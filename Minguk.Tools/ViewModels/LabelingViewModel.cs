@@ -85,6 +85,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
         TrainEpochs = GetSetting(nameof(TrainEpochs), 20);
         MinimumScore = GetSetting(nameof(MinimumScore), 0.5);
+        FollowTraining = GetSetting(nameof(FollowTraining), false);
 
         var size = GetSetting(nameof(SelectedInputSize), InputSizes[0]);
 
@@ -103,6 +104,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
         SetSetting(nameof(TrainEpochs), TrainEpochs);
         SetSetting(nameof(MinimumScore), MinimumScore);
+        SetSetting(nameof(FollowTraining), FollowTraining);
         SetSetting(nameof(SelectedInputSize), SelectedInputSize ?? InputSizes[0]);
     }
 

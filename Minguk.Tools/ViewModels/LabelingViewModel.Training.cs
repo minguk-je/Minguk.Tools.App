@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -119,12 +120,14 @@ public partial class LabelingViewModel
             TrainPercent = step.Fraction * 100;
 
             if (step.Loss is { } loss) LossHistory.Add(loss);
+            if (step.ImagePath is { } image) MarkTrainingImage(image, step.Loss);
         });
 
         var result = await DetectorTrainer.TrainAsync(dataset, TrainEpochs, progress, token, width, height, steps: steps);
 
         TrainEpochsDone = TrainEpochsTotal;
         TrainPercent = 100;
+        MarkTrainingImage(null, null);
 
         TrainingStatus =
             $"끝났습니다 - 그림 {result.Images}장 · 사각형 {result.Boxes}개 · 몹 {result.Classes}종 을 " +
@@ -136,6 +139,34 @@ public partial class LabelingViewModel
         ReleaseModel();
 
         MessengerUtility.SendMainMessage($"학습이 끝났습니다: {result.ModelPath}");
+    }
+
+    private LabelingRow? _trainingRow;
+
+    /// <summary>
+    /// 학습기가 보고 있는 그림을 목록과 진행 줄에 표시한다. null 이면 지운다.
+    /// </summary>
+    /// <remarks>
+    /// 목록의 선택을 옮기지 않는다. 사람이 학습 중에 다른 그림을 찍고 있을 수 있는데,
+    /// 선택이 스텝마다 튀면 찍던 것이 저장되고 넘어가 버린다. 표시만 따라간다.
+    /// </remarks>
+    private void MarkTrainingImage(string? imagePath, double? loss)
+    {
+        if (_trainingRow is { } previous) previous.IsTrainingNow = false;
+
+        _trainingRow = imagePath is null ? null : Items.FirstOrDefault(row => row.ImagePath == imagePath);
+
+        if (_trainingRow is { } current)
+        {
+            current.IsTrainingNow = true;
+            if (loss is not null) current.LastLoss = loss;
+
+            // 따라가기를 켰으면 가운데 그림도 옮긴다. 선택을 바꾸면 찍던 것은 저장되고 넘어간다 -
+            // 그래서 기본은 끔이다.
+            if (FollowTraining && !ReferenceEquals(SelectedItem, current)) SelectedItem = current;
+        }
+
+        TrainingImageName = _trainingRow?.Name;
     }
 
     /// <summary>

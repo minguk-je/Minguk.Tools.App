@@ -43,6 +43,15 @@ public partial class CaptureMonitorViewModel
     private DetectorModel? _detector;
     private LabelClasses _detectClasses = new();
 
+    /// <summary>
+    /// 읽어 둔 모델 파일의 시각. 다시 학습하면 파일이 바뀌므로 이것으로 안다.
+    /// </summary>
+    /// <remarks>
+    /// 이게 없으면 처음 켤 때 읽은 모델을 화면을 닫을 때까지 든다. 라벨링에서 다시 학습하고
+    /// 몹 찾기를 껐다 켜도 옛 모델로 찾는다 - "닫았다 열어야 하나" 가 그 말이었다.
+    /// </remarks>
+    private DateTime _detectorStamp;
+
     /// <summary>지금 찾는 중인지. 한 번에 하나만 돈다.</summary>
     private int _isDetectRunning;
 
@@ -82,7 +91,12 @@ public partial class CaptureMonitorViewModel
     /// </remarks>
     private void MaybeDetect(CapturedFrameEventArgs e)
     {
-        if (!IsMobDetectionOn || _detector is null || !e.HasPixels) return;
+        if (!IsMobDetectionOn || !e.HasPixels) return;
+
+        // 켜 둔 채 다시 학습했으면 새 모델을 읽는다. 읽는 동안 _detector 는 null 이라 아래서 걸러진다.
+        MaybeReloadDetector();
+
+        if (_detector is null) return;
 
         var now = Environment.TickCount64;
 
@@ -205,30 +219,66 @@ public partial class CaptureMonitorViewModel
         // 값만 바꾸는 것은 세션을 만들 때만 먹어서, 예전에는 켰다고 적어 놓고 헛것이었다.
         EnsureCpuReadback("추론에는 픽셀이 필요합니다");
 
-        if (_detector is not null)
+        LoadDetector(modelPath, dataset, flavor);
+    });
+
+    /// <summary>새 모델을 읽는 중인지. 5초 검사와 버튼이 겹쳐 두 번 읽지 않게.</summary>
+    private int _isDetectorLoading;
+
+    /// <summary>
+    /// 모델을 읽는다. 이미 읽어 둔 것이 그 파일 그대로면 그냥 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// 몹 찾기를 켤 때와, 켜 둔 채 파일이 바뀐 것을 알아챘을 때 둘 다 여기로 온다.
+    /// </remarks>
+    private void LoadDetector(string modelPath, LabelDataset dataset, LibTorchFlavor flavor)
+    {
+        var stamp = File.GetLastWriteTimeUtc(modelPath);
+
+        if (_detector is not null && stamp == _detectorStamp)
         {
             DetectionStatus = "찾는 중...";
             return;
         }
 
-        DetectionStatus = "모델을 읽는 중... (처음 한 번, 몇 초 걸립니다)";
+        // 다시 학습해서 파일이 바뀌었으면 옛것을 버리고 새로 읽는다. 지금 돌고 있는 추론이
+        // 옛 모델을 쓰는 중일 수 있으니 필드를 먼저 비우고, 끝나기를 기다렸다가 놓는다.
+        var stale = _detector;
+        _detector = null;
+
+        DetectionStatus = stale is null
+            ? "모델을 읽는 중... (처음 한 번, 몇 초 걸립니다)"
+            : "다시 학습한 모델을 읽는 중...";
+
+        if (Interlocked.CompareExchange(ref _isDetectorLoading, 1, 0) != 0) return;
 
         _ = System.Threading.Tasks.Task.Run(() =>
         {
             try
             {
+                if (stale is not null)
+                {
+                    var waited = Stopwatch.StartNew();
+                    while (Volatile.Read(ref _isDetectRunning) != 0 && waited.ElapsedMilliseconds < 3000) Thread.Sleep(20);
+                    stale.Dispose();
+                }
+
                 LibTorchRuntime.Load(flavor);
 
                 var model = DetectorModel.Load(modelPath);
 
                 _detectClasses = dataset.LoadClasses();
+                _detectorStamp = stamp;
                 _detector = model;
+                _reloadSeenStamp = default;
 
+                _isDetectorLoading = 0;
                 DispatcherService?.BeginInvoke(() => DetectionStatus = "찾는 중...");
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, "검출 모델을 못 읽었다");
+                _isDetectorLoading = 0;
 
                 DispatcherService?.BeginInvoke(() => Guard(() =>
                 {
@@ -236,7 +286,51 @@ public partial class CaptureMonitorViewModel
                 }));
             }
         });
-    });
+    }
+
+    /// <summary>파일이 바뀐 것을 처음 본 시각과 그때의 파일 시각. 2초 동안 그대로여야 읽는다.</summary>
+    private DateTime _reloadSeenStamp;
+    private long _reloadSeenTicks;
+    private long _lastReloadCheckTicks;
+
+    /// <summary>
+    /// 켜 둔 채 다시 학습했으면 알아서 새 모델을 읽는다. 캡처 스레드에서 5초에 한 번.
+    /// </summary>
+    /// <remarks>
+    /// 버튼을 껐다 켜야만 새 모델이 들어오면 "지금 옛 모델로 찾고 있다" 는 것을 사람이
+    /// 기억하고 있어야 한다. 학습이 끝나면 zip 을 새로 쓰므로 파일 시각으로 안다.
+    /// <b>쓰는 도중에 읽으면 안 된다</b> - 69MB 를 쓰는 동안 시각이 계속 바뀌므로, 같은
+    /// 시각이 2초 유지된 뒤에 읽는다.
+    /// </remarks>
+    private void MaybeReloadDetector()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastReloadCheckTicks < 5000) return;
+        _lastReloadCheckTicks = now;
+
+        if (_detector is null || Volatile.Read(ref _isDetectorLoading) != 0) return;
+
+        var dataset = new LabelDataset(LabelDataset.ConfiguredRoot);
+        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+
+        if (!File.Exists(modelPath)) return;
+
+        var stamp = File.GetLastWriteTimeUtc(modelPath);
+        if (stamp == _detectorStamp) return;
+
+        if (stamp != _reloadSeenStamp)
+        {
+            _reloadSeenStamp = stamp;
+            _reloadSeenTicks = now;
+            return;
+        }
+
+        if (now - _reloadSeenTicks < 2000) return;
+
+        if (LibTorchRuntime.Installed is not { } flavor) return;
+
+        DispatcherService?.BeginInvoke(() => Guard(() => LoadDetector(modelPath, dataset, flavor)));
+    }
 
     /// <summary>
     /// 가장 자신 있는 몹을 누른다.
