@@ -41,6 +41,16 @@
 		-->
 		<PackageReference Include="AvalonEdit" Version="6.3.1.120" />
 
+		<!--
+			시퀀스 스크립트를 C# 으로 쓰고 돌린다.
+			Scripting 패키지가 CodeAnalysis 본체를 함께 끌고 온다.
+		-->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.14.0" />
+		<!--  파이썬 스크립트. 진짜 CPython 을 껴안으므로 런타임은 첫 실행 때 받아 온다.  -->
+		<PackageReference Include="pythonnet" Version="3.1.0" />
+		<!--  자바스크립트. 순수 .NET 인터프리터라 네이티브도 받아 올 것도 없다.  -->
+		<PackageReference Include="Jint" Version="4.16.2" />
+
 		<PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.11" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />

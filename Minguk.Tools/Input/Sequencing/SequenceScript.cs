@@ -44,6 +44,47 @@ public static class SequenceScript
     public static string ToText(SequencePlan plan)
         => string.Join(Environment.NewLine, plan.Steps.Select(ToLine));
 
+    /// <summary>
+    /// 계획을 C# 스크립트로 적는다.
+    /// </summary>
+    /// <remarks>
+    /// 예전에 이 형식으로 저장해 둔 것을 한 번 옮기려고 둔다.
+    /// 새로 쓰는 것은 전부 C# 이다(<see cref="Scripting.SequenceScriptEngine"/>).
+    /// </remarks>
+    public static string ToCSharp(SequencePlan plan)
+        => string.Join(Environment.NewLine, plan.Steps.Select(ToCSharpLine));
+
+    private static string ToCSharpLine(SequenceStepDefinition step) => step.Kind switch
+    {
+        SequenceStepKind.Type => $"Type({CSharpString(step.Text ?? string.Empty)});",
+        SequenceStepKind.Enter => "Enter();",
+        SequenceStepKind.ToggleHangul => "ToggleHangul();",
+        SequenceStepKind.Click => step.Button switch
+        {
+            MouseButton.Right => "Click(MouseButton.Right);",
+            MouseButton.Middle => "Click(MouseButton.Middle);",
+            _ => "Click();"
+        },
+        SequenceStepKind.MoveTo => $"MoveTo({step.X}, {step.Y});",
+        SequenceStepKind.Scroll => $"Scroll({step.Notches});",
+        SequenceStepKind.Wait => $"Wait({step.DelayMs});",
+        _ => $"// 모르는 단계: {step.Kind}"
+    };
+
+    private static string CSharpString(string text)
+    {
+        var sb = new StringBuilder(text.Length + 2).Append('"');
+
+        foreach (var c in text)
+        {
+            if (c is '"' or '\\') sb.Append('\\');
+
+            sb.Append(c);
+        }
+
+        return sb.Append('"').ToString();
+    }
+
     private static string ToLine(SequenceStepDefinition step) => step.Kind switch
     {
         SequenceStepKind.Type => $"글자 {Quote(step.Text ?? string.Empty)}",

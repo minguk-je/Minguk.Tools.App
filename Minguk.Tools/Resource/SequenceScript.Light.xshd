@@ -3,25 +3,29 @@
 <!--
     입력 시퀀스 스크립트 강조 (밝은 테마).
 
-    명령은 늘 줄 맨 앞에 온다. 그래서 명령 규칙만 ^ 로 묶는다 -
-    그러지 않으면 "클릭 휠" 의 휠 이 명령으로 물든다.
+    스크립트는 C# 이다. AvalonEdit 이 들고 있는 기본 C# 정의를 쓰지 않는 이유는 두 가지다.
+      하나, 그 정의는 밝은 테마 한 벌뿐이라 어두운 테마에서 읽기 어렵다.
+      둘, 이 화면에서 실제로 부르는 것은 우리 API(Type·Click·MoveTo …)인데,
+          그것이 여느 이름과 같은 색이면 무엇을 부를 수 있는지 눈에 안 들어온다.
 
-    어두운 테마용은 SequenceScript.Dark.xshd 에 같은 규칙으로 색만 달리 두었다.
-    규칙을 고치면 두 파일을 같이 고쳐야 한다.
+    C# 전체를 칠하지 않는다. 이 화면에서 쓸 법한 것만 안다 - 모르는 낱말은 그냥 둔다.
+    색만 다른 짝은 SequenceScript.Dark.xshd 에 있다. 규칙이나 API 를 고치면 두 파일을 같이 고쳐야 한다.
 -->
 <SyntaxDefinition name="SequenceScript"
                   xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
 
     <Color name="Comment" foreground="#6E7781" fontStyle="italic" />
-    <Color name="Command" foreground="#0550AE" fontWeight="bold" />
-    <Color name="Argument" foreground="#8250DF" />
-    <Color name="String" foreground="#A31515" />
+    <Color name="Keyword" foreground="#CF222E" />
+    <Color name="Api" foreground="#0550AE" fontWeight="bold" />
+    <Color name="Type" foreground="#8250DF" />
+    <Color name="String" foreground="#0A3069" />
     <Color name="Number" foreground="#0F766E" />
 
     <RuleSet ignoreCase="false">
 
-        <!--  주석과 글자가 먼저다. 그 안에 든 것은 명령·숫자로 보지 않는다.  -->
-        <Span color="Comment" begin="#" />
+        <!--  주석과 글자가 먼저다. 그 안에 든 것은 낱말로 보지 않는다.  -->
+        <Span color="Comment" begin="//" />
+        <Span color="Comment" multiline="true" begin="/\*" end="\*/" />
 
         <Span color="String" multiline="false">
             <Begin>"</Begin>
@@ -32,16 +36,62 @@
             </RuleSet>
         </Span>
 
-        <Rule color="Command">
-            ^\s*(?:글자|Enter|한/영|한영|클릭|이동|휠|쉬기|Type|ToggleHangul|Click|MoveTo|Scroll|Wait)(?=\s|$)
-        </Rule>
+        <!--  이 화면에서 부를 수 있는 것들. 영문·한글 둘 다 같은 것을 가리킨다.  -->
+        <Keywords color="Api">
+            <Word>Type</Word>
+            <Word>TypeLine</Word>
+            <Word>Enter</Word>
+            <Word>ToggleHangul</Word>
+            <Word>Click</Word>
+            <Word>RightClick</Word>
+            <Word>ClickAt</Word>
+            <Word>MoveTo</Word>
+            <Word>Scroll</Word>
+            <Word>Wait</Word>
+            <Word>글자</Word>
+            <Word>줄입력</Word>
+            <Word>엔터</Word>
+            <Word>한영</Word>
+            <Word>클릭</Word>
+            <Word>우클릭</Word>
+            <Word>이동</Word>
+            <Word>이동클릭</Word>
+            <Word>휠</Word>
+            <Word>쉬기</Word>
+        </Keywords>
 
-        <Rule color="Argument">
-            (?&lt;=\s)(?:좌|우|휠|Left|Right|Middle)(?=\s|$)
-        </Rule>
+        <Keywords color="Keyword">
+            <Word>var</Word>
+            <Word>new</Word>
+            <Word>for</Word>
+            <Word>foreach</Word>
+            <Word>in</Word>
+            <Word>while</Word>
+            <Word>do</Word>
+            <Word>if</Word>
+            <Word>else</Word>
+            <Word>switch</Word>
+            <Word>case</Word>
+            <Word>break</Word>
+            <Word>continue</Word>
+            <Word>return</Word>
+            <Word>true</Word>
+            <Word>false</Word>
+            <Word>null</Word>
+        </Keywords>
+
+        <Keywords color="Type">
+            <Word>int</Word>
+            <Word>string</Word>
+            <Word>bool</Word>
+            <Word>double</Word>
+            <Word>char</Word>
+            <Word>MouseButton</Word>
+            <Word>Math</Word>
+        </Keywords>
 
         <Rule color="Number">
-            [+-]?\d+
+            \b[+-]?\d+\b
         </Rule>
     </RuleSet>
 </SyntaxDefinition>

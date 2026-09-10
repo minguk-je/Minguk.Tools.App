@@ -6,6 +6,7 @@ using ICSharpCode.AvalonEdit;
 using Minguk.Image;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
+using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Sequencing;
 using Minguk.Tools.Input.Targets;
 
@@ -41,6 +42,15 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
     /// <summary>스크립트에서 읽어 낸 계획. 실행할 때 이것으로 시퀀스를 만든다.</summary>
     private SequencePlan _plan = new();
+
+    /// <summary>스크립트를 돌려 단계를 받아 오는 것. 언어를 바꾸면 갈아 끼운다.</summary>
+    private IScriptEngine? _engine;
+
+    /// <summary>타이핑이 멎기를 기다리는 타이머.</summary>
+    private System.Threading.Timer? _debounce;
+
+    /// <summary>돌고 있는 컴파일을 접는 데 쓴다.</summary>
+    private CancellationTokenSource? _compileCts;
 
     /// <summary>스크립트가 통째로 들어가는 설정 키.</summary>
     private const string ScriptSettingKey = "Script";
@@ -82,6 +92,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     /// </remarks>
     protected override void InitializeControls()
     {
+
         _editor = FindControl<TextEditor>("EditorObjectService");
 
         if (_editor is null) Logger.Warn("스크립트 편집기를 찾지 못했다. 줄 담기는 글 끝에 붙는다.");
@@ -93,6 +104,14 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
             GetSetting(nameof(SelectedInputBackend), nameof(InputBackend.SendInput)), out var backend)
             ? backend
             : InputBackend.SendInput;
+
+        SelectedScriptLanguage = Enum.TryParse<ScriptLanguage>(
+            GetSetting(nameof(SelectedScriptLanguage), nameof(ScriptLanguage.CSharp)), out var language)
+            ? language
+            : ScriptLanguage.CSharp;
+
+        // 언어를 넣어도 SetProperty 의 콜백은 값이 같으면 안 돈다. 엔진은 여기서 확실히 만든다.
+        _engine ??= ScriptEngineFactory.Create(SelectedScriptLanguage);
 
         RestoreScript();
 
@@ -117,7 +136,15 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
         if (!string.IsNullOrWhiteSpace(saved))
         {
-            ScriptText = saved;
+            // 예전에는 자체 형식(글자 "..." / Enter)이었다. 그 글은 C# 으로 컴파일되지 않으므로
+            // 한 번 읽어 옮겨 준다. 새로 쓰는 것은 전부 C# 이다.
+            ScriptText = SequenceScript.TryParse(saved, out var legacyPlan, out var legacyErrors) && legacyErrors.Count == 0
+                ? SequenceScript.ToCSharp(legacyPlan)
+                : saved;
+
+            if (!ReferenceEquals(ScriptText, saved))
+                Logger.Info("예전 형식의 시퀀스를 C# 스크립트로 옮겼다.");
+
             return;
         }
 
@@ -129,12 +156,12 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
             if (error is not null) Logger.Warn($"예전에 저장된 시퀀스를 읽지 못했다: {error}");
 
-            ScriptText = SequenceScript.ToText(plan);
-            Logger.Info("예전 JSON 시퀀스를 스크립트로 옮겼다.");
+            ScriptText = SequenceScript.ToCSharp(plan);
+            Logger.Info("예전 JSON 시퀀스를 C# 스크립트로 옮겼다.");
             return;
         }
 
-        ScriptText = SequenceScript.ToText(SequencePlan.CreateDefault());
+        ScriptText = _engine?.SampleSource ?? string.Empty;
     }
 
     protected override void OnLoaded()
@@ -146,11 +173,15 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         RaisePropertyChanged(nameof(NeedsWindowTarget));
 
         if (NeedsWindowTarget) DoRefreshWindows();
+
+        // 첫 준비가 유독 느리다(C# 은 첫 컴파일, 파이썬은 런타임 받기). 미리 치러 둔다.
+        _ = PrepareEngineAsync();
     }
 
     protected override void SaveSettings()
     {
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
+        SetSetting(nameof(SelectedScriptLanguage), SelectedScriptLanguage.ToString());
         SetSetting(ScriptSettingKey, ScriptText ?? string.Empty);
 
         SetSetting(nameof(HoldTimeMs), HoldTimeMs);
@@ -172,6 +203,16 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         _service = null;
 
         _editor = null;
+
+        _debounce?.Dispose();
+        _debounce = null;
+
+        _compileCts?.Cancel();
+        _compileCts?.Dispose();
+        _compileCts = null;
+
+        _engine?.Dispose();
+        _engine = null;
 
         _windows?.Dispose();
         _windows = null;

@@ -76,10 +76,10 @@ internal static class ViewSmokeProbe
             var vm = InputAutomationViewModel.Create();
 
             vm.ScriptText = """
-                            글자 "가"
-                            한/영
-                            Enter
-                            이동 100 200
+                            Type("가");
+                            ToggleHangul();
+                            Enter();
+                            MoveTo(100, 200);
                             """;
 
             Apply(vm, InputBackend.SendInput);
@@ -88,11 +88,14 @@ internal static class ViewSmokeProbe
             Apply(vm, InputBackend.PostMessage);
 
             // 이제 이 경로도 한/영 을 뒤집는다. 빠지는 단계는 없어야 하고,
-            // 대신 이 경로에서만 필요한 안내(단축키로 시작 · 대상 창)가 떠야 한다.
+            // 대신 이 경로에서만 필요한 안내(단축키로 시작)가 떠야 한다.
+            //
+            // "대상 창" 줄은 여기서 못 본다. 스크립트를 돌려 단계가 생겨야 뜨는데,
+            // 스크립트 실행은 비동기라 이 동기 검사에서는 아직 안 끝났다.
+            // 스크립트가 단계가 되는 것은 하네스의 "스크립트 엔진" 항목이 본다.
             var warned = vm.PathWarning is not null
                          && !vm.PathWarning.Contains("빠집니다")
-                         && vm.PathWarning.Contains("F5")
-                         && vm.PathWarning.Contains("대상 창");
+                         && vm.PathWarning.Contains("F5");
 
             if (quietOnSendInput && warned)
             {

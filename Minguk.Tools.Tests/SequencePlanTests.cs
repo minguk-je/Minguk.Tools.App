@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Korean;
+using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Sequencing;
 
 namespace Minguk.Tools.Tests;
@@ -139,6 +140,129 @@ internal static partial class Program
         SequenceScript.TryParse("글자 \"안 닫음", out _, out var unclosed);
         Check("안 닫힌 따옴표를 잡는다", unclosed.Count == 1,
               unclosed.Count == 1 ? unclosed[0].ToString() : $"오류 {unclosed.Count}건");
+    }
+
+    /// <summary>
+    /// 스크립트 엔진이 글을 단계로 바꾸는지.
+    /// </summary>
+    /// <remarks>
+    /// 스크립트는 돌아도 <b>입력이 나가지 않는다</b> - 부른 것이 단계로 적힐 뿐이다.
+    /// 그 덕에 순서 미리보기·반복·중지가 그대로 살아 있다. 여기서 보는 것이 그 성질이다.
+    ///
+    /// 반복문이 단계로 풀리는지도 함께 본다. 풀리지 않으면 순서 미리보기가 거짓말을 한다.
+    /// </remarks>
+    private static async Task TestScriptEngineAsync()
+    {
+        await TestOneEngineAsync(ScriptLanguage.CSharp);
+        await TestOneEngineAsync(ScriptLanguage.JavaScript);
+
+        // 파이썬은 첫 실행 때 11MB 를 받아 온다. 이미 받아 둔 PC 에서만 잰다 -
+        // 검증 하나 때문에 네트워크를 타고 내려받게 하지 않는다.
+        if (PythonRuntimeInstaller.IsInstalled) await TestOneEngineAsync(ScriptLanguage.Python);
+        else Skip("스크립트 엔진 (Python)", "런타임이 아직 안 깔려 있다 - 화면에서 한 번 고르면 받아 온다");
+    }
+
+    /// <summary>
+    /// 한 언어를 잰다. 세 언어가 <b>같은 것을 같은 이름으로</b> 해야 한다.
+    /// </summary>
+    /// <remarks>
+    /// 언어마다 다른 잣대를 대면 "이 언어에서는 원래 그래" 가 쌓인다. 문법만 다르고
+    /// 되는 일은 같아야 언어를 오갈 수 있다.
+    /// </remarks>
+    private static async Task TestOneEngineAsync(ScriptLanguage language)
+    {
+        using var engine = ScriptEngineFactory.Create(language);
+
+        await engine.PrepareAsync();
+
+        if (!engine.IsReady)
+        {
+            Skip($"스크립트 엔진 ({language})", engine.UnavailableReason ?? "준비되지 않았다");
+            return;
+        }
+
+        var semi = language == ScriptLanguage.Python ? "" : ";";
+
+        // ── 부른 대로 단계가 되는지 ──
+        var (plan, errors) = await engine.RunAsync(string.Join(Environment.NewLine,
+        [
+            $"Type(\"가\"){semi}",
+            $"Enter(){semi}",
+            $"MoveTo(100, 200){semi}",
+            $"Click(MouseButton.Right){semi}",
+            $"Wait(250){semi}"
+        ]));
+
+        var order = string.Join(" → ", plan.Steps.Select(s => s.Describe()));
+
+        Check($"스크립트 → 단계 ({language})",
+              errors.Count == 0 && order == "글자 \"가\" → Enter → 이동 (100, 200) → 우클릭 → 250ms 쉬기",
+              errors.Count > 0 ? errors[0].ToString() : order);
+
+        // ── 반복문이 풀리는지 ──
+        var loop = language == ScriptLanguage.Python
+            ? "for i in range(3):
+    Type(\"x\")"
+            : "for (var i = 0; i < 3; i++) Type(\"x\");";
+
+        var (unrolled, loopErrors) = await engine.RunAsync(loop);
+
+        Check($"반복문이 단계로 풀린다 ({language})",
+              loopErrors.Count == 0 && unrolled.Steps.Count == 3,
+              loopErrors.Count > 0 ? loopErrors[0].ToString() : $"{unrolled.Steps.Count}단계");
+
+        // ── 한글 이름도 되는지 ──
+        var (korean, koreanErrors) = await engine.RunAsync($"글자(\"안녕\"){semi} 엔터(){semi}");
+
+        Check($"한글 이름 ({language})", koreanErrors.Count == 0 && korean.Steps.Count == 2,
+              koreanErrors.Count > 0 ? koreanErrors[0].ToString() : $"{korean.Steps.Count}단계");
+
+        // ── 사용자가 함수를 만들어 써도 되는지 ──
+        //     이 화면에서 짜는 것이 결국 프로그램이라, 되풀이되는 것을 묶을 수 있어야 한다.
+        var define = language switch
+        {
+            ScriptLanguage.Python => "def 두번(s):
+    Type(s)
+    Type(s)
+
+두번(\"ab\")",
+            ScriptLanguage.JavaScript => "function 두번(s) { Type(s); Type(s); }
+두번(\"ab\");",
+            _ => "void 두번(string s) { Type(s); Type(s); }
+두번(\"ab\");"
+        };
+
+        var (custom, customErrors) = await engine.RunAsync(define);
+
+        Check($"사용자 정의 함수 ({language})", customErrors.Count == 0 && custom.Steps.Count == 2,
+              customErrors.Count > 0 ? customErrors[0].ToString()
+                                     : string.Join(" → ", custom.Steps.Select(s => s.Describe())));
+
+        // ── 틀린 글은 줄 번호와 함께 ──
+        var (broken, brokenErrors) = await engine.RunAsync($"Type(\"ok\"){semi}{Environment.NewLine}이건 문법이 아니다 (((");
+
+        // 줄 번호까지 맞히는 것은 언어마다 다르다. 오류를 내고 계획을 안 만드는 것만 본다.
+        Check($"문법 오류를 잡는다 ({language})",
+              brokenErrors.Count > 0 && broken.Steps.Count == 0,
+              brokenErrors.Count > 0 ? brokenErrors[0].ToString() : "오류를 안 냈다");
+
+        // ── 도는 중에 터지면 아무것도 안 남긴다 ──
+        //     반쪽짜리 시퀀스를 돌리는 것보다 안 돌리는 것이 낫다.
+        var raise = language switch
+        {
+            ScriptLanguage.Python => "Type(\"a\")
+raise Exception(\"일부러\")",
+            ScriptLanguage.JavaScript => "Type(\"a\");
+throw new Error(\"일부러\");",
+            _ => "Type(\"a\");
+throw new System.Exception(\"일부러\");"
+        };
+
+        var (half, runErrors) = await engine.RunAsync(raise);
+
+        Check($"도는 중에 터지면 계획을 버린다 ({language})",
+              runErrors.Count > 0 && half.Steps.Count == 0,
+              runErrors.Count > 0 ? runErrors[0].ToString() : "오류를 안 냈다");
     }
 
     /// <summary>

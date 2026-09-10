@@ -5,6 +5,7 @@ using DevExpress.Mvvm;
 using ICSharpCode.AvalonEdit.Highlighting;
 using Minguk.Tools.Helper;
 using Minguk.Tools.Input;
+using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Sequencing;
 using Minguk.Tools.Input.Targets;
 
@@ -63,6 +64,27 @@ public partial class InputAutomationViewModel
     /// <summary>대상 창을 골라야 하는 경로인지. 아니면 그 줄을 아예 접는다.</summary>
     public bool NeedsWindowTarget => _service is not null && !_service.SupportsTyping;
 
+    // ── 스크립트 언어 ────────────────────────────────────────────────────
+
+    public ObservableCollection<ScriptLanguage> ScriptLanguages { get; }
+        = new((ScriptLanguage[])Enum.GetValues(typeof(ScriptLanguage)));
+
+    /// <summary>
+    /// 스크립트를 무슨 언어로 쓸지.
+    /// </summary>
+    /// <remarks>
+    /// 언어가 달라도 부르는 것은 같다(<see cref="SequenceScriptApi"/>). 그래서 바꾸면 글만
+    /// 새로 쓰면 되고, 그 뒤(순서 미리보기·반복·중지)는 손댈 것이 없다.
+    /// </remarks>
+    public ScriptLanguage SelectedScriptLanguage
+    {
+        get => GetProperty(() => SelectedScriptLanguage);
+        set => SetProperty(() => SelectedScriptLanguage, value, OnScriptLanguageChanged);
+    }
+
+    /// <summary>엔진이 준비되는 동안 무슨 일을 하는지. 파이썬은 처음에 11MB 를 받아 온다.</summary>
+    public string? EngineStatus { get => GetProperty(() => EngineStatus); set => SetProperty(() => EngineStatus, value); }
+
     // ── 보낼 것 ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -72,7 +94,7 @@ public partial class InputAutomationViewModel
     /// 예전에는 그리드에 줄을 담았는데, 한 줄 고치는 데 마우스가 여러 번 필요하고 통째로
     /// 복사하거나 남에게 주는 것이 안 됐다. 글로 두면 편집기가 이미 잘하는 일
     /// (되돌리기·여러 줄 선택·찾아 바꾸기·붙여넣기)이 전부 따라온다.
-    /// 형식은 <see cref="SequenceScript"/> 에 적혀 있다.
+    /// 형식은 C# 이다 - <see cref="SequenceScriptApi"/> 가 스크립트에서 부를 수 있는 것들이다.
     /// </remarks>
     public string? ScriptText
     {

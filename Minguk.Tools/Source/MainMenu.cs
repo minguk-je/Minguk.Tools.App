@@ -33,7 +33,7 @@ public class MainMenu : ObservableCollection<MenuItemModel>
         // canSelect: false → 폴더 자체는 선택되지 않는다(클릭하면 펼침/접힘만 한다).
         var rootItem = MenuItemModel.Create(
             menu_cd: "1000",
-            menu_nm: "Minguk",
+            menu_nm: "Office Automation",
             dll_nm: string.Empty,
             class_nm: string.Empty,
             is_enable: true,

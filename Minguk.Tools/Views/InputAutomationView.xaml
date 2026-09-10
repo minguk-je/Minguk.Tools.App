@@ -109,6 +109,25 @@
                           Orientation="Vertical"
                           View="GroupBox">
 
+            <dxlc:LayoutGroup HorizontalAlignment="Left"
+                              Orientation="Horizontal"
+                              VerticalAlignment="Top">
+                <dxlc:LayoutItem Label="언어">
+                    <dxe:ComboBoxEdit Width="140"
+                                      IsTextEditable="False"
+                                      ItemsSource="{Binding ScriptLanguages}"
+                                      SelectedItem="{Binding SelectedScriptLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </dxlc:LayoutItem>
+
+                <!--  파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다.  -->
+                <dxlc:LayoutItem Width="520"
+                                 Label="엔진">
+                    <dxe:TextEdit EditValue="{Binding EngineStatus}"
+                                  IsReadOnly="True"
+                                  NullText="준비됨" />
+                </dxlc:LayoutItem>
+            </dxlc:LayoutGroup>
+
             <!--  본보기 줄을 캐럿이 있는 줄 아래에 끼운다. 형식을 외우지 않아도 되게.  -->
             <dxlc:LayoutGroup HorizontalAlignment="Left"
                               Orientation="Horizontal"
@@ -322,7 +341,7 @@
                 <TextBlock Margin="12,0,0,0"
                            VerticalAlignment="Center"
                            Opacity="0.65"
-                           Text="여기를 클릭해 두면 대상 창을 따로 띄우지 않아도 된다. 시작 전 대기 동안 이 칸을 눌러 두면 된다." />
+                           Text="시작 전 대기 동안 이 칸을 눌러 두면 된다." />
             </dxlc:LayoutGroup>
 
             <!--

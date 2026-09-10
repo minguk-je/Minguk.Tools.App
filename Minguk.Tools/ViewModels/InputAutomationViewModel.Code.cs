@@ -7,6 +7,7 @@ using Minguk.Base.Utilities;
 using System.Windows.Input;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
+using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Sequencing;
 using Minguk.Tools.Input.Targets;
 
@@ -154,16 +155,103 @@ public partial class InputAutomationViewModel
     /// 통째로 비면 무엇을 고쳐야 하는지 오히려 알기 어렵다.
     /// 대신 실행은 막는다 - 반쪽짜리 시퀀스가 나가는 것이 더 나쁘다.
     /// </remarks>
-    private void OnScriptTextChanged() => Guard(() =>
+    /// <summary>
+    /// 글이 바뀌면 잠시 묶어 두었다가 한 번만 돌린다.
+    /// </summary>
+    /// <remarks>
+    /// 글자 하나 칠 때마다 컴파일하면 안 된다. 느린 것도 문제지만, Roslyn 은 컴파일할 때마다
+    /// 메모리에 어셈블리를 새로 만들고 <b>그것은 언로드되지 않는다</b> - 치는 대로 쌓인다.
+    /// 타이핑이 멎은 뒤에 한 번만 돌린다.
+    /// </remarks>
+    private void OnScriptTextChanged()
     {
-        SequenceScript.TryParse(ScriptText, out _plan, out var errors);
+        _debounce?.Dispose();
+        _debounce = new System.Threading.Timer(
+            _ => DispatcherService?.BeginInvoke(() => _ = RecompileAsync()),
+            null, DebounceMs, System.Threading.Timeout.Infinite);
+    }
 
-        ScriptError = errors.Count == 0
-            ? null
-            : string.Join(Environment.NewLine, errors.Select(e => e.ToString()));
+    /// <summary>타이핑이 멎기를 기다리는 시간.</summary>
+    private const int DebounceMs = 500;
 
-        UpdateSequenceText();
+    /// <summary>
+    /// 스크립트를 돌려 단계를 받아 온다. 실제 입력은 나가지 않는다 - 단계로 적힐 뿐이다.
+    /// </summary>
+    /// <summary>
+    /// 언어를 갈아 끼운다. 글은 그대로 두고, 비어 있을 때만 본보기를 넣는다.
+    /// </summary>
+    /// <remarks>
+    /// 쓰던 글을 지우면 안 된다 - 잘못 골랐을 때 되돌릴 방법이 없어진다.
+    /// 대신 새 언어로는 컴파일되지 않을 테니 "고칠 줄" 에 그대로 뜬다.
+    /// </remarks>
+    private void OnScriptLanguageChanged() => Guard(() =>
+    {
+        _engine?.Dispose();
+        _engine = ScriptEngineFactory.Create(SelectedScriptLanguage);
+
+        if (string.IsNullOrWhiteSpace(ScriptText)) ScriptText = _engine.SampleSource;
+
+        _ = PrepareEngineAsync();
     });
+
+    /// <summary>
+    /// 엔진을 준비시키고, 끝나면 한 번 돌려 순서를 채운다.
+    /// </summary>
+    /// <remarks>
+    /// 파이썬은 처음 고를 때 런타임을 받아 온다(11MB). 그동안 화면이 멈춘 것처럼 보이지
+    /// 않도록 무슨 일을 하는 중인지 적는다.
+    /// </remarks>
+    private async Task PrepareEngineAsync()
+    {
+        if (_engine is null) return;
+
+        var engine = _engine;
+        var progress = new Progress<string>(message => EngineStatus = message);
+
+        await GuardAsync(async () =>
+        {
+            await engine.PrepareAsync(progress);
+
+            EngineStatus = engine.IsReady ? null : engine.UnavailableReason;
+
+            if (ReferenceEquals(engine, _engine)) await RecompileAsync();
+        });
+    }
+
+    private async Task RecompileAsync()
+    {
+        if (_engine is null) return;
+
+        // 앞선 것이 아직 돌고 있으면 접는다. 마지막 글만 의미가 있다.
+        _compileCts?.Cancel();
+        _compileCts?.Dispose();
+        _compileCts = new CancellationTokenSource();
+
+        var token = _compileCts.Token;
+        var source = ScriptText;
+
+        await GuardAsync(async () =>
+        {
+            try
+            {
+                var (plan, errors) = await _engine.RunAsync(source, token);
+
+                if (token.IsCancellationRequested) return;
+
+                _plan = plan;
+
+                ScriptError = errors.Count == 0
+                    ? null
+                    : string.Join(Environment.NewLine, errors.Select(e => e.ToString()));
+
+                UpdateSequenceText();
+            }
+            catch (OperationCanceledException)
+            {
+                // 더 새 글이 들어왔다는 뜻이다. 그쪽이 결과를 낸다.
+            }
+        });
+    }
 
     /// <summary>
     /// 고른 종류의 본보기 줄을 캐럿이 있는 줄 아래에 끼운다.
@@ -174,7 +262,7 @@ public partial class InputAutomationViewModel
     /// </remarks>
     private void DoAddStep(SequenceStepKind kind) => Guard(() =>
     {
-        var line = SequenceScript.ToText(new SequencePlan { Steps = [Sample(kind)] });
+        var line = ScriptLine(Sample(kind));
 
         if (_editor is null)
         {
@@ -184,6 +272,19 @@ public partial class InputAutomationViewModel
 
         InsertLine(line);
     });
+
+    /// <summary>
+    /// 단계 하나를 지금 언어의 한 줄로 적는다.
+    /// </summary>
+    /// <remarks>
+    /// 두 언어의 차이는 세미콜론뿐이다. 부르는 이름과 인자는 일부러 똑같이 맞춰 두었다.
+    /// </remarks>
+    private string ScriptLine(SequenceStepDefinition step)
+    {
+        var line = SequenceScript.ToCSharp(new SequencePlan { Steps = [step] });
+
+        return SelectedScriptLanguage == ScriptLanguage.Python ? line.TrimEnd(';') : line;
+    }
 
     /// <summary>본보기 줄에 쓸 값. 이동만 지금 커서 자리를 쓴다 - (0,0) 은 쓸 일이 거의 없다.</summary>
     private SequenceStepDefinition Sample(SequenceStepKind kind)
@@ -223,7 +324,7 @@ public partial class InputAutomationViewModel
         _editor.Focus();
     }
 
-    private void DoResetSteps() => Guard(() => ScriptText = SequenceScript.ToText(SequencePlan.CreateDefault()));
+    private void DoResetSteps() => Guard(() => ScriptText = _engine?.SampleSource ?? string.Empty);
 
     private void UpdateSequenceText() => Guard(() =>
     {

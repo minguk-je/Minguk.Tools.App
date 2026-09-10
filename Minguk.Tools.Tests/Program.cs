@@ -162,6 +162,7 @@ internal static partial class Program
 
         TestSequencePlan();
         TestSequenceScript();
+        await TestScriptEngineAsync();
         await TestSequenceAsync(ui);
         await TestPlanRunAsync(ui);
         await TestImeToggleAsync();

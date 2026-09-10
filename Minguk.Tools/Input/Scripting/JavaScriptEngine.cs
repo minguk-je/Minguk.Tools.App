@@ -1,0 +1,177 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Jint;
+using Jint.Runtime;
+using Minguk.Tools.Input.Sequencing;
+
+namespace Minguk.Tools.Input.Scripting;
+
+/// <summary>
+/// 자바스크립트로 쓴 스크립트를 Jint 로 돌려 단계 목록을 받아 온다.
+/// </summary>
+/// <remarks>
+/// <b>왜 Jint 인가</b>
+///
+/// 순수 .NET 으로 쓰인 인터프리터다. 받아 올 런타임도, 따라붙는 네이티브도 없어서
+/// 파이썬처럼 첫 실행 때 뭔가를 설치할 필요가 없다. V8 을 껴안는 ClearScript 가 훨씬 빠르지만
+/// 플랫폼마다 네이티브 바이너리가 수십 MB 씩 따라온다 - 여기서 도는 것은 단계를 적는
+/// 짧은 글이라 속도가 문제 될 일이 없다.
+///
+/// <b>한도를 건다</b>
+///
+/// 스크립트가 <c>while(true)</c> 를 돌면 이 앱이 같이 멈춘다. C# 과 파이썬은 사용자가 그렇게
+/// 쓸 일이 드물다고 보고 두었지만, Jint 는 한도를 거는 것이 한 줄이라 걸어 둔다.
+/// 걸린 것도 사용자가 고쳐야 할 오류로 돌려준다.
+/// </remarks>
+public sealed class JavaScriptEngine : IScriptEngine
+{
+    /// <summary>스크립트 하나가 돌 수 있는 시간. 넘으면 오류로 돌려준다.</summary>
+    private static readonly TimeSpan RunLimit = TimeSpan.FromSeconds(5);
+
+    public string Name => "JavaScript (Jint)";
+
+    /// <summary>받아 올 것이 없다. 늘 돌릴 수 있다.</summary>
+    public bool IsReady => true;
+
+    public string? UnavailableReason => null;
+
+    public string SampleSource => string.Join(Environment.NewLine,
+    [
+        "// 자바스크립트로 씁니다. 한글 이름도 됩니다 - 글자(\"...\") · 이동(x, y)",
+        "Type(\"안녕하세요\");",
+        "Enter();"
+    ]);
+
+    /// <summary>준비할 것이 없다.</summary>
+    public Task PrepareAsync(IProgress<string>? progress = null, CancellationToken token = default)
+        => Task.CompletedTask;
+
+    public Task<(SequencePlan Plan, IReadOnlyList<ScriptError> Errors)> RunAsync(
+        string? source, CancellationToken token = default)
+    {
+        var text = source ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text))
+            return Task.FromResult<(SequencePlan, IReadOnlyList<ScriptError>)>((new SequencePlan(), []));
+
+        return Task.Run(() => Execute(text, token), token);
+    }
+
+    private static (SequencePlan, IReadOnlyList<ScriptError>) Execute(string source, CancellationToken token)
+    {
+        var api = new SequenceScriptApi();
+
+        // 스크립트마다 새로 만든다. 앞선 것이 남긴 이름이 다음에 보이면 지운 줄이 계속 도는
+        // 것처럼 굴어서 무엇 때문에 되는지 알 수 없어진다.
+        var engine = new Engine(options => options
+            .TimeoutInterval(RunLimit)
+            .LimitRecursion(64)
+            .CancellationToken(token));
+
+        Bind(engine, api);
+
+        try
+        {
+            engine.Execute(source);
+
+            return (api.ToPlan(), []);
+        }
+        catch (JavaScriptException ex)
+        {
+            return (new SequencePlan(), [new ScriptError(ex.Location.Start.Line, ex.Message)]);
+        }
+        catch (TimeoutException)
+        {
+            return (new SequencePlan(),
+                [new ScriptError(0, $"스크립트가 {RunLimit.TotalSeconds:0}초 안에 안 끝났습니다 - 끝나지 않는 반복이 있는지 보세요.")]);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // 문법 오류(파서)도 여기로 온다. Jint 의 파서 예외 타입은 판마다 바뀌어 왔으므로
+            // 타입을 짚지 않고 메시지를 그대로 보여 준다.
+            return (new SequencePlan(), [new ScriptError(LineOf(ex), ex.Message)]);
+        }
+    }
+
+    /// <summary>
+    /// 스크립트가 부를 것들을 심는다.
+    /// </summary>
+    /// <remarks>
+    /// 객체 하나를 통째로 주지 않고 이름을 하나씩 심는다. C# · 파이썬과 쓰는 모양이 같아야
+    /// 언어를 오갈 때 헷갈리지 않는다.
+    /// API 를 늘리면 여기와 구문 강조(<c>Resource/SequenceScript.*.xshd</c>)를 같이 고친다.
+    /// </remarks>
+    private static void Bind(Engine engine, SequenceScriptApi api)
+    {
+        Pair(engine, "Type", "글자", new Action<string>(api.Type));
+        Pair(engine, "TypeLine", "줄입력", new Action<string>(api.TypeLine));
+        Pair(engine, "Enter", "엔터", new Action(api.Enter));
+        Pair(engine, "ToggleHangul", "한영", new Action(api.ToggleHangul));
+        Pair(engine, "RightClick", "우클릭", new Action(api.RightClick));
+        Pair(engine, "MoveTo", "이동", new Action<int, int>(api.MoveTo));
+        Pair(engine, "Scroll", "휠", new Action<int>(api.Scroll));
+        Pair(engine, "Wait", "쉬기", new Action<int>(api.Wait));
+
+        // 인자를 생략할 수 있는 것들은 자바스크립트 쪽에서 기본값을 채워 준다.
+        Pair(engine, "Click", "클릭", new Action<object?>(b => api.Click(ToButton(b))));
+        Pair(engine, "ClickAt", "이동클릭", new Action<int, int, object?>((x, y, b) => api.ClickAt(x, y, ToButton(b))));
+
+        engine.SetValue("MouseButton", new
+        {
+            Left = (int)MouseButton.Left,
+            Right = (int)MouseButton.Right,
+            Middle = (int)MouseButton.Middle
+        });
+    }
+
+    private static void Pair(Engine engine, string english, string korean, Delegate action)
+    {
+        engine.SetValue(english, action);
+        engine.SetValue(korean, action);
+    }
+
+    /// <summary>
+    /// 자바스크립트에서 넘어온 버튼 값을 읽는다.
+    /// </summary>
+    /// <remarks>
+    /// 안 적으면(undefined) 좌클릭이다. 대부분 좌클릭이라 매번 적게 하면 성가시다.
+    /// 숫자(<c>MouseButton.Right</c>)와 글자(<c>"right"</c>) 둘 다 받는다 -
+    /// 자바스크립트로 쓰는 사람은 글자로 넘기는 쪽이 더 자연스럽다.
+    /// </remarks>
+    private static MouseButton ToButton(object? value) => value switch
+    {
+        null => MouseButton.Left,
+        double d => (MouseButton)(int)d,
+        int i => (MouseButton)i,
+        string s when s.Equals("right", StringComparison.OrdinalIgnoreCase) => MouseButton.Right,
+        string s when s.Equals("middle", StringComparison.OrdinalIgnoreCase) => MouseButton.Middle,
+        _ => MouseButton.Left
+    };
+
+    /// <summary>메시지에 섞여 있는 줄 번호를 뽑아 본다. 못 뽑으면 0.</summary>
+    private static int LineOf(Exception ex)
+    {
+        var message = ex.Message ?? string.Empty;
+        var marker = message.IndexOf("line ", StringComparison.OrdinalIgnoreCase);
+
+        if (marker < 0) return 0;
+
+        var digits = string.Empty;
+
+        for (var i = marker + 5; i < message.Length && char.IsDigit(message[i]); i++)
+            digits += message[i];
+
+        return int.TryParse(digits, out var line) ? line : 0;
+    }
+
+    /// <summary>엔진을 스크립트마다 새로 만들므로 들고 있는 것이 없다.</summary>
+    public void Dispose()
+    {
+    }
+}
