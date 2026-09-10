@@ -201,8 +201,7 @@ internal static partial class Program
 
         // ── 반복문이 풀리는지 ──
         var loop = language == ScriptLanguage.Python
-            ? "for i in range(3):
-    Type(\"x\")"
+            ? "for i in range(3):\n    Type(\"x\")"
             : "for (var i = 0; i < 3; i++) Type(\"x\");";
 
         var (unrolled, loopErrors) = await engine.RunAsync(loop);
@@ -212,7 +211,8 @@ internal static partial class Program
               loopErrors.Count > 0 ? loopErrors[0].ToString() : $"{unrolled.Steps.Count}단계");
 
         // ── 한글 이름도 되는지 ──
-        var (korean, koreanErrors) = await engine.RunAsync($"글자(\"안녕\"){semi} 엔터(){semi}");
+        var (korean, koreanErrors) = await engine.RunAsync(
+            string.Join(Environment.NewLine, [$"글자(\"안녕\"){semi}", $"엔터(){semi}"]));
 
         Check($"한글 이름 ({language})", koreanErrors.Count == 0 && korean.Steps.Count == 2,
               koreanErrors.Count > 0 ? koreanErrors[0].ToString() : $"{korean.Steps.Count}단계");
@@ -221,15 +221,9 @@ internal static partial class Program
         //     이 화면에서 짜는 것이 결국 프로그램이라, 되풀이되는 것을 묶을 수 있어야 한다.
         var define = language switch
         {
-            ScriptLanguage.Python => "def 두번(s):
-    Type(s)
-    Type(s)
-
-두번(\"ab\")",
-            ScriptLanguage.JavaScript => "function 두번(s) { Type(s); Type(s); }
-두번(\"ab\");",
-            _ => "void 두번(string s) { Type(s); Type(s); }
-두번(\"ab\");"
+            ScriptLanguage.Python => "def 두번(s):\n    Type(s)\n    Type(s)\n\n두번(\"ab\")",
+            ScriptLanguage.JavaScript => "function 두번(s) { Type(s); Type(s); }\n두번(\"ab\");",
+            _ => "void 두번(string s) { Type(s); Type(s); }\n두번(\"ab\");"
         };
 
         var (custom, customErrors) = await engine.RunAsync(define);
@@ -250,12 +244,9 @@ internal static partial class Program
         //     반쪽짜리 시퀀스를 돌리는 것보다 안 돌리는 것이 낫다.
         var raise = language switch
         {
-            ScriptLanguage.Python => "Type(\"a\")
-raise Exception(\"일부러\")",
-            ScriptLanguage.JavaScript => "Type(\"a\");
-throw new Error(\"일부러\");",
-            _ => "Type(\"a\");
-throw new System.Exception(\"일부러\");"
+            ScriptLanguage.Python => "Type(\"a\")\nraise Exception(\"일부러\")",
+            ScriptLanguage.JavaScript => "Type(\"a\");\nthrow new Error(\"일부러\");",
+            _ => "Type(\"a\");\nthrow new System.Exception(\"일부러\");"
         };
 
         var (half, runErrors) = await engine.RunAsync(raise);

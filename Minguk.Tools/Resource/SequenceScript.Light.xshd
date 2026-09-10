@@ -25,6 +25,7 @@
 
         <!--  주석과 글자가 먼저다. 그 안에 든 것은 낱말로 보지 않는다.  -->
         <Span color="Comment" begin="//" />
+        <Span color="Comment" begin="#" />
         <Span color="Comment" multiline="true" begin="/\*" end="\*/" />
 
         <Span color="String" multiline="false">
@@ -62,22 +63,46 @@
 
         <Keywords color="Keyword">
             <Word>var</Word>
+            <Word>let</Word>
+            <Word>const</Word>
             <Word>new</Word>
             <Word>for</Word>
             <Word>foreach</Word>
             <Word>in</Word>
+            <Word>of</Word>
             <Word>while</Word>
             <Word>do</Word>
             <Word>if</Word>
+            <Word>elif</Word>
             <Word>else</Word>
             <Word>switch</Word>
             <Word>case</Word>
             <Word>break</Word>
             <Word>continue</Word>
             <Word>return</Word>
+            <Word>function</Word>
+            <Word>def</Word>
+            <Word>lambda</Word>
+            <Word>class</Word>
+            <Word>try</Word>
+            <Word>except</Word>
+            <Word>catch</Word>
+            <Word>finally</Word>
+            <Word>raise</Word>
+            <Word>throw</Word>
+            <Word>import</Word>
+            <Word>from</Word>
+            <Word>as</Word>
+            <Word>pass</Word>
+            <Word>and</Word>
+            <Word>or</Word>
+            <Word>not</Word>
             <Word>true</Word>
             <Word>false</Word>
             <Word>null</Word>
+            <Word>True</Word>
+            <Word>False</Word>
+            <Word>None</Word>
         </Keywords>
 
         <Keywords color="Type">
@@ -86,8 +111,12 @@
             <Word>bool</Word>
             <Word>double</Word>
             <Word>char</Word>
+            <Word>void</Word>
             <Word>MouseButton</Word>
             <Word>Math</Word>
+            <Word>range</Word>
+            <Word>len</Word>
+            <Word>print</Word>
         </Keywords>
 
         <Rule color="Number">

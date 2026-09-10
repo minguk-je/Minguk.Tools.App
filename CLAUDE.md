@@ -144,6 +144,36 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 시퀀스를 굳히는 시점은 **시작할 때 한 번**이다. 도는 중에 글을 고쳐도 그 바퀴는 영향받지 않는다.
 전송은 `Task.Run` 으로 UI 스레드에서 떼어 낸다.
 
+### 스크립트 엔진
+
+무엇을 보낼지는 **스크립트**로 쓴다. 언어는 세 가지고, `IScriptEngine` + 구현 + 팩터리다.
+
+| 언어 | 구현 | 받아 오는 것 |
+|---|---|---|
+| C# (기본) | `RoslynScriptEngine` | 없음 |
+| JavaScript | `JavaScriptEngine` (Jint) | 없음 — 순수 .NET |
+| Python | `PythonScriptEngine` (Python.NET) | 첫 선택 때 임베더블 CPython 11MB |
+
+**스크립트를 돌려도 입력은 나가지 않는다.** 부르는 것은 `SequenceScriptApi` 고, 그것은 단계를
+적어 둘 뿐이다(**녹화 방식**). 그래서 순서 미리보기·시작 전 대기·반복·중지가 그대로 살아 있고,
+언어를 바꿔도 그 뒤는 손댈 것이 없다. `for` 문은 단계로 풀려 나온다.
+
+못 하는 것: 실행 **도중**에 반응하는 것("화면에 X 가 보이면"). 화면을 읽는 단계 자체가 아직
+없어서 지금은 잃는 것이 없다. 필요해지면 그때 갈래를 하나 더 둔다.
+
+- API 를 늘리면 **네 곳**을 같이 고친다 — `SequenceScriptApi`, `PythonScriptEngine.BoundNames`,
+  `JavaScriptEngine.Bind`, 그리고 구문 강조 `Resource/SequenceScript.*.xshd`.
+- 이름은 영문·한글 둘 다 연다(`Type` / `글자`). 세 언어가 **같은 이름·같은 인자**를 쓴다 -
+  문법만 다르고 되는 일이 같아야 오갈 수 있다.
+- **Roslyn 은 컴파일할 때마다 어셈블리를 만들고 그것은 언로드되지 않는다.** 글자마다 컴파일하면
+  쌓이기만 하므로 타이핑을 500ms 묶었다가 한 번만 돌리고, 같은 글이면 캐시를 쓴다.
+  컴파일한 것은 10분간 붙들고 있다가 안 쓰이면 놓는다(`RoslynScriptEngine.KeepAlive`).
+  "GC 를 막는" 것이 아니라 참조를 들고 있는 것이다 — `GC.TryStartNoGCRegion` 은 여기 쓸 물건이 아니다.
+- **파이썬은 한 프로세스에 한 번만 켠다.** `PythonEngine.Shutdown()` 뒤 재초기화가 깨지므로
+  화면을 닫아도, 언어를 바꿔도 켜 둔 채로 둔다. 파이썬 객체를 만지는 곳은 전부 `Py.GIL()` 안이다.
+- pythonnet 에 열거형을 열 때 `typeof(T).ToPython()` 은 안 된다. 파이썬 쪽에서 `RuntimeType` 으로
+  보여 멤버가 안 잡힌다. 값을 하나씩 심고 묶는 껍데기를 파이썬에서 만든다.
+
 ### 편집기
 
 `AvalonEdit`(`ICSharpCode.AvalonEdit`)을 쓴다. **AvaloniaEdit 이 아니다** - 그쪽은 Avalonia 용

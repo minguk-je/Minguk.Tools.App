@@ -165,8 +165,22 @@ public sealed class PythonScriptEngine : IScriptEngine
         foreach (var name in BoundNames)
             scope.Exec($"{name} = api.{name}");
 
-        // MouseButton.Right 처럼 쓰려면 타입도 있어야 한다.
-        scope.Set("MouseButton", typeof(MouseButton).ToPython());
+        // MouseButton.Right 처럼 쓸 수 있게 한다.
+        //
+        // typeof(MouseButton).ToPython() 은 안 된다 - 파이썬 쪽에서 RuntimeType 으로 보여
+        // 멤버가 안 잡힌다("'RuntimeType' object has no attribute 'Right'"). 실측으로 겪었다.
+        // 값을 하나씩 심고 그것을 묶는 껍데기를 파이썬에서 만든다. 심는 것은 진짜 열거형
+        // 값이라 C# 메서드가 그대로 받는다.
+        scope.Set("_mbLeft", MouseButton.Left.ToPython());
+        scope.Set("_mbRight", MouseButton.Right.ToPython());
+        scope.Set("_mbMiddle", MouseButton.Middle.ToPython());
+
+        scope.Exec("""
+                   class MouseButton:
+                       Left = _mbLeft
+                       Right = _mbRight
+                       Middle = _mbMiddle
+                   """);
     }
 
     /// <summary>
