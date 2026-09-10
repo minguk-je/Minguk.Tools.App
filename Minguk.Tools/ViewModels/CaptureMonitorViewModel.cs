@@ -596,6 +596,9 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         }
 
         RefreshTargets();
+
+        // 게임을 앞에 둔 채로 담을 수 있게. 화면을 닫으면 ReleaseResources 가 푼다.
+        RegisterHotkeys();
     }
 
     /// <summary>캡처할 수 있는 창과 모니터를 다시 훑는다.</summary>
@@ -720,13 +723,16 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// captures 폴더에 아무렇게나 쌓아도 된다. 담기는 학습에 쓸 것이라 이름 규칙과 폴더가
     /// 정해져 있어야 하고, 라벨 파일과 짝이 맞아야 한다.
     /// </remarks>
-    private void DoCollectFrame()
+    private void DoCollectFrame() => RequestCollectFrame(CollectFromButton);
+
+    /// <summary>버튼과 단축키가 같은 길로 온다. 두 벌로 두면 한쪽만 고쳐진다.</summary>
+    private void RequestCollectFrame(int source)
     {
         // 픽셀이 CPU 로 안 내려오면 담을 것이 없다. 버튼을 회색으로 두고 이유를 안 알려 주면
         // "몹을 모을 수가 없다" 가 된다 - 실제로 그랬다. 알아서 켜고 그렇게 적는다.
         EnsureCpuReadback("데이터셋에 담으려면 픽셀이 필요합니다");
 
-        Interlocked.Exchange(ref _isCollectFrameRequested, 1);
+        Interlocked.Exchange(ref _isCollectFrameRequested, source);
     }
 
     /// <summary>
@@ -777,8 +783,9 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         if (Interlocked.CompareExchange(ref _isSaveFrameRequested, 0, 1) == 1)
             TrySaveFrame(e);
 
-        if (Interlocked.CompareExchange(ref _isCollectFrameRequested, 0, 1) == 1)
-            TryCollectFrame(e);
+        var collectSource = Interlocked.Exchange(ref _isCollectFrameRequested, 0);
+        if (collectSource != 0)
+            TryCollectFrame(e, collectSource == CollectFromHotkey);
 
         // 0.25초에 한 번만, 앞의 것이 끝났을 때만. 여기서 기다리면 프레임이 밀린다.
         MaybeDetect(e);
@@ -1409,7 +1416,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// 이름은 <see cref="LabelDataset.NextImagePath"/> 가 시각으로 짓는다. 여기서 따로
     /// 지으면 라벨링 쪽이 기대하는 규칙과 어긋난다.
     /// </remarks>
-    private void TryCollectFrame(CapturedFrameEventArgs e)
+    private void TryCollectFrame(CapturedFrameEventArgs e, bool byHotkey)
     {
         try
         {
@@ -1432,6 +1439,9 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
                 StatusText = message;
                 MessengerUtility.SendMainMessage($"데이터셋에 담았습니다 - {count}장째");
             });
+
+            // 단축키로 담을 때 사용자는 게임을 보고 있다. 소리가 유일한 답이다.
+            if (byHotkey) System.Media.SystemSounds.Asterisk.Play();
         }
         catch (Exception ex)
         {
@@ -1441,6 +1451,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
 
             Note(message);
             _uiDispatcher?.BeginInvoke(() => StatusText = message);
+            if (byHotkey) System.Media.SystemSounds.Hand.Play();
         }
     }
 
@@ -1597,6 +1608,8 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// <summary>탭이 닫힐 때. 베이스가 SaveSettings 다음에 불러 준다.</summary>
     protected override void ReleaseResources()
     {
+        ReleaseHotkeys();
+
         // 모델은 68MB 를 물고 있고 libtorch 는 GPU 메모리를 잡는다. 화면을 닫으면 놓는다.
         ReleaseDetector();
 
