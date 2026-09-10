@@ -99,6 +99,8 @@
 		<PackageReference Include="TorchSharp" Version="0.102.7" />
 		<PackageReference Include="Microsoft.ML.TorchSharp" Version="0.23.0" />
 		<PackageReference Include="Microsoft.ML.ImageAnalytics" Version="5.0.0" />
+		<PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.25.0-rc.1" />
+		<PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.14" />
 	</ItemGroup>
 
 	<!--
