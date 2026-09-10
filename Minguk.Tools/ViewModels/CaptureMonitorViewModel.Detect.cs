@@ -31,12 +31,13 @@ public partial class CaptureMonitorViewModel
     /// 추론에 넣기 전에 줄일 크기(긴 변).
     /// </summary>
     /// <remarks>
-    /// <b>정확도와는 무관하다.</b> 모델 파이프라인이 제 크기(<see cref="DetectorTrainer.InputWidth"/>)로
-    /// 맞추므로 무엇을 넣든 같은 것을 본다 - 실측으로 160x90 부터 1920x1080 까지 다 230ms 에
-    /// 같은 것을 찾았다.
+    /// 모델 파이프라인이 제 크기로 다시 맞추므로, <b>모델 크기보다 크게만 넣으면</b> 무엇을 넣든
+    /// 같은 것을 본다 - 실측으로 320 모델에 160x90 부터 1920x1080 까지 다 230ms 에 같은 것을
+    /// 찾았다. 줄여 저장하는 것은 PNG 로 만드는 값을 아끼기 위해서다. 0.25초마다 1920x1080 을
+    /// 인코딩할 이유가 없다.
     ///
-    /// 그래도 줄여 저장하는 것은 <b>PNG 로 만드는 값</b>을 아끼기 위해서다. 0.25초마다
-    /// 1920x1080 을 인코딩할 이유가 없다.
+    /// <b>모델 크기보다 작게 줄이면 정확도가 떨어진다.</b> 640x360 모델에 320 을 넣으면 도로
+    /// 키워 보는 꼴이다. 그래서 이 값은 바닥이고, 실제로는 모델의 InputWidth 와 큰 쪽을 쓴다.
     /// </remarks>
     private const int DetectLongestSide = 320;
 
@@ -126,7 +127,12 @@ public partial class CaptureMonitorViewModel
                 SweepStaleScratch();
             }
 
-            size = FrameSnapshot.SaveScaledPng(e, _detectScratchPath, DetectLongestSide);
+            // 모델이 보는 크기보다 작게 줄이면 안 된다. 640x360 모델에 320 으로 줄인 그림을 넣으면
+            // 파이프라인이 도로 키워서 보는 꼴이라, 작은 몹 때문에 640 으로 올린 뜻이 실시간에서
+            // 사라진다 - 실제로 되찾기 검사(원본 파일)는 97% 인데 실시간은 320 을 넣고 있었다.
+            var longestSide = Math.Max(DetectLongestSide, _detector?.Manifest.InputWidth ?? DetectLongestSide);
+
+            size = FrameSnapshot.SaveScaledPng(e, _detectScratchPath, longestSide);
         }
         catch (Exception ex)
         {
