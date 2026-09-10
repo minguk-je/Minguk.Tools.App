@@ -250,7 +250,7 @@
                           View="GroupBox">
 
             <dxlc:LayoutItem Label="단축키"
-                             ToolTip="다른 창이 앞에 있을 때도 눌린다. 대상 창을 앞으로 가져온 뒤 F11/F12 를 누르면 된다. Ctrl+Alt+F4 는 커서 자리를 이동 단계로 담고, Ctrl+Alt+F3 은 커서 아래 창을 대상으로 집는다.">
+                             ToolTip="다른 창이 앞에 있을 때도 눌린다. 대상 창을 앞으로 가져온 뒤 F11/F12 를 누르면 된다. F4 는 커서 자리를 이동 단계로 담고, F3 은 커서 아래 창을 대상으로 집는다.">
                 <dxe:TextEdit EditValue="{Binding HotkeyStatus}"
                               IsReadOnly="True" />
             </dxlc:LayoutItem>

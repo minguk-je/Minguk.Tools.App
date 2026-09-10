@@ -111,9 +111,8 @@ public partial class InputAutomationViewModel
 
         _windows ??= WindowTargetAdapterFactory.Create();
 
-        if (_adapter.GetCursorPosition() is not { } p)
+        if (ScreenCursor.TryGetPosition() is not { } p)
         {
-            // PostMessage 는 진짜 커서를 안 움직이지만 읽을 수는 있어야 한다.
             CurrentStep = "커서 자리를 알 수 없어 창을 집지 못했다";
             return;
         }
@@ -193,7 +192,7 @@ public partial class InputAutomationViewModel
 
         if (kind == SequenceStepKind.Type) step.Text = "안녕하세요";
 
-        if (kind == SequenceStepKind.MoveTo && _adapter?.GetCursorPosition() is { } p)
+        if (kind == SequenceStepKind.MoveTo && ScreenCursor.TryGetPosition() is { } p)
         {
             step.X = p.X;
             step.Y = p.Y;
@@ -290,17 +289,14 @@ public partial class InputAutomationViewModel
         _hotkeys = GlobalHotkeyAdapterFactory.Create();
 
         // RegisterHotKey 는 시스템 전역이다. 맨 키로 잡으면 이 화면이 열려 있는 동안
-        // 모든 앱에서 그 키를 빼앗는다 - F11 은 브라우저 전체화면, F12 는 개발자 도구다.
-        // 자주 눌러야 하는 실행 두 개는 맨 키로 두고(손이 덜 간다),
-        // 가끔 쓰는 집기 두 개는 조합키로 남긴다.
-        const ModifierKeys Combo = ModifierKeys.Control | ModifierKeys.Alt;
-
+        // 모든 앱에서 그 키를 빼앗는다 - F11 은 브라우저 전체화면, F12 는 개발자 도구,
+        // F3 은 흔한 "다음 찾기" 다. 화면을 닫으면 돌려준다(ReleaseResources 가 푼다).
         (string Label, Key Key, ModifierKeys Modifiers, Action Action)[] bindings =
         [
             ("F11 1회", Key.F11, ModifierKeys.None, () => { if (IsIdle) DoRunOnce(); }),
             ("F12 반복/중지", Key.F12, ModifierKeys.None, ToggleLoop),
-            ("Ctrl+Alt+F4 좌표 담기", Key.F4, Combo, PickCursorPosition),
-            ("Ctrl+Alt+F3 대상 창 집기", Key.F3, Combo, PickWindowUnderCursor)
+            ("F4 좌표 담기", Key.F4, ModifierKeys.None, PickCursorPosition),
+            ("F3 대상 창 집기", Key.F3, ModifierKeys.None, PickWindowUnderCursor)
         ];
 
         var live = new List<string>();
@@ -337,7 +333,13 @@ public partial class InputAutomationViewModel
     {
         if (IsRunning || _adapter is null) return;
 
-        if (_adapter.GetCursorPosition() is not { } p) return;
+        // 어댑터가 아니라 OS 에게 묻는다. 창 메시지 경로는 커서를 안 움직이므로
+        // GetCursorPosition 이 null 인데, 좌표를 집는 것은 그것과 상관없는 일이다.
+        if (ScreenCursor.TryGetPosition() is not { } p)
+        {
+            CurrentStep = "커서 자리를 읽지 못했다";
+            return;
+        }
 
         DoAddStep(SequenceStepKind.MoveTo);
         CurrentStep = $"좌표 담음 ({p.X}, {p.Y})";
