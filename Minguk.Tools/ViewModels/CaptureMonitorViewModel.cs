@@ -220,7 +220,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     public bool EnableCpuReadback
     {
         get => GetProperty(() => EnableCpuReadback);
-        set => SetProperty(() => EnableCpuReadback, value, OnReadbackChanged);
+        set => SetProperty(() => EnableCpuReadback, value);
     }
 
     // ── 몹 찾기 ──────────────────────────────────────────────────────────
@@ -441,7 +441,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         DoStartCommand = new DelegateCommand(DoStart, () => !IsRunning && SelectedTarget is not null, false);
         DoStopCommand = new DelegateCommand(DoStop, () => IsRunning, false);
         DoClearCommand = new DelegateCommand(DoClear, false);
-        SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning && EnableCpuReadback, false);
+        SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning, false);
         CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning, false);
         ClickDetectionCommand = new DelegateCommand(DoClickDetection, () => Detections.Count > 0, false);
 
@@ -713,7 +713,13 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     }
 
     /// <summary>다음 프레임 한 장을 PNG 로 떨어뜨린다. 캡처 내용을 눈으로 확인하는 용도.</summary>
-    private void DoSaveFrame() => Interlocked.Exchange(ref _isSaveFrameRequested, 1);
+    private void DoSaveFrame()
+    {
+        // 담기와 같다 - 리드백이 꺼져 있다고 회색으로 두면 이유를 모른다. 알아서 켠다.
+        EnsureCpuReadback("프레임을 저장하려면 픽셀이 필요합니다");
+
+        Interlocked.Exchange(ref _isSaveFrameRequested, 1);
+    }
 
     /// <summary>
     /// 다음 프레임 한 장을 <b>데이터셋</b>에 담는다. 라벨링 화면이 그 폴더를 읽는다.
@@ -1398,14 +1404,29 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     {
         try
         {
-            var path = Path.Combine(UserDataPaths.Root, "captures", $"frame_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
+            var folder = Path.Combine(UserDataPaths.Root, "captures");
+            var path = Path.Combine(folder, $"frame_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
             FrameSnapshot.SavePng(e, path);
-            Note($"저장: {path}");
+
+            // 담기와 같은 자리에 같은 모양으로 알린다. 비고 칸에만 적으면 안 보인다.
+            var count = Directory.GetFiles(folder, "*.png").Length;
+            var message = $"프레임 저장: {Path.GetFileName(path)} - 지금까지 {count}장 ({folder})";
+
+            Note(message);
+            _uiDispatcher?.BeginInvoke(() =>
+            {
+                StatusText = message;
+                MessengerUtility.SendMainMessage($"프레임을 저장했습니다 - {count}장째");
+            });
         }
         catch (Exception ex)
         {
             Logger.Error(ex, "프레임 저장 실패");
-            Note($"저장 실패: {ex.Message}");
+
+            var message = $"저장 실패: {ex.Message}";
+
+            Note(message);
+            _uiDispatcher?.BeginInvoke(() => StatusText = message);
         }
     }
 
@@ -1550,12 +1571,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         DoStartCommand.RaiseCanExecuteChanged();
         DoStopCommand.RaiseCanExecuteChanged();
         RefreshTargetsCommand.RaiseCanExecuteChanged();
-        SaveFrameCommand.RaiseCanExecuteChanged();
-        CollectFrameCommand.RaiseCanExecuteChanged();
-    }
-
-    private void OnReadbackChanged()
-    {
         SaveFrameCommand.RaiseCanExecuteChanged();
         CollectFrameCommand.RaiseCanExecuteChanged();
     }

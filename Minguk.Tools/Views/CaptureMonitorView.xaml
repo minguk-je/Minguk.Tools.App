@@ -90,7 +90,7 @@
                                Command="{Binding SaveFrameCommand}"
                                Content="프레임 저장"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
-                               ToolTip="다음 프레임 한 장을 PNG 로 저장한다. CPU 리드백이 켜져 있어야 한다." />
+                               ToolTip="다음 프레임 한 장을 captures 폴더에 PNG 로 저장한다. 캡처가 무엇을 잡고 있는지 눈으로 확인하는 용도라 라벨링에는 안 보인다." />
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding CollectFrameCommand}"
                                Content="데이터셋에 담기 (F8)"
@@ -160,7 +160,7 @@
             <dxb:BarCheckItem Content="CPU 리드백"
                               IsChecked="{Binding EnableCpuReadback}"
                               IsEnabled="{Binding IsNotRunning}"
-                              ToolTip="GPU 프레임을 CPU 메모리로 내린다. 켜야 프레임 저장이 된다." />
+                              ToolTip="GPU 프레임을 CPU 메모리로 내린다. 프레임 저장·데이터셋에 담기·몹 찾기가 필요하면 알아서 켠다." />
 
             <dxb:BarItemSeparator />
 
