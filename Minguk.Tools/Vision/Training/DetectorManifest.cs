@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -95,5 +95,7 @@ public sealed class DetectorManifest
         File.WriteAllText(PathFor(modelPath), json, new UTF8Encoding(false));
     }
 
+    /// <summary>사람에게 보여 줄 한 마디. 파일에는 안 적는다 - 계산해서 나오는 값이다.</summary>
+    [JsonIgnore]
     public string Describe => $"{InputWidth}x{InputHeight}";
 }

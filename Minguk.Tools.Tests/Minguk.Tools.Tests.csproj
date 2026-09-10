@@ -21,6 +21,12 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.12" />
+	  <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.9.0" />
+	  <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+	  <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
+	  <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.29.0" />
+	  <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
+	  <PackageReference Include="TorchSharp" Version="0.107.0" />
 	</ItemGroup>
 
 	<!--
