@@ -21,6 +21,13 @@ public enum InputBackend
     PostMessage,
 
     /// <summary>
+    /// <see cref="PostMessage"/> 와 같은 메시지를 넣되, 대상이 처리를 마칠 때까지 기다린다.
+    /// 순서와 타이밍이 확실해지는 대신 대상이 느리면 그만큼 느려진다.
+    /// 대상이 멈춰 있어도 영영 굳지 않도록 <c>SendMessageTimeout</c> 을 쓴다.
+    /// </summary>
+    SendMessage,
+
+    /// <summary>
     /// 커널 드라이버 스택 아래에서 만든다. 진짜 장치가 보낸 입력과 구분되지 않아
     /// 주입 입력을 걸러내는 대상(RawInput·DirectInput 을 쓰는 게임 등)에도 통한다.
     /// 드라이버 설치와 재부팅이 선행되어야 하고, 안 되어 있으면 IsAvailable 이 false 다.
@@ -42,7 +49,8 @@ public static class InputAdapterFactory
     /// </param>
     public static IInputAdapter Create(InputBackend backend, Func<IntPtr> targetWindowProvider) => backend switch
     {
-        InputBackend.PostMessage => new PostMessageInputAdapter(targetWindowProvider),
+        InputBackend.PostMessage => new WindowMessageInputAdapter(targetWindowProvider),
+        InputBackend.SendMessage => new WindowMessageInputAdapter(targetWindowProvider, WindowMessageDelivery.SendWithTimeout),
         InputBackend.Interception => new InterceptionInputAdapter(),
         _ => new SendInputAdapter()
     };

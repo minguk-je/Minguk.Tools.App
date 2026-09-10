@@ -62,18 +62,18 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=Interception
 
 `[N/A ]` 는 실패가 아니다. 그 경로에 해당하지 않는 항목이다.
 
-| 항목 | SendInput | Interception | PostMessage |
-|---|---|---|---|
-| 스캔코드 문자 입력 · Enter | PASS | PASS | N/A — 스캔코드를 넣지 못한다 |
-| 계획 실행 (영문·Shift·Enter·한글) | PASS | PASS | **PASS** — WM_CHAR 로 들어간다 |
-| 가상 키 입력 | PASS | PASS | **PASS** |
-| 시퀀스 (한 바퀴·반복·취소) | PASS | PASS | N/A — 스캔코드를 넣지 못한다 |
-| 계획 (순서·저장·복구·깨진 것) | PASS | PASS | **PASS** |
+| 항목 | SendInput | Interception | PostMessage | SendMessage |
+|---|---|---|---|---|
+| 스캔코드 문자 입력 · Enter | PASS | PASS | N/A — 스캔코드를 넣지 못한다 | N/A — 같음 |
+| 계획 실행 (영문·Shift·Enter·한글) | PASS | PASS | **PASS** — WM_CHAR 로 들어간다 | **PASS** — 같음 |
+| 가상 키 입력 | PASS | PASS | **PASS** | N/A — 아래 설명 |
+| 시퀀스 (한 바퀴·반복·취소) | PASS | PASS | N/A — 스캔코드를 넣지 못한다 | N/A — 같음 |
+| 계획 (순서·저장·복구·깨진 것) | PASS | PASS | **PASS** | **PASS** |
 | 스크립트 (왕복·주석·틀린 줄) | PASS | PASS | **PASS** |
-| 한글 입력 | PASS | PASS | N/A — 스캔코드를 넣지 못한다 |
-| 절대 좌표 이동 · 부드러운 이동 | PASS | PASS | N/A — 진짜 커서를 안 움직인다 |
-| 마우스 좌클릭 | PASS | PASS | N/A — 메시지는 도착하나 WPF 가 안 넘긴다 |
-| 휠 스크롤 | PASS | PASS | **PASS** |
+| 한글 입력(IME 전환) | PASS | PASS | N/A — 한/영 전환은 스캔코드로만 된다 | N/A — 같음 |
+| 절대 좌표 이동 · 부드러운 이동 | PASS | PASS | N/A — 진짜 커서를 안 움직인다 | N/A — 같음 |
+| 마우스 좌클릭 | PASS | PASS | N/A — 메시지는 도착하나 WPF 가 안 넘긴다 | N/A — 같음 |
+| 휠 스크롤 | PASS | PASS | **PASS** | **PASS** |
 
 PostMessage 의 클릭은 `WM_LBUTTONDOWN` 이 창까지 **도착하는 것을 확인했다**(창에서 직접 센다).
 WPF 는 창 하나가 전부라 자식 HWND 가 없고 마우스 입력을 실제 커서 위치로 판단해서, 부친 메시지가
@@ -96,6 +96,25 @@ WPF 는 창 하나가 전부라 자식 HWND 가 없고 마우스 입력을 실�
 
 한글이 들어가는 것은 IME 를 거치는 것이 아니라 **완성된 음절을 그대로 주는 것**이다.
 그래서 대상의 IME 상태를 바꾸는 한/영 단계는 여전히 스캔코드 경로에서만 된다.
+
+## PostMessage 와 SendMessage 의 차이 (실측)
+
+같은 메시지를 넣는다. 건네는 방식만 다르다.
+
+| | PostMessage | SendMessage (`SendMessageTimeout`) |
+|---|---|---|
+| 언제 돌아오나 | 큐에 넣고 곧바로 | 대상이 처리를 마칠 때까지 (한도 300ms) |
+| 대상이 멈춰 있으면 | 이쪽은 안 멈춘다 | 한도만큼 굳고 false 를 돌려준다 |
+| 글자(`WM_CHAR`) | 들어간다 | 들어간다 |
+| **가상 키가 글자가 되나** | **된다** | **안 된다** |
+
+마지막 줄이 갈리는 이유: 부친 키 메시지는 대상의 메시지 루프가 `TranslateMessage` 로
+`WM_CHAR` 를 만들어 준다. **직접 보낸 것은 큐를 거치지 않아 그 단계가 없다.**
+그래서 `SendMessage` 경로에서 키를 보내면 글자가 되지 않는다 — 실측으로 "ab" 가 빈 문자열이었다.
+글자를 넣는 것은 그 경로도 `WM_CHAR` 로 하므로 영향이 없다.
+
+순서와 타이밍이 확실해야 할 때 `SendMessage` 를 쓴다. 그렇지 않으면 `PostMessage` 가 낫다 -
+느린 대상을 만나도 이쪽이 안 굳는다.
 
 계획(`SequencePlan`)과 스크립트(`SequenceScript`)를 다루는 항목들은 경로와 무관하다 - 적어 둔 것을 읽고 쓰는 순수 계산이라
 어느 경로로 돌려도 같아야 하고, 세 경로 모두에서 돌려 그것을 확인한다.

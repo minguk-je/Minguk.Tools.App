@@ -23,20 +23,27 @@ namespace Minguk.Tools.Input.Adapters;
 ///   (GetGUIThreadInfo 로 읽는다 — AttachThreadInput 없이 알 수 있다).
 ///   WPF 는 창 하나가 전부라 어느 쪽이든 같은 곳으로 간다.
 /// </summary>
-public sealed class PostMessageInputAdapter : IInputAdapter, ICharacterInput
+public sealed class WindowMessageInputAdapter : IInputAdapter, ICharacterInput
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
     private readonly Func<IntPtr> _targetWindowProvider;
+    private readonly WindowMessageDelivery _delivery;
 
     /// <summary>마지막으로 옮긴 화면 좌표. 버튼 메시지에 실을 자리를 여기서 가져온다.</summary>
     private (int X, int Y) _lastScreenPoint;
 
     /// <param name="targetWindowProvider">메시지를 받을 최상위 창. 대상이 바뀌면 다음 호출부터 반영된다.</param>
-    public PostMessageInputAdapter(Func<IntPtr> targetWindowProvider)
-        => _targetWindowProvider = targetWindowProvider;
+    /// <param name="delivery">부칠지, 처리될 때까지 기다릴지.</param>
+    public WindowMessageInputAdapter(
+        Func<IntPtr> targetWindowProvider,
+        WindowMessageDelivery delivery = WindowMessageDelivery.Post)
+    {
+        _targetWindowProvider = targetWindowProvider;
+        _delivery = delivery;
+    }
 
-    public string Name => "PostMessage";
+    public string Name => _delivery == WindowMessageDelivery.Post ? "PostMessage" : "SendMessageTimeout";
 
     /// <summary>
     /// 창 메시지는 OS 기본 기능이라 준비할 것이 없다.
@@ -262,14 +269,59 @@ public sealed class PostMessageInputAdapter : IInputAdapter, ICharacterInput
 
     private static int MakeParam(int low, int high) => (low & 0xFFFF) | (high << 16);
 
-    private static bool Post(IntPtr window, uint message, int wParam, int lParam)
+    /// <summary>
+    /// 메시지 하나를 대상 창에 넣는다.
+    /// </summary>
+    /// <remarks>
+    /// <b>Post</b> 는 대상의 메시지 큐에 넣고 곧바로 돌아온다. 대상이 언제 처리하는지는 모른다.
+    /// 그래서 연달아 보낸 글자가 대상에서 밀릴 수 있고, 마지막 글자가 화면에 나타나기 전에
+    /// 다음 단계가 나간다.
+    ///
+    /// <b>SendWithTimeout</b> 은 대상이 처리를 마칠 때까지 기다린다. 순서와 타이밍이 확실해지는
+    /// 대신, 대상이 멈춰 있으면 이쪽도 같이 멈춘다 - 그래서 맨 <c>SendMessage</c> 가 아니라
+    /// <c>SendMessageTimeout</c> 을 쓴다. <see cref="TimeoutMs"/> 안에 답이 없으면 포기하고
+    /// false 를 돌려준다. <c>SMTO_ABORTIFHUNG</c> 도 함께 걸어, 이미 멈춘 것으로 알려진 창이면
+    /// 기다리지도 않는다.
+    /// </remarks>
+    private bool Post(IntPtr window, uint message, int wParam, int lParam)
     {
-        if (NativeMethods.PostMessage(window, message, (IntPtr)wParam, (IntPtr)lParam))
-            return true;
+        if (_delivery == WindowMessageDelivery.Post)
+        {
+            if (NativeMethods.PostMessage(window, message, (IntPtr)wParam, (IntPtr)lParam))
+                return true;
 
-        Logger.Warn($"PostMessage 실패. 메시지 0x{message:X}, 오류 코드 {Marshal.GetLastWin32Error()}");
+            Logger.Warn($"PostMessage 실패. 메시지 0x{message:X}, 오류 코드 {Marshal.GetLastWin32Error()}");
+            return false;
+        }
+
+        var sent = NativeMethods.SendMessageTimeout(
+            window, message, (IntPtr)wParam, (IntPtr)lParam,
+            NativeMethods.SMTO_ABORTIFHUNG | NativeMethods.SMTO_NORMAL,
+            TimeoutMs, out _);
+
+        if (sent != IntPtr.Zero) return true;
+
+        // 0 은 두 가지다 - 시간 안에 답이 없었거나(오류 코드 0 또는 ERROR_TIMEOUT), 진짜 실패거나.
+        var error = Marshal.GetLastWin32Error();
+
+        Logger.Warn(error is 0 or ErrorTimeout
+            ? $"SendMessageTimeout 이 {TimeoutMs}ms 안에 답을 못 받았다. 메시지 0x{message:X} - 대상이 멈춰 있을 수 있다."
+            : $"SendMessageTimeout 실패. 메시지 0x{message:X}, 오류 코드 {error}");
+
         return false;
     }
+
+    /// <summary>
+    /// 대상이 메시지 하나를 처리하기를 기다리는 한도.
+    /// </summary>
+    /// <remarks>
+    /// 글자 하나를 넣는 데 이보다 오래 걸리는 창이면 자동화가 성립하지 않는다.
+    /// 길게 잡으면 멈춘 대상을 만났을 때 이쪽이 그만큼 굳는다 - 한 바퀴에 단계가 여럿이라
+    /// 한도 × 단계 수만큼 굳는 셈이다.
+    /// </remarks>
+    private const uint TimeoutMs = 300;
+
+    private const int ErrorTimeout = 1460;
 
     /// <summary>창 메시지를 부치기만 하므로 놓아 줄 자원이 없다.</summary>
     public void Dispose()
@@ -306,6 +358,15 @@ public sealed class PostMessageInputAdapter : IInputAdapter, ICharacterInput
         // WM_CHAR 로 보낸 한글이 '?' 로 뭉개진다(실측: "한글" -> "?").
         [DllImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
         public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+        public const uint SMTO_NORMAL = 0x0000;
+        public const uint SMTO_ABORTIFHUNG = 0x0002;
+
+        // 여기도 W 판이어야 한다. ANSI 판이 잡히면 WM_CHAR 의 한글이 '?' 로 뭉개진다.
+        [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", SetLastError = true)]
+        public static extern IntPtr SendMessageTimeout(
+            IntPtr window, uint message, IntPtr wParam, IntPtr lParam,
+            uint flags, uint timeoutMs, out IntPtr result);
 
         [DllImport("user32.dll")]
         public static extern bool ScreenToClient(IntPtr window, ref ScreenPoint point);

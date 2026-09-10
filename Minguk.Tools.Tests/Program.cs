@@ -91,6 +91,7 @@ internal static partial class Program
     }
 
     private static IInputAdapter _adapter = null!;
+    private static InputBackend _backend;
     private static InputService _service = null!;
 
     /// <summary>--backend=Interception 처럼 지정한다. 없으면 SendInput.</summary>
@@ -112,6 +113,7 @@ internal static partial class Program
         // PostMessage 경로는 어느 창에 넣을지 알아야 한다. 검증 대상이 이 창이다.
         OurHandle = Read(() => new WindowInteropHelper(ui).Handle);
 
+        _backend = backend;
         _adapter = InputAdapterFactory.Create(backend, () => OurHandle);
         _service = new InputService(_adapter);
 
@@ -221,8 +223,24 @@ internal static partial class Program
     /// 가상 키로 넣는 경로. <c>PreviewInputRouter</c> 가 실제로 쓰는 길이라 세 경로 모두 확인한다.
     /// WPF 가 주는 것이 가상 키라 미리보기 입력은 이쪽으로만 나간다.
     /// </summary>
+    /// <summary>
+    /// 가상 키를 눌렀을 때 글자가 되는지.
+    /// </summary>
+    /// <remarks>
+    /// 부친 키 메시지는 대상의 메시지 루프가 TranslateMessage 로 WM_CHAR 를 만들어 준다.
+    /// <b>직접 보낸 것은 그 단계를 건너뛴다</b> - 큐를 거치지 않기 때문이다.
+    /// 그래서 SendMessageTimeout 경로에서는 키를 보내도 글자가 되지 않는다.
+    /// 못 하는 것이 아니라 그 방식에서 따라오는 성질이라 실패로 세지 않는다.
+    /// 글자를 넣는 것은 그 경로도 WM_CHAR 로 한다("계획 실행" 이 그것을 본다).
+    /// </remarks>
     private static async Task TestVirtualKeyAsync(TestWindow ui)
     {
+        if (_backend == InputBackend.SendMessage)
+        {
+            Skip("가상 키 입력", "직접 보낸 키 메시지는 TranslateMessage 를 안 거쳐 글자가 되지 않는다");
+            return;
+        }
+
         const ushort vkA = 0x41;
         const ushort vkB = 0x42;
 
