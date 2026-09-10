@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -161,6 +161,7 @@ internal static partial class Program
         await TestHangulTypingAsync(ui);
 
         TestScriptFiles();
+        TestLabeling();
         TestInterceptionDriver();
         TestSequencePlan();
         TestSequenceScript();

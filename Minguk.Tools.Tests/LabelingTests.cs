@@ -1,0 +1,250 @@
+﻿using System;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Threading;
+
+using Minguk.Tools.Vision.Labeling;
+
+namespace Minguk.Tools.Tests;
+
+/// <summary>
+/// 라벨이 찍은 그대로 파일에 남고 그대로 돌아오는지.
+/// </summary>
+/// <remarks>
+/// 여기가 틀리면 사람이 반나절 찍어 둔 것이 조용히 어긋난다. 그런데 어긋나도 화면에는
+/// 그럴싸한 사각형이 떠서 눈으로는 알아채기 어렵다 - 학습을 다 돌리고 나서야 안다.
+/// </remarks>
+internal static partial class Program
+{
+    private static void TestLabeling()
+    {
+        // ── 두 점 → 사각형 ──
+
+        var box = LabelBox.FromCorners(0, 0.2, 0.4, 0.6, 0.8);
+
+        Check("두 점으로 사각형 만들기",
+              Near(box.CenterX, 0.4) && Near(box.CenterY, 0.6)
+              && Near(box.Width, 0.4) && Near(box.Height, 0.4),
+              $"가운데 ({box.CenterX:0.##}, {box.CenterY:0.##}) 크기 {box.Width:0.##}x{box.Height:0.##}");
+
+        // 오른쪽 아래에서 왼쪽 위로 끌어도 같은 사각형이어야 한다.
+        var backwards = LabelBox.FromCorners(0, 0.6, 0.8, 0.2, 0.4);
+
+        Check("거꾸로 끌어도 같은 사각형", backwards == box,
+              $"{LabelFile.Format(backwards)} / {LabelFile.Format(box)}");
+
+        // 그림 밖으로 끌면 가장자리에서 멈춘다.
+        var outside = LabelBox.FromCorners(1, -0.5, -0.5, 1.5, 0.5);
+
+        Check("그림 밖으로는 안 나간다",
+              Near(outside.Left, 0d) && Near(outside.Top, 0d) && Near(outside.Right, 1d),
+              LabelFile.Format(outside));
+
+        Check("점 하나짜리는 걸러 낸다",
+              LabelBox.FromCorners(0, 0.5, 0.5, 0.5, 0.5).IsTooSmall,
+              "넓이 0");
+
+        // ── 한 줄 왕복 ──
+
+        var line = LabelFile.Format(box);
+
+        Check("한 줄로 적는 형식", line == "0 0.4 0.6 0.4 0.4", $"[{line}]");
+
+        Check("적은 줄을 그대로 되읽는다",
+              LabelFile.TryParse(line, out var parsed) && parsed == box,
+              LabelFile.Format(parsed));
+
+        // ── 이 형식이 아닌 줄 ──
+
+        var wrong = new (string Line, string Why)[]
+        {
+            ("0 0.4 0.6 0.4", "값이 넷"),
+            ("0 0.4 0.6 0.4 0.4 0.4", "값이 여섯"),
+            ("-1 0.4 0.6 0.4 0.4", "몹 번호가 음수"),
+            ("0 100 200 50 50", "0~1 이 아니다 - 픽셀로 적힌 파일"),
+            ("0 0.4 0.6 0 0", "넓이 0"),
+            ("몹 0.4 0.6 0.4 0.4", "번호 자리에 이름"),
+            (string.Empty, "빈 줄")
+        };
+
+        var accepted = wrong.Where(w => LabelFile.TryParse(w.Line, out _)).ToArray();
+
+        Check("이 형식이 아닌 줄은 안 받는다", accepted.Length == 0,
+              accepted.Length == 0
+                  ? $"{wrong.Length}가지 모두 걸렀다"
+                  : string.Join(", ", accepted.Select(a => $"[{a.Line}] ({a.Why})")));
+
+        // ── 소수점이 . 인지 ──
+        //
+        // 지역을 유럽으로 둔 PC 에서 "0,5" 로 찍히면 빈칸으로 나눈 값의 개수부터 달라진다.
+        // 실제로 문화권을 바꿔 놓고 확인한다 - 코드를 읽어서는 이걸 못 잡는다.
+        var previous = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+
+            var german = LabelFile.Format(box);
+
+            Check("소수점은 지역을 안 탄다",
+                  german == line && LabelFile.TryParse(german, out var back) && back == box,
+                  $"de-DE 에서 [{german}]");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+
+        // ── 파일 왕복 ──
+
+        var root = Path.Combine(Path.GetTempPath(), "minguk-dataset-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var dataset = new LabelDataset(root);
+            dataset.EnsureCreated();
+
+            Check("데이터셋 폴더를 만든다",
+                  Directory.Exists(dataset.ImageDirectory) && Directory.Exists(dataset.LabelDirectory),
+                  dataset.Root);
+
+            // 그림 자리에 아무 파일이나 하나 둔다. 여기서 보는 것은 짝짓기지 그림 내용이 아니다.
+            var imagePath = dataset.NextImagePath(new DateTime(2026, 9, 10, 13, 5, 7, 250));
+            File.WriteAllBytes(imagePath, [0]);
+
+            Check("그림 이름을 시각으로 짓는다",
+                  Path.GetFileName(imagePath) == "20260910-130507-250.png",
+                  Path.GetFileName(imagePath));
+
+            // 같은 시각으로 한 번 더 부르면 겹치지 않게 번호가 붙어야 한다.
+            var second = dataset.NextImagePath(new DateTime(2026, 9, 10, 13, 5, 7, 250));
+            File.WriteAllBytes(second, [0]);
+
+            Check("같은 시각이어도 안 겹친다",
+                  second != imagePath && Path.GetFileName(second) == "20260910-130507-250-2.png",
+                  Path.GetFileName(second));
+
+            var labelPath = dataset.LabelPathFor(imagePath);
+
+            Check("그림과 라벨을 이름으로 짝짓는다",
+                  Path.GetFileNameWithoutExtension(labelPath) == Path.GetFileNameWithoutExtension(imagePath)
+                  && Path.GetExtension(labelPath) == LabelFile.Extension,
+                  Path.GetFileName(labelPath));
+
+            LabelBox[] written =
+            [
+                LabelBox.FromCorners(0, 0.1, 0.1, 0.3, 0.5),
+                LabelBox.FromCorners(2, 0.6, 0.2, 0.9, 0.7)
+            ];
+
+            LabelFile.Save(labelPath, written);
+            var read = LabelFile.Load(labelPath, out var skipped);
+
+            Check("라벨을 파일에 쓰고 다시 읽기",
+                  skipped == 0 && read.SequenceEqual(written),
+                  string.Join(" / ", read.Select(LabelFile.Format)));
+
+            // 망가진 줄이 섞여도 나머지는 살아야 한다.
+            File.WriteAllLines(labelPath,
+            [
+                LabelFile.Format(written[0]),
+                "이건 망가진 줄",
+                LabelFile.Format(written[1])
+            ]);
+
+            var survived = LabelFile.Load(labelPath, out var dropped);
+
+            Check("망가진 줄만 버리고 나머지는 살린다",
+                  dropped == 1 && survived.SequenceEqual(written),
+                  $"{survived.Count}개 살고 {dropped}줄 버림");
+
+            // 다 지우면 파일도 없어져야 한다 - 빈 파일이 남으면 배경 사진으로 학습에 들어간다.
+            LabelFile.Save(labelPath, []);
+
+            Check("라벨을 다 지우면 파일도 지운다", !File.Exists(labelPath), Path.GetFileName(labelPath));
+
+            // ── 목록 ──
+
+            var items = dataset.EnumerateItems();
+
+            // -2 가 먼저다. '-' 이 '.' 보다 앞이라 "...250-2.png" 가 "...250.png" 보다 앞선다.
+            Check("그림을 이름순으로 훑는다",
+                  items.Count == 2
+                  && items[0].ImagePath == second && items[1].ImagePath == imagePath
+                  && items.All(i => !i.HasLabel),
+                  string.Join(", ", items.Select(i => i.Name)));
+
+            LabelFile.Save(items[0].LabelPath, written);
+
+            Check("찍은 것과 안 찍은 것을 가른다",
+                  dataset.EnumerateItems().Count(i => i.HasLabel) == 1,
+                  "2장 중 1장");
+
+            // 이름이 같고 확장자만 다른 그림은 라벨 하나를 나눠 갖게 된다.
+            File.WriteAllBytes(Path.ChangeExtension(imagePath, ".jpg"), [0]);
+
+            Check("확장자만 다른 그림을 알아본다",
+                  dataset.FindDuplicateStems().SequenceEqual([Path.GetFileNameWithoutExtension(imagePath)]),
+                  string.Join(", ", dataset.FindDuplicateStems()));
+
+            // ── 몹 이름 ──
+
+            var classes = new LabelClasses(["슬라임", "버섯"]);
+
+            Check("이름을 번호로 바꿔 준다",
+                  classes.NameOf(0) == "슬라임" && classes.NameOf(1) == "버섯",
+                  string.Join(", ", classes.Names));
+
+            Check("없는 번호도 터지지 않는다", classes.NameOf(7) == "7번", classes.NameOf(7));
+
+            Check("이미 있는 이름을 더하면 그 자리를 준다",
+                  classes.Add("슬라임") == 0 && classes.Count == 2,
+                  $"{classes.Count}개");
+
+            classes.Rename(0, "왕슬라임");
+
+            Check("이름을 바꿔도 번호는 그대로",
+                  classes.NameOf(0) == "왕슬라임" && classes.IndexOf("왕슬라임") == 0,
+                  string.Join(", ", classes.Names));
+
+            Check("있는 이름으로는 못 바꾼다",
+                  Throws(() => classes.Rename(0, "버섯")),
+                  "버섯으로 바꾸기 거절");
+
+            Check("이름에 줄 바꿈을 못 넣는다",
+                  classes.Add("두\n줄") is var added && !classes.Names[added].Contains('\n'),
+                  $"[{classes.Names[^1]}]");
+
+            dataset.SaveClasses(classes);
+            var reloaded = dataset.LoadClasses();
+
+            Check("몹 이름을 파일에 쓰고 다시 읽기",
+                  reloaded.Names.SequenceEqual(classes.Names),
+                  string.Join(", ", reloaded.Names));
+
+            Check("classes.txt 가 없으면 빈 목록",
+                  LabelClasses.Load(Path.Combine(root, "없는파일.txt")).Count == 0,
+                  "터지지 않음");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (Exception) { }
+        }
+    }
+
+    private static bool Near(double a, double b) => Math.Abs(a - b) < 1e-9;
+
+    private static bool Throws(Action action)
+    {
+        try
+        {
+            action();
+            return false;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+}
