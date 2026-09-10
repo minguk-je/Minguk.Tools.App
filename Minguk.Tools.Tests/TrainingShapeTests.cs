@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 
@@ -41,19 +41,39 @@ internal static partial class Program
 
         dataset.SaveClasses(classes);
 
-        // 왼쪽 위 1/4 을 차지하는 사각형. 320x200 이면 (0,0)~(160,100) 이어야 한다.
+        // 왼쪽 위 1/4 을 차지하는 사각형.
+        //
+        // 곱하는 것은 원본(320x200)이 아니라 <b>모델이 보는 크기</b>다. 파이프라인이 그림을
+        // 그 크기로 늘려 놓은 뒤에 망이 보기 때문이다. 원본을 곱하면 사각형만 원본 자리에
+        // 남고 그림은 줄어들어 둘이 통째로 어긋나는데, 학습은 그대로 돌아가고 몇 시간 뒤에
+        // 아무것도 못 배운 모델이 나온다.
         var box = LabelBox.FromCorners(1, 0d, 0d, 0.5, 0.5);
 
         LabelFile.Save(dataset.LabelPathFor(realPng), [box]);
 
         var sample = TrainingSample.From(new LabelItem(realPng, dataset.LabelPathFor(realPng)), classes);
 
-        Check("0~1 을 픽셀로 바꾼다",
+        Check("0~1 을 모델이 보는 크기의 픽셀로 바꾼다",
               sample is not null
               && sample.Box.Length == 4
               && Near(sample.Box[0], 0f) && Near(sample.Box[1], 0f)
-              && Near(sample.Box[2], 160f) && Near(sample.Box[3], 100f),
-              sample is null ? "(못 만듦)" : string.Join(", ", sample.Box));
+              && Near(sample.Box[2], DetectorTrainer.InputWidth / 2f)
+              && Near(sample.Box[3], DetectorTrainer.InputHeight / 2f),
+              sample is null ? "(못 만듦)" : string.Join(", ", sample.Box)
+                  + $" (모델 {DetectorTrainer.InputWidth}x{DetectorTrainer.InputHeight})");
+
+        // 원본 크기가 달라도 같은 값이 나와야 한다 - 그래야 1920x1080 으로 담아 둔 그림과
+        // 320 으로 줄여 넣은 프레임이 같은 것을 가리킨다.
+        var big = Path.Combine(dataset.ImageDirectory, "20260910-150000-002.png");
+
+        File.WriteAllBytes(big, MakePng(1920, 1080));
+        LabelFile.Save(dataset.LabelPathFor(big), [box]);
+
+        var fromBig = TrainingSample.From(new LabelItem(big, dataset.LabelPathFor(big)), classes);
+
+        Check("원본 크기가 달라도 같은 자리로 간다",
+              fromBig is not null && sample is not null && fromBig.Box.SequenceEqual(sample.Box),
+              fromBig is null ? "(못 만듦)" : string.Join(", ", fromBig.Box));
 
         Check("몹 번호를 이름으로 되돌린다",
               sample is not null && sample.Labels.SequenceEqual(["버섯"]),

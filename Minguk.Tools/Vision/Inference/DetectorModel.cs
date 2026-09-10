@@ -103,7 +103,7 @@ public sealed class DetectorModel : IDisposable
     /// <summary>
     /// 그림 하나에서 찾는다.
     /// </summary>
-    /// <param name="imagePath">볼 그림.</param>
+    /// <param name="imagePath">볼 그림. 크기는 아무래도 좋다 - 모델이 제 크기로 맞춘다.</param>
     /// <param name="minimumScore">이보다 자신 없는 것은 버린다.</param>
     /// <remarks>
     /// 모델은 <b>픽셀</b> 좌표를 내놓는다. 우리는 0~1 로 다루므로 여기서 나눈다 -
@@ -113,13 +113,13 @@ public sealed class DetectorModel : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (!ImageSize.TryRead(imagePath, out var width, out var height))
-            throw new InvalidOperationException($"그림 크기를 읽지 못했습니다: {imagePath}");
-
         // 학습 때와 같은 그릇으로 넣는다. 라벨 쪽은 비워 둔다 - 예측에는 안 쓰인다.
         var prediction = _engine.Predict(new TrainingSample { ImagePath = imagePath });
 
-        return Convert(prediction, classes, width, height, minimumScore);
+        // 넣은 파일이 몇 픽셀이든 파이프라인이 InputWidth x InputHeight 로 늘려 놓고,
+        // 망은 그것을 본다. 그러니 돌아온 좌표도 그 크기의 것이다 - 파일 크기로 나누면 틀린다.
+        return Convert(prediction, classes,
+                       DetectorTrainer.InputWidth, DetectorTrainer.InputHeight, minimumScore);
     }
 
     /// <summary>

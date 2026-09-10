@@ -49,6 +49,26 @@ public static class DetectorTrainer
     /// <summary>학습 결과를 두는 이름. 데이터셋 폴더 안에 둔다 - 그 라벨로 만든 것이므로.</summary>
     public const string ModelFileName = "detector.zip";
 
+    /// <summary>
+    /// 모델이 실제로 보는 크기. <b>학습과 추론이 같아야 한다.</b>
+    /// </summary>
+    /// <remarks>
+    /// AutoFormerV2 는 넣은 그림을 줄이지 않고 그대로 본다. 그래서 크기를 안 맞추면 두 가지가
+    /// 한꺼번에 어긋난다 - 1920x1080 으로 학습하면 값이 픽셀 수에 비례해 <b>몇십 배</b> 걸리고,
+    /// 실시간 쪽은 320 으로 줄여 넣으므로 <b>학습한 것과 다른 크기</b>를 보게 된다.
+    /// 실측으로 그 어긋남은 검출을 망친다(320x200 으로 학습한 모델이 1080p 에서 2개 중 1개만 찾았다).
+    ///
+    /// 그래서 크기 맞추기를 <b>모델 파이프라인 안에</b> 넣는다. 저장된 모델이 그것을 들고 다니므로
+    /// 추론 쪽은 아무것도 안 해도 학습 때와 같은 것을 보게 된다.
+    ///
+    /// 16:9 로 잡은 것은 게임 화면이 대개 그 비율이라, 늘려 맞출 때 찌그러짐이 거의 없어서다.
+    /// 담아 두는 그림 자체는 원본 크기 그대로 둔다 - 나중에 다른 크기로 다시 학습할 수 있고,
+    /// 라벨은 0~1 이라 크기를 안 탄다.
+    /// </remarks>
+    public const int InputWidth = 320;
+
+    public const int InputHeight = 180;
+
     /// <summary>모델이 내놓는 열 이름들. 추론 쪽(<see cref="Inference.DetectorModel"/>)과 같아야 한다.</summary>
     public const string PredictedLabelColumn = "PredictedLabel";
 
@@ -119,6 +139,13 @@ public static class DetectorTrainer
             // imageFolder 를 null 로 두면 ImagePath 를 전체 경로로 본다.
             var pipeline = ml.Transforms.Conversion.MapValueToKey("LabelKey", nameof(TrainingSample.Labels))
                 .Append(ml.Transforms.LoadImages("Image", imageFolder: null, nameof(TrainingSample.ImagePath)))
+
+                // 넣기 전에 크기를 맞춘다. Fill 은 비율을 안 지키고 늘려 채우는데, 그래야
+                // 0~1 라벨이 그대로 곱해져 맞는다(축마다 따로 늘어난다). IsoPad 로 여백을
+                // 두면 라벨 쪽에서도 같은 여백을 계산해 줘야 해서 어긋나기 쉽다.
+                .Append(ml.Transforms.ResizeImages(
+                    "Image", InputWidth, InputHeight, "Image",
+                    Microsoft.ML.Transforms.Image.ImageResizingEstimator.ResizingKind.Fill))
                 .Append(ml.MulticlassClassification.Trainers.ObjectDetection(
                     labelColumnName: "LabelKey",
                     boundingBoxColumnName: nameof(TrainingSample.Box),
