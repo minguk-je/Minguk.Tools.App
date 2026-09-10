@@ -39,7 +39,9 @@ public partial class InputAutomationViewModel
             return;
         }
 
-        AdapterStatus = $"{_adapter.Name} · 글자 입력 {(_service.SupportsTyping ? "가능" : "불가")}"
+        // "글자 입력 불가" 라고 적어 두었더니 PostMessage 로는 아무것도 못 넣는 줄 알게 됐다.
+        // 그 경로도 영문·숫자·문장부호·Enter 는 넣는다. 못 하는 것은 한글이다.
+        AdapterStatus = $"{_adapter.Name} · {(_service.SupportsTyping ? "한글·영문 입력" : "영문만 입력 (한글 불가)")}"
                       + $" · 진짜 커서 {(_adapter.GetCursorPosition() is null ? "안 움직임" : "움직임")}";
     });
 
