@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Minguk.Base.Utilities;
+using DevExpress.Xpf.Core;
 using Minguk.Tools.Helper;
 using System.Windows.Input;
 using Minguk.Tools.Input;
@@ -53,27 +54,40 @@ public partial class InputAutomationViewModel
     /// 편집기 색을 지금 테마에 맞춘다.
     /// </summary>
     /// <remarks>
-    /// 테마 키를 짚지 않고 <b>이미 테마가 입혀진 컨트롤에서 실제 색을 잰다.</b>
-    /// 키 이름은 DevExpress 판마다 달라지고, 팔레트로 만든 테마(파란색 같은)는 이름만으로
-    /// 밝고 어두움을 알 수 없다. 옆의 TextEdit 은 그 테마 그대로 그려져 있으므로
-    /// 거기서 읽으면 어떤 테마든 따라간다.
-    ///
-    /// 화면이 뜬 뒤에 불러야 한다. 그리기 전에는 색이 아직 안 정해져 있다.
+    /// 색은 경량 테마 팔레트에서 읽는다(<see cref="SequenceScriptHighlighting"/>).
+    /// AvalonEdit 은 경량 테마를 안 타므로 이렇게 옮겨 주지 않으면 테마를 바꿔도 이 편집기만
+    /// 그대로 남는다.
     /// </remarks>
     private void ApplyEditorTheme() => Guard(() =>
     {
-        var sample = FindControl<DevExpress.Xpf.Editors.TextEdit>("ThemeSampleObjectService");
-
-        SequenceScriptHighlighting.SampleFrom(sample?.Background, sample?.Foreground);
-
         EditorBackground = SequenceScriptHighlighting.Background;
         EditorForeground = SequenceScriptHighlighting.Foreground;
         EditorLineNumberForeground = SequenceScriptHighlighting.LineNumberForeground;
         EditorBorder = SequenceScriptHighlighting.Border;
         Highlighting = SequenceScriptHighlighting.Current;
-
-        if (sample is null) Logger.Debug("테마를 잴 컨트롤을 못 찾아 기본 색을 쓴다.");
     });
+
+    /// <summary>
+    /// 테마가 바뀌면 편집기 색을 다시 잰다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="LightweightThemeManager.CurrentThemeChanged"/> 를 듣는다. 테마 <b>이름</b>이
+    /// 바뀌는 이벤트가 아니라 실제로 새 팔레트가 들어온 뒤에 오는 것이라, 그때 읽으면 새 색이다.
+    ///
+    /// 정적 이벤트라 화면이 닫힐 때 반드시 풀어야 한다. 안 풀면 닫은 화면이 앱이 살아 있는
+    /// 동안 계속 붙들려 있는다.
+    /// </remarks>
+    private void OnApplicationThemeChanged(object? sender, EventArgs e)
+    {
+        if (DispatcherService is { } dispatcher)
+        {
+            dispatcher.BeginInvoke(ApplyEditorTheme);
+            return;
+        }
+
+        // 화면 밖(검증 하네스 같은 곳)에서는 서비스가 없다. 그래도 배선은 돌아야 한다.
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(ApplyEditorTheme);
+    }
 
     private void OnSelectedInputBackendChanged()
     {

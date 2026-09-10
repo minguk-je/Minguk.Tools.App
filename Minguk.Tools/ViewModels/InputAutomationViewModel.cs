@@ -90,6 +90,13 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     /// 편집기를 못 잡아도 화면은 돈다 - 줄 담기가 캐럿 자리 대신 끝에 붙을 뿐이다.
     /// 그래서 여기서 막지 않는다.
     /// </remarks>
+    /// <remarks>
+    /// 테마가 바뀔 때 편집기 색을 다시 재려고 구독한다. 정적 이벤트라 <see cref="ReleaseResources"/>
+    /// 에서 반드시 풀어야 한다.
+    /// </remarks>
+    protected override void InitializeObservable()
+        => DevExpress.Xpf.Core.LightweightThemeManager.CurrentThemeChanged += OnApplicationThemeChanged;
+
     protected override void InitializeControls()
     {
 
@@ -203,6 +210,8 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         _adapter?.Dispose();
         _adapter = null;
         _service = null;
+
+        DevExpress.Xpf.Core.LightweightThemeManager.CurrentThemeChanged -= OnApplicationThemeChanged;
 
         _editor = null;
 

@@ -1,7 +1,10 @@
 using System;
 using System.Windows;
 using System.Windows.Threading;
+using DevExpress.Xpf.Core;
 using Minguk.Tools.Input;
+using System.Windows.Media;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Source;
 using Minguk.Tools.ViewModels;
 using Minguk.Tools.Views;
@@ -46,6 +49,7 @@ internal static class ViewSmokeProbe
             failures += CheckMenu("Minguk.Tools.Views.CaptureMonitorView");
 
             failures += CheckPathWarning();
+            failures += CheckEditorPalette();
 
             app.Shutdown();
         });
@@ -113,6 +117,79 @@ internal static class ViewSmokeProbe
             Console.WriteLine($"[FAIL] 못 보내는 단계 알림 — {ex.GetType().Name}: {ex.Message}");
             return 1;
         }
+    }
+
+    /// <summary>
+    /// 편집기 색이 테마 팔레트에서 나오는지.
+    /// </summary>
+    /// <remarks>
+    /// AvalonEdit 은 경량 테마를 안 타서 색을 직접 줘야 한다. 예전에는 테마 <b>이름</b>으로
+    /// 밝은 벌·어두운 벌을 갈랐는데, 팔레트로 만든 테마(VS2019Blue 같은)는 이름에 Dark 도
+    /// Black 도 없어 밝은 쪽으로 잘못 봤다. 지금은 팔레트에서 실제 색을 읽는다.
+    ///
+    /// <b>여기서 못 보는 것</b>: 테마를 바꿨을 때 따라오는지. LightweightThemeManager 는
+    /// 화면 없이 도는 여기서 테마 변경을 따라오지 않고(실측: 이름을 바꿔도 CurrentTheme 이
+    /// Office2019Colorful 그대로였다) CurrentTheme 세터도 공개가 아니다.
+    /// 그 갈래는 앱에서 눈으로 봐야 한다.
+    /// </remarks>
+    private static int CheckEditorPalette()
+    {
+        try
+        {
+            var palette = LightweightThemeManager.CurrentTheme?.Palette;
+
+            if (palette is null || !palette.Contains("Brush.Editor.Background"))
+            {
+                Console.WriteLine("[N/A ] 편집기 색 — 지금 테마에 팔레트가 없다");
+                return 0;
+            }
+
+            var expected = palette["Brush.Editor.Background"] as SolidColorBrush;
+            var actual = SequenceScriptHighlighting.Background as SolidColorBrush;
+
+            var same = expected is not null && actual is not null && expected.Color == actual.Color;
+
+            // 줄 번호는 본문과 바탕 사이여야 한다. 둘 중 하나와 같으면 섞은 것이 아니다.
+            var line = SequenceScriptHighlighting.LineNumberForeground as SolidColorBrush;
+            var fore = SequenceScriptHighlighting.Foreground as SolidColorBrush;
+            var between = line is not null && fore is not null && actual is not null
+                          && line.Color != fore.Color && line.Color != actual.Color;
+
+            if (same && between)
+            {
+                Console.WriteLine($"[PASS] 편집기 색 — 팔레트({LightweightThemeManager.CurrentTheme!.Name})에서 읽음 "
+                                  + $"바탕 {actual!.Color} · 글자 {fore!.Color} · 줄번호 {line!.Color}");
+                return 0;
+            }
+
+            Console.WriteLine($"[FAIL] 편집기 색 — 바탕 일치 {same} / 줄번호가 사이값 {between}");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 편집기 색 — {ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
+    }
+
+    /// <summary>ViewModel 의 비공개 메서드를 부른다. 검사용 공개 API 를 제품에 내지 않으려는 것이다.</summary>
+    private static void Invoke(InputAutomationViewModel vm, string name)
+    {
+        var type = vm.GetType();
+
+        while (type is not null)
+        {
+            var method = type.GetMethod(name,
+                System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.DeclaredOnly);
+
+            if (method is not null) { method.Invoke(vm, null); return; }
+
+            type = type.BaseType;
+        }
+
+        throw new MissingMethodException(name);
     }
 
     /// <summary>
