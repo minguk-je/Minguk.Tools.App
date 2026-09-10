@@ -9,6 +9,7 @@
              xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
              xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
              xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:markup="clr-namespace:Minguk.Tools.Markup"
              xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
              xmlns:dependency="clr-namespace:Minguk.Base.Dependency;assembly=Minguk.Base"
              xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
@@ -95,6 +96,14 @@
                                Content="데이터셋에 담기"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
                                ToolTip="라벨링 화면이 읽는 폴더에 한 장 담는다. 여기 담은 그림에 몹 사각형을 찍는다." />
+            <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                              Content="몹 찾기"
+                              Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
+                              IsChecked="{Binding IsMobDetectionOn}"
+                              ToolTip="학습한 모델로 0.25초에 한 번 찾아 점선으로 겹쳐 그린다. CPU 리드백이 켜져 있어야 한다." />
+
+            <!-- 몇 마리를 몇 ms 에 찾았는지. 실제 속도가 여기 그대로 뜬다. -->
+            <dxb:BarStaticItem Content="{Binding DetectionStatus}" />
         </dxb:MainMenuControl>
 
         <!-- ── 설정 첫 줄 ──────────────────────────────────────────── -->
@@ -254,14 +263,24 @@
                                                PassEventArgsToCommand="True" />
                     </dxmvvm:Interaction.Behaviors>
 
-                    <Image RenderOptions.BitmapScalingMode="LowQuality"
-                           Source="{Binding PreviewImage}"
-                           Stretch="Uniform">
+                    <Grid>
+                        <Image RenderOptions.BitmapScalingMode="LowQuality"
+                               Source="{Binding PreviewImage}"
+                               Stretch="Uniform">
 
-                        <dxmvvm:Interaction.Behaviors>
-                            <dxmvvm:UIObjectService x:Name="PreviewImageObjectService" />
-                        </dxmvvm:Interaction.Behaviors>
-                    </Image>
+                            <dxmvvm:Interaction.Behaviors>
+                                <dxmvvm:UIObjectService x:Name="PreviewImageObjectService" />
+                            </dxmvvm:Interaction.Behaviors>
+                        </Image>
+
+                        <!--
+                            찾은 몹을 점선으로 겹쳐 그린다. Image 와 정확히 같은 자리를 차지하고
+                            Source 로 원본 크기만 받아 Uniform 레터박스를 스스로 계산한다.
+                            마우스는 통과시킨다 - 미리보기는 클릭을 대상 창으로 넘기는 일을 한다.
+                        -->
+                        <markup:DetectionOverlay Detections="{Binding Detections}"
+                                                 Source="{Binding PreviewImage}" />
+                    </Grid>
                 </Border>
             </dxlc:LayoutGroup>
 

@@ -55,7 +55,7 @@ public class FrameLogRow
 /// 프레임 콜백은 스레드풀에서 돈다(<see cref="WgcCaptureSession"/> 참조).
 /// 그래서 콜백에서는 카운터만 올리고, 그리드에 넣는 일은 1초마다 한 번 디스패처로 넘긴다.
 /// </summary>
-public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
+public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 {
     /// <summary>그리드에 남겨 둘 줄 수. 오래 켜 두면 메모리를 먹으니 잘라 낸다.</summary>
     private const int MaxRows = 600;
@@ -222,6 +222,32 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         get => GetProperty(() => EnableCpuReadback);
         set => SetProperty(() => EnableCpuReadback, value, OnReadbackChanged);
     }
+
+    // ── 몹 찾기 ──────────────────────────────────────────────────────────
+
+    /// <summary>학습한 모델로 프레임에서 몹을 찾을지.</summary>
+    public bool IsMobDetectionOn
+    {
+        get => GetProperty(() => IsMobDetectionOn);
+        set => SetProperty(() => IsMobDetectionOn, value, OnMobDetectionChanged);
+    }
+
+    /// <summary>이보다 자신 없는 것은 안 보여 준다.</summary>
+    public double DetectMinimumScore
+    {
+        get => GetProperty(() => DetectMinimumScore);
+        set => SetProperty(() => DetectMinimumScore, value);
+    }
+
+    /// <summary>몇 마리를 몇 ms 에 찾았는지. 실제 속도가 여기 그대로 뜬다.</summary>
+    public string? DetectionStatus
+    {
+        get => GetProperty(() => DetectionStatus);
+        set => SetProperty(() => DetectionStatus, value);
+    }
+
+    /// <summary>찾은 것들. 미리보기 위에 겹쳐 그린다.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<Markup.PredictedBox> Detections { get; } = [];
 
     public CaptureTarget? SelectedTarget
     {
@@ -443,6 +469,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     protected override void RestoreSettings()
     {
         _lastPreviewGroupHeight = GetSetting(nameof(_lastPreviewGroupHeight), DefaultPreviewHeight);
+
+        // 켜진 채로 복구하지 않는다 - 화면을 열자마자 모델 68MB 를 읽으면 뜨는 것이 느려진다.
+        DetectMinimumScore = GetSetting(nameof(DetectMinimumScore), 0.5);
 
         if (_lastPreviewGroupHeight < 80)
             _lastPreviewGroupHeight = DefaultPreviewHeight;
@@ -712,6 +741,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         if (Interlocked.CompareExchange(ref _isCollectFrameRequested, 0, 1) == 1)
             TryCollectFrame(e);
+
+        // 0.25초에 한 번만, 앞의 것이 끝났을 때만. 여기서 기다리면 프레임이 밀린다.
+        MaybeDetect(e);
 
         if (ShowPreview)
             TryPushPreview(e);
@@ -1495,7 +1527,13 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     }
 
     /// <summary>탭이 닫힐 때. 베이스가 SaveSettings 다음에 불러 준다.</summary>
-    protected override void ReleaseResources() => DisposeSession();
+    protected override void ReleaseResources()
+    {
+        // 모델은 68MB 를 물고 있고 libtorch 는 GPU 메모리를 잡는다. 화면을 닫으면 놓는다.
+        ReleaseDetector();
+
+        DisposeSession();
+    }
 
     public void Dispose() => DisposeSession();
 }
