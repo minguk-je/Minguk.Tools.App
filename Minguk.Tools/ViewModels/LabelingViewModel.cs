@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reactive.Disposables;
 
 using DevExpress.Mvvm;
@@ -78,6 +79,10 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
         TrainEpochs = GetSetting(nameof(TrainEpochs), 20);
         MinimumScore = GetSetting(nameof(MinimumScore), 0.5);
+
+        var size = GetSetting(nameof(SelectedInputSize), InputSizes[0]);
+
+        SelectedInputSize = InputSizes.Contains(size) ? size : InputSizes[0];
     }
 
     protected override void OnLoaded()
@@ -92,6 +97,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
         SetSetting(nameof(TrainEpochs), TrainEpochs);
         SetSetting(nameof(MinimumScore), MinimumScore);
+        SetSetting(nameof(SelectedInputSize), SelectedInputSize ?? InputSizes[0]);
     }
 
     /// <summary>

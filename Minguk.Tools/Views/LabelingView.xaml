@@ -243,6 +243,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
@@ -261,20 +262,36 @@
                               MaxValue="500"
                               MinValue="1"
                               ToolTip="적으면 아무것도 못 배우고 많으면 외워 버립니다." />
+                <!--
+                    작은 몹을 놓칠 때만 키운다. 값이 픽셀 수에 비례해 늘어난다 -
+                    320x180 이 220ms, 640x360 이 587ms 다(실측). 학습 시간도 같은 비율이다.
+                    바꾸면 반드시 다시 학습해야 한다 - 이미 만들어 둔 모델은 제가 학습된
+                    크기를 옆에 들고 있어(detector.json) 여기를 바꿔도 안 흔들린다.
+                -->
+                <dxe:ComboBoxEdit Grid.Row="0"
+                                  Grid.Column="2"
+                                  Width="110"
+                                  Margin="0,0,6,4"
+                                  IsEnabled="{Binding IsTraining, Converter={StaticResource NotBool}}"
+                                  IsTextEditable="False"
+                                  ItemsSource="{Binding InputSizes}"
+                                  SelectedItem="{Binding SelectedInputSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="모델이 실제로 볼 크기. 작은 몹을 놓칠 때만 키웁니다 - 키우면 느려지고 다시 학습해야 합니다." />
+
                 <dx:SimpleButton Grid.Row="0"
-                                 Grid.Column="2"
+                                 Grid.Column="3"
                                  Width="110"
                                  Margin="0,0,6,4"
                                  Command="{Binding DoTrainCommand}"
                                  Content="학습 시작" />
                 <dx:SimpleButton Grid.Row="0"
-                                 Grid.Column="3"
+                                 Grid.Column="4"
                                  Width="80"
                                  Margin="0,0,6,4"
                                  Command="{Binding DoCancelTrainCommand}"
                                  Content="멈추기" />
                 <dxe:TextEdit Grid.Row="0"
-                              Grid.Column="4"
+                              Grid.Column="5"
                               Margin="0,0,0,4"
                               EditValue="{Binding TrainingStatus, Mode=OneWay}"
                               IsReadOnly="True"
@@ -289,9 +306,11 @@
                            Margin="0,0,6,4"
                            VerticalAlignment="Center"
                            Text="자신 있는 정도" />
+                <!-- 0번 열은 크기 고르기가 차지했다. 여기서는 두 칸을 걸쳐 빈 자리를 없앤다. -->
                 <dxe:TrackBarEdit Grid.Row="1"
                                   Grid.Column="1"
-                                  Width="140"
+                                  Grid.ColumnSpan="2"
+                                  Width="195"
                                   Margin="0,0,6,4"
                                   EditValue="{Binding MinimumScore, Mode=TwoWay}"
                                   Maximum="0.95"
@@ -300,20 +319,20 @@
                                   TickFrequency="0.1"
                                   ToolTip="낮추면 놓친 것까지 보이지만 헛것도 같이 늘어납니다." />
                 <dx:SimpleButton Grid.Row="1"
-                                 Grid.Column="2"
+                                 Grid.Column="3"
                                  Width="110"
                                  Margin="0,0,6,4"
                                  Command="{Binding DoDetectCommand}"
                                  Content="찾아보기"
                                  ToolTip="학습한 모델로 이 그림에서 몹을 찾아 점선으로 겹쳐 그립니다." />
                 <dx:SimpleButton Grid.Row="1"
-                                 Grid.Column="3"
+                                 Grid.Column="4"
                                  Width="100"
                                  Margin="0,0,6,4"
                                  Command="{Binding DoClearPredictionsCommand}"
                                  Content="점선 지우기" />
                 <dxe:TextEdit Grid.Row="1"
-                              Grid.Column="4"
+                              Grid.Column="5"
                               EditValue="{Binding DetectStatus, Mode=OneWay}"
                               IsReadOnly="True"
                               NullText="아직 안 찾아봤습니다." />
@@ -324,7 +343,7 @@
                 -->
                 <TextBlock Grid.Row="2"
                            Grid.Column="0"
-                           Grid.ColumnSpan="5"
+                           Grid.ColumnSpan="6"
                            Margin="0,4,0,0"
                            Foreground="#BF6A02"
                            Text="{Binding TrainingNotice}"

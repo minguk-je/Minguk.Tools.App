@@ -19,6 +19,10 @@
 		<AssemblyName>Minguk.Tools.Tests</AssemblyName>
 	</PropertyGroup>
 
+	<ItemGroup>
+	  <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.12" />
+	</ItemGroup>
+
 	<!--
 	  단위 테스트 프레임워크를 쓰지 않는다. 검증 대상이 실제 커서 위치와 실제 창의 입력 처리라
 	  목으로는 확인할 수 없다. 창을 띄우고 입력을 쏜 뒤 결과를 되읽는 실행형 하네스다.

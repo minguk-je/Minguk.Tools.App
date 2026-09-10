@@ -99,8 +99,10 @@ public partial class LabelingViewModel
         foreach (var detection in found)
             Predictions.Add(new PredictedBox(detection.Box, detection.Describe));
 
+        var trained = _model!.Manifest.Describe;
+
         DetectStatus = found.Count == 0
-            ? $"못 찾았습니다 (자신 있는 정도 {MinimumScore:P0} 이상만 봅니다)."
+            ? $"못 찾았습니다 (모델 {trained}, 자신 있는 정도 {MinimumScore:P0} 이상만 봅니다)."
             : $"{found.Count}마리 찾았습니다: {string.Join(", ", found.Take(4).Select(d => d.Describe))}"
               + (found.Count > 4 ? " …" : string.Empty);
     }

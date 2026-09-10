@@ -19,8 +19,9 @@ namespace Minguk.Tools.Vision.Training;
 /// <param name="Classes">몹 종류 수.</param>
 /// <param name="Elapsed">걸린 시간.</param>
 /// <param name="UsedGpu">GPU 로 돌았는지.</param>
+/// <param name="InputSize">모델이 실제로 본 크기.</param>
 public readonly record struct TrainingResult(
-    string ModelPath, int Images, int Boxes, int Classes, TimeSpan Elapsed, bool UsedGpu);
+    string ModelPath, int Images, int Boxes, int Classes, TimeSpan Elapsed, bool UsedGpu, string InputSize);
 
 /// <summary>
 /// 찍어 둔 라벨로 몹 검출 모델을 학습시킨다.
@@ -65,9 +66,24 @@ public static class DetectorTrainer
     /// 담아 두는 그림 자체는 원본 크기 그대로 둔다 - 나중에 다른 크기로 다시 학습할 수 있고,
     /// 라벨은 0~1 이라 크기를 안 탄다.
     /// </remarks>
-    public const int InputWidth = 320;
+    public const int DefaultInputWidth = 320;
 
-    public const int InputHeight = 180;
+    public const int DefaultInputHeight = 180;
+
+    /// <summary>
+    /// 화면에서 고를 수 있는 크기들. 16:9 로만 둔다.
+    /// </summary>
+    /// <remarks>
+    /// 실측한 한 장 값(GTX 1060): 320x180 = 220ms · 480x270 = 439ms · 640x360 = 587ms ·
+    /// 960x540 = 1,064ms. 학습 시간도 같은 비율로 늘어난다. 작은 몹을 놓칠 때만 키운다.
+    /// </remarks>
+    public static readonly (int Width, int Height)[] InputSizes =
+    [
+        (320, 180),
+        (480, 270),
+        (640, 360),
+        (960, 540)
+    ];
 
     /// <summary>모델이 내놓는 열 이름들. 추론 쪽(<see cref="Inference.DetectorModel"/>)과 같아야 한다.</summary>
     public const string PredictedLabelColumn = "PredictedLabel";
@@ -85,9 +101,11 @@ public static class DetectorTrainer
     /// 라벨이 없는 그림은 뺀다. 우리 목록의 "안 찍음" 은 <b>아직 안 본 그림</b>이라는 뜻이지
     /// 비었다는 뜻이 아니라, 넣으면 "여기엔 아무것도 없다" 를 가르치게 된다.
     /// </remarks>
-    public static IReadOnlyList<TrainingSample> Collect(LabelDataset dataset, LabelClasses classes)
+    public static IReadOnlyList<TrainingSample> Collect(LabelDataset dataset, LabelClasses classes,
+                                                       int inputWidth = DefaultInputWidth,
+                                                       int inputHeight = DefaultInputHeight)
         => dataset.EnumerateItems()
-            .Select(item => TrainingSample.From(item, classes))
+            .Select(item => TrainingSample.From(item, classes, inputWidth, inputHeight))
             .OfType<TrainingSample>()
             .ToArray();
 
@@ -101,7 +119,9 @@ public static class DetectorTrainer
     public static Task<TrainingResult> TrainAsync(LabelDataset dataset,
                                                   int maxEpoch,
                                                   IProgress<string>? progress = null,
-                                                  CancellationToken token = default)
+                                                  CancellationToken token = default,
+                                                  int inputWidth = DefaultInputWidth,
+                                                  int inputHeight = DefaultInputHeight)
         => Task.Run(() =>
         {
             if (!LibTorchRuntime.IsLoaded)
@@ -114,7 +134,7 @@ public static class DetectorTrainer
 
             progress?.Report("찍어 둔 라벨을 모으는 중...");
 
-            var samples = Collect(dataset, classes);
+            var samples = Collect(dataset, classes, inputWidth, inputHeight);
 
             if (samples.Count == 0)
                 throw new InvalidOperationException("사각형이 찍힌 그림이 없습니다. 라벨링 화면에서 먼저 찍으세요.");
@@ -126,7 +146,8 @@ public static class DetectorTrainer
                         $"/ {maxEpoch} epoch / GPU {usedGpu}");
 
             progress?.Report($"그림 {samples.Count}장 · 사각형 {boxes}개 · 몹 {classes.Count}종 " +
-                             $"으로 {maxEpoch} epoch 학습합니다 ({(usedGpu ? "GPU" : "CPU")})");
+                             $"을 {inputWidth}x{inputHeight} 로 {maxEpoch} epoch 학습합니다 " +
+                             $"({(usedGpu ? "GPU" : "CPU")})");
 
             token.ThrowIfCancellationRequested();
 
@@ -144,7 +165,7 @@ public static class DetectorTrainer
                 // 0~1 라벨이 그대로 곱해져 맞는다(축마다 따로 늘어난다). IsoPad 로 여백을
                 // 두면 라벨 쪽에서도 같은 여백을 계산해 줘야 해서 어긋나기 쉽다.
                 .Append(ml.Transforms.ResizeImages(
-                    "Image", InputWidth, InputHeight, "Image",
+                    "Image", inputWidth, inputHeight, "Image",
                     Microsoft.ML.Transforms.Image.ImageResizingEstimator.ResizingKind.Fill))
                 .Append(ml.MulticlassClassification.Trainers.ObjectDetection(
                     labelColumnName: "LabelKey",
@@ -172,8 +193,22 @@ public static class DetectorTrainer
 
             ml.Model.Save(model, data.Schema, modelPath);
 
-            Logger.Info($"학습 끝 - {stopwatch.Elapsed.TotalSeconds:0.0}초, {modelPath}");
+            // 어떤 크기로 학습했는지 모델 옆에 남긴다. 추론이 이걸 보고 좌표를 되돌린다 -
+            // 설정에서 읽으면 크기를 바꾼 순간 옛 모델의 좌표가 조용히 어긋난다.
+            new DetectorManifest
+            {
+                InputWidth = inputWidth,
+                InputHeight = inputHeight,
+                TrainedAt = DateTime.Now,
+                Images = samples.Count,
+                Boxes = boxes,
+                Epochs = maxEpoch,
+                Classes = [.. classes.Names]
+            }.Save(modelPath);
 
-            return new TrainingResult(modelPath, samples.Count, boxes, classes.Count, stopwatch.Elapsed, usedGpu);
+            Logger.Info($"학습 끝 - {stopwatch.Elapsed.TotalSeconds:0.0}초, {inputWidth}x{inputHeight}, {modelPath}");
+
+            return new TrainingResult(modelPath, samples.Count, boxes, classes.Count,
+                                      stopwatch.Elapsed, usedGpu, $"{inputWidth}x{inputHeight}");
         }, token);
 }

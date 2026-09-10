@@ -100,7 +100,7 @@
 		<PackageReference Include="Microsoft.ML.TorchSharp" Version="0.23.0" />
 		<PackageReference Include="Microsoft.ML.ImageAnalytics" Version="5.0.0" />
 		<PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.25.0-rc.1" />
-		<PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.14" />
+		<PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.12" />
 	</ItemGroup>
 
 	<!--
@@ -136,9 +136,7 @@
 
 	<!-- DirectML 네이티브. 출력 루트로 복사하고, 트리에는 Libs 아래로 보이게 한다. -->
 	<ItemGroup>
-	  <Content Include="..\Libs\DirectML\x64\DirectML.dll"
-	           Link="Libs\DirectML\x64\DirectML.dll"
-	           TargetPath="DirectML.dll">
+	  <Content Include="..\Libs\DirectML\x64\DirectML.dll" Link="Libs\DirectML\x64\DirectML.dll" TargetPath="DirectML.dll">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
 	</ItemGroup>
@@ -151,9 +149,7 @@
 	  DirectML.Debug.dll 은 디버그 레이어를 켰을 때만 쓰이므로 배포본에 있을 이유가 없다.
 	-->
 	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
-	  <Content Include="..\Libs\DirectML\x64\DirectML.Debug.dll"
-	           Link="Libs\DirectML\x64\DirectML.Debug.dll"
-	           TargetPath="DirectML.Debug.dll">
+	  <Content Include="..\Libs\DirectML\x64\DirectML.Debug.dll" Link="Libs\DirectML\x64\DirectML.Debug.dll" TargetPath="DirectML.Debug.dll">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
 	</ItemGroup>

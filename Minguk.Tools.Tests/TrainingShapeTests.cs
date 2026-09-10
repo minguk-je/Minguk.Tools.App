@@ -57,10 +57,10 @@ internal static partial class Program
               sample is not null
               && sample.Box.Length == 4
               && Near(sample.Box[0], 0f) && Near(sample.Box[1], 0f)
-              && Near(sample.Box[2], DetectorTrainer.InputWidth / 2f)
-              && Near(sample.Box[3], DetectorTrainer.InputHeight / 2f),
+              && Near(sample.Box[2], DetectorTrainer.DefaultInputWidth / 2f)
+              && Near(sample.Box[3], DetectorTrainer.DefaultInputHeight / 2f),
               sample is null ? "(못 만듦)" : string.Join(", ", sample.Box)
-                  + $" (모델 {DetectorTrainer.InputWidth}x{DetectorTrainer.InputHeight})");
+                  + $" (모델 {DetectorTrainer.DefaultInputWidth}x{DetectorTrainer.DefaultInputHeight})");
 
         // 원본 크기가 달라도 같은 값이 나와야 한다 - 그래야 1920x1080 으로 담아 둔 그림과
         // 320 으로 줄여 넣은 프레임이 같은 것을 가리킨다.
@@ -100,6 +100,63 @@ internal static partial class Program
         Check("모델은 데이터셋 폴더에 둔다",
               DetectorTrainer.ModelPathFor(dataset) == Path.Combine(dataset.Root, DetectorTrainer.ModelFileName),
               Path.GetFileName(DetectorTrainer.ModelPathFor(dataset)));
+
+        // ── 모델 옆 쪽지 ──
+        //
+        // 크기를 모델과 함께 남기지 않으면, 320 으로 학습해 둔 모델을 640 설정으로 읽는 순간
+        // 좌표가 조용히 어긋난다. 사각형은 그럴싸하게 그려져 눈으로는 못 잡는다.
+        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+
+        new DetectorManifest
+        {
+            InputWidth = 640,
+            InputHeight = 360,
+            TrainedAt = new DateTime(2026, 9, 10, 21, 0, 0),
+            Images = 24,
+            Boxes = 48,
+            Epochs = 20,
+            Classes = ["슬라임", "버섯"]
+        }.Save(modelPath);
+
+        var manifest = DetectorManifest.Load(modelPath);
+
+        Check("모델이 학습된 크기를 옆에 남긴다",
+              manifest.InputWidth == 640 && manifest.InputHeight == 360 && manifest.Epochs == 20,
+              manifest.Describe + $" / {manifest.Epochs} epoch");
+
+        Check("몹 이름도 남긴다 - 한글이 안 깨진다",
+              manifest.Classes.SequenceEqual(["슬라임", "버섯"]),
+              string.Join(", ", manifest.Classes));
+
+        Check("쪽지는 사람이 읽을 수 있게 쓴다",
+              File.ReadAllText(DetectorManifest.PathFor(modelPath)).Contains("슬라임"),
+              "u+XXXX 로 흘려 적지 않음");
+
+        File.Delete(DetectorManifest.PathFor(modelPath));
+
+        var fallback = DetectorManifest.Load(modelPath);
+
+        Check("쪽지가 없으면 옛 값으로 본다 - 예전에 학습한 모델도 돈다",
+              fallback.InputWidth == DetectorManifest.LegacyWidth
+              && fallback.InputHeight == DetectorManifest.LegacyHeight,
+              fallback.Describe);
+
+        File.WriteAllText(DetectorManifest.PathFor(modelPath), "이건 JSON 이 아니다");
+
+        Check("쪽지가 망가져도 터지지 않는다",
+              DetectorManifest.Load(modelPath).InputWidth == DetectorManifest.LegacyWidth,
+              "옛 값으로 떨어짐");
+
+        File.Delete(DetectorManifest.PathFor(modelPath));
+
+        Check("고를 수 있는 크기는 모두 16:9",
+              DetectorTrainer.InputSizes.All(z => Math.Abs(((double)z.Width / z.Height) - (16d / 9d)) < 0.01),
+              string.Join(", ", DetectorTrainer.InputSizes.Select(z => $"{z.Width}x{z.Height}")));
+
+        Check("기본 크기가 목록에 있다",
+              DetectorTrainer.InputSizes.Contains(
+                  (DetectorTrainer.DefaultInputWidth, DetectorTrainer.DefaultInputHeight)),
+              $"{DetectorTrainer.DefaultInputWidth}x{DetectorTrainer.DefaultInputHeight}");
 
         // ── libtorch 를 안 올리고 학습을 부르면 ──
         //

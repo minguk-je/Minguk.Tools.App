@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Media;
 
 using DevExpress.Mvvm;
@@ -139,6 +140,27 @@ public partial class LabelingViewModel
     {
         get => GetProperty(() => TrainingStatus);
         set => SetProperty(() => TrainingStatus, value);
+    }
+
+    /// <summary>고를 수 있는 모델 크기들.</summary>
+    public System.Collections.Generic.IReadOnlyList<string> InputSizes { get; } =
+        [.. Vision.Training.DetectorTrainer.InputSizes.Select(s => $"{s.Width}x{s.Height}")];
+
+    /// <summary>
+    /// 모델이 실제로 볼 크기.
+    /// </summary>
+    /// <remarks>
+    /// 작은 몹을 놓칠 때만 키운다. 1080p 화면에서 60px 짜리 몹은 320x180 으로 줄이면
+    /// 10px 가 되어 잘 안 잡힌다. 대신 값이 픽셀 수에 비례해 늘어난다 -
+    /// 실측으로 320x180 이 220ms, 640x360 이 587ms 다. 학습 시간도 같은 비율이다.
+    ///
+    /// 바꾸면 <b>반드시 다시 학습해야 한다.</b> 이미 만들어 둔 모델은 제가 학습된 크기를
+    /// 옆에 들고 있어서(<c>detector.json</c>) 여기를 바꿔도 그쪽은 안 흔들린다.
+    /// </remarks>
+    public string? SelectedInputSize
+    {
+        get => GetProperty(() => SelectedInputSize);
+        set => SetProperty(() => SelectedInputSize, value);
     }
 
     /// <summary>

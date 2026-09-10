@@ -103,12 +103,18 @@ public partial class LabelingViewModel
 
         var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
 
-        var result = await DetectorTrainer.TrainAsync(dataset, TrainEpochs, progress, token);
+        var (width, height) = ParseInputSize();
+
+        var result = await DetectorTrainer.TrainAsync(dataset, TrainEpochs, progress, token, width, height);
 
         TrainingStatus =
             $"끝났습니다 - 그림 {result.Images}장 · 사각형 {result.Boxes}개 · 몹 {result.Classes}종 을 " +
-            $"{result.Elapsed.TotalMinutes:0.0}분 동안 {(result.UsedGpu ? "GPU" : "CPU")} 로 학습했습니다. " +
+            $"{result.InputSize} 로 {result.Elapsed.TotalMinutes:0.0}분 동안 " +
+            $"{(result.UsedGpu ? "GPU" : "CPU")} 로 학습했습니다. " +
             $"{System.IO.Path.GetFileName(result.ModelPath)}";
+
+        // 다시 학습했으니 읽어 둔 모델은 옛것이다. 버려야 다음 찾아보기가 새 것을 읽는다.
+        ReleaseModel();
 
         MessengerUtility.SendMainMessage($"학습이 끝났습니다: {result.ModelPath}");
     }
@@ -153,6 +159,26 @@ public partial class LabelingViewModel
             MessageIcon.Question);
 
         return answer == MessageResult.OK;
+    }
+
+    /// <summary>
+    /// 화면에서 고른 크기를 숫자로. 못 읽으면 기본값.
+    /// </summary>
+    /// <remarks>
+    /// 목록에서 고르게 해 두었으므로 어긋날 일이 없지만, 설정 파일을 손으로 고칠 수 있다.
+    /// 그때 터지는 대신 기본값으로 돈다.
+    /// </remarks>
+    private (int Width, int Height) ParseInputSize()
+    {
+        var parts = (SelectedInputSize ?? string.Empty).Split('x');
+
+        if (parts.Length == 2
+            && int.TryParse(parts[0], out var width)
+            && int.TryParse(parts[1], out var height)
+            && width > 0 && height > 0)
+            return (width, height);
+
+        return (DetectorTrainer.DefaultInputWidth, DetectorTrainer.DefaultInputHeight);
     }
 
     /// <summary>

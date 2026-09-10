@@ -29,7 +29,7 @@ public sealed class TrainingSample
     /// AutoFormerV2 는 픽셀을 받는다. 이걸 안 하면 사각형이 전부 왼쪽 위 한 점에 몰려
     /// 아무것도 못 배운다.
     ///
-    /// <b>원본 크기가 아니라 <see cref="DetectorTrainer.InputWidth"/> 를 곱한다.</b>
+    /// <b>원본 크기가 아니라 <see cref="DetectorTrainer.DefaultInputWidth"/> 같은 모델 크기를 곱한다.</b>
     /// 파이프라인이 그림을 그 크기로 늘려 놓은 뒤에 망이 보기 때문이다. 원본 크기를 곱하면
     /// 사각형만 원본 자리에 남고 그림은 줄어들어, 둘이 통째로 어긋난다.
     /// </remarks>
@@ -42,7 +42,9 @@ public sealed class TrainingSample
     /// 사각형이 없는 그림을 넣으면 "여기엔 아무것도 없다" 를 가르치게 된다. 그런데 우리 목록의
     /// "안 찍음" 은 <b>아직 안 본 그림</b>이라는 뜻이지 비었다는 뜻이 아니다. 그래서 뺀다.
     /// </remarks>
-    public static TrainingSample? From(LabelItem item, LabelClasses classes)
+    public static TrainingSample? From(LabelItem item, LabelClasses classes,
+                                       int width = DetectorTrainer.DefaultInputWidth,
+                                       int height = DetectorTrainer.DefaultInputHeight)
     {
         var boxes = LabelFile.Load(item.LabelPath);
 
@@ -50,9 +52,6 @@ public sealed class TrainingSample
 
         // 그림이 진짜 읽히는지는 봐 둔다. 깨진 파일을 학습에 넣으면 도중에 터진다.
         if (!ImageSize.TryRead(item.ImagePath, out _, out _)) return null;
-
-        const int width = DetectorTrainer.InputWidth;
-        const int height = DetectorTrainer.InputHeight;
 
         var labels = new List<string>(boxes.Count);
         var flat = new List<float>(boxes.Count * 4);

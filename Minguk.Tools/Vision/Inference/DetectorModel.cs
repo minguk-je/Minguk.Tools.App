@@ -70,15 +70,20 @@ public sealed class DetectorModel : IDisposable
 
     private bool _disposed;
 
-    private DetectorModel(MLContext ml, PredictionEngine<TrainingSample, DetectionPrediction> engine, string path)
+    private DetectorModel(MLContext ml, PredictionEngine<TrainingSample, DetectionPrediction> engine,
+                          string path, DetectorManifest manifest)
     {
         _ml = ml;
         _engine = engine;
 
         ModelPath = path;
+        Manifest = manifest;
     }
 
     public string ModelPath { get; }
+
+    /// <summary>이 모델이 어떤 크기로 학습됐는지. 좌표를 되돌릴 때 쓴다.</summary>
+    public DetectorManifest Manifest { get; }
 
     /// <summary>
     /// 모델을 읽는다. 오래 걸리므로(69MB) 백그라운드에서 부른다.
@@ -95,9 +100,13 @@ public sealed class DetectorModel : IDisposable
         var model = ml.Model.Load(modelPath, out _);
         var engine = ml.Model.CreatePredictionEngine<TrainingSample, DetectionPrediction>(model);
 
-        Logger.Info($"검출 모델을 읽었다: {modelPath}");
+        // 학습할 때의 크기를 모델 옆 쪽지에서 읽는다. 설정에서 읽으면 크기를 바꾼 순간
+        // 옛 모델의 좌표가 조용히 어긋난다.
+        var manifest = DetectorManifest.Load(modelPath);
 
-        return new DetectorModel(ml, engine, modelPath);
+        Logger.Info($"검출 모델을 읽었다: {modelPath} ({manifest.Describe})");
+
+        return new DetectorModel(ml, engine, modelPath, manifest);
     }
 
     /// <summary>
@@ -116,10 +125,9 @@ public sealed class DetectorModel : IDisposable
         // 학습 때와 같은 그릇으로 넣는다. 라벨 쪽은 비워 둔다 - 예측에는 안 쓰인다.
         var prediction = _engine.Predict(new TrainingSample { ImagePath = imagePath });
 
-        // 넣은 파일이 몇 픽셀이든 파이프라인이 InputWidth x InputHeight 로 늘려 놓고,
-        // 망은 그것을 본다. 그러니 돌아온 좌표도 그 크기의 것이다 - 파일 크기로 나누면 틀린다.
-        return Convert(prediction, classes,
-                       DetectorTrainer.InputWidth, DetectorTrainer.InputHeight, minimumScore);
+        // 넣은 파일이 몇 픽셀이든 파이프라인이 학습할 때의 크기로 늘려 놓고, 망은 그것을 본다.
+        // 그러니 돌아온 좌표도 그 크기의 것이다 - 파일 크기로 나누면 틀린다.
+        return Convert(prediction, classes, Manifest.InputWidth, Manifest.InputHeight, minimumScore);
     }
 
     /// <summary>
