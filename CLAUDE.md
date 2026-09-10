@@ -285,6 +285,64 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
   들어 있어, 중간을 지우면 뒤가 당겨져 찍어 둔 것이 조용히 다른 몹을 가리킨다.
   이름 바꾸기는 번호가 그대로라 안전하다.
 
+### 학습 (TorchSharp) - 실측해 둔 것
+
+학습은 **C# 으로 한다**(`Microsoft.ML.TorchSharp` 0.23.0 의 `ObjectDetectionTrainer`,
+AutoFormerV2). 스크래치 프로젝트에서 학습 → 저장 → 불러오기 → 추론까지 실제로 돌려 보고
+정한 것이라, 아래 숫자는 추측이 아니라 잰 값이다.
+
+- **.NET 10 x64 에서 돈다.** `Microsoft.ML.TorchSharp` 은 `netstandard2.0` 이지만 물린다.
+  `ObjectDetection(labelColumnName, boundingBoxColumnName, imageColumnName, maxEpoch)` 로 부른다
+  (`using Microsoft.ML.TorchSharp;` 가 있어야 확장 메서드가 보인다).
+- 데이터 모양: `MapValueToKey` 로 라벨을 키로, `LoadImages` 로 경로를 픽셀로 바꿔 넘긴다.
+  사각형은 **픽셀 좌표 (x1, y1, x2, y2)** 다 - 우리가 파일에 담는 0~1 과 다르므로 넘기기 전에
+  그림 크기를 곱해야 한다.
+- 모델은 ML.NET `model.zip` 으로 저장된다(약 69MB).
+
+**ONNX 로는 못 내보낸다.** `ObjectDetectionTransformer` 가 `ICanSaveOnnx` 를 구현하지 않고
+(ML.NET 의 TorchSharp 학습기는 하나도 구현하지 않는다), TorchSharp 어셈블리 안에 onnx 관련
+타입이 **하나도 없다**(`torch.onnx.export` 는 파이썬 전용). 그래서 **`Inference/OnnxDmlEngine`
+은 이 길에서 쓰지 않는다** - 추론도 TorchSharp 로 한다. 남의 `.onnx` 를 돌릴 일이 생기면
+그때 다시 꺼내면 된다.
+
+**CPU 로는 학습을 못 한다.** 같은 코드·같은 데이터(그림 8장, 1 epoch)로 쟀다.
+
+| | 걸린 시간 |
+|---|---|
+| CPU | **248.2초** |
+| CUDA (GTX 1060 3GB) | **8.6초** |
+
+29배다. 300장 × 20 epoch 이면 CPU 로는 수백 시간이라 아예 못 쓴다. **학습은 GPU 를 전제한다.**
+
+### libtorch 는 받아서 쓴다
+
+NuGet 의 `TorchSharp-cuda-windows` 를 참조하면 **빌드 출력이 3.6GB** 가 된다
+(`torch_cuda.dll` 863MB · `cudnn_cnn_infer64_8.dll` 578MB · `cublasLt64_12.dll` 514MB …).
+CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 때 받는다** - 파이썬을 처음
+고를 때 받는 것(`PythonRuntimeInstaller`)과 같은 방식이다. 라벨링까지만 쓰는 사람은 안 받는다.
+
+- csproj 에는 **관리 어셈블리인 `TorchSharp` 만** 넣는다. 여기에 딸려오는
+  `LibTorchSharp.dll`(1.9MB)이 우리 쪽 껍데기라 반드시 같이 나가야 한다.
+  `TorchSharp-cpu` · `TorchSharp-cuda-windows` 는 **넣지 않는다.**
+- 받는 곳은 pytorch.org 의 통짜 zip 이다. NuGet 판은 크기 제한 때문에 part1~part9 로
+  쪼개져 있어 런타임에 다시 붙이는 것이 번거롭다.
+
+| | 주소 | 크기 |
+|---|---|---|
+| CUDA 12.1 | `download.pytorch.org/libtorch/cu121/libtorch-win-shared-with-deps-2.2.1+cu121.zip` | 2294 MB |
+| CPU | `download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.2.1+cpu.zip` | 177 MB |
+
+판(2.2.1)은 TorchSharp 0.102.7 이 요구하는 것과 맞춰야 한다. 어긋나면 진입점을 못 찾는다.
+
+- 물리는 법은 **`NativeLibrary.Load` 로 전체 경로를 주어 `torch_cpu.dll` · `torch.dll` 을
+  먼저 올리는 것**뿐이다. 그 뒤 `torch.ones(...)` 가 그냥 된다.
+  `AddDllDirectory` 는 안 써도 된다(실제로 87 로 실패하는데도 로드는 됐다).
+- 받은 폴더를 안 주면 TorchSharp 가 제 진단문("Giving up, TorchSharp.dll does not appear to
+  have been loaded from package directories")과 함께 실패한다 - **NuGet 캐시를 주워 쓰지
+  않는다는 것을 이걸로 확인했다.**
+- 받는 자리는 실행 폴더가 아니라 `%AppData%` 밑이어야 한다. Velopack 이 업데이트 때
+  설치 폴더를 통째로 갈아 끼우므로 2GB 를 매번 다시 받게 된다(`Helper/UserDataPaths` 참고).
+
 ### 화면
 
 - 데이터셋 자리는 **캡처 모니터와 라벨링이 같이 본다**(`LabelDataset.ConfiguredRoot`,
