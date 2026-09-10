@@ -85,7 +85,7 @@ internal static class ViewSmokeProbe
             var quietOnSendInput = vm.PathWarning is null;
 
             Apply(vm, InputBackend.PostMessage);
-            var warned = vm.PathWarning is not null && vm.PathWarning.Contains("2개");
+            var warned = vm.PathWarning is not null && vm.PathWarning.Contains("1개");
 
             if (quietOnSendInput && warned)
             {

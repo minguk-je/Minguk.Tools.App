@@ -73,6 +73,21 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 (`PreviewInputRouter`, `PreviewInputMapper`, `CaptureTargetBounds`, `InputForwardResult`).
 입력은 캡처 전용이 아니라서 나눠 두었다.
 
+능력이 경로마다 다른 것은 **능력별 인터페이스**로 뺀다. 부르는 쪽이 `adapter is IXxx` 로 물어보고,
+아니면 못 한다고 말한다. 못 하는 것을 늘 false 만 돌려주는 빈 메서드로 두면 부르는 쪽이
+되는 줄 알고 쓰기 때문이다.
+
+| 인터페이스 | 있는 경로 | 무엇 |
+|---|---|---|
+| `IScanCodeInput` | SendInput · Interception | 스캔코드. 한글 IME 전환이 이것으로만 된다 |
+| `ICharacterInput` | PostMessage | `WM_CHAR`. 글자를 그대로 넣는다 |
+
+**PostMessage 는 영문·숫자·문장부호·Enter 를 넣을 수 있다.** 못 하는 것은 한글뿐이다.
+한때 스캔코드가 안 되면 글자 단계를 통째로 버렸는데, 보낼 수 있는 것을 버리고 있었다.
+
+그 경로에서 글자는 반드시 `WM_CHAR` 로 넣는다. 키로 보내면 안 된다 —
+부친 `VK_SHIFT` 는 대상 스레드의 키 상태를 바꾸지 못해서 `abC!` 가 `abc1` 로 들어간다(실측).
+
 스캔코드로 키를 넣는 것은 `IScanCodeInput` 으로 따로 뺐다. PostMessage 경로는 그것을
 제대로 할 수 없고(대상 IME 가 그렇게 온 한/영 전환을 받지 않는다), 못 하는 것을 늘 false 만
 돌려주는 빈 메서드로 두면 부르는 쪽이 되는 줄 알고 쓰기 때문이다.

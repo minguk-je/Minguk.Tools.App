@@ -140,22 +140,25 @@ internal static partial class Program
               unclosed.Count == 1 ? unclosed[0].ToString() : $"오류 {unclosed.Count}건");
     }
 
-    /// <summary>계획으로 만든 시퀀스가 실제로 창에 닿는지. 순서 문구만 맞고 안 나가면 소용없다.</summary>
+    /// <summary>
+    /// 계획으로 만든 시퀀스가 실제로 창에 닿는지. 순서 문구만 맞고 안 나가면 소용없다.
+    /// </summary>
+    /// <remarks>
+    /// 영문과 Enter 만 쓴다 - <b>세 경로 모두에서 돌아야 하기 때문이다.</b>
+    /// 스캔코드를 못 넣는 경로(PostMessage)도 가상 키로는 이것들을 넣을 수 있다.
+    /// 한때 그 경로에서 이 검증을 통째로 건너뛰었는데, 그래서 "Enter 가 빠진다" 는
+    /// 잘못된 믿음을 오래 들고 있었다.
+    /// </remarks>
     private static async Task TestPlanRunAsync(TestWindow ui)
     {
-        if (!_service.SupportsTyping)
-        {
-            Skip("계획 실행", $"{_adapter.Name} 은 스캔코드를 넣지 못한다");
-            return;
-        }
-
         var plan = new SequencePlan
         {
             Steps =
             [
                 new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = "ab" },
                 new SequenceStepDefinition { Kind = SequenceStepKind.Wait, DelayMs = 30 },
-                new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = "c" }
+                new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = "C!" },
+                new SequenceStepDefinition { Kind = SequenceStepKind.Enter }
             ]
         };
 
@@ -167,6 +170,9 @@ internal static partial class Program
 
         var typed = Read(() => ui.Input.Text);
 
-        Check("계획 실행", finished && typed == "abc", $"입력란 {Describe(typed)} / 끝까지 {finished}");
+        // Shift 가 필요한 글자(C·!)를 넣어 두었다. 조합키가 빠지면 여기서 드러난다.
+        Check("계획 실행 (영문·Shift·Enter)",
+              finished && typed.StartsWith("abC!") && typed.Contains((char)10),
+              $"입력란 {Describe(typed)} / 끝까지 {finished}");
     }
 }

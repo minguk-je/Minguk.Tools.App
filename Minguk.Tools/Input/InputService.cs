@@ -130,6 +130,61 @@ public sealed class InputService
         return true;
     }
 
+    /// <summary>
+    /// 가상 키로 한 글자를 넣는다. 스캔코드를 못 넣는 경로가 쓰는 길이다.
+    /// </summary>
+    /// <remarks>
+    /// 한글은 못 한다 - 자모를 눌러 넣는 것은 대상 IME 가 처리해야 하는데 부친 키 메시지로는
+    /// 한/영 전환이 먹지 않는다. 그쪽은 <see cref="TypeCharAsync"/> 의 스캔코드 경로만 된다.
+    /// </remarks>
+    /// <returns>넣었으면 true, 지금 자판으로 못 넣는 글자면 false.</returns>
+    public async Task<bool> TypeCharByVirtualKeyAsync(char c, int holdTimeMs)
+    {
+        // 글자를 그대로 넣을 수 있으면 그 길이 낫다.
+        // 부친 VK_SHIFT 는 대상의 키 상태를 안 바꿔서 "abC!" 가 "abc1" 로 들어간다(실측).
+        if (_adapter is ICharacterInput characters)
+        {
+            if (!characters.SendCharacter(c)) return false;
+
+            await Task.Delay(Jitter(holdTimeMs));
+            return true;
+        }
+
+        if (!VirtualKeys.TryGetKeyStroke(c, out var virtualKey, out var needsShift)) return false;
+
+        if (needsShift) _adapter.PressKey(VirtualKeys.Shift);
+
+        await TapVirtualKeyAsync(virtualKey, holdTimeMs);
+
+        if (needsShift) _adapter.ReleaseKey(VirtualKeys.Shift);
+
+        return true;
+    }
+
+    /// <summary>
+    /// 스캔코드 없이 이 글자를 넣을 수 있는지.
+    /// </summary>
+    /// <remarks>
+    /// 한글은 못 한다 - 자모를 눌러 넣는 것은 대상 IME 가 처리해야 하는데, 부친 키로는
+    /// 한/영 전환이 먹지 않고 WM_CHAR 로는 조합이 일어나지 않는다.
+    /// </remarks>
+    public bool CanTypeWithoutScanCode(char c)
+    {
+        if (Korean.HangulKeyMap.IsHangul(c)) return false;
+
+        return _adapter is ICharacterInput || VirtualKeys.CanType(c);
+    }
+
+    /// <summary>가상 키 하나를 눌렀다 뗀다.</summary>
+    public async Task<bool> TapVirtualKeyAsync(ushort virtualKey, int holdTimeMs)
+    {
+        if (!_adapter.PressKey(virtualKey)) return false;
+
+        await Task.Delay(Jitter(holdTimeMs));
+
+        return _adapter.ReleaseKey(virtualKey);
+    }
+
     /// <summary>두벌식 키 문자열을 차례로 누른다. 대문자는 Shift 를 함께 누른다(ㄲ, ㅒ 등).</summary>
     public async Task SendKeySequenceAsync(string keys, int holdTimeMs)
     {

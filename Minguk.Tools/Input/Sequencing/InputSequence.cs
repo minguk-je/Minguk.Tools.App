@@ -48,29 +48,49 @@ public sealed class InputSequence
     /// </remarks>
     public InputSequence Type(string text, HangulKeyMode hangulMode = HangulKeyMode.HangulScanCode)
     {
-        if (!_service.SupportsTyping) return this;
-
         foreach (var ch in text)
         {
-            if (!CanType(ch)) continue;
-
             var c = ch;   // 클로저가 반복 변수를 잡지 않도록 복사한다
-            _steps.Add(InputStep.Of(Display(c), () => _service.TypeCharAsync(c, HoldTimeMs, hangulMode)));
+
+            if (_service.SupportsTyping)
+            {
+                if (!CanType(c)) continue;
+
+                _steps.Add(InputStep.Of(Display(c), () => _service.TypeCharAsync(c, HoldTimeMs, hangulMode)));
+                continue;
+            }
+
+            // 스캔코드를 못 넣는 경로라도 영문·숫자·문장부호는 가상 키로 들어간다.
+            // 한글만 못 한다 - 대상 IME 가 부친 키로는 한/영 전환을 받지 않는다.
+            if (!_service.CanTypeWithoutScanCode(c)) continue;
+
+            _steps.Add(InputStep.Of(Display(c), () => _service.TypeCharByVirtualKeyAsync(c, HoldTimeMs)));
         }
 
         return this;
     }
 
-    /// <summary>이 문자를 보낼 수 있는지. 한글·영숫자·공백·문장부호만 다룬다.</summary>
+    /// <summary>이 문자를 스캔코드로 보낼 수 있는지. 한글·영숫자·공백·문장부호를 다룬다.</summary>
     public static bool CanType(char c) => HangulKeyMap.IsHangul(c) || ScanCodes.TryGetKeyStroke(c, out _, out _);
+
+    /// <summary>이 문자를 가상 키로 보낼 수 있는지. 한글은 못 한다.</summary>
+    public static bool CanTypeByVirtualKey(char c) => !HangulKeyMap.IsHangul(c) && VirtualKeys.CanType(c);
 
     /// <summary>순서 문구에 보여 줄 글자. 공백은 눈에 보이게 바꾼다.</summary>
     private static string Display(char c) => c == ' ' ? "␣" : c.ToString();
 
+    /// <summary>
+    /// Enter 한 번. 스캔코드를 못 넣는 경로에서는 가상 키로 보낸다.
+    /// </summary>
+    /// <remarks>
+    /// 한때 스캔코드가 안 되면 이 단계를 통째로 버렸는데, PostMessage 도 <c>PressKey</c> 는
+    /// 할 수 있으므로 보낼 수 있는 것을 버리고 있었던 것이다.
+    /// </remarks>
     public InputSequence Enter()
     {
-        if (_service.SupportsTyping)
-            _steps.Add(InputStep.Of("Enter", () => _service.TapKeyAsync(ScanCodes.Enter, HoldTimeMs)));
+        _steps.Add(_service.SupportsTyping
+            ? InputStep.Of("Enter", () => _service.TapKeyAsync(ScanCodes.Enter, HoldTimeMs))
+            : InputStep.Of("Enter", () => _service.TapVirtualKeyAsync(VirtualKeys.Enter, HoldTimeMs)));
 
         return this;
     }

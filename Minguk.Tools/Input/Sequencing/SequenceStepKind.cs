@@ -1,3 +1,6 @@
+using System.Linq;
+using Minguk.Tools.Input.Korean;
+
 namespace Minguk.Tools.Input.Sequencing;
 
 /// <summary>
@@ -50,8 +53,20 @@ public enum SequenceStepKind
 /// </remarks>
 public static class SequenceStepKinds
 {
-    public static bool NeedsScanCode(SequenceStepKind kind)
-        => kind is SequenceStepKind.Type or SequenceStepKind.Enter or SequenceStepKind.ToggleHangul;
+    /// <summary>
+    /// 이 단계가 스캔코드 경로에서만 되는지.
+    /// </summary>
+    /// <remarks>
+    /// Enter 와 영문·숫자·문장부호는 가상 키로도 들어가므로 여기 들지 않는다.
+    /// 남는 것은 한/영 전환과, 글자 단계에 든 한글이다 - 대상 IME 가 부친 키로는
+    /// 한/영 전환을 받지 않는다.
+    /// </remarks>
+    public static bool NeedsScanCode(SequenceStepDefinition step) => step.Kind switch
+    {
+        SequenceStepKind.ToggleHangul => true,
+        SequenceStepKind.Type => step.Text?.Any(HangulKeyMap.IsHangul) == true,
+        _ => false
+    };
 }
 
 public static class SequenceStepKindNames

@@ -237,13 +237,14 @@ public partial class InputAutomationViewModel
     {
         if (_service is null || _service.SupportsTyping) return null;
 
-        var dropped = _plan.Steps.Count(s => SequenceStepKinds.NeedsScanCode(s.Kind));
+        var dropped = _plan.Steps.Count(SequenceStepKinds.NeedsScanCode);
 
         var lines = new List<string>();
 
         if (dropped > 0)
-            lines.Add($"{_adapter?.Name} 경로는 스캔코드를 넣지 못해 글자·Enter·한/영 단계 {dropped}개가 빠집니다. "
-                      + "그 단계를 보내려면 입력 경로를 SendInput 이나 Interception 으로 바꾸세요.");
+            lines.Add($"{_adapter?.Name} 경로는 한글을 넣지 못해 한글이 든 글자·한/영 단계 {dropped}개가 빠집니다. "
+                      + "영문·숫자·문장부호·Enter 는 그대로 나갑니다. "
+                      + "한글을 보내려면 입력 경로를 SendInput 이나 Interception 으로 바꾸세요.");
 
         // 대상 창을 안 고르면 마지막 좌표 아래 창으로 간다. 나가긴 나가는데 어디로 갔는지
         // 알 수 없어서, "끝남" 을 보고 됐다고 믿게 된다. 그 전에 말해 준다.

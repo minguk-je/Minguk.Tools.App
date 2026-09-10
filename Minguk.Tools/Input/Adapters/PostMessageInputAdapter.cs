@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 
 namespace Minguk.Tools.Input.Adapters;
@@ -23,7 +23,7 @@ namespace Minguk.Tools.Input.Adapters;
 ///   (GetGUIThreadInfo 로 읽는다 — AttachThreadInput 없이 알 수 있다).
 ///   WPF 는 창 하나가 전부라 어느 쪽이든 같은 곳으로 간다.
 /// </summary>
-public sealed class PostMessageInputAdapter : IInputAdapter
+public sealed class PostMessageInputAdapter : IInputAdapter, ICharacterInput
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -87,6 +87,23 @@ public sealed class PostMessageInputAdapter : IInputAdapter
     public bool PressKey(ushort virtualKey) => PostKey(virtualKey, isKeyUp: false);
 
     public bool ReleaseKey(ushort virtualKey) => PostKey(virtualKey, isKeyUp: true);
+
+    /// <summary>
+    /// 글자를 그대로 넣는다.
+    /// </summary>
+    /// <remarks>
+    /// 부친 VK_SHIFT 는 대상 스레드의 키 상태를 안 바꾼다. 그래서 키로 보내면 대문자와
+    /// Shift 문장부호가 소문자·숫자로 들어간다(실측: "abC!" 를 보내면 "abc1" 이 된다).
+    /// WM_CHAR 는 그 해석 단계를 건너뛴다.
+    /// </remarks>
+    public bool SendCharacter(char c)
+    {
+        var window = ResolveKeyboardTarget();
+        if (window == IntPtr.Zero)
+            return false;
+
+        return Post(window, NativeMethods.WM_CHAR, c, 1);
+    }
 
     // ── 마우스 ────────────────────────────────────────────────────────────
 
@@ -271,6 +288,7 @@ public sealed class PostMessageInputAdapter : IInputAdapter
         public const uint WM_MOUSEWHEEL = 0x020A;
 
         public const uint WM_KEYDOWN = 0x0100;
+        public const uint WM_CHAR = 0x0102;
         public const uint WM_KEYUP = 0x0101;
 
         public const int MK_LBUTTON = 0x0001;
