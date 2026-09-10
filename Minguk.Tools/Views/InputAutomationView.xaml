@@ -45,6 +45,10 @@
 
         <!--  드라이버 설치 뒤 "재시작이 필요합니다" 를 띄운다. 없으면 조용히 안 뜬다.  -->
         <dx:DXMessageBoxService />
+
+        <!--  스크립트를 파일로 열고 저장한다.  -->
+        <dxmvvm:OpenFileDialogService />
+        <dxmvvm:SaveFileDialogService />
     </dxmvvm:Interaction.Behaviors>
 
     <!--
@@ -152,12 +156,41 @@
                 </dxlc:LayoutItem>
 
                 <!--  파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다.  -->
-                <dxlc:LayoutItem Width="520"
+                <dxlc:LayoutItem Width="330"
                                  Label="엔진">
                     <dxe:TextEdit EditValue="{Binding EngineStatus}"
                                   IsReadOnly="True"
                                   NullText="준비됨" />
                 </dxlc:LayoutItem>
+
+                <!--
+                    파일 이름. 파일과 지금 글이 다르면 * 가 붙는다.
+                    저장하지 않아도 글은 설정에 남으므로 "잃어버린다" 는 경고는 아니다.
+                -->
+                <dxlc:LayoutItem Width="230"
+                                 Label="파일">
+                    <dxe:TextEdit EditValue="{Binding ScriptFileLabel, Mode=OneWay}"
+                                  IsReadOnly="True" />
+                </dxlc:LayoutItem>
+            </dxlc:LayoutGroup>
+
+            <dxlc:LayoutGroup HorizontalAlignment="Left"
+                              Orientation="Horizontal"
+                              VerticalAlignment="Top">
+                <dx:SimpleButton Width="80"
+                                 Command="{Binding DoNewScriptCommand}"
+                                 Content="새로"
+                                 ToolTip="본보기 글로 새로 시작한다. 파일과의 연결도 끊는다." />
+                <dx:SimpleButton Width="80"
+                                 Command="{Binding DoOpenScriptCommand}"
+                                 Content="열기"
+                                 ToolTip="확장자를 보고 언어까지 맞춘다 (.csx · .py · .js)" />
+                <dx:SimpleButton Width="80"
+                                 Command="{Binding DoSaveScriptCommand}"
+                                 Content="저장" />
+                <dx:SimpleButton Width="110"
+                                 Command="{Binding DoSaveScriptAsCommand}"
+                                 Content="다른 이름으로" />
             </dxlc:LayoutGroup>
 
             <!--  본보기 줄을 캐럿이 있는 줄 아래에 끼운다. 형식을 외우지 않아도 되게.  -->

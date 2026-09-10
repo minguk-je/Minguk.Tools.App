@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Minguk.Tools.Input;
@@ -255,6 +255,58 @@ internal static partial class Program
         Check($"도는 중에 터지면 계획을 버린다 ({language})",
               runErrors.Count > 0 && half.Steps.Count == 0,
               runErrors.Count > 0 ? runErrors[0].ToString() : "오류를 안 냈다");
+    }
+
+    /// <summary>
+    /// 파일 확장자로 언어를 알아내는지, 모르는 확장자를 아무거나로 찍지 않는지.
+    /// </summary>
+    /// <remarks>
+    /// 여는 쪽이 언어를 잘못 고르면 문법 오류만 잔뜩 뜨는데, 사용자는 글이 틀린 줄 알지
+    /// 언어가 어긋난 줄은 모른다. 모르면 안 고르는 것이 낫다.
+    /// </remarks>
+    private static void TestScriptFiles()
+    {
+        var pairs = new (string Path, ScriptLanguage? Expected)[]
+        {
+            ("a.csx", ScriptLanguage.CSharp),
+            ("a.cs", ScriptLanguage.CSharp),
+            ("a.py", ScriptLanguage.Python),
+            ("a.js", ScriptLanguage.JavaScript),
+            ("a.txt", null),
+            ("확장자없음", null),
+            ("", null)
+        };
+
+        var wrong = pairs.Where(p => ScriptFiles.FromPath(p.Path) != p.Expected).ToArray();
+
+        Check("확장자로 언어 알아내기", wrong.Length == 0,
+              wrong.Length == 0
+                  ? $"{pairs.Length}가지 확인"
+                  : string.Join(", ", wrong.Select(w => $"{w.Path} -> {ScriptFiles.FromPath(w.Path)}")));
+
+        // 언어마다 확장자가 달라야 파일만 보고 알 수 있다.
+        var extensions = Enum.GetValues<ScriptLanguage>().Select(ScriptFiles.Extension).ToArray();
+
+        Check("언어마다 확장자가 다르다",
+              extensions.Distinct().Count() == extensions.Length,
+              string.Join(" ", extensions));
+
+        // 저장한 것을 다시 읽으면 같아야 한다. 한글이 든 글로 본다 - UTF-8 로 안 쓰면 여기서 깨진다.
+        var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                          "minguk-script-" + Guid.NewGuid().ToString("N") + ".csx");
+        var written = "Type(\"안녕하세요\");" + Environment.NewLine + "Enter();";
+
+        try
+        {
+            System.IO.File.WriteAllText(temp, written, new System.Text.UTF8Encoding(false));
+            var read = System.IO.File.ReadAllText(temp);
+
+            Check("파일에 쓰고 다시 읽기", read == written, read == written ? "그대로" : $"[{read}]");
+        }
+        finally
+        {
+            try { System.IO.File.Delete(temp); } catch (Exception) { }
+        }
     }
 
     /// <summary>

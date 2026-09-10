@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -263,14 +263,6 @@ public partial class InputAutomationViewModel
     // ── 스크립트 ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 글이 바뀔 때마다 읽어 계획으로 만든다.
-    /// </summary>
-    /// <remarks>
-    /// 틀린 줄이 있어도 나머지는 그대로 계획에 담는다. 오타 한 줄 때문에 순서 미리보기가
-    /// 통째로 비면 무엇을 고쳐야 하는지 오히려 알기 어렵다.
-    /// 대신 실행은 막는다 - 반쪽짜리 시퀀스가 나가는 것이 더 나쁘다.
-    /// </remarks>
-    /// <summary>
     /// 글이 바뀌면 잠시 묶어 두었다가 한 번만 돌린다.
     /// </summary>
     /// <remarks>
@@ -280,6 +272,9 @@ public partial class InputAutomationViewModel
     /// </remarks>
     private void OnScriptTextChanged()
     {
+        // 파일과 지금 글이 다르다는 표시. 되읽기 전에 세워 둔다 - 되읽기는 뒤늦게 끝난다.
+        IsScriptDirty = true;
+
         _debounce?.Dispose();
         _debounce = new System.Threading.Timer(
             _ => DispatcherService?.BeginInvoke(() => _ = RecompileAsync()),
@@ -289,9 +284,6 @@ public partial class InputAutomationViewModel
     /// <summary>타이핑이 멎기를 기다리는 시간.</summary>
     private const int DebounceMs = 500;
 
-    /// <summary>
-    /// 스크립트를 돌려 단계를 받아 온다. 실제 입력은 나가지 않는다 - 단계로 적힐 뿐이다.
-    /// </summary>
     /// <summary>
     /// 언어를 갈아 끼운다. 글은 그대로 두고, 비어 있을 때만 본보기를 넣는다.
     /// </summary>
@@ -333,6 +325,14 @@ public partial class InputAutomationViewModel
         });
     }
 
+    /// <summary>
+    /// 글을 돌려 계획을 받아 온다. 실제 입력은 나가지 않는다 - 단계로 적힐 뿐이다.
+    /// </summary>
+    /// <remarks>
+    /// 틀린 줄이 있어도 나머지는 그대로 계획에 담는다. 오타 한 줄 때문에 순서 미리보기가
+    /// 통째로 비면 무엇을 고쳐야 하는지 오히려 알기 어렵다.
+    /// 대신 실행은 막는다 - 반쪽짜리 시퀀스가 나가는 것이 더 나쁘다.
+    /// </remarks>
     private async Task RecompileAsync()
     {
         if (_engine is null) return;
@@ -440,6 +440,94 @@ public partial class InputAutomationViewModel
     }
 
     private void DoResetSteps() => Guard(() => ScriptText = _engine?.SampleSource ?? string.Empty);
+
+    // ── 스크립트 파일 ────────────────────────────────────────────────────
+
+    /// <summary>본보기 글로 새로 시작한다. 파일과의 연결도 끊는다.</summary>
+    private void DoNewScript() => Guard(() =>
+    {
+        ScriptText = _engine?.SampleSource ?? string.Empty;
+        ScriptFilePath = null;
+        IsScriptDirty = false;
+    });
+
+    /// <summary>
+    /// 파일을 열어 글을 갈아 끼운다. 확장자로 언어까지 맞춘다.
+    /// </summary>
+    /// <remarks>
+    /// 언어를 먼저 바꾸고 글을 넣는다. 순서가 반대면 새 글을 예전 언어로 한 번 돌려
+    /// 헛된 오류가 화면에 스쳤다 사라진다.
+    /// </remarks>
+    private void DoOpenScript() => Guard(() =>
+    {
+        if (OpenFileDialogService is not { } dialog)
+        {
+            MessengerUtility.SendMainMessage("파일 열기 서비스를 찾지 못했습니다.");
+            return;
+        }
+
+        dialog.Filter = ScriptFiles.OpenFilter(SelectedScriptLanguage);
+        dialog.InitialDirectory = ScriptFiles.DefaultDirectory;
+
+        if (!dialog.ShowDialog()) return;
+
+        var path = dialog.File.GetFullName();
+        var text = System.IO.File.ReadAllText(path);
+
+        if (ScriptFiles.FromPath(path) is { } language && language != SelectedScriptLanguage)
+            SelectedScriptLanguage = language;
+
+        ScriptText = text;
+        ScriptFilePath = path;
+        IsScriptDirty = false;
+
+        Logger.Info($"스크립트를 열었다: {path}");
+        MessengerUtility.SendMainMessage($"{System.IO.Path.GetFileName(path)} 을(를) 열었습니다.");
+    });
+
+    /// <summary>저장한다. 아직 자리를 안 정했으면 물어본다.</summary>
+    private void DoSaveScript() => Guard(() =>
+    {
+        if (string.IsNullOrEmpty(ScriptFilePath))
+        {
+            DoSaveScriptAs();
+            return;
+        }
+
+        WriteScript(ScriptFilePath);
+    });
+
+    private void DoSaveScriptAs() => Guard(() =>
+    {
+        if (SaveFileDialogService is not { } dialog)
+        {
+            MessengerUtility.SendMainMessage("파일 저장 서비스를 찾지 못했습니다.");
+            return;
+        }
+
+        dialog.Filter = ScriptFiles.SaveFilter(SelectedScriptLanguage);
+        dialog.DefaultExt = ScriptFiles.Extension(SelectedScriptLanguage).TrimStart('.');
+        dialog.DefaultFileName = string.IsNullOrEmpty(ScriptFilePath)
+            ? "스크립트" + ScriptFiles.Extension(SelectedScriptLanguage)
+            : System.IO.Path.GetFileName(ScriptFilePath);
+        dialog.InitialDirectory = ScriptFiles.DefaultDirectory;
+
+        if (!dialog.ShowDialog()) return;
+
+        WriteScript(dialog.File.GetFullName());
+    });
+
+    private void WriteScript(string path)
+    {
+        // UTF-8 로 쓴다. 한글 이름을 쓸 수 있게 해 놓고 ANSI 로 쓰면 다른 PC 에서 깨진다.
+        System.IO.File.WriteAllText(path, ScriptText ?? string.Empty, new System.Text.UTF8Encoding(false));
+
+        ScriptFilePath = path;
+        IsScriptDirty = false;
+
+        Logger.Info($"스크립트를 저장했다: {path}");
+        MessengerUtility.SendMainMessage($"{System.IO.Path.GetFileName(path)} 에 저장했습니다.");
+    }
 
     private void UpdateSequenceText() => Guard(() =>
     {

@@ -57,6 +57,15 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     private const string ScriptSettingKey = "Script";
 
     /// <summary>
+    /// 마지막으로 열었던 파일 경로가 들어가는 설정 키.
+    /// </summary>
+    /// <remarks>
+    /// 글 자체(<see cref="ScriptSettingKey"/>)도 따로 저장한다. 파일에 저장하지 않은 글이
+    /// 다음에 열 때 사라지면 안 되기 때문이다. 경로는 "무엇을 보고 있었나" 를 되살리는 데 쓴다.
+    /// </remarks>
+    private const string ScriptPathSettingKey = "ScriptPath";
+
+    /// <summary>
     /// 스크립트를 쓰기 전, 단계 목록을 JSON 으로 넣던 키.
     /// </summary>
     /// <remarks>
@@ -76,6 +85,11 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
         DoAddStepCommand = new DelegateCommand<SequenceStepKind>(DoAddStep, _ => IsIdle, false);
         DoResetStepsCommand = new DelegateCommand(DoResetSteps, () => IsIdle, false);
+
+        DoNewScriptCommand = new DelegateCommand(DoNewScript, () => IsIdle, false);
+        DoOpenScriptCommand = new DelegateCommand(DoOpenScript, () => IsIdle, false);
+        DoSaveScriptCommand = new DelegateCommand(DoSaveScript, () => true, false);
+        DoSaveScriptAsCommand = new DelegateCommand(DoSaveScriptAs, () => true, false);
 
         // 도는 동안에도 눌린다. 한 바퀴 돌려 보고 지우고 다시 돌리는 것이 흔한 흐름이다.
         DoClearTestPadCommand = new DelegateCommand(() => TestPadText = string.Empty, () => true, false);
@@ -122,7 +136,12 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         // 언어를 넣어도 SetProperty 의 콜백은 값이 같으면 안 돈다. 엔진은 여기서 확실히 만든다.
         _engine ??= ScriptEngineFactory.Create(SelectedScriptLanguage);
 
+        ScriptFilePath = GetSetting(ScriptPathSettingKey, string.Empty) is { Length: > 0 } saved ? saved : null;
+
         RestoreScript();
+
+        // 되살린 글은 아직 아무것도 안 고친 상태다.
+        IsScriptDirty = false;
 
         HoldTimeMs = GetSetting(nameof(HoldTimeMs), 30);
         IntervalMs = GetSetting(nameof(IntervalMs), 60);
@@ -195,6 +214,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
         SetSetting(nameof(SelectedScriptLanguage), SelectedScriptLanguage.ToString());
         SetSetting(ScriptSettingKey, ScriptText ?? string.Empty);
+        SetSetting(ScriptPathSettingKey, ScriptFilePath ?? string.Empty);
 
         SetSetting(nameof(HoldTimeMs), HoldTimeMs);
         SetSetting(nameof(IntervalMs), IntervalMs);

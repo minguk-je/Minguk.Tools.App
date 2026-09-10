@@ -30,6 +30,14 @@ public partial class InputAutomationViewModel
 
     public DelegateCommand DoResetStepsCommand { get; private set; } = null!;
 
+    public DelegateCommand DoNewScriptCommand { get; private set; } = null!;
+
+    public DelegateCommand DoOpenScriptCommand { get; private set; } = null!;
+
+    public DelegateCommand DoSaveScriptCommand { get; private set; } = null!;
+
+    public DelegateCommand DoSaveScriptAsCommand { get; private set; } = null!;
+
     public DelegateCommand DoClearTestPadCommand { get; private set; } = null!;
 
     public DelegateCommand DoRefreshWindowsCommand { get; private set; } = null!;
@@ -100,6 +108,41 @@ public partial class InputAutomationViewModel
     {
         get => GetProperty(() => SelectedScriptLanguage);
         set => SetProperty(() => SelectedScriptLanguage, value, OnScriptLanguageChanged);
+    }
+
+    // ── 스크립트 파일 ────────────────────────────────────────────────────
+
+    /// <summary>지금 열어 둔 파일. 아직 저장한 적 없으면 null.</summary>
+    public string? ScriptFilePath
+    {
+        get => GetProperty(() => ScriptFilePath);
+        set => SetProperty(() => ScriptFilePath, value, () => RaisePropertyChanged(nameof(ScriptFileLabel)));
+    }
+
+    /// <summary>
+    /// 글이 마지막으로 저장된 뒤 바뀌었는지.
+    /// </summary>
+    /// <remarks>
+    /// 파일로 저장하지 않아도 글 자체는 설정에 남아 다음에 열 때 그대로 나온다. 그래서 이 표시는
+    /// "잃어버릴 수 있다" 는 경고가 아니라 "파일과 지금 글이 다르다" 는 뜻이다.
+    /// </remarks>
+    public bool IsScriptDirty
+    {
+        get => GetProperty(() => IsScriptDirty);
+        set => SetProperty(() => IsScriptDirty, value, () => RaisePropertyChanged(nameof(ScriptFileLabel)));
+    }
+
+    /// <summary>화면에 보여 줄 파일 이름. 안 바뀐 것과 바뀐 것을 * 로 가른다.</summary>
+    public string ScriptFileLabel
+    {
+        get
+        {
+            var name = string.IsNullOrEmpty(ScriptFilePath)
+                ? "(저장 안 함)"
+                : System.IO.Path.GetFileName(ScriptFilePath);
+
+            return IsScriptDirty ? name + " *" : name;
+        }
     }
 
     /// <summary>엔진이 준비되는 동안 무슨 일을 하는지. 파이썬은 처음에 11MB 를 받아 온다.</summary>
