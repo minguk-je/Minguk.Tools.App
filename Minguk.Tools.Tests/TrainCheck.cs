@@ -60,6 +60,6 @@ internal static class TrainCheck
 
         Console.WriteLine();
 
-        return DetectCheck.Run(dataset, 0.3f);
+        return DetectCheck.Run(dataset, DetectCheck.DefaultMinimumScore);
     }
 }
