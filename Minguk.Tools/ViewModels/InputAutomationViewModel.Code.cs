@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Minguk.Base.Utilities;
+using Minguk.Tools.Helper;
 using System.Windows.Input;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
@@ -46,6 +47,32 @@ public partial class InputAutomationViewModel
         AdapterStatus = $"{_adapter.Name} · 한글·영문 입력"
                       + $" · 한/영 전환 {(_service.SupportsHangulToggle ? "가능" : "불가")}"
                       + $" · 진짜 커서 {(_adapter.GetCursorPosition() is null ? "안 움직임" : "움직임")}";
+    });
+
+    /// <summary>
+    /// 편집기 색을 지금 테마에 맞춘다.
+    /// </summary>
+    /// <remarks>
+    /// 테마 키를 짚지 않고 <b>이미 테마가 입혀진 컨트롤에서 실제 색을 잰다.</b>
+    /// 키 이름은 DevExpress 판마다 달라지고, 팔레트로 만든 테마(파란색 같은)는 이름만으로
+    /// 밝고 어두움을 알 수 없다. 옆의 TextEdit 은 그 테마 그대로 그려져 있으므로
+    /// 거기서 읽으면 어떤 테마든 따라간다.
+    ///
+    /// 화면이 뜬 뒤에 불러야 한다. 그리기 전에는 색이 아직 안 정해져 있다.
+    /// </remarks>
+    private void ApplyEditorTheme() => Guard(() =>
+    {
+        var sample = FindControl<DevExpress.Xpf.Editors.TextEdit>("ThemeSampleObjectService");
+
+        SequenceScriptHighlighting.SampleFrom(sample?.Background, sample?.Foreground);
+
+        EditorBackground = SequenceScriptHighlighting.Background;
+        EditorForeground = SequenceScriptHighlighting.Foreground;
+        EditorLineNumberForeground = SequenceScriptHighlighting.LineNumberForeground;
+        EditorBorder = SequenceScriptHighlighting.Border;
+        Highlighting = SequenceScriptHighlighting.Current;
+
+        if (sample is null) Logger.Debug("테마를 잴 컨트롤을 못 찾아 기본 색을 쓴다.");
     });
 
     private void OnSelectedInputBackendChanged()

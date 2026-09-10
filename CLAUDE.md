@@ -181,9 +181,14 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 
 - `TextEditor.Text` 는 의존 속성이 아니다. `Markup/AvalonEditText` 붙임 속성으로 양방향을 잇는다.
 - 순수 WPF 컨트롤이라 **경량 테마가 손대지 않는다.** 배경·글자색을 직접 주지 않으면
-  어두운 테마에서 이 편집기만 흰 판으로 남는다. `Helper/SequenceScriptHighlighting` 이 색을 든다.
-- 테마가 어두운지는 이름(`Dark`·`Black`)으로 가르고, `*System` 테마는 레지스트리의
-  `AppsUseLightTheme` 을 본다. DevExpress `Theme` 에는 그걸 알려 주는 것이 없다.
+  테마를 바꿔도 이 편집기만 그대로 남는다. `Helper/SequenceScriptHighlighting` 이 색을 든다.
+- 색은 **테마 키를 짚지 않고, 이미 테마가 입혀진 컨트롤에서 실제로 그려진 색을 잰다**
+  (`SampleFrom`). 키 이름은 DevExpress 판마다 달라지고(`LayoutControlThemeKey` 를 짚었다가
+  MC3074 로 막힌 적이 있다), **팔레트로 만든 테마는 이름만으로 밝고 어두움을 알 수 없다**
+  (VS2019Blue 가 그렇다). 잰 바탕색의 밝기로 밝은 벌·어두운 벌을 고른다.
+  줄 번호와 테두리는 잰 두 색을 섞어 만든다.
+- 잴 것이 없을 때만 이름(`Dark`·`Black`)과 레지스트리(`AppsUseLightTheme`)로 어림한다.
+- 지금은 **화면이 뜰 때 한 번 잰다.** 앱을 켜 둔 채 테마를 바꾸면 편집기는 다음에 열 때 따라온다.
 - **`TextEditor` 를 바로 얹으면 창 전체의 UI 자동화 트리가 빈다.** 실측으로 갈렸다 -
   같은 화면의 버튼이 그리드 시절 37개에서 편집기를 넣은 뒤 0개가 됐다. 편집기만이 아니라
   창에 있는 모든 것이 안 보인다(스크린 리더에도 그렇다). AvalonEdit 이 만드는 자동화 피어가

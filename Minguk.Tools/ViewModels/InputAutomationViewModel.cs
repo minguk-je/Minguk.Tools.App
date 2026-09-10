@@ -170,6 +170,8 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         UpdateSequenceText();
         RegisterHotkeys();
 
+        ApplyEditorTheme();
+
         RaisePropertyChanged(nameof(NeedsWindowTarget));
 
         if (NeedsWindowTarget) DoRefreshWindows();

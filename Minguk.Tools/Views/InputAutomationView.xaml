@@ -274,9 +274,19 @@
                               IsReadOnly="True" />
             </dxlc:LayoutItem>
 
+            <!--
+                이 칸은 값을 보여 주는 것 말고 하나를 더 한다 - 편집기 색을 여기서 잰다.
+                AvalonEdit 은 경량 테마를 안 타므로, 이미 테마가 입혀진 컨트롤에서 실제 색을
+                읽어 옮긴다. 테마 키를 짚으면 판마다 이름이 달라지고 팔레트 테마는 이름만으로
+                밝고 어두움을 알 수 없다.
+            -->
             <dxlc:LayoutItem Label="순서">
                 <dxe:TextEdit EditValue="{Binding SequenceText}"
-                              IsReadOnly="True" />
+                              IsReadOnly="True">
+                    <dxmvvm:Interaction.Behaviors>
+                        <dxmvvm:UIObjectService x:Name="ThemeSampleObjectService" />
+                    </dxmvvm:Interaction.Behaviors>
+                </dxe:TextEdit>
             </dxlc:LayoutItem>
 
             <dxlc:LayoutGroup Orientation="Horizontal"

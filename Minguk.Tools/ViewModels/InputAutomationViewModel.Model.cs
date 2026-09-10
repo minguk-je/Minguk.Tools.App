@@ -133,16 +133,23 @@ public partial class InputAutomationViewModel
     /// 화면에서 직접 고르지 않고 ViewModel 이 들고 있는 이유는, 테마에 따라 다른 것을 줘야
     /// 하는데 그 판단이 XAML 에서 할 일이 아니기 때문이다.
     /// </remarks>
-    public IHighlightingDefinition Highlighting { get; } = SequenceScriptHighlighting.Current;
+    public IHighlightingDefinition Highlighting
+    {
+        get => GetProperty(() => Highlighting);
+        set => SetProperty(() => Highlighting, value);
+    }
 
-    /// <summary>편집기 색. AvalonEdit 은 DevExpress 테마를 안 타므로 여기서 준다.</summary>
-    public Brush EditorBackground { get; } = SequenceScriptHighlighting.Background;
+    // ── 편집기 색 ────────────────────────────────────────────────────────
+    //    AvalonEdit 은 순수 WPF 컨트롤이라 DevExpress 경량 테마가 손대지 않는다.
+    //    화면이 뜰 때 옆의 테마 컨트롤에서 실제 색을 재 와 여기 넣는다(ApplyEditorTheme).
 
-    public Brush EditorForeground { get; } = SequenceScriptHighlighting.Foreground;
+    public Brush? EditorBackground { get => GetProperty(() => EditorBackground); set => SetProperty(() => EditorBackground, value); }
 
-    public Brush EditorLineNumberForeground { get; } = SequenceScriptHighlighting.LineNumberForeground;
+    public Brush? EditorForeground { get => GetProperty(() => EditorForeground); set => SetProperty(() => EditorForeground, value); }
 
-    public Brush EditorBorder { get; } = SequenceScriptHighlighting.Border;
+    public Brush? EditorLineNumberForeground { get => GetProperty(() => EditorLineNumberForeground); set => SetProperty(() => EditorLineNumberForeground, value); }
+
+    public Brush? EditorBorder { get => GetProperty(() => EditorBorder); set => SetProperty(() => EditorBorder, value); }
 
     // ── 타이밍 ───────────────────────────────────────────────────────────
 
