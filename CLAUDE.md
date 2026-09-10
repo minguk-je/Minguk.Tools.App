@@ -565,6 +565,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --canvas-drag         # 라�
 dotnet run --project Minguk.Tools.Tests -c Debug -- --fallback            # 드라이버 없는 상황
 dotnet run --project Minguk.Tools.Tests -c Debug -- --calibrate           # 정규화 규칙 실측
 dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-bench        # 추론 속도 (libtorch 필요)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 학습한 모델이 라벨을 되찾는지 (libtorch 필요)
 ```
 
 - `--views` · `--vision` · `--detect-bench` 외에는 **커서와 키보드를 가져간다.** 돌리는 동안 손을 떼야 한다.
@@ -572,6 +573,10 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-bench        # 추�
   라벨 하나 고치고 확인하려 해도 상관없는 입력 어댑터 검증이 통째로 딸려 오고, 그동안
   커서를 못 쓴다. `--backend=` 로 도는 전체 검증에도 그대로 끼므로 한 번에 다 볼 수도 있다.
 - `--detect-bench` 는 libtorch(4GB)와 학습한 `detector.zip` 이 있어야 돈다. 없으면 그렇게 말하고 끝난다.
+- **학습이 끝나면 `--detect-check` 로 본다.** "끝났습니다" 는 모델이 만들어졌다는 뜻이지 찾는다는
+  뜻이 아니다. 라벨 찍은 그림마다 검출을 돌려 IoU 0.5 이상으로 되찾은 개수와 헛것을 센다.
+  학습에 쓴 그림이라 외운 것도 맞은 것이 된다 - 여기서 못 찾으면 확실히 문제고, 다 찾아도
+  새 장면은 캡처 화면의 몹 찾기로 따로 봐야 한다.
 - 화면을 고쳤으면 `--views` 를 돌린다. XAML 은 빌드를 통과하고 런타임에만 터진다.
 - 입력 쪽을 고쳤으면 **세 경로 모두** 돌린다. 한 경로만 통과하는 변경이 흔하다.
 - 한글 쪽을 고쳤으면 하네스만으로 부족하다. 대상이 WPF 라 최상위 창과 포커스 창이 같아서,

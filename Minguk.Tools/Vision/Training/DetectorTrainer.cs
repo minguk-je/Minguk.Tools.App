@@ -168,10 +168,20 @@ public static class DetectorTrainer
                     "Image", inputWidth, inputHeight, "Image",
                     Microsoft.ML.Transforms.Image.ImageResizingEstimator.ResizingKind.Fill))
                 .Append(ml.MulticlassClassification.Trainers.ObjectDetection(
-                    labelColumnName: "LabelKey",
-                    boundingBoxColumnName: nameof(TrainingSample.Box),
-                    imageColumnName: "Image",
-                    maxEpoch: maxEpoch))
+                    new Microsoft.ML.TorchSharp.AutoFormerV2.ObjectDetectionTrainer.Options
+                    {
+                        LabelColumnName = "LabelKey",
+                        BoundingBoxColumnName = nameof(TrainingSample.Box),
+                        ImageColumnName = "Image",
+                        MaxEpoch = maxEpoch,
+
+                        // 학습기 안에도 점수 문턱이 있고 모델에 같이 저장된다. 기본 0.5 로 두면
+                        // 그 아래는 모델이 아예 내놓지 않아, 화면의 "자신 있는 정도" 를 1% 로
+                        // 내려도 0건이다 - 실제로 그랬다(14장 · 20 epoch 모델이 27개 중 0개).
+                        // 낮게 잡아 두고 거르는 일은 화면 쪽 문턱이 한다. 그래야 못 찾는
+                        // 것이 "아예 못 보는지" "자신이 없을 뿐인지" 갈린다.
+                        ScoreThreshold = 0.1
+                    }))
 
                 // 예측을 번호가 아니라 몹 이름으로 내놓게 한다. 이걸 빼면 추론 쪽이 번호를
                 // 받아 classes.txt 로 다시 찾아야 하는데, 그러면 학습할 때의 목록과 그때의

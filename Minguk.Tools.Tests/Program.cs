@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -36,6 +37,13 @@ internal static partial class Program
 
         // libtorch(4GB)와 학습한 모델이 있어야 도는 것이라 평소 검증에는 안 낀다.
         if (args.Contains("--detect-bench")) return DetectBench.Run();
+
+        // 학습한 모델이 라벨을 찍은 그림에서 그 사각형을 되찾는지 센다. 같은 조건이라 평소 검증 밖.
+        if (args.Contains("--detect-check"))
+        {
+            var score = args.FirstOrDefault(a => a.StartsWith("--score=", StringComparison.OrdinalIgnoreCase));
+            return score is null ? DetectCheck.Run() : DetectCheck.Run(float.Parse(score["--score=".Length..], CultureInfo.InvariantCulture));
+        }
 
         // 라벨·학습 준비·추론 변환만 본다. 입력 어댑터를 안 만들므로 커서와 키보드를
         // 가져가지 않는다 - 시각 쪽만 고쳤을 때 이것만 돌리면 된다.

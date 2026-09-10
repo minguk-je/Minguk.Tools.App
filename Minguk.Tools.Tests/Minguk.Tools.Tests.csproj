@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<Platforms>x64</Platforms>
@@ -26,7 +26,8 @@
 	  <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.29.0" />
 	  <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
-	  <PackageReference Include="TorchSharp" Version="0.107.0" />
+	  <!-- Minguk.Tools 과 같은 판이어야 한다. 0.107.0 은 libtorch 2.10 을 찾아 하네스가 모델을 못 연다. 이유는 Minguk.Tools.csproj 에. -->
+	  <PackageReference Include="TorchSharp" Version="0.102.7" />
 	</ItemGroup>
 
 	<!--
