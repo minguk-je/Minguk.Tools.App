@@ -26,11 +26,8 @@ namespace Minguk.Tools.Tests;
 /// </remarks>
 internal static class DetectCheck
 {
-    /// <summary>이만큼 겹치면 같은 것을 찾은 것으로 친다. 검출 쪽에서 흔히 쓰는 기준이다.</summary>
-    private const double MatchIou = 0.5;
-
     /// <summary>앱의 "자신 있는 정도" 기본값과 같다. 다르게 두면 하네스 숫자와 화면이 안 맞는다.</summary>
-    private const float DefaultMinimumScore = 0.5f;
+    public const float DefaultMinimumScore = 0.5f;
 
     public static int Run() => Run(new LabelDataset(LabelDataset.ConfiguredRoot), DefaultMinimumScore);
 
@@ -63,7 +60,7 @@ internal static class DetectCheck
         using var model = DetectorModel.Load(modelPath);
 
         Console.WriteLine($"모델: {model.Manifest.Describe}");
-        Console.WriteLine($"기준: 자신 있는 정도 {MinimumScore:P0} 이상 · 겹침(IoU) {MatchIou:0.0} 이상이면 찾은 것");
+        Console.WriteLine($"기준: 자신 있는 정도 {MinimumScore:P0} 이상 · 겹침(IoU) {DetectionMatch.MatchIou:0.0} 이상이면 찾은 것");
         Console.WriteLine();
 
         var classes = dataset.LoadClasses();
@@ -83,37 +80,19 @@ internal static class DetectCheck
             watch.Stop();
             times.Add(watch.Elapsed.TotalMilliseconds);
 
-            // 라벨마다 가장 잘 겹치는 검출 하나를 짝짓는다. 한 검출이 두 라벨에 쓰이면
-            // 붙어 있는 봇 둘을 하나로 뭉뚱그린 것도 둘 다 찾은 것이 되므로 한 번만 쓴다.
-            var used = new HashSet<int>();
-            var found = 0;
-            var misses = new List<string>();
+            // 짝짓기는 앱과 같은 계산이다(DetectionMatch). 놓친 것의 크기만 여기서 따로 적는다.
+            var match = DetectionMatch.Match(labels, detections);
+            var found = match.Found;
+            var extra = match.Extra;
 
+            var misses = new List<string>();
             foreach (var label in labels)
             {
-                var bestIndex = -1;
-                var bestIou = 0d;
-
-                for (var i = 0; i < detections.Count; i++)
-                {
-                    if (used.Contains(i)) continue;
-
-                    var iou = Iou(label, detections[i].Box);
-                    if (iou > bestIou) { bestIou = iou; bestIndex = i; }
-                }
-
-                if (bestIndex >= 0 && bestIou >= MatchIou)
-                {
-                    used.Add(bestIndex);
-                    found++;
-                }
-                else
-                {
-                    misses.Add($"{label.Width * 1920:0}x{label.Height * 1080:0}px" + (bestIndex >= 0 ? $" 겹침 {bestIou:0.00}" : string.Empty));
-                }
+                var best = 0d;
+                foreach (var detection in detections) best = Math.Max(best, DetectionMatch.Iou(label, detection.Box));
+                if (best < DetectionMatch.MatchIou)
+                    misses.Add($"{label.Width * 1920:0}x{label.Height * 1080:0}px" + (best > 0 ? $" 겹침 {best:0.00}" : string.Empty));
             }
-
-            var extra = detections.Count - used.Count;
 
             totalLabels += labels.Count;
             totalFound += found;
@@ -134,17 +113,4 @@ internal static class DetectCheck
         return totalLabels > 0 && totalFound == totalLabels ? 0 : 1;
     }
 
-    /// <summary>두 사각형이 겹치는 넓이 / 합친 넓이. 0~1 좌표라 그림 크기를 안 탄다.</summary>
-    private static double Iou(LabelBox a, LabelBox b)
-    {
-        var width = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);
-        var height = Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top);
-
-        if (width <= 0 || height <= 0) return 0;
-
-        var overlap = width * height;
-        var union = (a.Width * a.Height) + (b.Width * b.Height) - overlap;
-
-        return union <= 0 ? 0 : overlap / union;
-    }
 }

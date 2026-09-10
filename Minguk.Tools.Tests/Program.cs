@@ -41,7 +41,7 @@ internal static partial class Program
         // 학습한 모델이 라벨을 찍은 그림에서 그 사각형을 되찾는지 센다. 같은 조건이라 평소 검증 밖.
         if (args.Contains("--detect-check"))
         {
-            var score = ArgValue(args, "--score=") is { } s ? float.Parse(s, CultureInfo.InvariantCulture) : 0.3f;
+            var score = ArgValue(args, "--score=") is { } s ? float.Parse(s, CultureInfo.InvariantCulture) : DetectCheck.DefaultMinimumScore;
             var root = ArgValue(args, "--root=");
             return root is null ? DetectCheck.Run(score) : DetectCheck.Run(new Minguk.Tools.Vision.Labeling.LabelDataset(root), score);
         }

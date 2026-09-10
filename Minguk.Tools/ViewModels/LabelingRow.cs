@@ -62,4 +62,26 @@ public sealed class LabelingRow : BindableBase
         get => GetValue<double?>();
         set => SetValue(value);
     }
+
+    /// <summary>
+    /// 학습 뒤 모델이 이 그림의 라벨을 몇 개 되찾았나. "2/2", "1/2 · 헛것 3".
+    /// </summary>
+    /// <remarks>
+    /// loss 는 오차라 낮을수록 좋고 인식률은 높을수록 좋다. 둘을 나란히 두면 loss 를 인식률로
+    /// 읽는 일이 생겨("인식률 맞지?") 이쪽은 개수로 적는다. 학습에 쓴 그림이라 외운 것도
+    /// 맞은 것으로 센다 - 여기서 못 찾으면 확실히 문제고, 다 찾았다고 새 장면에서도 찾는다는
+    /// 뜻은 아니다.
+    /// </remarks>
+    public string? Recognition
+    {
+        get => GetValue<string?>();
+        set => SetValue(value);
+    }
+
+    /// <summary>다 못 찾았거나 헛것이 있으면 참. 목록에서 색으로 가른다.</summary>
+    public bool RecognitionIsPoor
+    {
+        get => GetValue<bool>();
+        set => SetValue(value);
+    }
 }

@@ -55,6 +55,36 @@ public sealed class DetectorManifest
     [JsonPropertyName("classes")]
     public string[] Classes { get; set; } = [];
 
+    /// <summary>이 데이터셋에서 몇 번째 학습인지. 지난 쪽지의 값에 1을 더해 이어 간다.</summary>
+    [JsonPropertyName("trainCount")]
+    public int TrainCount { get; set; }
+
+    [JsonPropertyName("elapsedSeconds")]
+    public double ElapsedSeconds { get; set; }
+
+    [JsonPropertyName("learningRate")]
+    public double LearningRate { get; set; }
+
+    /// <summary>마지막 바퀴의 평균 loss. 스텝 하나는 그림 하나의 값이라 튄다. 다음 학습과 견주는 눈금이다.</summary>
+    [JsonPropertyName("finalLoss")]
+    public double? FinalLoss { get; set; }
+
+    [JsonPropertyName("usedGpu")]
+    public bool UsedGpu { get; set; }
+
+    /// <summary>학습 뒤 학습 그림을 되찾은 결과. 되찾기를 안 돌렸으면 비어 있다.</summary>
+    [JsonPropertyName("recallFound")]
+    public int? RecallFound { get; set; }
+
+    [JsonPropertyName("recallLabels")]
+    public int? RecallLabels { get; set; }
+
+    [JsonPropertyName("recallExtra")]
+    public int? RecallExtra { get; set; }
+
+    [JsonPropertyName("recallThreshold")]
+    public double? RecallThreshold { get; set; }
+
     public static string PathFor(string modelPath)
         => Path.Combine(Path.GetDirectoryName(modelPath) ?? string.Empty, FileName);
 
@@ -98,4 +128,38 @@ public sealed class DetectorManifest
     /// <summary>사람에게 보여 줄 한 마디. 파일에는 안 적는다 - 계산해서 나오는 값이다.</summary>
     [JsonIgnore]
     public string Describe => $"{InputWidth}x{InputHeight}";
+
+    /// <summary>
+    /// 화면 한 줄에 다 적는다. 사람이 "지금 모델이 어떤 것인지" 물을 때 답이 되는 것들.
+    /// </summary>
+    /// <remarks>
+    /// 옛 쪽지(학습 횟수·loss 가 없던 것)도 깨지지 않고 있는 만큼만 적는다.
+    /// </remarks>
+    [JsonIgnore]
+    public string Summary
+    {
+        get
+        {
+            var parts = new System.Collections.Generic.List<string>();
+
+            if (TrainCount > 0) parts.Add($"{TrainCount}번째 학습");
+            if (TrainedAt != default) parts.Add(TrainedAt.ToString("MM-dd HH:mm"));
+            parts.Add($"{InputWidth}x{InputHeight}");
+            parts.Add($"그림 {Images}장 · 사각형 {Boxes}개 · 몹 {Classes.Length}종");
+            parts.Add($"{Epochs}바퀴");
+            if (ElapsedSeconds > 0) parts.Add($"{ElapsedSeconds / 60:0.0}분 ({(UsedGpu ? "GPU" : "CPU")})");
+            if (LearningRate > 0) parts.Add($"학습률 {LearningRate:0.###}");
+            if (FinalLoss is { } loss) parts.Add($"마지막 바퀴 loss {loss:0.00}");
+
+            if (RecallFound is { } found && RecallLabels is { } labels && labels > 0)
+            {
+                var recall = $"되찾기 {found}/{labels} ({100.0 * found / labels:0}%)";
+                if (RecallExtra is > 0) recall += $" · 헛것 {RecallExtra}";
+                if (RecallThreshold is { } threshold) recall += $" @{threshold:P0}";
+                parts.Add(recall);
+            }
+
+            return string.Join("  ·  ", parts);
+        }
+    }
 }

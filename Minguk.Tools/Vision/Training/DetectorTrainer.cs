@@ -172,6 +172,9 @@ public static class DetectorTrainer
 
             progress?.Report("찍어 둔 라벨을 모으는 중...");
 
+            // 다른 PC 에서 폴더째 복사해 왔으면 사전학습 가중치가 임시 폴더에 없다. 보관본으로 채운다.
+            PretrainedWeights.SeedTemp();
+
             var samples = Collect(dataset, classes, inputWidth, inputHeight);
 
             if (samples.Count == 0)
@@ -196,12 +199,31 @@ public static class DetectorTrainer
             // 찾는 모델을 두 번 만들고 나서야 loss 를 봐야 한다는 것을 알았다.
             var lastLossReport = 0L;
             var epochsDone = 0;
+            // 마지막 스텝 하나는 튄다(그림 하나의 값). 마지막 바퀴의 평균을 쪽지에 적는다.
+            double? lastLoss = null;
+            double? lastEpochMeanLoss = null;
+            var epochLossSum = 0d;
+            var epochLossCount = 0;
             ml.Log += (_, e) =>
             {
                 // 학습기가 내는 것 중 쓸 만한 것은 "Row: n, Loss: x" 와 "Starting/Finished epoch n" 뿐이다.
                 var isLoss = e.Message.IndexOf("Loss:", StringComparison.OrdinalIgnoreCase) >= 0;
                 var isEpoch = e.Message.IndexOf("epoch", StringComparison.OrdinalIgnoreCase) >= 0;
                 if (!isLoss && !isEpoch) return;
+
+                if (isLoss && TryParseLoss(e.Message, out var parsedLoss))
+                {
+                    lastLoss = parsedLoss;
+                    epochLossSum += parsedLoss;
+                    epochLossCount++;
+                }
+
+                if (isEpoch && e.Message.Contains("Finished", StringComparison.OrdinalIgnoreCase) && epochLossCount > 0)
+                {
+                    lastEpochMeanLoss = epochLossSum / epochLossCount;
+                    epochLossSum = 0;
+                    epochLossCount = 0;
+                }
 
                 // 숫자 진행. 막대와 꺾은선이 이걸로 그려진다.
                 if (steps is not null)
@@ -302,6 +324,9 @@ public static class DetectorTrainer
 
             // 어떤 크기로 학습했는지 모델 옆에 남긴다. 추론이 이걸 보고 좌표를 되돌린다 -
             // 설정에서 읽으면 크기를 바꾼 순간 옛 모델의 좌표가 조용히 어긋난다.
+            // 몇 번째 학습인지는 지난 쪽지에서 이어 간다. 쪽지가 없거나 깨졌으면 1부터.
+            var previous = DetectorManifest.Load(modelPath);
+
             new DetectorManifest
             {
                 InputWidth = inputWidth,
@@ -310,10 +335,18 @@ public static class DetectorTrainer
                 Images = samples.Count,
                 Boxes = boxes,
                 Epochs = maxEpoch,
-                Classes = [.. classes.Names]
+                Classes = [.. classes.Names],
+                TrainCount = previous.TrainCount + 1,
+                ElapsedSeconds = stopwatch.Elapsed.TotalSeconds,
+                LearningRate = learningRate ?? DefaultLearningRate,
+                FinalLoss = lastEpochMeanLoss ?? lastLoss,
+                UsedGpu = usedGpu
             }.Save(modelPath);
 
             Logger.Info($"학습 끝 - {stopwatch.Elapsed.TotalSeconds:0.0}초, {inputWidth}x{inputHeight}, {modelPath}");
+
+            // 이번에 받았을 수 있는 사전학습 가중치를 우리 폴더에 챙긴다. 폴더 하나로 옮기려면 여기 있어야 한다.
+            PretrainedWeights.Keep();
 
             return new TrainingResult(modelPath, samples.Count, boxes, classes.Count,
                                       stopwatch.Elapsed, usedGpu, $"{inputWidth}x{inputHeight}");

@@ -321,6 +321,22 @@ AutoFormerV2). 스크래치 프로젝트에서 학습 → 저장 → 불러오�
 
 29배다. 300장 × 20 epoch 이면 CPU 로는 수백 시간이라 아예 못 쓴다. **학습은 GPU 를 전제한다.**
 
+### 폴더 하나로 옮긴다 - %AppData%\Minguk.Tools
+
+학습에 얽힌 것은 전부 이 뿌리 아래 둔다. 다른 PC 로 갈 때 이 폴더만 복사하면 된다.
+
+```
+%AppData%\Minguk.Tools\
+├─ Datasets\몹\      images · labels · classes.txt · detector.zip · detector.json
+├─ libtorch\2.2.1\   받아 둔 libtorch (CUDA 4.2GB / CPU 186MB)
+├─ mlnet\            autoformer_11m_torchsharp.bin - 사전학습 가중치 보관본 (77MB)
+└─ AppSettings.User.config
+```
+
+사전학습 가중치는 ML.NET 이 `%TEMP%\mlnet\` 에서만 읽고 그 자리를 바꿀 수 없다(환경 변수
+없음 - DLL 문자열을 뒤져 확인). 그래서 `PretrainedWeights` 가 학습 뒤에 보관본을 챙기고,
+학습 전에 임시 폴더에 없으면 보관본으로 채운다. 임시 폴더는 청소 대상이라 원본으로 믿지 않는다.
+
 ### 학습률 - 기본값 1.0 으로는 실제 화면을 못 배운다
 
 ML.NET `ObjectDetectionTrainer` 의 기본 `InitLearningRate` 는 1.0(SGD) 이다. 확인용 단색 네모
@@ -341,6 +357,13 @@ ML.NET `ObjectDetectionTrainer` 의 기본 `InitLearningRate` 는 1.0(SGD) 이�
   있을 수 있다. `따라가기` 를 켜면 가운데 그림도 따라간다(한 장 30~50ms, 초당 두세 장).
   목록에는 그림마다 **마지막 loss** 를 적는다 - 혼자 높은 그림이 라벨이 틀렸거나 다시 찍을
   장면이다. "이건 다시 찍어야겠다" 는 그림을 지켜보는 것보다 이 숫자로 고르는 것이 빠르다.
+- **쪽지(detector.json)에 사람이 물을 만한 것을 다 적는다** - 몇 번째 학습인지(지난 쪽지 +1),
+  언제, 크기, 장수·사각형·몹 종, 바퀴, 걸린 시간, GPU 여부, 학습률, 마지막 loss, 되찾기 결과.
+  화면의 "모델" 줄(`ModelSummary`)이 이것을 한 줄로 보인다. 옛 쪽지는 있는 것만 적는다.
+- **학습이 끝나면 학습 그림을 되찾아 목록에 "2/2" 로 적는다** (`RunSelfCheckAsync`). loss 를
+  인식률로 읽는 일이 있어("인식률 맞지?") 개수로 따로 보인다. 계산은 하네스 `--detect-check`
+  와 같은 `DetectionMatch`(IoU 0.5, 라벨 하나에 검출 하나) 다 - 두 벌이면 숫자가 어긋난다.
+  학습에 쓴 그림이라 외운 것도 맞은 것으로 센다. 한 장 0.3초라 학습의 일부로 돈다.
 
 ### libtorch 는 받아서 쓴다
 

@@ -112,10 +112,24 @@
                                            Text="●"
                                            Visibility="{Binding HasLabel, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding Name}" />
-                                <!-- 마지막 loss. 혼자 높은 그림이 다시 찍거나 라벨을 볼 그림이다. -->
+                                <!-- 학습 뒤 되찾은 개수. 다 못 찾았거나 헛것이 있으면 주황. -->
+                                <TextBlock Margin="6,0,0,0"
+                                           Text="{Binding Recognition}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="#2E9E4F" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding RecognitionIsPoor}" Value="True">
+                                                    <Setter Property="Foreground" Value="#BF6A02" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <!-- 마지막 loss(오차, 낮을수록 좋다). 혼자 높은 그림이 다시 찍거나 라벨을 볼 그림이다. -->
                                 <TextBlock Margin="6,0,0,0"
                                            Foreground="#888888"
-                                           Text="{Binding LastLoss, StringFormat={}{0:0.00}}" />
+                                           Text="{Binding LastLoss, StringFormat=loss {0:0.00}}" />
                                 <!-- 학습기가 지금 보는 그림. 스텝마다 옮겨 다닌다. -->
                                 <TextBlock Margin="4,0,0,0"
                                            Foreground="#BF6A02"
@@ -251,6 +265,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -260,6 +275,21 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
+
+                <!-- 지금 폴더의 모델이 어떤 것인지. 몇 번째 학습, 언제, 무엇으로, 얼마나 되찾았나. -->
+                <StackPanel Grid.Row="3"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="6"
+                            Margin="0,2,0,0"
+                            Orientation="Horizontal">
+                    <TextBlock Margin="0,0,6,0"
+                               VerticalAlignment="Center"
+                               Text="모델" />
+                    <TextBlock VerticalAlignment="Center"
+                               Foreground="#666666"
+                               Text="{Binding ModelSummary}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
 
                 <!--
                     진행 막대와 loss 꺾은선. 글 한 줄로는 "돌고 있나" 밖에 안 보인다.
@@ -409,7 +439,7 @@
                     libtorch 를 아직 안 받았거나 GPU 가 없을 때만 뜬다.
                     2.2GB 를 받고 나서 "못 씁니다" 라고 하면 안 되므로 누르기 전에 말한다.
                 -->
-                <TextBlock Grid.Row="3"
+                <TextBlock Grid.Row="4"
                            Grid.Column="0"
                            Grid.ColumnSpan="6"
                            Margin="0,4,0,0"

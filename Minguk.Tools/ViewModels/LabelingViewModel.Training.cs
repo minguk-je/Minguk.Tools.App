@@ -7,6 +7,7 @@ using DevExpress.Mvvm;
 
 using Minguk.Base.Utilities;
 
+using Minguk.Tools.Vision.Inference;
 using Minguk.Tools.Vision.Labeling;
 using Minguk.Tools.Vision.Training;
 
@@ -137,8 +138,99 @@ public partial class LabelingViewModel
 
         // 다시 학습했으니 읽어 둔 모델은 옛것이다. 버려야 다음 찾아보기가 새 것을 읽는다.
         ReleaseModel();
+        RefreshModelSummary();
 
         MessengerUtility.SendMainMessage($"학습이 끝났습니다: {result.ModelPath}");
+
+        // 학습한 모델로 학습 그림을 되찾아 본다. "끝났습니다" 만으로는 무엇을 배웠는지 모른다 -
+        // 실제로 27개 중 0개를 찾는 모델을 두 번 만들고도 화면에서는 몰랐다.
+        await RunSelfCheckAsync(dataset, result.ModelPath, token);
+    }
+
+    /// <summary>
+    /// 학습에 쓴 그림마다 모델로 다시 찾아 몇 개를 되찾았는지 목록에 적는다.
+    /// </summary>
+    /// <remarks>
+    /// 하네스 <c>--detect-check</c> 와 같은 계산(<see cref="DetectionMatch"/>)이다. 학습에 쓴
+    /// 그림이라 외운 것도 맞은 것으로 센다. 그러니 여기서 못 찾은 그림은 라벨이 틀렸거나 장면이
+    /// 애매한 것이고, 다 찾았다는 것이 새 장면에서도 찾는다는 뜻은 아니다.
+    /// 한 장에 0.3초라 26장이면 8초다. 학습 시간에 견주면 없는 값이라 학습의 일부로 돈다.
+    /// </remarks>
+    private async Task RunSelfCheckAsync(LabelDataset dataset, string modelPath, CancellationToken token)
+    {
+        var rows = Items.Where(row => row.HasLabel).ToList();
+        if (rows.Count == 0) return;
+
+        foreach (var row in Items)
+        {
+            row.Recognition = null;
+            row.RecognitionIsPoor = false;
+        }
+
+        var finished = TrainingStatus;
+        var classes = dataset.LoadClasses();
+        var threshold = (float)MinimumScore;
+
+        var total = new DetectionMatch.Result(0, 0, 0);
+
+        await Task.Run(() =>
+        {
+            using var model = DetectorModel.Load(modelPath);
+
+            for (var i = 0; i < rows.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var row = rows[i];
+                var labels = LabelFile.Load(row.LabelPath, out _);
+                var found = model.Detect(row.ImagePath, classes, threshold);
+                var match = DetectionMatch.Match(labels, found);
+
+                total = new DetectionMatch.Result(total.Found + match.Found, total.Labels + match.Labels, total.Extra + match.Extra);
+
+                var index = i + 1;
+                DispatcherService?.BeginInvoke(() =>
+                {
+                    row.Recognition = match.Describe;
+                    row.RecognitionIsPoor = !match.IsComplete || match.Extra > 0;
+                    TrainingStatus = $"{finished}  되찾는 중 {index}/{rows.Count}...";
+                });
+            }
+        }, token);
+
+        var rate = total.Labels == 0 ? 0 : 100.0 * total.Found / total.Labels;
+
+        TrainingStatus = $"{finished}  되찾기: 라벨 {total.Labels}개 중 {total.Found}개 ({rate:0}%)" +
+                         (total.Extra > 0 ? $" · 헛것 {total.Extra}개" : string.Empty) +
+                         $" (자신 있는 정도 {MinimumScore:P0} 기준)";
+
+        // 되찾기 결과를 쪽지에도 남긴다. 다음에 화면을 열었을 때 "지난 모델이 얼마나 찾았나" 가 보여야 한다.
+        try
+        {
+            var manifest = DetectorManifest.Load(modelPath);
+            manifest.RecallFound = total.Found;
+            manifest.RecallLabels = total.Labels;
+            manifest.RecallExtra = total.Extra;
+            manifest.RecallThreshold = MinimumScore;
+            manifest.Save(modelPath);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "되찾기 결과를 쪽지에 적지 못했다");
+        }
+
+        RefreshModelSummary();
+    }
+
+    /// <summary>쪽지를 읽어 "모델" 줄을 다시 쓴다. 폴더를 바꿀 때, 학습 뒤, 되찾기 뒤.</summary>
+    private void RefreshModelSummary()
+    {
+        var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
+        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+
+        ModelSummary = System.IO.File.Exists(modelPath)
+            ? DetectorManifest.Load(modelPath).Summary
+            : "아직 학습한 모델이 없습니다.";
     }
 
     private LabelingRow? _trainingRow;

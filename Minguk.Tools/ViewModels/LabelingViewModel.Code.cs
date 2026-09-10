@@ -61,6 +61,7 @@ public partial class LabelingViewModel
             : Items.FirstOrDefault();
 
         UpdateProgress();
+        RefreshModelSummary();
 
         // 이름만 다르고 확장자가 같은 그림은 라벨 하나를 나눠 갖는다. 조용히 두면
         // 한쪽에 찍은 것이 다른 쪽에도 붙은 것처럼 보인다.

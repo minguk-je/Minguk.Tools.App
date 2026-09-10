@@ -228,6 +228,13 @@ public partial class LabelingViewModel
 
     public bool HasTrainingNotice => !string.IsNullOrEmpty(TrainingNotice);
 
+    /// <summary>지금 폴더의 모델이 어떤 것인지 한 줄. 쪽지(detector.json)에서 읽는다.</summary>
+    public string? ModelSummary
+    {
+        get => GetProperty(() => ModelSummary);
+        set => SetProperty(() => ModelSummary, value);
+    }
+
     // ── 찾아보기 ─────────────────────────────────────────────────────────
 
     public DelegateCommand DoDetectCommand { get; private set; } = null!;
