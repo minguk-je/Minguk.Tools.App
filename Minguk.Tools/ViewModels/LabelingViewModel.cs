@@ -52,10 +52,12 @@ public partial class LabelingViewModel : DocumentViewModelBase
         DoPreviousCommand = new DelegateCommand(DoPrevious, () => Items.Count > 0, false);
         DoNextCommand = new DelegateCommand(DoNext, () => Items.Count > 0, false);
         DoNextUnlabeledCommand = new DelegateCommand(DoNextUnlabeled, () => Items.Count > 0, false);
+        DoCopyPreviousCommand = new DelegateCommand(DoCopyPrevious, () => HasImage && Items.Count > 1, false);
         DoTrainCommand = new DelegateCommand(DoTrain, () => !IsTraining, false);
         DoCancelTrainCommand = new DelegateCommand(DoCancelTrain, () => IsTraining, false);
         DoDetectCommand = new DelegateCommand(DoDetect, () => !IsDetecting && HasImage, false);
         DoClearPredictionsCommand = new DelegateCommand(DoClearPredictions, () => Predictions.Count > 0, false);
+        DoAdoptPredictionsCommand = new DelegateCommand(DoAdoptPredictions, () => Predictions.Count > 0, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
@@ -65,6 +67,10 @@ public partial class LabelingViewModel : DocumentViewModelBase
         // 사각형이 늘거나 줄면 "안 저장한 것이 있다" 를 세우고 버튼 상태를 다시 본다.
         // 컨트롤이 컬렉션을 직접 고치므로, 바뀐 것을 알 길은 이것뿐이다.
         Boxes.CollectionChanged += OnBoxesChanged;
+
+        // 캔버스가 점선을 눌러 라벨로 옮기면 여기서는 모른다. 컬렉션이 바뀌면 버튼 상태를 다시 본다.
+        Predictions.CollectionChanged += OnPredictionsChanged;
+        Disposables.Add(Disposable.Create(() => Predictions.CollectionChanged -= OnPredictionsChanged));
 
         Disposables.Add(Disposable.Create(() => Boxes.CollectionChanged -= OnBoxesChanged));
     }

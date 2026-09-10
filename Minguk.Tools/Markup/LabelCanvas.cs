@@ -447,8 +447,47 @@ public sealed class LabelCanvas : FrameworkElement
             return;
         }
 
+        // 사람이 찍은 것이 없는 자리의 점선을 누르면 그 점선을 라벨로 옮긴다. 모델이 맞게
+        // 찾은 것을 그 위에 다시 그리게 하는 것은 낭비다. 옮긴 뒤 바로 끌어 고칠 수 있게
+        // 골라 둔다.
+        var predicted = HitPrediction(point);
+        if (predicted >= 0 && Predictions is { } predictions)
+        {
+            var adopted = predictions[predicted];
+
+            predictions.RemoveAt(predicted);
+            boxes.Add(adopted.Box);
+            SelectedIndex = boxes.Count - 1;
+            BeginDrag(DragMode.Move, SelectedIndex, BoxHandle.Inside, point);
+            return;
+        }
+
         SelectedIndex = -1;
         BeginDrag(DragMode.Draw, -1, BoxHandle.None, point);
+    }
+
+    /// <summary>그 자리에 있는 점선. 없으면 -1. 겹치면 작은 것.</summary>
+    private int HitPrediction(Point point)
+    {
+        if (Predictions is not { } predictions || _imageRect.IsEmpty) return -1;
+
+        var best = -1;
+        var bestArea = double.MaxValue;
+
+        for (var i = 0; i < predictions.Count; i++)
+        {
+            var rect = ToScreen(predictions[i].Box);
+
+            if (!rect.Contains(point)) continue;
+
+            var area = rect.Width * rect.Height;
+            if (area >= bestArea) continue;
+
+            best = i;
+            bestArea = area;
+        }
+
+        return best;
     }
 
     private void BeginDrag(DragMode mode, int index, BoxHandle handle, Point point)
@@ -597,7 +636,9 @@ public sealed class LabelCanvas : FrameworkElement
             }
         }
 
-        Cursor = HitTest(point) >= 0 ? Cursors.SizeAll : Cursors.Cross;
+        Cursor = HitTest(point) >= 0 ? Cursors.SizeAll
+            : HitPrediction(point) >= 0 ? Cursors.Hand
+            : Cursors.Cross;
     }
 
     private static Cursor CursorFor(BoxHandle handle) => handle switch

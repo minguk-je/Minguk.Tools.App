@@ -64,6 +64,12 @@ public partial class LabelingViewModel
         IsTraining = true;
         TrainingStatus = "준비하는 중...";
 
+        // 지난번 그래프는 지운다. 남겨 두면 이번 loss 가 지난번 꼬리에 이어 붙어 어디서부터가 이번인지 안 보인다.
+        LossHistory.Clear();
+        TrainEpochsDone = 0;
+        TrainEpochsTotal = TrainEpochs;
+        TrainPercent = 0;
+
         _ = GuardAsync(async () =>
         {
             try
@@ -105,7 +111,20 @@ public partial class LabelingViewModel
 
         var (width, height) = ParseInputSize();
 
-        var result = await DetectorTrainer.TrainAsync(dataset, TrainEpochs, progress, token, width, height);
+        // Progress<T> 는 만든 스레드(UI)로 돌아와서 부른다. 컬렉션을 여기서 고쳐도 된다.
+        var steps = new Progress<TrainingStep>(step =>
+        {
+            TrainEpochsDone = step.EpochsDone;
+            TrainEpochsTotal = step.MaxEpoch;
+            TrainPercent = step.Fraction * 100;
+
+            if (step.Loss is { } loss) LossHistory.Add(loss);
+        });
+
+        var result = await DetectorTrainer.TrainAsync(dataset, TrainEpochs, progress, token, width, height, steps: steps);
+
+        TrainEpochsDone = TrainEpochsTotal;
+        TrainPercent = 100;
 
         TrainingStatus =
             $"끝났습니다 - 그림 {result.Images}장 · 사각형 {result.Boxes}개 · 몹 {result.Classes}종 을 " +

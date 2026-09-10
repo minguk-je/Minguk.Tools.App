@@ -41,8 +41,19 @@ internal static partial class Program
         // 학습한 모델이 라벨을 찍은 그림에서 그 사각형을 되찾는지 센다. 같은 조건이라 평소 검증 밖.
         if (args.Contains("--detect-check"))
         {
-            var score = args.FirstOrDefault(a => a.StartsWith("--score=", StringComparison.OrdinalIgnoreCase));
-            return score is null ? DetectCheck.Run() : DetectCheck.Run(float.Parse(score["--score=".Length..], CultureInfo.InvariantCulture));
+            var score = ArgValue(args, "--score=") is { } s ? float.Parse(s, CultureInfo.InvariantCulture) : 0.3f;
+            var root = ArgValue(args, "--root=");
+            return root is null ? DetectCheck.Run(score) : DetectCheck.Run(new Minguk.Tools.Vision.Labeling.LabelDataset(root), score);
+        }
+
+        // 지정한 폴더로 학습하고 곧바로 되찾는지 센다. 조건을 바꿔 가며 여러 번 돌릴 때.
+        // --train-check=<폴더> [--epochs=20] [--size=320x180]
+        if (ArgValue(args, "--train-check=") is { } trainRoot)
+        {
+            var epochs = int.Parse(ArgValue(args, "--epochs=") ?? "20", CultureInfo.InvariantCulture);
+            var size = (ArgValue(args, "--size=") ?? "320x180").Split('x');
+            double? lr = ArgValue(args, "--lr=") is { } l ? double.Parse(l, CultureInfo.InvariantCulture) : null;
+            return TrainCheck.Run(trainRoot, epochs, int.Parse(size[0], CultureInfo.InvariantCulture), int.Parse(size[1], CultureInfo.InvariantCulture), lr);
         }
 
         // 라벨·학습 준비·추론 변환만 본다. 입력 어댑터를 안 만들므로 커서와 키보드를
@@ -104,6 +115,9 @@ internal static partial class Program
     }
 
     /// <summary>시각 쪽만 돌린다. 커서와 키보드를 안 건드린다.</summary>
+    private static string? ArgValue(string[] args, string prefix)
+        => args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) is { } hit ? hit[prefix.Length..] : null;
+
     private static int RunVisionOnly()
     {
         Console.WriteLine("시각 검증 (라벨 · 학습 준비 · 추론 변환)");

@@ -54,6 +54,9 @@ internal static class ViewSmokeProbe
             failures += CheckPathWarning();
             failures += CheckEditorPalette();
             failures += CheckLabelCanvasDrawing();
+            failures += CheckLabelingAssist();
+            failures += CheckScriptPerLanguage();
+            failures += CheckLossSparkline();
 
             app.Shutdown();
         });
@@ -383,6 +386,179 @@ internal static class ViewSmokeProbe
             // XAML 파싱 오류는 안쪽 예외에 진짜 이유가 들어 있다.
             var reason = ex.InnerException?.Message ?? ex.Message;
             Console.WriteLine($"[FAIL] {name} — {ex.GetType().Name}: {reason}");
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// 앞 장 가져오기 · 점선 받기. ViewModel 을 임시 데이터셋에 붙여 커서 없이 본다.
+    /// </summary>
+    /// <remarks>
+    /// 둘 다 사각형 컬렉션을 옮기는 일이라 화면이 없어도 결과가 컬렉션에 남는다.
+    /// 사용자 데이터셋이 아니라 임시 폴더다 - 가져오기가 라벨을 더하고 넘기면 저장까지 한다.
+    /// </remarks>
+    private static int CheckLabelingAssist()
+    {
+        var failures = 0;
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "minguk-assist-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var dataset = new Minguk.Tools.Vision.Labeling.LabelDataset(root);
+            dataset.EnsureCreated();
+            System.IO.File.WriteAllText(dataset.ClassesPath, "슬라임" + Environment.NewLine);
+
+            foreach (var stem in new[] { "a", "b" })
+                WriteTinyPng(System.IO.Path.Combine(dataset.ImageDirectory, stem + ".png"));
+
+            var first = Minguk.Tools.Vision.Labeling.LabelBox.FromCorners(0, 0.4, 0.4, 0.6, 0.6);
+            Minguk.Tools.Vision.Labeling.LabelFile.Save(dataset.LabelPathFor(System.IO.Path.Combine(dataset.ImageDirectory, "a.png")), [first]);
+
+            var vm = LabelingViewModel.Create();
+            vm.DatasetRoot = root;
+            vm.DoReloadCommand.Execute(null);
+
+            if (vm.Items.Count != 2)
+            {
+                Console.WriteLine($"[FAIL] 라벨링 보조 — 임시 데이터셋을 못 읽었다 ({vm.Items.Count}장)");
+                return 1;
+            }
+
+            // b 로 넘어가면 비어 있다. 앞 장(a)의 사각형을 가져온다.
+            vm.SelectedItem = vm.Items[1];
+            vm.DoCopyPreviousCommand.Execute(null);
+
+            var copied = vm.Boxes.Count == 1 && vm.Boxes[0] == first;
+            Console.WriteLine($"[{(copied ? "PASS" : "FAIL")}] 앞 장 가져오기 — 사각형 {vm.Boxes.Count}개, 고른 것 {vm.SelectedBoxIndex}");
+            if (!copied) failures++;
+
+            // 점선 둘을 받으면 라벨이 되고 점선은 없어진다.
+            vm.Predictions.Add(new Minguk.Tools.Markup.PredictedBox(Minguk.Tools.Vision.Labeling.LabelBox.FromCorners(0, 0.1, 0.1, 0.2, 0.2), "슬라임 90%"));
+            vm.Predictions.Add(new Minguk.Tools.Markup.PredictedBox(Minguk.Tools.Vision.Labeling.LabelBox.FromCorners(0, 0.7, 0.7, 0.9, 0.9), "슬라임 80%"));
+            vm.DoAdoptPredictionsCommand.Execute(null);
+
+            var adopted = vm.Boxes.Count == 3 && vm.Predictions.Count == 0;
+            Console.WriteLine($"[{(adopted ? "PASS" : "FAIL")}] 점선 받기 — 사각형 {vm.Boxes.Count}개, 점선 {vm.Predictions.Count}개");
+            if (!adopted) failures++;
+
+            // 앞에 라벨이 없으면 아무것도 안 가져온다(a 는 첫 장).
+            vm.SelectedItem = vm.Items[0];
+            var before = vm.Boxes.Count;
+            vm.DoCopyPreviousCommand.Execute(null);
+
+            var untouched = vm.Boxes.Count == before;
+            Console.WriteLine($"[{(untouched ? "PASS" : "FAIL")}] 첫 장에서는 가져올 것이 없다 — {vm.StatusText}");
+            if (!untouched) failures++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 라벨링 보조 — {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(root, recursive: true); } catch (Exception) { }
+        }
+
+        return failures;
+    }
+
+    private static void WriteTinyPng(string path)
+    {
+        var bitmap = new System.Windows.Media.Imaging.WriteableBitmap(8, 8, 96, 96, PixelFormats.Bgra32, null);
+        bitmap.WritePixels(new Int32Rect(0, 0, 8, 8), new byte[8 * 8 * 4], 8 * 4, 0);
+
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+
+        using var stream = System.IO.File.Create(path);
+        encoder.Save(stream);
+    }
+
+    /// <summary>
+    /// 언어를 바꾸면 쓰던 글이 언어별로 남는지. C# ↔ JavaScript 로 본다(파이썬은 런타임을 받아 와야 해서 뺀다).
+    /// </summary>
+    /// <remarks>
+    /// "파이썬 골랐더니 스크립트는 C#" 이 여기서 잡혀야 한다. 바꾸면 그 언어의 글(없으면 본보기)이
+    /// 올라와야 하고, 돌아오면 쓰던 글이 그대로여야 한다.
+    /// </remarks>
+    private static int CheckScriptPerLanguage()
+    {
+        var failures = 0;
+
+        try
+        {
+            var vm = InputAutomationViewModel.Create();
+
+            vm.ScriptText = "var mine = 1; // C# 에서 쓰던 글";
+            vm.SelectedScriptLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.JavaScript;
+
+            var swapped = vm.ScriptText is { } js && !js.Contains("mine = 1") && js.Length > 0;
+            Console.WriteLine($"[{(swapped ? "PASS" : "FAIL")}] 언어를 바꾸면 그 언어의 글이 올라온다 — {(vm.ScriptText ?? string.Empty).Split('\n')[0].Trim()}");
+            if (!swapped) failures++;
+
+            vm.ScriptText = "let theirs = 2; // JavaScript 에서 쓰던 글";
+            vm.SelectedScriptLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.CSharp;
+
+            var restored = vm.ScriptText?.Contains("mine = 1") == true;
+            Console.WriteLine($"[{(restored ? "PASS" : "FAIL")}] 돌아오면 쓰던 글이 그대로다 — {(vm.ScriptText ?? string.Empty).Split('\n')[0].Trim()}");
+            if (!restored) failures++;
+
+            vm.SelectedScriptLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.JavaScript;
+
+            var kept = vm.ScriptText?.Contains("theirs = 2") == true;
+            Console.WriteLine($"[{(kept ? "PASS" : "FAIL")}] 다른 언어의 글도 각자 남는다 — {(vm.ScriptText ?? string.Empty).Split('\n')[0].Trim()}");
+            if (!kept) failures++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 언어별 스크립트 — {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        return failures;
+    }
+
+    /// <summary>loss 꺾은선이 실제로 선을 그리는지. 오프스크린으로 그려 선 색 픽셀을 센다.</summary>
+    private static int CheckLossSparkline()
+    {
+        try
+        {
+            const int width = 200, height = 44;
+
+            var values = new System.Collections.ObjectModel.ObservableCollection<double> { 278, 1.5, 1.4, 1.2, 1.1, 0.95 };
+            var chart = new Minguk.Tools.Markup.LossSparkline { Width = width, Height = height, Values = values };
+
+            chart.Measure(new Size(width, height));
+            chart.Arrange(new Rect(0, 0, width, height));
+            chart.UpdateLayout();
+
+            var target = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            target.Render(chart);
+
+            var pixels = new byte[width * height * 4];
+            target.CopyPixels(pixels, width * 4, 0);
+
+            var expected = Minguk.Tools.Markup.LabelCanvas.ColorOf(0);
+            var painted = 0;
+
+            for (var i = 0; i < pixels.Length; i += 4)
+            {
+                if (Math.Abs(pixels[i + 2] - expected.R) < 40 && Math.Abs(pixels[i + 1] - expected.G) < 40 && Math.Abs(pixels[i] - expected.B) < 40)
+                    painted++;
+            }
+
+            // 값 하나를 더하면 다시 그려야 한다 - 컬렉션 구독이 빠지면 학습 내내 빈 칸이다.
+            values.Add(0.9);
+            chart.UpdateLayout();
+
+            var ok = painted > 40;
+            Console.WriteLine($"[{(ok ? "PASS" : "FAIL")}] loss 꺾은선을 그린다 — 선 색 픽셀 {painted}개");
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] loss 꺾은선 — {ex.GetType().Name}: {ex.Message}");
             return 1;
         }
     }

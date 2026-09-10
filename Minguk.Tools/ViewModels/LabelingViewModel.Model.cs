@@ -34,6 +34,9 @@ public partial class LabelingViewModel
 
     public DelegateCommand DoNextUnlabeledCommand { get; private set; } = null!;
 
+    /// <summary>앞 장의 사각형을 가져온다. 연달아 담은 그림은 몹 자리가 거의 같다.</summary>
+    public DelegateCommand DoCopyPreviousCommand { get; private set; } = null!;
+
     // ── 데이터셋 ─────────────────────────────────────────────────────────
 
     /// <summary>그림과 라벨을 담아 둔 폴더.</summary>
@@ -142,6 +145,32 @@ public partial class LabelingViewModel
         set => SetProperty(() => TrainingStatus, value);
     }
 
+    /// <summary>끝난 바퀴 / 돌릴 바퀴. 막대는 이것으로 찬다.</summary>
+    public int TrainEpochsDone
+    {
+        get => GetProperty(() => TrainEpochsDone);
+        set => SetProperty(() => TrainEpochsDone, value, () => RaisePropertyChanged(nameof(TrainProgressLabel)));
+    }
+
+    public int TrainEpochsTotal
+    {
+        get => GetProperty(() => TrainEpochsTotal);
+        set => SetProperty(() => TrainEpochsTotal, value, () => RaisePropertyChanged(nameof(TrainProgressLabel)));
+    }
+
+    /// <summary>0~100. 진행 막대가 바로 물 수 있게 백분율로 둔다.</summary>
+    public double TrainPercent
+    {
+        get => GetProperty(() => TrainPercent);
+        set => SetProperty(() => TrainPercent, value);
+    }
+
+    /// <summary>학습 중 흘러나온 loss. 꺾은선이 이것을 그린다. 새로 시작하면 비운다.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<double> LossHistory { get; } = [];
+
+    public string TrainProgressLabel
+        => TrainEpochsTotal <= 0 ? string.Empty : $"{TrainEpochsDone}/{TrainEpochsTotal} 바퀴";
+
     /// <summary>고를 수 있는 모델 크기들.</summary>
     public System.Collections.Generic.IReadOnlyList<string> InputSizes { get; } =
         [.. Vision.Training.DetectorTrainer.InputSizes.Select(s => $"{s.Width}x{s.Height}")];
@@ -183,6 +212,9 @@ public partial class LabelingViewModel
     public DelegateCommand DoDetectCommand { get; private set; } = null!;
 
     public DelegateCommand DoClearPredictionsCommand { get; private set; } = null!;
+
+    /// <summary>모델이 찾은 점선을 전부 라벨로 굳힌다. 틀린 것은 굳힌 뒤 지운다.</summary>
+    public DelegateCommand DoAdoptPredictionsCommand { get; private set; } = null!;
 
     public bool IsDetecting
     {

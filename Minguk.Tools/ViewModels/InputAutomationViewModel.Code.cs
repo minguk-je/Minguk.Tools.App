@@ -297,19 +297,52 @@ public partial class InputAutomationViewModel
     /// </remarks>
     private void OnScriptLanguageChanged() => Guard(() =>
     {
-        // 갈아 끼우기 전에 예전 본보기를 챙긴다. Dispose 한 뒤에는 물어볼 데가 없다.
-        var previousSample = _engine?.SampleSource;
+        if (_shownLanguage == SelectedScriptLanguage) return;
+
+        // 쓰던 글은 제 언어 칸에 넣어 둔다. 손대지 않은 본보기는 넣을 것이 없다.
+        StashShownScript();
 
         _engine?.Dispose();
         _engine = ScriptEngineFactory.Create(SelectedScriptLanguage);
+        _shownLanguage = SelectedScriptLanguage;
 
-        // 파일을 열어 둔 채면 그 글은 본보기가 아니라 그 파일의 것이다. 건드리지 않는다.
-        if (string.IsNullOrWhiteSpace(ScriptText)
-            || (string.IsNullOrEmpty(ScriptFilePath) && IsSame(ScriptText, previousSample)))
+        // 그 언어로 쓰던 글이 있으면 그것을, 없으면 그 언어의 본보기를 올린다.
+        if (_scriptsByLanguage.TryGetValue(SelectedScriptLanguage, out var kept))
+        {
+            ScriptText = kept.Text;
+            ScriptFilePath = kept.Path;
+            IsScriptDirty = kept.Dirty;
+        }
+        else
+        {
             ScriptText = _engine.SampleSource;
+            ScriptFilePath = null;
+            IsScriptDirty = false;
+        }
 
         _ = PrepareEngineAsync();
     });
+
+    /// <summary>
+    /// 화면의 글을 지금 언어 칸에 넣는다. 손대지 않은 본보기는 넣지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 본보기까지 넣어 두면 그 언어로 돌아올 때 "쓰던 글" 로 취급돼, 나중에 본보기가
+    /// 바뀌어도 옛 본보기가 되살아난다. 본보기는 그때그때 엔진에서 받는 것이 맞다.
+    /// </remarks>
+    private void StashShownScript()
+    {
+        var text = ScriptText ?? string.Empty;
+        var untouchedSample = string.IsNullOrEmpty(ScriptFilePath) && IsSame(text, _engine?.SampleSource);
+
+        if (string.IsNullOrWhiteSpace(text) || untouchedSample)
+        {
+            _scriptsByLanguage.Remove(_shownLanguage);
+            return;
+        }
+
+        _scriptsByLanguage[_shownLanguage] = (text, ScriptFilePath, IsScriptDirty);
+    }
 
     /// <summary>
     /// 두 글이 같은 글인지. 줄 끝과 앞뒤 여백은 세지 않는다.

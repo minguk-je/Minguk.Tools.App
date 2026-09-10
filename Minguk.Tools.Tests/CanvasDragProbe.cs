@@ -69,7 +69,13 @@ internal static class CanvasDragProbe
             LabelBox.FromCorners(0, 0.25, 0.25, 0.5, 0.5)   // 화면 100..200
         };
 
-        var canvas = new LabelCanvas { Width = Size, Height = Size, ImageSource = image, Boxes = boxes };
+        // 모델이 찾은 것처럼 점선 하나. 누르면 라벨로 옮겨져야 한다. 화면 240..360 x 20..120.
+        var predictions = new ObservableCollection<PredictedBox>
+        {
+            new(LabelBox.FromCorners(0, 0.6, 0.05, 0.9, 0.3), "슬라임 90%")
+        };
+
+        var canvas = new LabelCanvas { Width = Size, Height = Size, ImageSource = image, Boxes = boxes, Predictions = predictions };
 
         var window = new Window
         {
@@ -134,6 +140,14 @@ internal static class CanvasDragProbe
             await DragAsync(canvas, 200, 180, 201, 181);
 
             failures += Check("클릭(1px 떨림)으로는 안 움직인다", boxes[0] == before, LabelFile.Format(boxes[0]));
+
+            // ── 5) 점선을 누르면 그것이 라벨이 된다 ──
+            var predicted = predictions[0].Box;
+            await DragAsync(canvas, 300, 70, 301, 71);
+
+            failures += Check("점선을 누르면 라벨로 옮겨진다",
+                predictions.Count == 0 && boxes.Count == 3 && boxes[2] == predicted && canvas.SelectedIndex == 2,
+                $"점선 {predictions.Count}개 · 사각형 {boxes.Count}개 · 고른 것 {canvas.SelectedIndex}");
         }
         finally
         {
@@ -152,6 +166,15 @@ internal static class CanvasDragProbe
 
         SetCursorPos((int)from.X, (int)from.Y);
         await Task.Delay(80);
+
+        // 커서가 정말 거기 갔는지 본다. 게임(전체화면·커서 가두기)이 앞에 있으면 SetCursorPos 가
+        // 그 창 안으로 접히고, 그러면 아래의 클릭이 시험 창이 아니라 게임에 들어간다.
+        // 실제로 게임을 켜 둔 채 돌렸을 때 모든 끌기가 빗나갔다. 그 상태면 누르기 전에 멈춘다.
+        GetCursorPos(out var actual);
+        if (Math.Abs(actual.X - from.X) > 2 || Math.Abs(actual.Y - from.Y) > 2)
+            throw new InvalidOperationException(
+                $"커서를 ({from.X:0},{from.Y:0}) 로 보냈는데 ({actual.X},{actual.Y}) 에 있다. 다른 창이 커서를 가두고 있다 - 게임을 내리고 다시 돌린다.");
+
         mouse_event(MouseEventLeftDown, 0, 0, 0, UIntPtr.Zero);
         await Task.Delay(80);
 

@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
@@ -55,6 +56,22 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
     /// <summary>스크립트가 통째로 들어가는 설정 키.</summary>
     private const string ScriptSettingKey = "Script";
+
+    /// <summary>
+    /// 언어마다 따로 둔 글. 언어를 바꾸면 쓰던 글을 여기 넣어 두고 그 언어의 글을 꺼낸다.
+    /// </summary>
+    /// <remarks>
+    /// 하나만 들고 있으면 파이썬으로 바꿔 놓고 C# 글을 보게 되고, 그 상태로 저장하면 C# 이 든
+    /// .py 가 나온다 - 실제로 "파이썬 골랐더니 스크립트는 C#" 이었다. 언어별로 기억하면
+    /// 왔다 갔다 해도 각자 것이 그대로 있다. 설정 키는 <c>Script.CSharp</c> 처럼 언어를 붙인다.
+    /// </remarks>
+    private readonly Dictionary<ScriptLanguage, (string Text, string? Path, bool Dirty)> _scriptsByLanguage = new();
+
+    /// <summary>지금 화면에 올라 있는 글이 어느 언어의 것인지. SetProperty 콜백은 예전 값을 안 알려 준다.</summary>
+    private ScriptLanguage _shownLanguage;
+
+    private static string ScriptKeyFor(ScriptLanguage language) => $"{ScriptSettingKey}.{language}";
+    private static string ScriptPathKeyFor(ScriptLanguage language) => $"{ScriptPathSettingKey}.{language}";
 
     /// <summary>
     /// 마지막으로 열었던 파일 경로가 들어가는 설정 키.
@@ -135,10 +152,29 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
         // 언어를 넣어도 SetProperty 의 콜백은 값이 같으면 안 돈다. 엔진은 여기서 확실히 만든다.
         _engine ??= ScriptEngineFactory.Create(SelectedScriptLanguage);
+        _shownLanguage = SelectedScriptLanguage;
 
-        ScriptFilePath = GetSetting(ScriptPathSettingKey, string.Empty) is { Length: > 0 } saved ? saved : null;
+        // 언어별로 저장해 둔 글을 전부 되읽는다. 지금 언어 것만 화면에 올린다.
+        foreach (var each in ScriptLanguages)
+        {
+            var text = GetSetting(ScriptKeyFor(each), string.Empty);
+            if (string.IsNullOrWhiteSpace(text)) continue;
 
-        RestoreScript();
+            var path = GetSetting(ScriptPathKeyFor(each), string.Empty);
+            _scriptsByLanguage[each] = (text, string.IsNullOrEmpty(path) ? null : path, false);
+        }
+
+        if (_scriptsByLanguage.TryGetValue(SelectedScriptLanguage, out var shown))
+        {
+            ScriptText = shown.Text;
+            ScriptFilePath = shown.Path;
+        }
+        else
+        {
+            // 언어별 저장이 생기기 전의 설정(Script / ScriptPath)은 그때 고른 언어의 것이다.
+            ScriptFilePath = GetSetting(ScriptPathSettingKey, string.Empty) is { Length: > 0 } saved ? saved : null;
+            RestoreScript();
+        }
 
         // 되살린 글은 아직 아무것도 안 고친 상태다.
         IsScriptDirty = false;
@@ -213,8 +249,19 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     {
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
         SetSetting(nameof(SelectedScriptLanguage), SelectedScriptLanguage.ToString());
-        SetSetting(ScriptSettingKey, ScriptText ?? string.Empty);
-        SetSetting(ScriptPathSettingKey, ScriptFilePath ?? string.Empty);
+
+        // 화면의 글을 제 언어 칸에 넣고 언어별로 전부 저장한다.
+        StashShownScript();
+
+        foreach (var (language, script) in _scriptsByLanguage)
+        {
+            SetSetting(ScriptKeyFor(language), script.Text);
+            SetSetting(ScriptPathKeyFor(language), script.Path ?? string.Empty);
+        }
+
+        // 옛 키는 비운다. 남겨 두면 언어별 키가 없는 언어로 바꿨을 때 엉뚱한 언어의 글이 되살아난다.
+        SetSetting(ScriptSettingKey, string.Empty);
+        SetSetting(ScriptPathSettingKey, string.Empty);
 
         SetSetting(nameof(HoldTimeMs), HoldTimeMs);
         SetSetting(nameof(IntervalMs), IntervalMs);

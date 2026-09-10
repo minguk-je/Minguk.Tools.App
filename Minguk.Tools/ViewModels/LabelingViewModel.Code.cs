@@ -234,6 +234,43 @@ public partial class LabelingViewModel
         StatusText = "안 찍은 그림이 없습니다.";
     });
 
+    /// <summary>
+    /// 앞에서 가장 가까운, 라벨이 있는 그림의 사각형을 이 그림에 더한다.
+    /// </summary>
+    /// <remarks>
+    /// 연달아 담은 그림은 몹이 몇 픽셀만 움직인다. 매 장 처음부터 그리게 하면 같은 사각형을
+    /// 수십 번 그린다 - 가져와서 옮기기·크기 조절로 맞추는 것이 빠르다.
+    /// 바로 앞 장이 아니라 <b>라벨이 있는</b> 가장 가까운 앞 장이다. 앞 장을 건너뛰었으면
+    /// 빈 것을 가져와 봐야 아무 일도 안 일어난다.
+    /// 지금 있는 사각형은 지우지 않고 더한다. 지우고 싶으면 모두 지우기가 있다.
+    /// </remarks>
+    private void DoCopyPrevious() => Guard(() =>
+    {
+        if (SelectedItem is not { } current) return;
+
+        var index = Items.IndexOf(current);
+
+        for (var i = index - 1; i >= 0; i--)
+        {
+            var source = Items[i];
+
+            if (!source.HasLabel) continue;
+
+            var boxes = LabelFile.Load(source.LabelPath, out _);
+
+            if (boxes.Count == 0) continue;
+
+            foreach (var box in boxes) Boxes.Add(box);
+
+            SelectedBoxIndex = Boxes.Count - 1;
+            StatusText = $"{source.Name} 의 사각형 {boxes.Count}개를 가져왔습니다. 자리가 다르면 끌어서 맞추세요.";
+
+            return;
+        }
+
+        StatusText = "앞에 라벨이 있는 그림이 없습니다.";
+    });
+
     // ── 저장 ─────────────────────────────────────────────────────────────
 
     private void DoSave() => Guard(() =>
@@ -420,5 +457,13 @@ public partial class LabelingViewModel
         DoDeleteBoxCommand.RaiseCanExecuteChanged();
         DoDetectCommand.RaiseCanExecuteChanged();
         DoClearPredictionsCommand.RaiseCanExecuteChanged();
+        DoAdoptPredictionsCommand.RaiseCanExecuteChanged();
+        DoCopyPreviousCommand.RaiseCanExecuteChanged();
+    }
+
+    private void OnPredictionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        DoClearPredictionsCommand.RaiseCanExecuteChanged();
+        DoAdoptPredictionsCommand.RaiseCanExecuteChanged();
     }
 }

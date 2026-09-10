@@ -1446,19 +1446,27 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
 
             FrameSnapshot.SavePng(e, path);
 
+            // 몹 찾기가 켜져 있으면 방금 찾은 것을 라벨로 같이 쓴다. 그러면 라벨링 화면은
+            // 그리는 곳이 아니라 틀린 것만 고치는 곳이 된다. 찾은 것이 없으면 라벨 파일을
+            // 안 만든다 - 빈 라벨은 "여기엔 몹이 없다" 를 가르치는 것이라 사람이 봐야 한다.
+            var found = FreshDetections;
+            if (found.Count > 0)
+                LabelFile.Save(dataset.LabelPathFor(path), found.Select(d => d.Box));
+
             // 몇 장째인지 센다. "담겼다" 만으로는 모으는 사람이 어디까지 왔는지 모른다.
             var count = dataset.EnumerateItems().Count;
 
             // 통계 표의 비고 칸에만 적으면 사실상 안 보인다 - 실제로 "담을 수가 없다" 는 말이
             // 나왔다. 상태 줄과 아래 바에 같이 적는다. 어느 폴더인지도 같이 - 라벨링에서
             // 다른 폴더를 보고 있으면 "담았는데 왜 안 보이지" 로 헤맨다.
-            var message = $"데이터셋에 담음: {Path.GetFileName(path)} - 지금까지 {count}장 ({dataset.Root})";
+            var labeled = found.Count > 0 ? $" · 찾은 {found.Count}마리를 라벨로" : string.Empty;
+            var message = $"데이터셋에 담음: {Path.GetFileName(path)} - 지금까지 {count}장{labeled} ({dataset.Root})";
 
             Note(message);
             _uiDispatcher?.BeginInvoke(() =>
             {
                 StatusText = message;
-                MessengerUtility.SendMainMessage($"데이터셋에 담았습니다 - {count}장째");
+                MessengerUtility.SendMainMessage($"데이터셋에 담았습니다 - {count}장째{labeled}");
             });
 
             // 단축키로 담을 때 사용자는 게임을 보고 있다. 소리가 유일한 답이다.

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -92,6 +93,17 @@ public static class DetectorTrainer
 
     public const string ScoreColumn = "Score";
 
+    /// <summary>"Row: 5, Loss: 1.47" 에서 1.47 을 꺼낸다.</summary>
+    private static bool TryParseLoss(string message, out double loss)
+    {
+        loss = 0;
+
+        var at = message.IndexOf("Loss:", StringComparison.OrdinalIgnoreCase);
+        if (at < 0) return false;
+
+        return double.TryParse(message[(at + 5)..].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out loss);
+    }
+
     public static string ModelPathFor(LabelDataset dataset) => Path.Combine(dataset.Root, ModelFileName);
 
     /// <summary>
@@ -116,12 +128,24 @@ public static class DetectorTrainer
     /// <b>취소는 epoch 사이에만 듣는다.</b> 학습기가 중간에 멈춰 주지 않아서, 한 epoch 이
     /// 끝나기 전에는 누른 것이 안 먹는다. 화면에서 그렇게 적어 둔다.
     /// </remarks>
+    /// <summary>
+    /// 우리가 쓰는 학습률. ML.NET 기본값 1.0 이 아니다.
+    /// </summary>
+    /// <remarks>
+    /// 1.0(SGD)은 단색 네모 같은 확인용 데이터에서는 두 바퀴 만에 수렴하지만, 실제 게임 화면
+    /// 14장에서는 20·40·100 바퀴 어느 것도 loss 가 1.4 아래로 못 내려가 27개 중 0개를 찾았다.
+    /// 0.1 로 낮추자 같은 데이터 20바퀴에 18개(67%)를 찾았다. 실측으로 정한 값이다.
+    /// </remarks>
+    public const double DefaultLearningRate = 0.1;
+
     public static Task<TrainingResult> TrainAsync(LabelDataset dataset,
                                                   int maxEpoch,
                                                   IProgress<string>? progress = null,
                                                   CancellationToken token = default,
                                                   int inputWidth = DefaultInputWidth,
-                                                  int inputHeight = DefaultInputHeight)
+                                                  int inputHeight = DefaultInputHeight,
+                                                  double? learningRate = null,
+                                                  IProgress<TrainingStep>? steps = null)
         => Task.Run(() =>
         {
             if (!LibTorchRuntime.IsLoaded)
@@ -152,6 +176,50 @@ public static class DetectorTrainer
             token.ThrowIfCancellationRequested();
 
             var ml = new MLContext(seed: 1234);
+
+            // 학습기가 내는 loss 를 밖으로 흘린다. 이것이 없으면 "끝났습니다" 가 뜬 모델이
+            // 무언가 배웠는지 아무것도 못 배웠는지 알 길이 없다 - 실제로 27개 중 0개를
+            // 찾는 모델을 두 번 만들고 나서야 loss 를 봐야 한다는 것을 알았다.
+            var lastLossReport = 0L;
+            var epochsDone = 0;
+            ml.Log += (_, e) =>
+            {
+                // 학습기가 내는 것 중 쓸 만한 것은 "Row: n, Loss: x" 와 "Starting/Finished epoch n" 뿐이다.
+                var isLoss = e.Message.IndexOf("Loss:", StringComparison.OrdinalIgnoreCase) >= 0;
+                var isEpoch = e.Message.IndexOf("epoch", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!isLoss && !isEpoch) return;
+
+                // 숫자 진행. 막대와 꺾은선이 이걸로 그려진다.
+                if (steps is not null)
+                {
+                    if (isEpoch && e.Message.Contains("Finished", StringComparison.OrdinalIgnoreCase))
+                    {
+                        epochsDone++;
+                        steps.Report(new TrainingStep(epochsDone, maxEpoch, null));
+                    }
+                    else if (isLoss && TryParseLoss(e.Message, out var loss))
+                    {
+                        steps.Report(new TrainingStep(epochsDone, maxEpoch, loss));
+                    }
+                }
+
+                // loss 는 줄마다 나오면 화면이 그것으로 덮인다. 2초에 한 줄이면 흐름은 보인다.
+                if (isLoss)
+                {
+                    var now = Environment.TickCount64;
+                    if (now - lastLossReport < 2000) return;
+                    lastLossReport = now;
+                }
+
+                // "[Source=ObjectDetectionTrainer; TrainModel, Kind=Info] Row: 5, Loss: 1.47" 에서 앞부분은 군더더기다.
+                var message = e.Message;
+                var close = message.IndexOf(']');
+                if (message.StartsWith('[') && close > 0) message = message[(close + 1)..];
+
+                Logger.Debug(message.Trim());
+                progress?.Report(message.Trim());
+            };
+
             var data = ml.Data.LoadFromEnumerable(samples);
 
             // 학습기가 요구하는 모양으로 맞춘다.
@@ -180,7 +248,14 @@ public static class DetectorTrainer
                         // 내려도 0건이다 - 실제로 그랬다(14장 · 20 epoch 모델이 27개 중 0개).
                         // 낮게 잡아 두고 거르는 일은 화면 쪽 문턱이 한다. 그래야 못 찾는
                         // 것이 "아예 못 보는지" "자신이 없을 뿐인지" 갈린다.
-                        ScoreThreshold = 0.1
+                        ScoreThreshold = 0.1,
+
+                        // 0 이면 loss 를 아예 안 낸다. 1 로 두고 위에서 2초에 한 줄로 거른다.
+                        LogEveryNStep = 1,
+
+                        // ML.NET 기본 1.0 이면 실제 화면에서 못 배운다(DefaultLearningRate 참고).
+                        // 실험할 수 있게 밖에서도 받는다.
+                        InitLearningRate = learningRate ?? DefaultLearningRate
                     }))
 
                 // 예측을 번호가 아니라 몹 이름으로 내놓게 한다. 이걸 빼면 추론 쪽이 번호를

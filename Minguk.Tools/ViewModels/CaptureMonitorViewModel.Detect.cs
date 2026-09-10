@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -47,6 +48,30 @@ public partial class CaptureMonitorViewModel
 
     private long _lastDetectTicks;
     private string? _detectScratchPath;
+
+    /// <summary>
+    /// 마지막으로 찾은 것. 담을 때 라벨로 같이 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// 화면의 <see cref="Detections"/> 는 UI 스레드 것이라 캡처 스레드에서 못 읽는다.
+    /// 찾은 순간의 목록을 그대로 들고 있다가 담기가 가져간다. 언제 찾은 것인지도 같이 -
+    /// 몇 초 전 것을 지금 프레임에 붙이면 몹이 이미 다른 자리에 있다.
+    /// </remarks>
+    private volatile IReadOnlyList<Detection>? _latestDetections;
+    private long _latestDetectionTicks;
+
+    /// <summary>이보다 오래된 검출은 담을 때 안 붙인다. 0.25초에 한 번 찾으니 이 안이면 방금 것이다.</summary>
+    private const int DetectionFreshMs = 1000;
+
+    /// <summary>
+    /// 방금 찾은 것. 없거나 오래됐으면 빈 목록.
+    /// </summary>
+    internal IReadOnlyList<Detection> FreshDetections
+        => IsMobDetectionOn
+           && _latestDetections is { } found
+           && Environment.TickCount64 - Interlocked.Read(ref _latestDetectionTicks) <= DetectionFreshMs
+            ? found
+            : [];
 
     /// <summary>
     /// 프레임이 올 때마다 불린다. 캡처 스레드다.
@@ -105,6 +130,9 @@ public partial class CaptureMonitorViewModel
             var found = _detector!.Detect(_detectScratchPath!, _detectClasses, (float)DetectMinimumScore);
 
             watch.Stop();
+
+            _latestDetections = found;
+            Interlocked.Exchange(ref _latestDetectionTicks, Environment.TickCount64);
 
             // 화면에 닿는 것은 UI 스레드에서. 컬렉션을 캡처 스레드에서 고치면 그리는 중에 터진다.
             DispatcherService?.BeginInvoke(() => Guard(() =>

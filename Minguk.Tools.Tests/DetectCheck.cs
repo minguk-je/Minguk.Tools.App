@@ -31,13 +31,15 @@ internal static class DetectCheck
 
     private const float DefaultMinimumScore = 0.3f;
 
-    public static int Run() => Run(DefaultMinimumScore);
+    public static int Run() => Run(new LabelDataset(LabelDataset.ConfiguredRoot), DefaultMinimumScore);
 
     /// <param name="minimumScore">문턱. 낮추면 놓친 것의 점수가 얼마였는지 보인다 - 아예 못 보는지, 자신이 없을 뿐인지 가른다.</param>
-    public static int Run(float minimumScore)
+    public static int Run(float minimumScore) => Run(new LabelDataset(LabelDataset.ConfiguredRoot), minimumScore);
+
+    /// <param name="dataset">확인용 데이터셋을 다른 폴더에 두고 볼 때. 기본 폴더는 사용자가 모은 것이라 거기서 실험하지 않는다.</param>
+    public static int Run(LabelDataset dataset, float minimumScore)
     {
         var MinimumScore = minimumScore;
-        var dataset = new LabelDataset(LabelDataset.ConfiguredRoot);
 
         Console.WriteLine($"데이터셋: {dataset.Root}");
 

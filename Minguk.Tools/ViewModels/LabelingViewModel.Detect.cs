@@ -107,6 +107,28 @@ public partial class LabelingViewModel
               + (found.Count > 4 ? " …" : string.Empty);
     }
 
+    /// <summary>
+    /// 모델이 찾은 점선을 전부 라벨로 굳힌다.
+    /// </summary>
+    /// <remarks>
+    /// 모델이 웬만큼 찾기 시작하면 사람이 할 일은 그리는 것이 아니라 <b>고치는 것</b>이 된다.
+    /// 전부 받고 틀린 것을 지우는 편이, 맞는 것을 하나씩 고르는 것보다 빠르다. 하나씩
+    /// 고르고 싶으면 캔버스에서 점선을 누르면 그것만 옮겨진다.
+    /// 문턱 아래 것은 애초에 점선으로 안 그려졌으니 여기 안 들어온다.
+    /// </remarks>
+    private void DoAdoptPredictions() => Guard(() =>
+    {
+        if (Predictions.Count == 0) return;
+
+        var count = Predictions.Count;
+
+        foreach (var prediction in Predictions) Boxes.Add(prediction.Box);
+
+        Predictions.Clear();
+        SelectedBoxIndex = Boxes.Count - 1;
+        DetectStatus = $"찾은 {count}개를 라벨로 받았습니다. 틀린 것은 골라서 지우세요.";
+    });
+
     /// <summary>점선을 지운다. 사람이 찍은 것은 그대로 둔다.</summary>
     private void DoClearPredictions() => Guard(() =>
     {

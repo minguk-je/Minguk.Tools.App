@@ -159,6 +159,10 @@
                                          Command="{Binding DoNextUnlabeledCommand}"
                                          Content="안 찍은 다음"
                                          ToolTip="아직 사각형이 없는 그림으로 건너뜁니다." />
+                        <dx:SimpleButton Width="110"
+                                         Command="{Binding DoCopyPreviousCommand}"
+                                         Content="앞 장 가져오기"
+                                         ToolTip="앞에서 가장 가까운, 라벨이 있는 그림의 사각형을 이 그림에 더합니다. 가져온 뒤 끌어서 맞추세요." />
                         <dx:SimpleButton Width="105"
                                          Command="{Binding DoDeleteBoxCommand}"
                                          Content="고른 것 지우기"
@@ -237,6 +241,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -246,6 +251,38 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
+
+                <!--
+                    진행 막대와 loss 꺾은선. 글 한 줄로는 "돌고 있나" 밖에 안 보인다.
+                    loss 가 내려가는지 제자리인지가 보여야 15분짜리 학습을 헛돌리지 않는다 -
+                    실제로 학습률이 높아 제자리인 것을 모른 채 100바퀴를 돌렸다.
+                -->
+                <Grid Grid.Row="2"
+                      Grid.Column="0"
+                      Grid.ColumnSpan="6"
+                      Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Width="80"
+                               VerticalAlignment="Center"
+                               Text="{Binding TrainProgressLabel}" />
+                    <dxe:ProgressBarEdit Grid.Column="1"
+                                         Height="18"
+                                         Margin="0,0,6,0"
+                                         VerticalAlignment="Center"
+                                         EditValue="{Binding TrainPercent, Mode=OneWay}"
+                                         Maximum="100"
+                                         Minimum="0"
+                                         ToolTip="끝난 바퀴 수. 한 바퀴 안에서는 안 움직입니다." />
+                    <markup:LossSparkline Grid.Column="2"
+                                          Height="44"
+                                          ToolTip="학습 loss. 내려가면 배우는 중, 제자리면 학습률이나 데이터를 봐야 합니다. 로그 눈금입니다."
+                                          Values="{Binding LossHistory}" />
+                </Grid>
 
                 <!-- 학습 -->
                 <TextBlock Grid.Row="0"
@@ -325,12 +362,19 @@
                                  Command="{Binding DoDetectCommand}"
                                  Content="찾아보기"
                                  ToolTip="학습한 모델로 이 그림에서 몹을 찾아 점선으로 겹쳐 그립니다." />
-                <dx:SimpleButton Grid.Row="1"
-                                 Grid.Column="4"
-                                 Width="100"
-                                 Margin="0,0,6,4"
-                                 Command="{Binding DoClearPredictionsCommand}"
-                                 Content="점선 지우기" />
+                <StackPanel Grid.Row="1"
+                            Grid.Column="4"
+                            Orientation="Horizontal">
+                    <dx:SimpleButton Width="90"
+                                     Margin="0,0,6,4"
+                                     Command="{Binding DoAdoptPredictionsCommand}"
+                                     Content="점선 받기"
+                                     ToolTip="찾은 점선을 전부 라벨로 굳힙니다. 틀린 것은 굳힌 뒤 골라서 지우세요. 하나만 받으려면 그림에서 점선을 누르세요." />
+                    <dx:SimpleButton Width="90"
+                                     Margin="0,0,6,4"
+                                     Command="{Binding DoClearPredictionsCommand}"
+                                     Content="점선 지우기" />
+                </StackPanel>
                 <dxe:TextEdit Grid.Row="1"
                               Grid.Column="5"
                               EditValue="{Binding DetectStatus, Mode=OneWay}"
@@ -341,7 +385,7 @@
                     libtorch 를 아직 안 받았거나 GPU 가 없을 때만 뜬다.
                     2.2GB 를 받고 나서 "못 씁니다" 라고 하면 안 되므로 누르기 전에 말한다.
                 -->
-                <TextBlock Grid.Row="2"
+                <TextBlock Grid.Row="3"
                            Grid.Column="0"
                            Grid.ColumnSpan="6"
                            Margin="0,4,0,0"
