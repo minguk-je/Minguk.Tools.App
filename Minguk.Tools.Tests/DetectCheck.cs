@@ -29,7 +29,8 @@ internal static class DetectCheck
     /// <summary>이만큼 겹치면 같은 것을 찾은 것으로 친다. 검출 쪽에서 흔히 쓰는 기준이다.</summary>
     private const double MatchIou = 0.5;
 
-    private const float DefaultMinimumScore = 0.3f;
+    /// <summary>앱의 "자신 있는 정도" 기본값과 같다. 다르게 두면 하네스 숫자와 화면이 안 맞는다.</summary>
+    private const float DefaultMinimumScore = 0.5f;
 
     public static int Run() => Run(new LabelDataset(LabelDataset.ConfiguredRoot), DefaultMinimumScore);
 
