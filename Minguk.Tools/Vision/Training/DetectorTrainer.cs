@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -48,6 +48,13 @@ public static class DetectorTrainer
 
     /// <summary>학습 결과를 두는 이름. 데이터셋 폴더 안에 둔다 - 그 라벨로 만든 것이므로.</summary>
     public const string ModelFileName = "detector.zip";
+
+    /// <summary>모델이 내놓는 열 이름들. 추론 쪽(<see cref="Inference.DetectorModel"/>)과 같아야 한다.</summary>
+    public const string PredictedLabelColumn = "PredictedLabel";
+
+    public const string PredictedBoxColumn = "PredictedBoundingBoxes";
+
+    public const string ScoreColumn = "Score";
 
     public static string ModelPathFor(LabelDataset dataset) => Path.Combine(dataset.Root, ModelFileName);
 
@@ -116,7 +123,13 @@ public static class DetectorTrainer
                     labelColumnName: "LabelKey",
                     boundingBoxColumnName: nameof(TrainingSample.Box),
                     imageColumnName: "Image",
-                    maxEpoch: maxEpoch));
+                    maxEpoch: maxEpoch))
+
+                // 예측을 번호가 아니라 몹 이름으로 내놓게 한다. 이걸 빼면 추론 쪽이 번호를
+                // 받아 classes.txt 로 다시 찾아야 하는데, 그러면 학습할 때의 목록과 그때의
+                // 목록이 어긋났을 때 조용히 다른 몹 이름이 붙는다.
+                .Append(ml.Transforms.Conversion.MapKeyToValue(
+                    PredictedLabelColumn, PredictedLabelColumn));
 
             var stopwatch = Stopwatch.StartNew();
 

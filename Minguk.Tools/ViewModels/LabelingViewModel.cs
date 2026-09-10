@@ -38,6 +38,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
         Items = [];
         Boxes = [];
         ClassNames = [];
+        Predictions = [];
 
         DoReloadCommand = new DelegateCommand(DoReload, false);
         DoOpenFolderCommand = new DelegateCommand(DoOpenFolder, false);
@@ -52,6 +53,8 @@ public partial class LabelingViewModel : DocumentViewModelBase
         DoNextUnlabeledCommand = new DelegateCommand(DoNextUnlabeled, () => Items.Count > 0, false);
         DoTrainCommand = new DelegateCommand(DoTrain, () => !IsTraining, false);
         DoCancelTrainCommand = new DelegateCommand(DoCancelTrain, () => IsTraining, false);
+        DoDetectCommand = new DelegateCommand(DoDetect, () => !IsDetecting && HasImage, false);
+        DoClearPredictionsCommand = new DelegateCommand(DoClearPredictions, () => Predictions.Count > 0, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
@@ -74,6 +77,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
         DatasetRoot = LabelDataset.ConfiguredRoot;
 
         TrainEpochs = GetSetting(nameof(TrainEpochs), 20);
+        MinimumScore = GetSetting(nameof(MinimumScore), 0.5);
     }
 
     protected override void OnLoaded()
@@ -87,6 +91,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
         if (!string.IsNullOrWhiteSpace(DatasetRoot)) LabelDataset.ConfiguredRoot = DatasetRoot;
 
         SetSetting(nameof(TrainEpochs), TrainEpochs);
+        SetSetting(nameof(MinimumScore), MinimumScore);
     }
 
     /// <summary>
@@ -104,6 +109,9 @@ public partial class LabelingViewModel : DocumentViewModelBase
         // 학습을 돌려 둔 채 화면을 닫을 수 있다. 결과를 받을 화면이 없어진 뒤에도
         // GPU 를 물고 있을 이유가 없어 취소는 걸어 둔다.
         _trainingCts?.Cancel();
+
+        // 모델은 69MB 를 물고 있다. 화면을 닫으면 놓는다.
+        ReleaseModel();
     }
 
     public ObservableCollection<LabelingRow> Items { get; }
@@ -113,4 +121,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
     /// <summary>몹 이름들. 콤보와 캔버스가 같이 본다.</summary>
     public ObservableCollection<string> ClassNames { get; }
+
+    /// <summary>모델이 찾아낸 것들. 캔버스가 점선으로 그린다.</summary>
+    public ObservableCollection<Markup.PredictedBox> Predictions { get; }
 }

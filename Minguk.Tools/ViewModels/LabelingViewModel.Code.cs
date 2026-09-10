@@ -124,6 +124,10 @@ public partial class LabelingViewModel
 
         _loaded = SelectedItem;
 
+        // 앞 그림에서 찾은 점선을 지운다. 안 지우면 다음 그림 위에 그대로 남아
+        // 엉뚱한 자리에 몹이 있는 것처럼 보인다.
+        ClearPredictionsForNewImage();
+
         Boxes.Clear();
         SelectedBoxIndex = -1;
 
@@ -414,5 +418,7 @@ public partial class LabelingViewModel
         DoSaveCommand.RaiseCanExecuteChanged();
         DoClearBoxesCommand.RaiseCanExecuteChanged();
         DoDeleteBoxCommand.RaiseCanExecuteChanged();
+        DoDetectCommand.RaiseCanExecuteChanged();
+        DoClearPredictionsCommand.RaiseCanExecuteChanged();
     }
 }

@@ -162,6 +162,7 @@ internal static partial class Program
 
         TestScriptFiles();
         TestLabeling();
+        TestDetection();
         TestInterceptionDriver();
         TestSequencePlan();
         TestSequenceScript();

@@ -156,6 +156,37 @@ public partial class LabelingViewModel
 
     public bool HasTrainingNotice => !string.IsNullOrEmpty(TrainingNotice);
 
+    // ── 찾아보기 ─────────────────────────────────────────────────────────
+
+    public DelegateCommand DoDetectCommand { get; private set; } = null!;
+
+    public DelegateCommand DoClearPredictionsCommand { get; private set; } = null!;
+
+    public bool IsDetecting
+    {
+        get => GetProperty(() => IsDetecting);
+        set => SetProperty(() => IsDetecting, value, () => DoDetectCommand.RaiseCanExecuteChanged());
+    }
+
+    /// <summary>
+    /// 이보다 자신 없는 것은 안 보여 준다.
+    /// </summary>
+    /// <remarks>
+    /// 낮추면 놓친 것까지 보이지만 헛것도 같이 늘어난다. 학습이 잘 됐는지 볼 때는
+    /// 낮춰 보는 편이 도움이 되므로 화면에서 고치게 둔다.
+    /// </remarks>
+    public double MinimumScore
+    {
+        get => GetProperty(() => MinimumScore);
+        set => SetProperty(() => MinimumScore, value);
+    }
+
+    public string? DetectStatus
+    {
+        get => GetProperty(() => DetectStatus);
+        set => SetProperty(() => DetectStatus, value);
+    }
+
     // ── 알림 ─────────────────────────────────────────────────────────────
 
     /// <summary>지금 무슨 일이 있었는지 한 줄. 자동 저장이 언제 돌았는지도 여기 뜬다.</summary>

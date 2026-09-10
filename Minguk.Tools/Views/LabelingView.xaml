@@ -138,6 +138,7 @@
                     <Border Grid.Row="0"
                             Background="#20808080">
                         <markup:LabelCanvas Boxes="{Binding Boxes}"
+                                            Predictions="{Binding Predictions}"
                                             ClassNames="{Binding ClassNameSnapshot}"
                                             CurrentClassId="{Binding SelectedClassIndex}"
                                             ImageSource="{Binding CurrentImage}"
@@ -158,11 +159,11 @@
                                          Command="{Binding DoNextUnlabeledCommand}"
                                          Content="안 찍은 다음"
                                          ToolTip="아직 사각형이 없는 그림으로 건너뜁니다." />
-                        <dx:SimpleButton Width="90"
+                        <dx:SimpleButton Width="105"
                                          Command="{Binding DoDeleteBoxCommand}"
                                          Content="고른 것 지우기"
                                          ToolTip="Delete 키로도 됩니다." />
-                        <dx:SimpleButton Width="80"
+                        <dx:SimpleButton Width="95"
                                          Command="{Binding DoClearBoxesCommand}"
                                          Content="모두 지우기" />
                         <dx:SimpleButton Width="70"
@@ -224,47 +225,113 @@
             </GroupBox>
         </Grid>
 
-        <!-- ── 학습 ──────────────────────────────────────────────────── -->
-        <dxlc:LayoutControl Grid.Row="2"
-                            Padding="0"
-                            Orientation="Vertical">
-            <dxlc:LayoutGroup Header="학습"
-                              Orientation="Vertical"
-                              View="GroupBox">
-                <dxlc:LayoutGroup Orientation="Horizontal">
-                    <dxlc:LayoutItem Width="150"
-                                     Label="바퀴(epoch)">
-                        <dxe:SpinEdit EditValue="{Binding TrainEpochs, Mode=TwoWay}"
-                                      IsEnabled="{Binding IsTraining, Converter={StaticResource NotBool}}"
-                                      MaxValue="500"
-                                      MinValue="1"
-                                      ToolTip="적으면 아무것도 못 배우고 많으면 외워 버립니다." />
-                    </dxlc:LayoutItem>
+        <!-- ── 학습 · 찾아보기 ──────────────────────────────────────── -->
+        <!--
+            dxlc:LayoutControl 로 감싸지 않는다. Auto 행 안에서 내용만큼 늘어나지 않아
+            셋째 줄(안내)이 잘렸다 - 실제로 그렇게 사라졌다.
+        -->
+        <GroupBox Grid.Row="2"
+                  Header="학습">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-                    <dx:SimpleButton Width="110"
-                                     Command="{Binding DoTrainCommand}"
-                                     Content="학습 시작" />
-                    <dx:SimpleButton Width="80"
-                                     Command="{Binding DoCancelTrainCommand}"
-                                     Content="멈추기" />
+                <!-- 학습 -->
+                <TextBlock Grid.Row="0"
+                           Grid.Column="0"
+                           Margin="0,0,6,4"
+                           VerticalAlignment="Center"
+                           Text="바퀴(epoch)" />
+                <dxe:SpinEdit Grid.Row="0"
+                              Grid.Column="1"
+                              Width="80"
+                              Margin="0,0,6,4"
+                              EditValue="{Binding TrainEpochs, Mode=TwoWay}"
+                              IsEnabled="{Binding IsTraining, Converter={StaticResource NotBool}}"
+                              MaxValue="500"
+                              MinValue="1"
+                              ToolTip="적으면 아무것도 못 배우고 많으면 외워 버립니다." />
+                <dx:SimpleButton Grid.Row="0"
+                                 Grid.Column="2"
+                                 Width="110"
+                                 Margin="0,0,6,4"
+                                 Command="{Binding DoTrainCommand}"
+                                 Content="학습 시작" />
+                <dx:SimpleButton Grid.Row="0"
+                                 Grid.Column="3"
+                                 Width="80"
+                                 Margin="0,0,6,4"
+                                 Command="{Binding DoCancelTrainCommand}"
+                                 Content="멈추기" />
+                <dxe:TextEdit Grid.Row="0"
+                              Grid.Column="4"
+                              Margin="0,0,0,4"
+                              EditValue="{Binding TrainingStatus, Mode=OneWay}"
+                              IsReadOnly="True"
+                              NullText="아직 안 돌렸습니다." />
 
-                    <dxlc:LayoutItem Label="진행">
-                        <dxe:TextEdit EditValue="{Binding TrainingStatus, Mode=OneWay}"
-                                      IsReadOnly="True"
-                                      NullText="아직 안 돌렸습니다." />
-                    </dxlc:LayoutItem>
-                </dxlc:LayoutGroup>
+                <!--
+                    찾아보기는 라벨을 고치는 일이 아니라 학습한 모델을 쓰는 일이라 이 칸에 둔다.
+                    점선이 모델이 찾은 것, 실선이 사람이 찍은 것이다.
+                -->
+                <TextBlock Grid.Row="1"
+                           Grid.Column="0"
+                           Margin="0,0,6,4"
+                           VerticalAlignment="Center"
+                           Text="자신 있는 정도" />
+                <dxe:TrackBarEdit Grid.Row="1"
+                                  Grid.Column="1"
+                                  Width="140"
+                                  Margin="0,0,6,4"
+                                  EditValue="{Binding MinimumScore, Mode=TwoWay}"
+                                  Maximum="0.95"
+                                  Minimum="0.05"
+                                  SmallStep="0.05"
+                                  TickFrequency="0.1"
+                                  ToolTip="낮추면 놓친 것까지 보이지만 헛것도 같이 늘어납니다." />
+                <dx:SimpleButton Grid.Row="1"
+                                 Grid.Column="2"
+                                 Width="110"
+                                 Margin="0,0,6,4"
+                                 Command="{Binding DoDetectCommand}"
+                                 Content="찾아보기"
+                                 ToolTip="학습한 모델로 이 그림에서 몹을 찾아 점선으로 겹쳐 그립니다." />
+                <dx:SimpleButton Grid.Row="1"
+                                 Grid.Column="3"
+                                 Width="100"
+                                 Margin="0,0,6,4"
+                                 Command="{Binding DoClearPredictionsCommand}"
+                                 Content="점선 지우기" />
+                <dxe:TextEdit Grid.Row="1"
+                              Grid.Column="4"
+                              EditValue="{Binding DetectStatus, Mode=OneWay}"
+                              IsReadOnly="True"
+                              NullText="아직 안 찾아봤습니다." />
 
                 <!--
                     libtorch 를 아직 안 받았거나 GPU 가 없을 때만 뜬다.
                     2.2GB 를 받고 나서 "못 씁니다" 라고 하면 안 되므로 누르기 전에 말한다.
                 -->
-                <TextBlock Foreground="#BF6A02"
+                <TextBlock Grid.Row="2"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="5"
+                           Margin="0,4,0,0"
+                           Foreground="#BF6A02"
                            Text="{Binding TrainingNotice}"
                            TextWrapping="Wrap"
                            Visibility="{Binding HasTrainingNotice, Converter={StaticResource BoolToVisibility}}" />
-            </dxlc:LayoutGroup>
-        </dxlc:LayoutControl>
+            </Grid>
+        </GroupBox>
 
         <!-- ── 알림 ──────────────────────────────────────────────────── -->
         <Grid Grid.Row="3">

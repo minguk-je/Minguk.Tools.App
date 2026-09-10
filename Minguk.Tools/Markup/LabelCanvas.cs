@@ -87,6 +87,36 @@ public sealed class LabelCanvas : FrameworkElement
         set => SetValue(BoxesProperty, value);
     }
 
+    public static readonly DependencyProperty PredictionsProperty = DependencyProperty.Register(
+        nameof(Predictions), typeof(ObservableCollection<PredictedBox>), typeof(LabelCanvas),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, OnPredictionsChanged));
+
+    /// <summary>
+    /// 모델이 찾아낸 것들. 사람이 찍은 <see cref="Boxes"/> 와 <b>따로</b> 그린다.
+    /// </summary>
+    /// <remarks>
+    /// 섞어 그리면 무엇이 내가 찍은 것이고 무엇이 모델이 찾은 것인지 갈리지 않는다.
+    /// 이쪽은 점선이고, 마우스로 고를 수도 지울 수도 없다 - 고칠 것은 사람이 찍은 쪽뿐이다.
+    /// </remarks>
+    public ObservableCollection<PredictedBox>? Predictions
+    {
+        get => (ObservableCollection<PredictedBox>?)GetValue(PredictionsProperty);
+        set => SetValue(PredictionsProperty, value);
+    }
+
+    private static void OnPredictionsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var canvas = (LabelCanvas)d;
+
+        if (e.OldValue is ObservableCollection<PredictedBox> old)
+            old.CollectionChanged -= canvas.OnBoxesCollectionChanged;
+
+        if (e.NewValue is ObservableCollection<PredictedBox> added)
+            added.CollectionChanged += canvas.OnBoxesCollectionChanged;
+
+        canvas.InvalidateVisual();
+    }
+
     public static readonly DependencyProperty SelectedIndexProperty = DependencyProperty.Register(
         nameof(SelectedIndex), typeof(int), typeof(LabelCanvas),
         new FrameworkPropertyMetadata(-1,
@@ -199,7 +229,47 @@ public sealed class LabelCanvas : FrameworkElement
             for (var i = 0; i < boxes.Count; i++) DrawBox(dc, boxes[i], i == SelectedIndex);
         }
 
+        // 예측을 사람이 찍은 것보다 먼저 그린다. 겹쳤을 때 내가 찍은 것이 위로 와야
+        // 무엇을 고치는 중인지 안 가린다.
+        if (Predictions is { } predictions)
+        {
+            foreach (var prediction in predictions) DrawPrediction(dc, prediction);
+        }
+
         DrawRubberBand(dc);
+    }
+
+    /// <summary>
+    /// 모델이 찾은 것. 점선으로 그리고 얼마나 자신 있는지 같이 적는다.
+    /// </summary>
+    /// <remarks>
+    /// 점선인 것과 이름 뒤에 %가 붙는 것, 둘로 사람이 찍은 것과 갈린다. 색은 같은 몹이면
+    /// 같게 둔다 - 색까지 다르면 어느 몹을 찾았는지 알아보기 어렵다.
+    /// </remarks>
+    private void DrawPrediction(DrawingContext dc, PredictedBox prediction)
+    {
+        var rect = ToScreen(prediction.Box);
+        var color = ColorOf(prediction.Box.ClassId);
+
+        var pen = new Pen(new SolidColorBrush(color), 2d)
+        {
+            DashStyle = new DashStyle([4, 3], 0)
+        };
+        pen.Freeze();
+
+        dc.DrawRectangle(null, pen, rect);
+
+        var text = MakeText(prediction.Caption, 11d, Brushes.White);
+
+        // 사람이 찍은 이름이 사각형 위에 붙으니, 이쪽은 아래에 붙여 겹치지 않게 한다.
+        var top = rect.Bottom + 2;
+        if (top + text.Height > _imageRect.Bottom) top = rect.Bottom - text.Height - 2;
+
+        var background = new SolidColorBrush(color) { Opacity = 0.7 };
+        background.Freeze();
+
+        dc.DrawRectangle(background, null, new Rect(rect.X, top, text.Width + 6, text.Height + 2));
+        dc.DrawText(text, new Point(rect.X + 3, top + 1));
     }
 
     private void DrawBox(DrawingContext dc, LabelBox box, bool selected)

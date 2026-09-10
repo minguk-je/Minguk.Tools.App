@@ -51,6 +51,7 @@ internal static class ViewSmokeProbe
 
             failures += CheckPathWarning();
             failures += CheckEditorPalette();
+            failures += CheckLabelCanvasDrawing();
 
             app.Shutdown();
         });
@@ -118,6 +119,98 @@ internal static class ViewSmokeProbe
             Console.WriteLine($"[FAIL] 못 보내는 단계 알림 — {ex.GetType().Name}: {ex.Message}");
             return 1;
         }
+    }
+
+
+    /// <summary>
+    /// 캔버스가 사각형을 제 자리에 그리는지.
+    /// </summary>
+    /// <remarks>
+    /// 진짜 추론은 2.2GB 를 받고 학습까지 해야 볼 수 있어 여기서 못 돌린다. 대신 <b>그리는
+    /// 쪽</b>만 떼어 본다 - 0~1 좌표가 화면 어디로 가는지가 여기서 정해지고, 그것이 틀리면
+    /// 사각형이 엉뚱한 자리에 그려지는데 화면에는 그럴싸하게 떠서 눈으로는 못 잡는다.
+    ///
+    /// 오프스크린으로 그린 뒤 픽셀을 직접 본다.
+    /// </remarks>
+    private static int CheckLabelCanvasDrawing()
+    {
+        try
+        {
+            const int size = 200;
+
+            // 200x200 캔버스에 200x200 그림을 채운다. 그러면 0~1 이 곧 픽셀 자리가 된다.
+            var image = new System.Windows.Media.Imaging.WriteableBitmap(
+                size, size, 96, 96, PixelFormats.Bgra32, null);
+
+            image.WritePixels(new Int32Rect(0, 0, size, size), new byte[size * size * 4], size * 4, 0);
+            image.Freeze();
+
+            var canvas = new Minguk.Tools.Markup.LabelCanvas
+            {
+                Width = size,
+                Height = size,
+                ImageSource = image,
+                Boxes = [],
+                Predictions =
+                [
+                    new Minguk.Tools.Markup.PredictedBox(
+                        Minguk.Tools.Vision.Labeling.LabelBox.FromCorners(0, 0.25, 0.25, 0.75, 0.75), "슬라임 90%")
+                ]
+            };
+
+            canvas.Measure(new Size(size, size));
+            canvas.Arrange(new Rect(0, 0, size, size));
+            canvas.UpdateLayout();
+
+            var target = new System.Windows.Media.Imaging.RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+
+            target.Render(canvas);
+
+            var pixels = new byte[size * size * 4];
+
+            target.CopyPixels(pixels, size * 4, 0);
+
+            // 0번 몹의 색. 점선 테두리가 이 색으로 그려져 있어야 한다.
+            var expected = Minguk.Tools.Markup.LabelCanvas.ColorOf(0);
+
+            // 사각형 위쪽 변(y=50) 을 훑어 그 색이 있는지 본다. 점선이라 군데군데 비어 있다.
+            var onEdge = CountColour(pixels, size, y: 50, from: 50, to: 150, expected);
+
+            // 사각형 <b>안쪽</b>(y=100 의 가운데)은 비어 있어야 한다. 채워 그리면 그림을 가린다.
+            var inside = CountColour(pixels, size, y: 100, from: 90, to: 110, expected);
+
+            var ok = onEdge > 10 && inside == 0;
+
+            Console.WriteLine(ok
+                ? $"[PASS] 캔버스가 예측을 제 자리에 그린다 — 위쪽 변에서 {onEdge}px, 안쪽은 비어 있음"
+                : $"[FAIL] 캔버스가 예측을 제 자리에 그린다 — 위쪽 변 {onEdge}px / 안쪽 {inside}px");
+
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 캔버스가 예측을 제 자리에 그린다 — {ex.GetType().Name}: {ex.Message}");
+
+            return 1;
+        }
+    }
+
+    /// <summary>한 줄에서 그 색인 픽셀이 몇 개인지. 그리기는 안티앨리어싱을 타므로 넉넉히 본다.</summary>
+    private static int CountColour(byte[] pixels, int stride, int y, int from, int to, Color colour)
+    {
+        var count = 0;
+
+        for (var x = from; x < to; x++)
+        {
+            var i = ((y * stride) + x) * 4;
+
+            if (Math.Abs(pixels[i + 2] - colour.R) < 40
+                && Math.Abs(pixels[i + 1] - colour.G) < 40
+                && Math.Abs(pixels[i + 0] - colour.B) < 40)
+                count++;
+        }
+
+        return count;
     }
 
     /// <summary>
