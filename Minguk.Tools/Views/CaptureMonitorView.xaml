@@ -102,6 +102,17 @@
                               IsChecked="{Binding IsMobDetectionOn}"
                               ToolTip="학습한 모델로 0.25초에 한 번 찾아 점선으로 겹쳐 그린다. CPU 리드백이 켜져 있어야 한다." />
 
+            <!--
+                찾기만 하면 자동화가 아니다. 찾은 것 중 가장 자신 있는 것의 가운데를 누른다.
+                입력 전달이 켜져 있어야 나간다 - 찾는 것은 화면만 보지만 누르는 것은
+                남의 프로그램에 실제로 들어가므로, 켜는 일은 사람이 한 번 분명히 해야 한다.
+            -->
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding ClickDetectionCommand}"
+                               Content="찾은 것 누르기"
+                               Glyph="{image:FreeImage ResourceName='Axialis/HardwareNetwork/16x16/mouse.png'}"
+                               ToolTip="가장 자신 있는 몹의 가운데를 누른다. 입력 전달이 켜져 있어야 한다." />
+
             <!-- 몇 마리를 몇 ms 에 찾았는지. 실제 속도가 여기 그대로 뜬다. -->
             <dxb:BarStaticItem Content="{Binding DetectionStatus}" />
         </dxb:MainMenuControl>

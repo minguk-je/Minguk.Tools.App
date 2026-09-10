@@ -249,6 +249,9 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// <summary>찾은 것들. 미리보기 위에 겹쳐 그린다.</summary>
     public System.Collections.ObjectModel.ObservableCollection<Markup.PredictedBox> Detections { get; } = [];
 
+    /// <summary>가장 자신 있는 몹을 누른다.</summary>
+    public DelegateCommand ClickDetectionCommand { get; set; } = null!;
+
     public CaptureTarget? SelectedTarget
     {
         get => GetProperty(() => SelectedTarget);
@@ -440,6 +443,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         DoClearCommand = new DelegateCommand(DoClear, false);
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning && EnableCpuReadback, false);
         CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning && EnableCpuReadback, false);
+        ClickDetectionCommand = new DelegateCommand(DoClickDetection, () => Detections.Count > 0, false);
 
         OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
         OnPreviewMouseWheelCommand = new DelegateCommand<MouseWheelEventArgs>(OnPreviewMouseWheel, false);
@@ -1133,18 +1137,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
                 return;
             }
 
-            // 커서를 옮기기 전에 지금 자리를 적어 둔다. 돌아올 때 쓴다.
-            var cursorBeforeClick = _inputRouter.InputAdapter.GetCursorPosition();
-
-            // 창을 새로 끌어올렸을 때만 기다린다. 이미 앞에 있었으면 곧바로 누른다.
-            if (didActivate)
-                await System.Threading.Tasks.Task.Delay(ActivationSettleDelayMs);
-
-            var result = _inputRouter.ClickAt(screenPoint, button);
-            ReportInputForward(result, "클릭");
-
-            if (result == Capture.Input.InputForwardResult.Sent && IsReturnFocusAfterClickEnabled)
-                await ReturnToThisWindowAsync(cursorBeforeClick);
+            await SendClickAsync(screenPoint, didActivate, button, "클릭");
         }
         catch (Exception ex)
         {
@@ -1154,6 +1147,32 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         {
             _isForwardingClick = false;
         }
+    }
+
+    /// <summary>
+    /// 화면 좌표 한 곳을 누른다. 끌어올린 뒤 기다리는 것과 포커스를 되돌리는 것까지.
+    /// </summary>
+    /// <remarks>
+    /// 미리보기를 손으로 누른 것과 모델이 찾아낸 몹을 누르는 것이 <b>같은 길</b>을 타야 한다.
+    /// 두 벌로 두면 한쪽만 고쳐져 손으로 누를 때는 되는데 자동으로는 안 되는 일이 생긴다.
+    /// </remarks>
+    private async System.Threading.Tasks.Task<Capture.Input.InputForwardResult> SendClickAsync(
+        Point screenPoint, bool didActivate, Input.MouseButton button, string what)
+    {
+        // 커서를 옮기기 전에 지금 자리를 적어 둔다. 돌아올 때 쓴다.
+        var cursorBeforeClick = _inputRouter!.InputAdapter.GetCursorPosition();
+
+        // 창을 새로 끌어올렸을 때만 기다린다. 이미 앞에 있었으면 곧바로 누른다.
+        if (didActivate)
+            await System.Threading.Tasks.Task.Delay(ActivationSettleDelayMs);
+
+        var result = _inputRouter.ClickAt(screenPoint, button);
+        ReportInputForward(result, what);
+
+        if (result == Capture.Input.InputForwardResult.Sent && IsReturnFocusAfterClickEnabled)
+            await ReturnToThisWindowAsync(cursorBeforeClick);
+
+        return result;
     }
 
     /// <summary>

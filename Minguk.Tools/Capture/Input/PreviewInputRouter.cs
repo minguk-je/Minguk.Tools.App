@@ -105,6 +105,40 @@ public sealed class PreviewInputRouter
         return InputAdapter.ClickMouseButton(button) ? InputForwardResult.Sent : InputForwardResult.Blocked;
     }
 
+    /// <summary>
+    /// 그림 안의 비율(0~1) 자리를 누를 준비를 한다.
+    /// </summary>
+    /// <remarks>
+    /// 모델이 찾아낸 몹처럼 <b>그림 안의 자리를 이미 아는</b> 쪽이 쓴다. 미리보기 컨트롤을
+    /// 거치지 않으므로 컨트롤 크기가 필요 없고, 미리보기가 꺼져 있어도 된다.
+    ///
+    /// 누르는 것은 <see cref="ClickAt"/> 가 따로 한다 - 창을 끌어올린 직후에는 조금 기다려야
+    /// 하는데, 그 기다림은 부르는 쪽이 정할 일이다.
+    /// </remarks>
+    public InputForwardResult PrepareClickAtRatio(Point ratio, out Point screenPoint, out bool didActivate)
+    {
+        screenPoint = default;
+        didActivate = false;
+
+        var target = _targetProvider();
+        if (target is null)
+            return InputForwardResult.NoTarget;
+
+        if (!CaptureTargetBounds.TryGet(target, out var bounds))
+            return InputForwardResult.TargetGone;
+
+        if (ratio.X is < 0 or > 1 || ratio.Y is < 0 or > 1)
+            return InputForwardResult.OutsideImage;
+
+        screenPoint = PreviewInputMapper.MapRatioToScreen(ratio, bounds);
+
+        // 창 메시지를 직접 넣는 경로는 활성화와 무관하므로 건너뛴다.
+        if (InputAdapter.RequiresForegroundTarget)
+            didActivate = ActivateWindowAt(screenPoint);
+
+        return InputForwardResult.Sent;
+    }
+
     public InputForwardResult TryScroll(Point pointInControl, Size controlSize, Size sourceSize, int delta)
     {
         var moved = TryMoveMouse(pointInControl, controlSize, sourceSize);

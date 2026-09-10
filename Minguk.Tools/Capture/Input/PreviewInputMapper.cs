@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 
 namespace Minguk.Tools.Capture.Input;
@@ -60,10 +60,22 @@ public static class PreviewInputMapper
         var ratioX = xInDrawn / drawnWidth;
         var ratioY = yInDrawn / drawnHeight;
 
-        screenPoint = new Point(
-            targetBounds.X + targetBounds.Width * ratioX,
-            targetBounds.Y + targetBounds.Height * ratioY);
+        screenPoint = MapRatioToScreen(new Point(ratioX, ratioY), targetBounds);
 
         return true;
     }
+
+    /// <summary>
+    /// 그림 안의 비율(0~1)을 화면 좌표로 바꾼다.
+    /// </summary>
+    /// <remarks>
+    /// 미리보기를 거치지 않고 <b>그림 안의 자리</b>를 이미 아는 쪽이 쓴다 - 모델이 찾아낸
+    /// 몹이 그렇다. 검출은 0~1 로 나오므로 컨트롤 크기도, 레터박스 여백도 알 필요가 없다.
+    ///
+    /// 미리보기 클릭도 결국 이 계산으로 끝나므로 한 곳에 둔다. 두 벌로 두면 한쪽만 고쳐져
+    /// 손으로 누른 자리와 모델이 누른 자리가 어긋난다.
+    /// </remarks>
+    public static Point MapRatioToScreen(Point ratio, Rect targetBounds) => new(
+        targetBounds.X + (targetBounds.Width * ratio.X),
+        targetBounds.Y + (targetBounds.Height * ratio.Y));
 }

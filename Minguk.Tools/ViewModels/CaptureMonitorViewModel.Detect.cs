@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
+using System.Windows;
+
 using Minguk.Tools.Capture;
 using Minguk.Tools.Markup;
 using Minguk.Tools.Vision.Inference;
@@ -112,6 +114,9 @@ public partial class CaptureMonitorViewModel
                 foreach (var detection in found)
                     Detections.Add(new PredictedBox(detection.Box, detection.Describe));
 
+                // 찾은 것이 바뀌었으니 누르기 버튼 상태도 다시 본다.
+                ClickDetectionCommand.RaiseCanExecuteChanged();
+
                 DetectionStatus = found.Count == 0
                     ? $"못 찾음 ({size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms)"
                     : $"{found.Count}마리 ({size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms): " +
@@ -146,6 +151,7 @@ public partial class CaptureMonitorViewModel
         {
             Detections.Clear();
             DetectionStatus = null;
+            ClickDetectionCommand.RaiseCanExecuteChanged();
 
             return;
         }
@@ -209,6 +215,72 @@ public partial class CaptureMonitorViewModel
             }
         });
     });
+
+    /// <summary>
+    /// 가장 자신 있는 몹을 누른다.
+    /// </summary>
+    /// <remarks>
+    /// <b>찾기만 하면 자동화가 아니다.</b> 찾은 사각형의 가운데를 눌러 준다.
+    ///
+    /// 누르는 길은 미리보기를 손으로 누를 때와 같은 것을 쓴다(<c>SendClickAsync</c>) -
+    /// 두 벌로 두면 한쪽만 고쳐져 손으로는 되는데 자동으로는 안 되는 일이 생긴다.
+    ///
+    /// <b>입력 전달이 켜져 있어야 한다.</b> 찾는 것은 화면만 보는 일이라 대상에 아무 영향이
+    /// 없지만, 누르는 것은 남의 프로그램에 실제로 들어간다. 그것을 켜는 일은 사람이 한 번
+    /// 분명히 해야 한다 - 몹 찾기를 켠 것만으로 클릭이 나가면 안 된다.
+    /// </remarks>
+    private async void DoClickDetection()
+    {
+        if (!CanForwardInput || _isForwardingClick)
+        {
+            DetectionStatus = IsInputForwardingEnabled
+                ? "지금은 누를 수 없습니다."
+                : "누르려면 \"입력 전달\" 을 먼저 켜세요.";
+
+            return;
+        }
+
+        if (Detections.Count == 0)
+        {
+            DetectionStatus = "누를 것이 없습니다. 먼저 찾아야 합니다.";
+            return;
+        }
+
+        // 목록은 자신 있는 것부터 들어 있다. 맨 앞이 가장 확실한 것이다.
+        var target = Detections[0];
+        var box = target.Box;
+
+        _isForwardingClick = true;
+
+        try
+        {
+            var prepared = _inputRouter!.PrepareClickAtRatio(
+                new Point(box.CenterX, box.CenterY), out var screenPoint, out var didActivate);
+
+            if (prepared != Capture.Input.InputForwardResult.Sent)
+            {
+                ReportInputForward(prepared, "몹 클릭");
+                return;
+            }
+
+            var result = await SendClickAsync(screenPoint, didActivate, Minguk.Tools.Input.MouseButton.Left, "몹 클릭");
+
+            if (result == Capture.Input.InputForwardResult.Sent)
+            {
+                DetectionStatus = $"{target.Caption} 을(를) 눌렀습니다 " +
+                                  $"({screenPoint.X:F0}, {screenPoint.Y:F0})";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "몹을 누르지 못했다");
+            DetectionStatus = $"누르지 못했습니다: {ex.Message}";
+        }
+        finally
+        {
+            _isForwardingClick = false;
+        }
+    }
 
     /// <summary>지난번에 죽으면서 남긴 임시 파일을 치운다. 지금 쓰는 것은 건드리지 않는다.</summary>
     private void SweepStaleScratch()
