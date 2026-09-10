@@ -5,6 +5,7 @@ using DevExpress.Mvvm.POCO;
 using ICSharpCode.AvalonEdit;
 using Minguk.Image;
 using Minguk.Tools.Input;
+using Minguk.Tools.Input.Adapters;
 using Minguk.Tools.Input.Hotkeys;
 using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Sequencing;
@@ -80,6 +81,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         DoClearTestPadCommand = new DelegateCommand(() => TestPadText = string.Empty, () => true, false);
 
         DoRefreshWindowsCommand = new DelegateCommand(DoRefreshWindows, () => IsIdle, false);
+        DoInstallDriverCommand = new DelegateCommand(DoInstallDriver, () => IsIdle && CanInstallDriver, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
@@ -178,6 +180,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         RegisterHotkeys();
 
         ApplyEditorTheme();
+        UpdateDriverNotice();
 
         RaisePropertyChanged(nameof(NeedsWindowTarget));
 

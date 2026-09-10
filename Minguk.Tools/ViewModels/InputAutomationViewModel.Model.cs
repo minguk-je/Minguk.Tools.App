@@ -34,6 +34,8 @@ public partial class InputAutomationViewModel
 
     public DelegateCommand DoRefreshWindowsCommand { get; private set; } = null!;
 
+    public DelegateCommand DoInstallDriverCommand { get; private set; } = null!;
+
     // ── 입력 경로 ────────────────────────────────────────────────────────
 
     public ObservableCollection<InputBackend> InputBackends { get; set; }
@@ -47,6 +49,24 @@ public partial class InputAutomationViewModel
 
     /// <summary>지금 어느 경로로 나가는지, 못 쓰면 왜 못 쓰는지.</summary>
     public string? AdapterStatus { get => GetProperty(() => AdapterStatus); set => SetProperty(() => AdapterStatus, value); }
+
+    // ── Interception 드라이버 ────────────────────────────────────────────
+
+    /// <summary>드라이버가 없거나 재부팅이 필요할 때 무엇을 해야 하는지. 괜찮으면 null.</summary>
+    public string? DriverNotice
+    {
+        get => GetProperty(() => DriverNotice);
+        set => SetProperty(() => DriverNotice, value, () => RaisePropertyChanged(nameof(HasDriverNotice)));
+    }
+
+    public bool HasDriverNotice => !string.IsNullOrEmpty(DriverNotice);
+
+    /// <summary>설치 버튼을 보일지. 이미 설치됐고 재부팅만 남았으면 보일 이유가 없다.</summary>
+    public bool CanInstallDriver
+    {
+        get => GetProperty(() => CanInstallDriver);
+        set => SetProperty(() => CanInstallDriver, value);
+    }
 
     // ── 대상 창 ──────────────────────────────────────────────────────────
     //    PostMessage 만 쓴다. 진짜 커서를 안 움직이므로 "포커스를 가진 창" 에 기댈 수 없고,

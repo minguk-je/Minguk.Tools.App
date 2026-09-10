@@ -160,6 +160,7 @@ internal static partial class Program
         TestKeyboardDetection();
         await TestHangulTypingAsync(ui);
 
+        TestInterceptionDriver();
         TestSequencePlan();
         TestSequenceScript();
         await TestScriptEngineAsync();

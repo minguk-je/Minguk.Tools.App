@@ -253,6 +253,16 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --calibrate           # 정�
   - `DirectML.Debug.dll` 은 Debug 구성에만 들어간다. 패키지의 targets 는 구성을 보지 않으므로
     (`Microsoft_AI_DirectML_SkipDebugLayerCopy` 로만 가른다) csproj 에서 직접 나눈다.
   - `.pdb` 는 저장소에 두지 않는다. 남의 네이티브 라이브러리 안으로 들어갈 일이 없다.
+- **Interception 드라이버**는 `Input/Adapters/InterceptionDriver` 가 살피고 설치한다.
+  - 상태를 `keyboard` · `mouse` **서비스**로 읽는다. 어댑터의 `IsAvailable` 은 "쓸 수 있는지" 만
+    말하고 **왜** 못 쓰는지는 모른다 - 설치가 안 된 것과 재부팅을 안 한 것은 사용자가 할 일이 다르다.
+  - 설치는 **별도 프로세스를 `runas` 로** 띄운다. 앱 전체를 관리자로 올리면 안 된다 —
+    관리자 창에는 탐색기에서 파일을 끌어다 놓을 수 없고(UIPI) 늘 UAC 를 거쳐 켜야 한다.
+  - 설치 뒤에는 **반드시 재부팅**이다. 키보드·마우스 장치 스택 사이에 끼어드는 필터 드라이버라
+    이미 올라온 장치에는 다음 부팅에야 붙는다. 안내 줄만으로는 지나치기 쉬워 대화 상자로도 알린다.
+  - `install-interception.exe` 는 `Native/x64/` 에 함께 둔다. **`interception.dll` 과 같은
+    릴리스(v1.0.1)여야 한다** - 넣을 때 릴리스 안의 dll 이 우리 것과 바이트 단위로 같은지 확인했다.
+    설치 프로그램 껍데기는 코드 서명이 없어 SmartScreen 경고가 뜰 수 있다(드라이버 .sys 는 서명됨).
 - `interception.dll` 은 `Minguk.Tools/Native/x64/` 에 있다. 이 프로젝트만 쓰므로 `Libs/` 가 아니다.
   `DllImport` 가 실행 파일 옆에서 찾으므로 `TargetPath` 로 출력 루트에 떨어뜨린다.
   x86 빌드를 잘못 넣으면 컴파일은 통과하고 실행할 때 `BadImageFormatException` 으로 터진다.

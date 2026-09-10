@@ -51,6 +51,9 @@
 		<!--  자바스크립트. 순수 .NET 인터프리터라 네이티브도 받아 올 것도 없다.  -->
 		<PackageReference Include="Jint" Version="4.16.2" />
 
+		<!--  드라이버 서비스 상태를 읽으려고 쓴다(ServiceController).  -->
+		<PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.0" />
+
 		<PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.11" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
@@ -157,6 +160,17 @@
 	<ItemGroup>
 	  <None Remove="Native\x64\interception.dll" />
 	  <Content Include="Native\x64\interception.dll" TargetPath="interception.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+
+	  <!--
+	    드라이버 설치 프로그램. 필요할 때만 관리자로 띄운다.
+	    interception.dll 과 같은 릴리스(v1.0.1)에서 나온 것이어야 한다 - 판이 어긋나면
+	    설치된 드라이버와 dll 이 서로 다른 규약을 쓰게 된다. 받아 올 때 dll 이 바이트 단위로
+	    같은지 확인하고 넣었다.
+	  -->
+	  <None Remove="Native\x64\install-interception.exe" />
+	  <Content Include="Native\x64\install-interception.exe" TargetPath="install-interception.exe">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
 	</ItemGroup>

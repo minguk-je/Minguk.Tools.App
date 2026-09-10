@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Minguk.Tools.Input;
+using Minguk.Tools.Input.Adapters;
 using Minguk.Tools.Input.Korean;
 using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Sequencing;
@@ -254,6 +255,37 @@ internal static partial class Program
         Check($"도는 중에 터지면 계획을 버린다 ({language})",
               runErrors.Count > 0 && half.Steps.Count == 0,
               runErrors.Count > 0 ? runErrors[0].ToString() : "오류를 안 냈다");
+    }
+
+    /// <summary>
+    /// Interception 드라이버 상태를 알아내는지, 설치 프로그램이 자리에 있는지.
+    /// </summary>
+    /// <remarks>
+    /// 설치를 실제로 해 보지는 않는다. 커널 드라이버를 넣고 재부팅해야 하는 일이라
+    /// 검증 하나 때문에 이 PC 를 흔들 수 없다. 알아내는 쪽과 준비물만 본다.
+    ///
+    /// "쓸 수 있는지" 는 어댑터도 말해 주지만 <b>왜</b> 못 쓰는지는 모른다.
+    /// 설치가 안 된 것과 재부팅을 안 한 것은 사용자가 할 일이 다르다.
+    /// </remarks>
+    private static void TestInterceptionDriver()
+    {
+        var state = InterceptionDriver.GetState();
+
+        using var adapter = InputAdapterFactory.Create(InputBackend.Interception, () => IntPtr.Zero);
+
+        // 상태와 어댑터가 서로 다른 말을 하면 둘 중 하나가 틀린 것이다.
+        var agrees = state switch
+        {
+            InterceptionDriverState.Ready => adapter.IsAvailable,
+            InterceptionDriverState.NotInstalled or InterceptionDriverState.NeedsReboot => !adapter.IsAvailable,
+            _ => true   // 알 수 없음이면 따질 것이 없다
+        };
+
+        Check("드라이버 상태 판별", agrees,
+              $"{state} / 어댑터 {(adapter.IsAvailable ? "사용 가능" : "사용 불가")} - {InterceptionDriver.Describe(state)}");
+
+        Check("설치 프로그램이 실행 파일 옆에 있다", InterceptionDriver.HasInstaller,
+              InterceptionDriver.InstallerPath);
     }
 
     /// <summary>

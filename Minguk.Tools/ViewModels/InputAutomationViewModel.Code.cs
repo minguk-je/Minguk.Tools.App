@@ -4,10 +4,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Minguk.Base.Utilities;
+using DevExpress.Mvvm;
 using DevExpress.Xpf.Core;
 using Minguk.Tools.Helper;
 using System.Windows.Input;
 using Minguk.Tools.Input;
+using Minguk.Tools.Input.Adapters;
 using Minguk.Tools.Input.Hotkeys;
 using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Sequencing;
@@ -89,12 +91,84 @@ public partial class InputAutomationViewModel
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(ApplyEditorTheme);
     }
 
+    /// <summary>
+    /// Interception 을 고를 때 드라이버가 준비됐는지 보고, 아니면 무엇을 해야 하는지 적는다.
+    /// </summary>
+    /// <remarks>
+    /// 어댑터가 "쓸 수 없다" 고만 하면 사용자는 무엇을 해야 할지 모른다. 설치가 안 된 것과
+    /// 설치는 됐는데 재부팅을 안 한 것은 할 일이 다르다 - 그것을 갈라 적는다.
+    /// </remarks>
+    private void UpdateDriverNotice() => Guard(() =>
+    {
+        if (SelectedInputBackend != InputBackend.Interception)
+        {
+            DriverNotice = null;
+            CanInstallDriver = false;
+            return;
+        }
+
+        var state = InterceptionDriver.GetState();
+
+        if (state == InterceptionDriverState.Ready)
+        {
+            DriverNotice = null;
+            CanInstallDriver = false;
+            return;
+        }
+
+        DriverNotice = InterceptionDriver.Describe(state)
+                       + (state == InterceptionDriverState.NotInstalled
+                           ? " 설치하려면 관리자 권한이 필요하고, 설치 뒤 Windows 를 다시 시작해야 합니다."
+                           : string.Empty);
+
+        // 재부팅만 남았으면 다시 설치할 이유가 없다.
+        CanInstallDriver = state is InterceptionDriverState.NotInstalled or InterceptionDriverState.Unknown
+                           && InterceptionDriver.HasInstaller;
+    });
+
+    /// <summary>
+    /// 드라이버를 설치한다. 설치 프로그램을 관리자로 띄운다.
+    /// </summary>
+    /// <remarks>
+    /// 앱 전체를 관리자로 올리지 않는다 - 그러면 탐색기에서 파일을 끌어다 놓을 수 없고
+    /// 늘 UAC 를 거쳐 켜야 한다. 설치할 때만 올린다.
+    /// </remarks>
+    private void DoInstallDriver() => Guard(() =>
+    {
+        CanInstallDriver = false;
+        DriverNotice = "설치 중입니다. 관리자 권한을 물어보면 허용해 주세요...";
+
+        _ = GuardAsync(async () =>
+        {
+            var result = await InterceptionDriver.InstallAsync();
+
+            DriverNotice = result.Message;
+            UpdateDriverNotice();
+
+            if (result.NeedsReboot)
+            {
+                // 재부팅해야 한다는 것은 한 번 더 분명히 말한다. 안내 줄만으로는 지나치기 쉽다.
+                MessageBoxService?.ShowMessage(
+                    "드라이버를 설치했습니다.\n\nWindows 를 다시 시작해야 Interception 경로를 쓸 수 있습니다.\n"
+                    + "재시작 전까지는 SendInput 경로로 돌아갑니다.",
+                    "재시작이 필요합니다",
+                    MessageButton.OK,
+                    MessageIcon.Information);
+            }
+            else
+            {
+                MessengerUtility.SendMainMessage(result.Message);
+            }
+        });
+    });
+
     private void OnSelectedInputBackendChanged()
     {
         if (_adapter is null) return;   // 아직 화면이 뜨기 전이면 OnLoaded 가 끼운다
 
         ApplyBackend();
         UpdateSequenceText();
+        UpdateDriverNotice();
 
         RaisePropertyChanged(nameof(NeedsWindowTarget));
 
