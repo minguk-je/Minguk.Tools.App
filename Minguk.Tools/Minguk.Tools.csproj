@@ -96,8 +96,14 @@
 
 		  TorchSharp 판을 올리면 LibTorchRuntime.Version 도 같이 봐야 한다.
 		  0.102.7 은 libtorch 2.2.1 을 요구하고, 어긋나면 진입점을 못 찾아 터진다.
+
+		  **"패키지 모두 업데이트" 에 딸려 올라가면 안 된다.** 실제로 그랬다 - 0.107.0 이 되자
+		  libtorch 2.10.0 을 찾으며 "The type initializer for 'TorchSharp.torch' threw an
+		  exception" 으로 학습이 죽었다. Microsoft.ML.TorchSharp 0.23.0 도 0.102.7 에 맞춰
+		  만든 것이다. 올리려면 셋(TorchSharp · ML.TorchSharp · LibTorchRuntime.Version)을
+		  같이 올리고, 받아 둔 libtorch(4GB)도 다시 받아야 한다.
 		-->
-		<PackageReference Include="TorchSharp" Version="0.107.0" />
+		<PackageReference Include="TorchSharp" Version="0.102.7" />
 		<PackageReference Include="Microsoft.ML.TorchSharp" Version="0.23.0" />
 		<PackageReference Include="Microsoft.ML.ImageAnalytics" Version="5.0.0" />
 		<PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.29.0" />
