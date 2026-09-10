@@ -31,10 +31,11 @@
             로고 그림은 698x128(비율 5.45) 이다. 상자 비율을 거기에 맞춰 둔다 -
             어긋나면 Stretch="Uniform" 이 짧은 쪽에 맞춰 넣으면서 남는 자리가 생긴다.
             상자를 키우면 로고도 같이 커진다(그림 자체의 워드마크 비율과는 다른 층이다).
+            380x70 도 재 봤는데 스플래시를 눌러 제목보다 세 보였다. 280 이 제목과 무게가 맞다.
         -->
         <dx:DXImage x:Name="PART_Logo"
-                    Width="380"
-                    Height="70"
+                    Width="280"
+                    Height="52"
                     Style="{DynamicResource ResourceKey={dxt:FluentSplashScreenThemeKey ResourceKey=LogoImageStyle}}"
                     Source="{Binding Logo}"
                     Stretch="Uniform" />
