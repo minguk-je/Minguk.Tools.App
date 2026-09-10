@@ -1,4 +1,4 @@
-<dx:SplashScreenWindow x:Class="Minguk.Tools.SplashScreen.StartupSplashScreen"
+﻿<dx:SplashScreenWindow x:Class="Minguk.Tools.SplashScreen.StartupSplashScreen"
                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -27,9 +27,14 @@
             <RowDefinition Height="2*" />
         </Grid.RowDefinitions>
 
+        <!--
+            로고 그림은 698x128(비율 5.45) 이다. 상자 비율을 거기에 맞춰 둔다 -
+            어긋나면 Stretch="Uniform" 이 짧은 쪽에 맞춰 넣으면서 남는 자리가 생긴다.
+            상자를 키우면 로고도 같이 커진다(그림 자체의 워드마크 비율과는 다른 층이다).
+        -->
         <dx:DXImage x:Name="PART_Logo"
-                    Width="200"
-                    Height="40"
+                    Width="380"
+                    Height="70"
                     Style="{DynamicResource ResourceKey={dxt:FluentSplashScreenThemeKey ResourceKey=LogoImageStyle}}"
                     Source="{Binding Logo}"
                     Stretch="Uniform" />
