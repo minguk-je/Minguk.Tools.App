@@ -65,7 +65,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=Interception
 | 항목 | SendInput | Interception | PostMessage |
 |---|---|---|---|
 | 스캔코드 문자 입력 · Enter | PASS | PASS | N/A — 스캔코드를 넣지 못한다 |
-| 계획 실행 (영문·Shift·Enter) | PASS | PASS | **PASS** — WM_CHAR 로 들어간다 |
+| 계획 실행 (영문·Shift·Enter·한글) | PASS | PASS | **PASS** — WM_CHAR 로 들어간다 |
 | 가상 키 입력 | PASS | PASS | **PASS** |
 | 시퀀스 (한 바퀴·반복·취소) | PASS | PASS | N/A — 스캔코드를 넣지 못한다 |
 | 계획 (순서·저장·복구·깨진 것) | PASS | PASS | **PASS** |
@@ -83,11 +83,19 @@ WPF 는 창 하나가 전부라 자식 HWND 가 없고 마우스 입력을 실�
 
 가상 키 입력은 세 경로 모두 통한다. `PreviewInputRouter` 가 실제로 쓰는 길이 이쪽이다.
 
-**PostMessage 도 영문·숫자·문장부호·Enter 는 넣는다.** 한때 스캔코드가 안 되면 통째로 건너뛰어서
-"이 경로는 Enter 도 못 보낸다" 는 잘못된 믿음을 오래 들고 있었다. 실제로 못 하는 것은 **한글**뿐이다.
+**PostMessage 도 영문·숫자·문장부호·Enter·한글을 다 넣는다.** 못 하는 것은 **한/영 전환**뿐이다.
+한때 스캔코드가 안 되면 통째로 건너뛰어서 "Enter 도 못 보낸다" 고 알았고, 그 다음엔
+"한글은 못 넣는다" 고 알았다. 둘 다 틀렸다. 그 경로에서 이 검증을 건너뛴 것이 원인이었다.
 
-글자는 `WM_CHAR` 로 넣는다. 키로 보내면 안 된다 — 부친 `VK_SHIFT` 는 대상 스레드의 키 상태를
-바꾸지 못해서 대상이 Shift 가 안 눌린 것으로 해석한다. 실측으로 `abC!` 가 `abc1` 로 들어갔다.
+글자는 `WM_CHAR` 로 넣는다. 두 가지를 지켜야 한다.
+
+- **키로 보내면 안 된다.** 부친 `VK_SHIFT` 는 대상 스레드의 키 상태를 바꾸지 못해서 대상이
+  Shift 가 안 눌린 것으로 해석한다. 실측으로 `abC!` 가 `abc1` 로 들어갔다.
+- **`PostMessageW` 여야 한다.** 이름만 `PostMessage` 로 P/Invoke 하면 ANSI 판이 잡혀서
+  한글이 `?` 로 뭉개진다. 실측으로 `한글` 이 `?` 가 됐다.
+
+한글이 들어가는 것은 IME 를 거치는 것이 아니라 **완성된 음절을 그대로 주는 것**이다.
+그래서 대상의 IME 상태를 바꾸는 한/영 단계는 여전히 스캔코드 경로에서만 된다.
 
 계획(`SequencePlan`)과 스크립트(`SequenceScript`)를 다루는 항목들은 경로와 무관하다 - 적어 둔 것을 읽고 쓰는 순수 계산이라
 어느 경로로 돌려도 같아야 하고, 세 경로 모두에서 돌려 그것을 확인한다.

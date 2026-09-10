@@ -302,7 +302,9 @@ public sealed class PostMessageInputAdapter : IInputAdapter, ICharacterInput
 
         public const uint GA_ROOT = 2;
 
-        [DllImport("user32.dll", SetLastError = true)]
+        // 반드시 W(유니코드) 판이어야 한다. 이름만 PostMessage 로 두면 ANSI 판이 잡혀서
+        // WM_CHAR 로 보낸 한글이 '?' 로 뭉개진다(실측: "한글" -> "?").
+        [DllImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
         public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll")]

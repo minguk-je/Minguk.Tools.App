@@ -31,6 +31,16 @@ public sealed class InputService
     /// <summary>글자 입력과 한/영 전환을 할 수 있는지. 스캔코드를 못 넣는 경로면 false.</summary>
     public bool SupportsTyping => _scanCodes is not null;
 
+    /// <summary>
+    /// 한/영 전환을 할 수 있는지.
+    /// </summary>
+    /// <remarks>
+    /// 글자를 넣는 것과 다르다. <see cref="ICharacterInput"/> 는 완성된 음절을 그대로 주므로
+    /// IME 를 건드리지 않고도 한글이 들어가지만, IME 의 상태 자체를 바꾸지는 못한다.
+    /// 한/영 키는 스캔코드로만 통한다.
+    /// </remarks>
+    public bool SupportsHangulToggle => SupportsTyping;
+
     public string AdapterName => _adapter.Name;
 
     // ─────────────────────────── 대기 시간 ───────────────────────────
@@ -165,15 +175,12 @@ public sealed class InputService
     /// 스캔코드 없이 이 글자를 넣을 수 있는지.
     /// </summary>
     /// <remarks>
-    /// 한글은 못 한다 - 자모를 눌러 넣는 것은 대상 IME 가 처리해야 하는데, 부친 키로는
-    /// 한/영 전환이 먹지 않고 WM_CHAR 로는 조합이 일어나지 않는다.
+    /// <see cref="ICharacterInput"/> 가 있으면 <b>한글도 된다.</b> 그 길은 글자를 그대로 주므로
+    /// IME 를 거치지 않는다 - 자모를 눌러 조합시키는 것이 아니라 완성된 음절을 넣는 것이다.
+    /// 가상 키로만 가야 하는 경우에는 지금 자판으로 낼 수 있는 글자만 된다(한글은 안 된다).
     /// </remarks>
     public bool CanTypeWithoutScanCode(char c)
-    {
-        if (Korean.HangulKeyMap.IsHangul(c)) return false;
-
-        return _adapter is ICharacterInput || VirtualKeys.CanType(c);
-    }
+        => _adapter is ICharacterInput || (!Korean.HangulKeyMap.IsHangul(c) && VirtualKeys.CanType(c));
 
     /// <summary>가상 키 하나를 눌렀다 뗀다.</summary>
     public async Task<bool> TapVirtualKeyAsync(ushort virtualKey, int holdTimeMs)

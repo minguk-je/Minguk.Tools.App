@@ -77,6 +77,7 @@ internal static class ViewSmokeProbe
 
             vm.ScriptText = """
                             글자 "가"
+                            한/영
                             Enter
                             이동 100 200
                             """;

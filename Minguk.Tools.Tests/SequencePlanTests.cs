@@ -158,7 +158,8 @@ internal static partial class Program
                 new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = "ab" },
                 new SequenceStepDefinition { Kind = SequenceStepKind.Wait, DelayMs = 30 },
                 new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = "C!" },
-                new SequenceStepDefinition { Kind = SequenceStepKind.Enter }
+                new SequenceStepDefinition { Kind = SequenceStepKind.Enter },
+                new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = "한글" }
             ]
         };
 
@@ -171,8 +172,13 @@ internal static partial class Program
         var typed = Read(() => ui.Input.Text);
 
         // Shift 가 필요한 글자(C·!)를 넣어 두었다. 조합키가 빠지면 여기서 드러난다.
-        Check("계획 실행 (영문·Shift·Enter)",
-              finished && typed.StartsWith("abC!") && typed.Contains((char)10),
-              $"입력란 {Describe(typed)} / 끝까지 {finished}");
+        // 한글은 경로에 따라 갈린다 - 넣을 수 있다고 한 경로에서만 도착해야 한다.
+        var hangulExpected = _service.CanTypeWithoutScanCode('한') || _service.SupportsTyping;
+        var hangulArrived = typed.Contains("한글");
+
+        Check("계획 실행 (영문·Shift·Enter·한글)",
+              finished && typed.StartsWith("abC!") && typed.Contains((char)10)
+              && hangulArrived == hangulExpected,
+              $"입력란 {Describe(typed)} / 한글 기대 {hangulExpected} 실제 {hangulArrived} / 끝까지 {finished}");
     }
 }

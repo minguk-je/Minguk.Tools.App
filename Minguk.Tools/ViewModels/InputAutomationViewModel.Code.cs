@@ -39,9 +39,11 @@ public partial class InputAutomationViewModel
             return;
         }
 
-        // "글자 입력 불가" 라고 적어 두었더니 PostMessage 로는 아무것도 못 넣는 줄 알게 됐다.
-        // 그 경로도 영문·숫자·문장부호·Enter 는 넣는다. 못 하는 것은 한글이다.
-        AdapterStatus = $"{_adapter.Name} · {(_service.SupportsTyping ? "한글·영문 입력" : "영문만 입력 (한글 불가)")}"
+        // 문구가 사실과 어긋나면 읽는 사람이 잘못 믿는다. 두 번 겪었다 -
+        // "글자 입력 불가" 라고 적어 두었다가 PostMessage 로는 아무것도 못 넣는 줄 알았고,
+        // 다음엔 "한글 불가" 라고 적어 두었다가 한글도 되는 것을 오래 몰랐다.
+        AdapterStatus = $"{_adapter.Name} · 한글·영문 입력"
+                      + $" · 한/영 전환 {(_service.SupportsHangulToggle ? "가능" : "불가")}"
                       + $" · 진짜 커서 {(_adapter.GetCursorPosition() is null ? "안 움직임" : "움직임")}";
     });
 
@@ -244,9 +246,9 @@ public partial class InputAutomationViewModel
         var lines = new List<string>();
 
         if (dropped > 0)
-            lines.Add($"{_adapter?.Name} 경로는 한글을 넣지 못해 한글이 든 글자·한/영 단계 {dropped}개가 빠집니다. "
-                      + "영문·숫자·문장부호·Enter 는 그대로 나갑니다. "
-                      + "한글을 보내려면 입력 경로를 SendInput 이나 Interception 으로 바꾸세요.");
+            lines.Add($"{_adapter?.Name} 경로는 한/영 전환을 하지 못해 한/영 단계 {dropped}개가 빠집니다. "
+                      + "글자는 한글까지 그대로 나갑니다 - 대상의 IME 상태를 바꿔야 할 때만 "
+                      + "입력 경로를 SendInput 이나 Interception 으로 바꾸세요.");
 
         // 대상 창을 안 고르면 마지막 좌표 아래 창으로 간다. 나가긴 나가는데 어디로 갔는지
         // 알 수 없어서, "끝남" 을 보고 됐다고 믿게 된다. 그 전에 말해 준다.
