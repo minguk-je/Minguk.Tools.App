@@ -45,6 +45,16 @@ public sealed class LabelCanvas : FrameworkElement
     private Point? _dragStart;
     private Point _dragCurrent;
 
+    /// <summary>지금 끌고 있는 것이 무엇인지. 새로 그리기·옮기기·크기 조절은 시작이 같은 마우스 다운이다.</summary>
+    private enum DragMode { None, Draw, Move, Resize }
+
+    private DragMode _dragMode;
+    private BoxHandle _dragHandle;
+    private int _dragIndex = -1;
+
+    /// <summary>끌기 시작할 때의 사각형. 옮기기는 여기에 변위를 더하지, 직전 위치에 더하지 않는다 - 오차가 쌓인다.</summary>
+    private LabelBox _dragOrigin;
+
     static LabelCanvas()
     {
         FocusableProperty.OverrideMetadata(typeof(LabelCanvas), new FrameworkPropertyMetadata(true));
@@ -55,6 +65,7 @@ public sealed class LabelCanvas : FrameworkElement
         // 배경이 없으면 마우스 이벤트가 통과해 버린다. 빈 자리를 눌러 고르기를 풀 수 없다.
         // 투명 배경을 칠하는 것으로 히트 테스트 대상이 된다.
         ClipToBounds = true;
+        Cursor = Cursors.Cross;
     }
 
     // ── 바깥과 주고받는 것 ───────────────────────────────────────────────
@@ -283,14 +294,15 @@ public sealed class LabelCanvas : FrameworkElement
 
         dc.DrawRectangle(null, pen, rect);
 
-        // 고른 것에만 모서리를 그린다. 늘 그리면 사각형이 많을 때 화면이 점으로 뒤덮인다.
+        // 고른 것에만 손잡이를 그린다. 늘 그리면 사각형이 많을 때 화면이 점으로 뒤덮인다.
+        // 변 가운데에도 그려서 한 변만 끌 수 있다는 것이 보이게 한다.
         if (selected)
         {
             var handle = new SolidColorBrush(color);
             handle.Freeze();
 
-            foreach (var corner in Corners(rect))
-                dc.DrawRectangle(handle, null, new Rect(corner.X - 3, corner.Y - 3, 6, 6));
+            foreach (var grip in Grips(rect))
+                dc.DrawRectangle(handle, null, new Rect(grip.X - 3, grip.Y - 3, 6, 6));
         }
 
         DrawName(dc, rect, box.ClassId, color);
@@ -383,37 +395,71 @@ public sealed class LabelCanvas : FrameworkElement
             (byte)Math.Round((b + m) * 255));
     }
 
-    private static IEnumerable<Point> Corners(Rect rect)
+    private static IEnumerable<Point> Grips(Rect rect)
     {
         yield return rect.TopLeft;
+        yield return new Point(rect.Left + (rect.Width / 2), rect.Top);
         yield return rect.TopRight;
-        yield return rect.BottomLeft;
+        yield return new Point(rect.Right, rect.Top + (rect.Height / 2));
         yield return rect.BottomRight;
+        yield return new Point(rect.Left + (rect.Width / 2), rect.Bottom);
+        yield return rect.BottomLeft;
+        yield return new Point(rect.Left, rect.Top + (rect.Height / 2));
     }
 
     // ── 마우스 ───────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 누른 자리로 할 일을 정한다. 고른 사각형의 손잡이면 크기 조절, 사각형 안이면 옮기기,
+    /// 빈 자리면 새로 그리기.
+    /// </summary>
+    /// <remarks>
+    /// 손잡이는 <b>고른 것</b>에서만 잡힌다. 안 고른 사각형의 모서리까지 잡으면, 붙어 있는
+    /// 두 사각형 사이에서 새로 그리려다 엉뚱한 것의 크기를 바꾸게 된다. 옮기기는 안 고른
+    /// 것도 바로 된다 - 누르는 순간 고르고 끌기 시작한다.
+    /// </remarks>
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
 
         Focus();   // Delete 키를 받으려면 포커스가 있어야 한다
 
-        if (_imageRect.IsEmpty) return;
+        if (_imageRect.IsEmpty || Boxes is not { } boxes) return;
 
-        // 이미 있는 사각형을 눌렀으면 고르는 것이지 새로 그리는 것이 아니다.
-        var hit = HitTest(e.GetPosition(this));
+        var point = e.GetPosition(this);
 
+        if (SelectedIndex >= 0 && SelectedIndex < boxes.Count)
+        {
+            var handle = HandleAt(boxes[SelectedIndex], point);
+
+            if (LabelBoxEdit.IsResizeHandle(handle))
+            {
+                BeginDrag(DragMode.Resize, SelectedIndex, handle, point);
+                return;
+            }
+        }
+
+        var hit = HitTest(point);
         if (hit >= 0)
         {
             SelectedIndex = hit;
-            InvalidateVisual();
+            BeginDrag(DragMode.Move, hit, BoxHandle.Inside, point);
             return;
         }
 
         SelectedIndex = -1;
-        _dragStart = e.GetPosition(this);
-        _dragCurrent = _dragStart.Value;
+        BeginDrag(DragMode.Draw, -1, BoxHandle.None, point);
+    }
+
+    private void BeginDrag(DragMode mode, int index, BoxHandle handle, Point point)
+    {
+        _dragMode = mode;
+        _dragIndex = index;
+        _dragHandle = handle;
+        _dragStart = point;
+        _dragCurrent = point;
+
+        if (index >= 0 && Boxes is { } boxes) _dragOrigin = boxes[index];
 
         CaptureMouse();
         InvalidateVisual();
@@ -423,10 +469,60 @@ public sealed class LabelCanvas : FrameworkElement
     {
         base.OnMouseMove(e);
 
-        if (_dragStart is null) return;
+        var point = e.GetPosition(this);
 
-        _dragCurrent = e.GetPosition(this);
+        if (_dragStart is not { } start)
+        {
+            UpdateCursor(point);
+            return;
+        }
+
+        _dragCurrent = point;
+
+        switch (_dragMode)
+        {
+            case DragMode.Move:
+                ApplyMove(start, point);
+                break;
+
+            case DragMode.Resize:
+                ApplyResize(point);
+                break;
+        }
+
         InvalidateVisual();
+    }
+
+    /// <summary>
+    /// 시작점에서 지금까지의 변위를 원래 사각형에 더한다.
+    /// </summary>
+    /// <remarks>
+    /// 클릭하면서 손이 떨린 1~2px 은 옮기기로 치지 않는다. 안 그러면 고르려고 누를 때마다
+    /// 사각형이 조금씩 흘러, 저장할 때마다 좌표가 바뀐다.
+    /// </remarks>
+    private void ApplyMove(Point start, Point point)
+    {
+        if (Boxes is not { } boxes || _dragIndex < 0 || _dragIndex >= boxes.Count) return;
+
+        var dx = point.X - start.X;
+        var dy = point.Y - start.Y;
+
+        var moved = Math.Abs(dx) >= MinimumDragPixels || Math.Abs(dy) >= MinimumDragPixels;
+        var next = moved
+            ? LabelBoxEdit.Move(_dragOrigin, dx / _imageRect.Width, dy / _imageRect.Height)
+            : _dragOrigin;
+
+        if (boxes[_dragIndex] != next) boxes[_dragIndex] = next;
+    }
+
+    private void ApplyResize(Point point)
+    {
+        if (Boxes is not { } boxes || _dragIndex < 0 || _dragIndex >= boxes.Count) return;
+
+        var normalized = ToNormalized(point);
+        var next = LabelBoxEdit.Resize(_dragOrigin, _dragHandle, normalized.X, normalized.Y);
+
+        if (boxes[_dragIndex] != next) boxes[_dragIndex] = next;
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -436,9 +532,20 @@ public sealed class LabelCanvas : FrameworkElement
         if (_dragStart is not { } start) return;
 
         var end = e.GetPosition(this);
+        var mode = _dragMode;
 
         _dragStart = null;
+        _dragMode = DragMode.None;
+        _dragIndex = -1;
         ReleaseMouseCapture();
+
+        // 옮기기·크기 조절은 끄는 동안 이미 적용됐다. 놓으면서 할 일은 없다.
+        if (mode != DragMode.Draw)
+        {
+            UpdateCursor(end);
+            InvalidateVisual();
+            return;
+        }
 
         // 그냥 클릭한 것과 끈 것을 가른다. 클릭만으로 점짜리 사각형이 생기면
         // 화면에는 안 보이는데 파일에는 남는다.
@@ -453,6 +560,7 @@ public sealed class LabelCanvas : FrameworkElement
 
         var from = ToNormalized(start);
         var to = ToNormalized(end);
+
         var box = LabelBox.FromCorners(CurrentClassId, from.X, from.Y, to.X, to.Y);
 
         if (box.IsTooSmall)
@@ -465,6 +573,47 @@ public sealed class LabelCanvas : FrameworkElement
         SelectedIndex = boxes.Count - 1;   // 방금 그린 것을 골라 둔다. 잘못 그렸으면 바로 지울 수 있게.
 
         InvalidateVisual();
+    }
+
+    /// <summary>
+    /// 커서 모양으로 무엇을 할 자리인지 미리 알린다. 손잡이 위에서는 화살표, 사각형 안은 옮기기, 빈 자리는 십자.
+    /// </summary>
+    private void UpdateCursor(Point point)
+    {
+        if (_imageRect.IsEmpty || Boxes is not { } boxes)
+        {
+            Cursor = Cursors.Arrow;
+            return;
+        }
+
+        if (SelectedIndex >= 0 && SelectedIndex < boxes.Count)
+        {
+            var handle = HandleAt(boxes[SelectedIndex], point);
+
+            if (LabelBoxEdit.IsResizeHandle(handle))
+            {
+                Cursor = CursorFor(handle);
+                return;
+            }
+        }
+
+        Cursor = HitTest(point) >= 0 ? Cursors.SizeAll : Cursors.Cross;
+    }
+
+    private static Cursor CursorFor(BoxHandle handle) => handle switch
+    {
+        BoxHandle.TopLeft or BoxHandle.BottomRight => Cursors.SizeNWSE,
+        BoxHandle.TopRight or BoxHandle.BottomLeft => Cursors.SizeNESW,
+        BoxHandle.Top or BoxHandle.Bottom => Cursors.SizeNS,
+        BoxHandle.Left or BoxHandle.Right => Cursors.SizeWE,
+        _ => Cursors.SizeAll
+    };
+
+    private BoxHandle HandleAt(LabelBox box, Point point)
+    {
+        var rect = ToScreen(box);
+
+        return LabelBoxEdit.HitHandle(rect.Left, rect.Top, rect.Right, rect.Bottom, point.X, point.Y, HandleHitPixels);
     }
 
     /// <summary>
@@ -537,6 +686,19 @@ public sealed class LabelCanvas : FrameworkElement
                 SelectedIndex = (SelectedIndex + 1) % boxes.Count;
                 e.Handled = true;
                 break;
+
+            // 화살표로 한 픽셀씩 민다. 작은 몹은 마우스로 1px 을 맞추기 어렵다. Shift 면 열 픽셀.
+            case Key.Left or Key.Right or Key.Up or Key.Down
+                when SelectedIndex >= 0 && SelectedIndex < boxes.Count && !_imageRect.IsEmpty:
+            {
+                var step = (Keyboard.Modifiers & ModifierKeys.Shift) != 0 ? 10d : 1d;
+                var dx = e.Key switch { Key.Left => -step, Key.Right => step, _ => 0d } / _imageRect.Width;
+                var dy = e.Key switch { Key.Up => -step, Key.Down => step, _ => 0d } / _imageRect.Height;
+
+                boxes[SelectedIndex] = LabelBoxEdit.Move(boxes[SelectedIndex], dx, dy);
+                e.Handled = true;
+                break;
+            }
         }
 
         InvalidateVisual();

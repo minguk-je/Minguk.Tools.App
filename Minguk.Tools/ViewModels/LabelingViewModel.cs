@@ -34,7 +34,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
     public LabelingViewModel()
     {
         Caption = "라벨링";
-        CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/edit.png");
+        CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/picture-edit.png");
 
         Items = [];
         Boxes = [];

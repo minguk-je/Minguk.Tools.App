@@ -20,6 +20,8 @@ internal static partial class Program
 {
     private static void TestLabeling()
     {
+        TestBoxEditing();
+
         // ── 두 점 → 사각형 ──
 
         var box = LabelBox.FromCorners(0, 0.2, 0.4, 0.6, 0.8);
@@ -249,5 +251,75 @@ internal static partial class Program
         {
             return true;
         }
+    }
+
+    /// <summary>
+    /// 옮기기·크기 조절 계산. 마우스 없이 숫자로 확인한다.
+    /// </summary>
+    /// <remarks>
+    /// 캔버스에 묻어 두면 손으로 끌어 봐야만 알 수 있다. 가장자리에서 멈추는지, 반대편을
+    /// 넘겨 끌면 뒤집히는지 같은 것은 눈으로 보면 놓치기 쉽다.
+    /// </remarks>
+    private static void TestBoxEditing()
+    {
+        var box = LabelBox.FromCorners(0, 0.2, 0.2, 0.4, 0.5);   // 0.2x0.3
+
+        // ── 옮기기 ──
+
+        var moved = LabelBoxEdit.Move(box, 0.1, -0.1);
+
+        Check("옮기면 크기는 그대로",
+              Near(moved.Left, 0.3) && Near(moved.Top, 0.1) && Near(moved.Width, 0.2) && Near(moved.Height, 0.3),
+              LabelFile.Format(moved));
+
+        var pushed = LabelBoxEdit.Move(box, 5, 5);
+
+        Check("가장자리에서 멈추고 찌그러지지 않는다",
+              Near(pushed.Right, 1) && Near(pushed.Bottom, 1) && Near(pushed.Width, 0.2) && Near(pushed.Height, 0.3),
+              LabelFile.Format(pushed));
+
+        var pulled = LabelBoxEdit.Move(box, -5, -5);
+
+        Check("왼쪽 위로도 멈춘다",
+              Near(pulled.Left, 0) && Near(pulled.Top, 0) && Near(pulled.Width, 0.2),
+              LabelFile.Format(pulled));
+
+        // ── 크기 조절 ──
+
+        var grown = LabelBoxEdit.Resize(box, BoxHandle.BottomRight, 0.6, 0.9);
+
+        Check("오른쪽 아래 모서리를 끌면 왼쪽 위는 그대로",
+              Near(grown.Left, 0.2) && Near(grown.Top, 0.2) && Near(grown.Right, 0.6) && Near(grown.Bottom, 0.9),
+              LabelFile.Format(grown));
+
+        var narrowed = LabelBoxEdit.Resize(box, BoxHandle.Left, 0.3, 0.99);
+
+        Check("왼쪽 변만 끌면 세로는 안 바뀐다",
+              Near(narrowed.Left, 0.3) && Near(narrowed.Right, 0.4) && Near(narrowed.Top, 0.2) && Near(narrowed.Bottom, 0.5),
+              LabelFile.Format(narrowed));
+
+        var flipped = LabelBoxEdit.Resize(box, BoxHandle.Left, 0.7, 0);
+
+        Check("반대편을 넘겨 끌면 뒤집히되 너비는 양수",
+              Near(flipped.Left, 0.4) && Near(flipped.Right, 0.7) && flipped.Width > 0,
+              LabelFile.Format(flipped));
+
+        var collapsed = LabelBoxEdit.Resize(box, BoxHandle.Right, 0.2, 0);
+
+        Check("점이 될 만큼 줄이면 원래 것을 지킨다", collapsed == box, LabelFile.Format(collapsed));
+
+        Check("안쪽을 잡은 것은 크기 조절이 아니다",
+              LabelBoxEdit.Resize(box, BoxHandle.Inside, 0.9, 0.9) == box, string.Empty);
+
+        // ── 손잡이 짚기 (화면 픽셀: 100,100 ~ 300,200, 손잡이 8px) ──
+
+        BoxHandle Hit(double x, double y) => LabelBoxEdit.HitHandle(100, 100, 300, 200, x, y, 8);
+
+        Check("모서리는 변보다 먼저 잡힌다", Hit(302, 98) == BoxHandle.TopRight, Hit(302, 98).ToString());
+        Check("변 가운데는 그 변", Hit(200, 203) == BoxHandle.Bottom, Hit(200, 203).ToString());
+        Check("왼쪽 변", Hit(95, 150) == BoxHandle.Left, Hit(95, 150).ToString());
+        Check("안쪽은 옮기기", Hit(200, 150) == BoxHandle.Inside, Hit(200, 150).ToString());
+        Check("바깥은 아무것도 아님", Hit(200, 250) == BoxHandle.None, Hit(200, 250).ToString());
+        Check("변에서 떨어진 바깥 자리는 변이 아니다", Hit(320, 100) == BoxHandle.None, Hit(320, 100).ToString());
     }
 }

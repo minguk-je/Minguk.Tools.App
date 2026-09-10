@@ -90,7 +90,8 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             isExpanded: true,
             showInCollapsedMode: false,
             canSelect: true,
-            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/edit.png")));
+            // edit.png 는 없는 파일이었다 - 아이콘이 조용히 비었다. 스모크(--views)가 메뉴 아이콘을 검사한다.
+            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/picture-edit.png")));
 
         return menuItemList;
     }

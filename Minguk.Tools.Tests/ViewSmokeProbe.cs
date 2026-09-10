@@ -48,6 +48,8 @@ internal static class ViewSmokeProbe
 
             failures += CheckMenu("Minguk.Tools.Views.InputAutomationView");
             failures += CheckMenu("Minguk.Tools.Views.CaptureMonitorView");
+            failures += CheckMenu("Minguk.Tools.Views.DashboardView");
+            failures += CheckMenu("Minguk.Tools.Views.LabelingView");
 
             failures += CheckPathWarning();
             failures += CheckEditorPalette();

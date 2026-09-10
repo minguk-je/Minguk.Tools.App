@@ -351,6 +351,14 @@ CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 �
 남이 만든 `.onnx` 를 돌릴 일이 생기면 그때 그쪽을 꺼내 쓰면 된다.
 
 - 모델은 **픽셀** 좌표를 내놓는다. 우리는 0~1 로 다루므로 받자마자 나눈다.
+- **찍은 사각형은 옮기고 크기를 바꿀 수 있다.** 계산은 `LabelBoxEdit`(순수, `--vision` 이
+  숫자로 본다)에 있고 캔버스는 마우스만 잇는다. 고른 것의 모서리·변 가운데 손잡이는 크기
+  조절, 안쪽은 옮기기(안 고른 것도 누르는 순간 고르고 끌린다), 빈 자리는 새로 그리기다.
+  손잡이는 **고른 것에서만** 잡힌다 - 안 고른 것의 모서리까지 잡으면 붙어 있는 사각형 사이에
+  새로 그리려다 엉뚱한 것이 늘어난다. 화살표는 1px, Shift+화살표는 10px 씩 민다.
+- 옮기기는 **시작 사각형에 변위를 더한다**. 직전 위치에 더하면 반올림이 쌓인다. 4px 안쪽의
+  떨림은 옮기기로 안 친다 - 고르려고 누를 때마다 사각형이 흘러 저장할 때마다 좌표가 바뀐다.
+  마우스로 실제로 끌리는지는 `--canvas-drag` 가 본다(커서를 가져가므로 `--views` 밖).
 - 예측 이름을 **번호로 되돌려** 손으로 찍은 사각형과 같은 색이 되게 한다. 색까지 다르면
   어느 몹을 찾았는지 알아보기 어렵다. 학습 파이프라인 끝에 `MapKeyToValue` 를 붙여
   모델이 번호가 아니라 이름을 내놓게 해 두었다.
@@ -553,6 +561,7 @@ CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 �
 dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 경로별 전체
 dotnet run --project Minguk.Tools.Tests -c Debug -- --views               # 화면 생성만 (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --vision              # 라벨·학습 준비·추론 변환 (안전, 2초)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --canvas-drag         # 라벨 캔버스를 실제 마우스로 끌기 (커서 3초)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --fallback            # 드라이버 없는 상황
 dotnet run --project Minguk.Tools.Tests -c Debug -- --calibrate           # 정규화 규칙 실측
 dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-bench        # 추론 속도 (libtorch 필요)

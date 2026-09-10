@@ -31,6 +31,9 @@ internal static partial class Program
         if (args.Contains("--fallback")) return FallbackProbe.Run();
         if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
+        // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.
+        if (args.Contains("--canvas-drag")) return CanvasDragProbe.Run();
+
         // libtorch(4GB)와 학습한 모델이 있어야 도는 것이라 평소 검증에는 안 낀다.
         if (args.Contains("--detect-bench")) return DetectBench.Run();
 
