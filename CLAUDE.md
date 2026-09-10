@@ -192,9 +192,12 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 - 팔레트를 못 읽을 때만 이름(`Dark`·`Black`)과 레지스트리(`AppsUseLightTheme`)로 어림한다.
 - 테마가 바뀌면 `LightweightThemeManager.CurrentThemeChanged` 로 다시 읽는다.
   **정적 이벤트라 화면이 닫힐 때 반드시 푼다.**
-- 이 갈래는 검증 하네스로 못 잰다. `LightweightThemeManager` 는 화면 없이 도는 곳에서
+- 전환 자체는 검증 하네스로 못 잰다. `LightweightThemeManager` 는 화면 없이 도는 곳에서
   테마 변경을 안 따라오고(이름을 바꿔도 `CurrentTheme` 이 그대로다) `CurrentTheme` 세터도
   공개가 아니다. 하네스는 "색이 팔레트에서 나오는지"까지만 보고, 전환은 앱에서 눈으로 본다.
+- 테마를 바꾸는 곳은 **오른쪽 위 핀 옆의 테마 갤러리**다
+  (`MainWindow.xaml` 의 `BarSplitItemThemeSelectorBehavior`). 왼쪽 위 툴바가 아니다 —
+  거기는 메뉴·설정·전체화면·재시작·종료다.
 - **`TextEditor` 를 바로 얹으면 창 전체의 UI 자동화 트리가 빈다.** 실측으로 갈렸다 -
   같은 화면의 버튼이 그리드 시절 37개에서 편집기를 넣은 뒤 0개가 됐다. 편집기만이 아니라
   창에 있는 모든 것이 안 보인다(스크린 리더에도 그렇다). AvalonEdit 이 만드는 자동화 피어가
