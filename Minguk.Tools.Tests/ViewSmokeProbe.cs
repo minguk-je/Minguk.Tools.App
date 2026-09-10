@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Threading;
 using DevExpress.Xpf.Core;
@@ -37,6 +37,7 @@ internal static class ViewSmokeProbe
         app.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             failures += Check("InputAutomationView 생성", () => new InputAutomationView());
+            failures += Check("LabelingView 생성", () => new LabelingView());
             failures += Check("DashboardView 생성", () => new DashboardView());
             failures += Check("CaptureMonitorView 생성", () => new CaptureMonitorView());
             failures += Check("ConfigView 생성", () => new ConfigView());

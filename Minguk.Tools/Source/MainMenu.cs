@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 
 using Minguk.Image;
 
@@ -79,6 +79,18 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             showInCollapsedMode: false,
             canSelect: true,
             icon: FreeImage.Instance?.CacheByteArray("axialis/hardwarenetwork/16x16/keyboard.png")));
+
+        // ── 라벨링 ────────────────────────────────────────────────────────
+        rootItem.AddChildren(MenuItemModel.Create(
+            menu_cd: "1400",
+            menu_nm: "라벨링",
+            dll_nm: "Minguk.Tools.dll",
+            class_nm: "Minguk.Tools.Views.LabelingView",
+            is_enable: true,
+            isExpanded: true,
+            showInCollapsedMode: false,
+            canSelect: true,
+            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/edit.png")));
 
         return menuItemList;
     }

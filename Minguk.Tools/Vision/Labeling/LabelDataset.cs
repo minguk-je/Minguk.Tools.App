@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -67,6 +67,27 @@ public sealed class LabelDataset
 
     /// <summary>앱이 기본으로 쓰는 자리.</summary>
     public static string DefaultRoot => Path.Combine(Helper.UserDataPaths.Root, "Datasets", "몹");
+
+    /// <summary>
+    /// 화면들이 <b>함께</b> 보는 데이터셋 자리.
+    /// </summary>
+    /// <remarks>
+    /// 캡처 모니터가 담고 라벨링이 찍는다. 둘이 각자 설정을 들면 사람이 라벨링에서만 폴더를
+    /// 바꿔 놓고, 담은 그림이 왜 안 보이는지 한참 찾게 된다. 화면별 키가 아니라
+    /// 앱 전체 키 하나를 쓰는 이유다.
+    /// </remarks>
+    public static string ConfiguredRoot
+    {
+        get
+        {
+            var saved = Minguk.Base.Utilities.AppSettingUtility.Get(RootSettingKey, string.Empty);
+
+            return string.IsNullOrWhiteSpace(saved) ? DefaultRoot : saved;
+        }
+        set => Minguk.Base.Utilities.AppSettingUtility.Set(RootSettingKey, value ?? string.Empty);
+    }
+
+    private const string RootSettingKey = "Vision.DatasetRoot";
 
     /// <summary>없는 폴더를 만든다. 이미 있으면 아무 일도 안 한다.</summary>
     public void EnsureCreated()

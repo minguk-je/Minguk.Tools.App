@@ -119,6 +119,7 @@ public partial class App : Application
             builder.Services.AddTransient<DashboardView>();
             builder.Services.AddTransient<CaptureMonitorView>();
             builder.Services.AddTransient<InputAutomationView>();
+            builder.Services.AddTransient<LabelingView>();
 
             StartupTrace.Mark("  DI 구성");
 

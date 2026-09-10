@@ -21,6 +21,7 @@ using DevExpress.Xpf.LayoutControl;
 using Minguk.Tools.Automation;
 using Minguk.Tools.Capture.Input;
 using Minguk.Tools.Input;
+using Minguk.Tools.Vision.Labeling;
 using System.Windows.Input;
 
 namespace Minguk.Tools.ViewModels;
@@ -83,6 +84,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
     // 저장 요청. 다음 프레임 한 장만 파일로 떨어뜨린다.
     private int _isSaveFrameRequested;
+
+    // 담기 요청. 다음 프레임 한 장만 데이터셋으로 보낸다.
+    private int _isCollectFrameRequested;
 
     // ── 미리보기 ─────────────────────────────────────────────────────────
 
@@ -197,6 +201,8 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     public DelegateCommand DoStopCommand { get; set; }
     public DelegateCommand DoClearCommand { get; set; }
     public DelegateCommand SaveFrameCommand { get; set; }
+
+    public DelegateCommand CollectFrameCommand { get; set; } = null!;
 
     public bool IsRunning
     {
@@ -407,6 +413,7 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         DoStopCommand = new DelegateCommand(DoStop, () => IsRunning, false);
         DoClearCommand = new DelegateCommand(DoClear, false);
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning && EnableCpuReadback, false);
+        CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning && EnableCpuReadback, false);
 
         OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
         OnPreviewMouseWheelCommand = new DelegateCommand<MouseWheelEventArgs>(OnPreviewMouseWheel, false);
@@ -672,6 +679,16 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
     /// <summary>다음 프레임 한 장을 PNG 로 떨어뜨린다. 캡처 내용을 눈으로 확인하는 용도.</summary>
     private void DoSaveFrame() => Interlocked.Exchange(ref _isSaveFrameRequested, 1);
 
+    /// <summary>
+    /// 다음 프레임 한 장을 <b>데이터셋</b>에 담는다. 라벨링 화면이 그 폴더를 읽는다.
+    /// </summary>
+    /// <remarks>
+    /// "프레임 저장" 과 나눠 둔 이유 - 저장은 캡처가 무엇을 잡고 있는지 눈으로 보는 용도라
+    /// captures 폴더에 아무렇게나 쌓아도 된다. 담기는 학습에 쓸 것이라 이름 규칙과 폴더가
+    /// 정해져 있어야 하고, 라벨 파일과 짝이 맞아야 한다.
+    /// </remarks>
+    private void DoCollectFrame() => Interlocked.Exchange(ref _isCollectFrameRequested, 1);
+
     // ── 캡처 콜백. 여기는 스레드풀이다 ────────────────────────────────────────
 
     private void OnFrameArrived(object? sender, CapturedFrameEventArgs e)
@@ -692,6 +709,9 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 
         if (Interlocked.CompareExchange(ref _isSaveFrameRequested, 0, 1) == 1)
             TrySaveFrame(e);
+
+        if (Interlocked.CompareExchange(ref _isCollectFrameRequested, 0, 1) == 1)
+            TryCollectFrame(e);
 
         if (ShowPreview)
             TryPushPreview(e);
@@ -1297,6 +1317,33 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// 프레임 한 장을 데이터셋 images/ 에 담는다. 캡처 콜백 스레드에서 돈다.
+    /// </summary>
+    /// <remarks>
+    /// 이름은 <see cref="LabelDataset.NextImagePath"/> 가 시각으로 짓는다. 여기서 따로
+    /// 지으면 라벨링 쪽이 기대하는 규칙과 어긋난다.
+    /// </remarks>
+    private void TryCollectFrame(CapturedFrameEventArgs e)
+    {
+        try
+        {
+            var dataset = new LabelDataset(LabelDataset.ConfiguredRoot);
+            var path = dataset.NextImagePath(DateTime.Now);
+
+            FrameSnapshot.SavePng(e, path);
+
+            // 어느 폴더에 담았는지 같이 적는다. 라벨링에서 다른 폴더를 보고 있으면
+            // "담았는데 왜 안 보이지" 로 한참 헤맨다.
+            Note($"데이터셋에 담음: {Path.GetFileName(path)} ({dataset.Root})");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "데이터셋에 담지 못했다");
+            Note($"담기 실패: {ex.Message}");
+        }
+    }
+
     private void OnSessionNotice(object? sender, string message)
     {
         Note(message);
@@ -1393,9 +1440,14 @@ public class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
         DoStopCommand.RaiseCanExecuteChanged();
         RefreshTargetsCommand.RaiseCanExecuteChanged();
         SaveFrameCommand.RaiseCanExecuteChanged();
+        CollectFrameCommand.RaiseCanExecuteChanged();
     }
 
-    private void OnReadbackChanged() => SaveFrameCommand.RaiseCanExecuteChanged();
+    private void OnReadbackChanged()
+    {
+        SaveFrameCommand.RaiseCanExecuteChanged();
+        CollectFrameCommand.RaiseCanExecuteChanged();
+    }
 
     private void ResetStats()
     {
