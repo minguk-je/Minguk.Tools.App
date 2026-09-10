@@ -173,12 +173,9 @@ public partial class CaptureMonitorViewModel
             return;
         }
 
-        if (!EnableCpuReadback)
-        {
-            // 픽셀이 CPU 로 안 내려오면 추론에 넣을 것이 없다. 알아서 켜 주고 그렇게 적는다.
-            EnableCpuReadback = true;
-            DetectionStatus = "CPU 리드백을 켰습니다 - 추론에는 픽셀이 필요합니다.";
-        }
+        // 픽셀이 CPU 로 안 내려오면 추론에 넣을 것이 없다. 도는 중이면 다시 시작까지 해 준다 -
+        // 값만 바꾸는 것은 세션을 만들 때만 먹어서, 예전에는 켰다고 적어 놓고 헛것이었다.
+        EnsureCpuReadback("추론에는 픽셀이 필요합니다");
 
         if (_detector is not null)
         {

@@ -442,7 +442,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         DoStopCommand = new DelegateCommand(DoStop, () => IsRunning, false);
         DoClearCommand = new DelegateCommand(DoClear, false);
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning && EnableCpuReadback, false);
-        CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning && EnableCpuReadback, false);
+        CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning, false);
         ClickDetectionCommand = new DelegateCommand(DoClickDetection, () => Detections.Count > 0, false);
 
         OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
@@ -720,7 +720,41 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// captures 폴더에 아무렇게나 쌓아도 된다. 담기는 학습에 쓸 것이라 이름 규칙과 폴더가
     /// 정해져 있어야 하고, 라벨 파일과 짝이 맞아야 한다.
     /// </remarks>
-    private void DoCollectFrame() => Interlocked.Exchange(ref _isCollectFrameRequested, 1);
+    private void DoCollectFrame()
+    {
+        // 픽셀이 CPU 로 안 내려오면 담을 것이 없다. 버튼을 회색으로 두고 이유를 안 알려 주면
+        // "몹을 모을 수가 없다" 가 된다 - 실제로 그랬다. 알아서 켜고 그렇게 적는다.
+        EnsureCpuReadback("데이터셋에 담으려면 픽셀이 필요합니다");
+
+        Interlocked.Exchange(ref _isCollectFrameRequested, 1);
+    }
+
+    /// <summary>
+    /// CPU 리드백이 꺼져 있으면 켠다. <b>도는 중이면 세션을 다시 시작한다.</b>
+    /// </summary>
+    /// <remarks>
+    /// 리드백은 세션을 만들 때 정해진다(<see cref="ScreenCaptureAdapterFactory.Create"/>).
+    /// 도는 중에 값만 바꾸면 아무것도 안 달라진다 - 몹 찾기에서 "알아서 켜 준다" 고 해 놓고
+    /// 실제로는 헛것이었다. 껐다 켜는 것이 유일한 길이고, 통계 몇 초가 사라지는 것 말고는
+    /// 잃는 것이 없다.
+    /// </remarks>
+    private void EnsureCpuReadback(string why)
+    {
+        if (EnableCpuReadback) return;
+
+        EnableCpuReadback = true;
+
+        if (!IsRunning)
+        {
+            StatusText = $"CPU 리드백을 켰습니다 - {why}.";
+            return;
+        }
+
+        DoStop();
+        DoStart();
+
+        StatusText = $"CPU 리드백을 켜고 다시 시작했습니다 - {why}.";
+    }
 
     // ── 캡처 콜백. 여기는 스레드풀이다 ────────────────────────────────────────
 
@@ -1384,14 +1418,29 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
 
             FrameSnapshot.SavePng(e, path);
 
-            // 어느 폴더에 담았는지 같이 적는다. 라벨링에서 다른 폴더를 보고 있으면
-            // "담았는데 왜 안 보이지" 로 한참 헤맨다.
-            Note($"데이터셋에 담음: {Path.GetFileName(path)} ({dataset.Root})");
+            // 몇 장째인지 센다. "담겼다" 만으로는 모으는 사람이 어디까지 왔는지 모른다.
+            var count = dataset.EnumerateItems().Count;
+
+            // 통계 표의 비고 칸에만 적으면 사실상 안 보인다 - 실제로 "담을 수가 없다" 는 말이
+            // 나왔다. 상태 줄과 아래 바에 같이 적는다. 어느 폴더인지도 같이 - 라벨링에서
+            // 다른 폴더를 보고 있으면 "담았는데 왜 안 보이지" 로 헤맨다.
+            var message = $"데이터셋에 담음: {Path.GetFileName(path)} - 지금까지 {count}장 ({dataset.Root})";
+
+            Note(message);
+            _uiDispatcher?.BeginInvoke(() =>
+            {
+                StatusText = message;
+                MessengerUtility.SendMainMessage($"데이터셋에 담았습니다 - {count}장째");
+            });
         }
         catch (Exception ex)
         {
             Logger.Error(ex, "데이터셋에 담지 못했다");
-            Note($"담기 실패: {ex.Message}");
+
+            var message = $"담기 실패: {ex.Message}";
+
+            Note(message);
+            _uiDispatcher?.BeginInvoke(() => StatusText = message);
         }
     }
 
