@@ -55,7 +55,7 @@ internal static class DetectBench
         if (!File.Exists(modelPath))
         {
             Console.WriteLine($"학습한 모델이 없다: {modelPath}");
-            Console.WriteLine("먼저 앱에서 학습하거나 --detect-bench --train 으로 부른다.");
+            Console.WriteLine("앱의 라벨링 화면에서 학습을 한 번 돌린 뒤 다시 부른다.");
 
             return 1;
         }

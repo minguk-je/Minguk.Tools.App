@@ -34,6 +34,10 @@ internal static partial class Program
         // libtorch(4GB)와 학습한 모델이 있어야 도는 것이라 평소 검증에는 안 낀다.
         if (args.Contains("--detect-bench")) return DetectBench.Run();
 
+        // 라벨·학습 준비·추론 변환만 본다. 입력 어댑터를 안 만들므로 커서와 키보드를
+        // 가져가지 않는다 - 시각 쪽만 고쳤을 때 이것만 돌리면 된다.
+        if (args.Contains("--vision")) return RunVisionOnly();
+
         // 같은 검증을 경로만 바꿔 돌린다. 경로마다 실제로 입력이 나가는지 따로 봐야 한다.
         var backend = ParseBackend(args);
 
@@ -66,6 +70,47 @@ internal static partial class Program
 
         Console.WriteLine();
         foreach (var line in Results) Console.WriteLine(line);
+        Console.WriteLine();
+        Console.WriteLine(_failures == 0 ? "== 전체 통과 ==" : $"== 실패 {_failures}건 ==");
+
+        return _failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// 라벨·학습 준비·추론 변환. 입력 어댑터가 필요 없는 것들이다.
+    /// </summary>
+    /// <remarks>
+    /// 입력 쪽 검증과 갈라 둔다. 처음에는 <c>--backend=</c> 안에 얹어 두었는데, 그러면
+    /// 라벨 하나 고치고 확인하려 해도 <b>커서와 키보드를 가져가는</b> 입력 어댑터 검증이
+    /// 통째로 딸려 왔다. 서로 상관이 없는 것들이다.
+    ///
+    /// <c>--backend=</c> 로 도는 전체 검증에도 그대로 낀다 - 한 번에 다 보고 싶을 때가 있다.
+    /// </remarks>
+    private static void RunVision()
+    {
+        TestLabeling();
+        TestDetection();
+    }
+
+    /// <summary>시각 쪽만 돌린다. 커서와 키보드를 안 건드린다.</summary>
+    private static int RunVisionOnly()
+    {
+        Console.WriteLine("시각 검증 (라벨 · 학습 준비 · 추론 변환)");
+        Console.WriteLine("입력 어댑터는 만들지 않는다 - 커서와 키보드를 안 가져간다.");
+        Console.WriteLine();
+
+        try
+        {
+            TestScriptFiles();
+            RunVision();
+        }
+        catch (Exception ex)
+        {
+            Fail("예외", ex.ToString());
+        }
+
+        foreach (var line in Results) Console.WriteLine(line);
+
         Console.WriteLine();
         Console.WriteLine(_failures == 0 ? "== 전체 통과 ==" : $"== 실패 {_failures}건 ==");
 
@@ -164,8 +209,7 @@ internal static partial class Program
         await TestHangulTypingAsync(ui);
 
         TestScriptFiles();
-        TestLabeling();
-        TestDetection();
+        RunVision();
         TestInterceptionDriver();
         TestSequencePlan();
         TestSequenceScript();
