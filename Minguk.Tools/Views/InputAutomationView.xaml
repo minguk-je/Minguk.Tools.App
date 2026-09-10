@@ -73,6 +73,32 @@
         </dxlc:LayoutGroup>
 
         <!--
+            대상 창은 PostMessage 경로에서만 쓴다. 그 경로는 진짜 커서를 안 움직이므로
+            "포커스를 가진 창" 에 기댈 수 없고, 어느 창에 넣을지 정해 줘야 한다.
+            다른 경로에서는 줄을 아예 접는다 - 안 쓰는 칸이 늘 떠 있으면 뭘 채워야 하는지 흐려진다.
+        -->
+        <dxlc:LayoutGroup Header="대상 창"
+                          VerticalAlignment="Top"
+                          IsEnabled="{Binding IsIdle}"
+                          Orientation="Horizontal"
+                          View="GroupBox"
+                          Visibility="{Binding NeedsWindowTarget, Converter={StaticResource BoolToVisibility}}">
+
+            <dxlc:LayoutItem Label="창">
+                <dxe:ComboBoxEdit DisplayMember="Display"
+                                  IsTextEditable="False"
+                                  ItemsSource="{Binding WindowTargets}"
+                                  NullText="고르지 않으면 마지막 좌표 아래의 창으로 나간다"
+                                  SelectedItem="{Binding SelectedWindowTarget, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </dxlc:LayoutItem>
+
+            <dx:SimpleButton Width="90"
+                             Command="{Binding DoRefreshWindowsCommand}"
+                             Content="새로고침"
+                             ToolTip="지금 떠 있는 창을 다시 훑는다. 고르고 있던 창이 그대로면 선택은 지킨다." />
+        </dxlc:LayoutGroup>
+
+        <!--
             단계를 데이터로 들고 편집한다.
             예전에는 체크박스로 켜고 껐는데, 그러면 순서가 코드에 박혀서(글자 → 클릭 → 이동 → 휠)
             "이동한 다음 클릭" 같은 흔한 것도 짤 수 없었다.
@@ -217,7 +243,7 @@
                           View="GroupBox">
 
             <dxlc:LayoutItem Label="단축키"
-                             ToolTip="다른 창이 앞에 있을 때도 눌린다. 대상 창을 앞으로 가져온 뒤 Ctrl+Alt+F5/F6 을 누르면 된다. Ctrl+Alt+F4 는 커서 자리를 고른 이동 단계에 담는다.">
+                             ToolTip="다른 창이 앞에 있을 때도 눌린다. 대상 창을 앞으로 가져온 뒤 Ctrl+Alt+F5/F6 을 누르면 된다. Ctrl+Alt+F4 는 커서 자리를 이동 단계로 담고, Ctrl+Alt+F3 은 커서 아래 창을 대상으로 집는다.">
                 <dxe:TextEdit EditValue="{Binding HotkeyStatus}"
                               IsReadOnly="True" />
             </dxlc:LayoutItem>

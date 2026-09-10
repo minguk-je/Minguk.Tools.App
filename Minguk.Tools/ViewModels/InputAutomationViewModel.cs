@@ -7,6 +7,7 @@ using Minguk.Image;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
 using Minguk.Tools.Input.Sequencing;
+using Minguk.Tools.Input.Targets;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -34,6 +35,9 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
     /// <summary>편집기. 줄을 캐럿 자리에 끼우려면 필요하다.</summary>
     private TextEditor? _editor;
+
+    /// <summary>대상 창을 찾아 주는 것. PostMessage 경로에서만 쓴다.</summary>
+    private IWindowTargetAdapter? _windows;
 
     /// <summary>스크립트에서 읽어 낸 계획. 실행할 때 이것으로 시퀀스를 만든다.</summary>
     private SequencePlan _plan = new();
@@ -64,6 +68,8 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
         // 도는 동안에도 눌린다. 한 바퀴 돌려 보고 지우고 다시 돌리는 것이 흔한 흐름이다.
         DoClearTestPadCommand = new DelegateCommand(() => TestPadText = string.Empty, () => true, false);
+
+        DoRefreshWindowsCommand = new DelegateCommand(DoRefreshWindows, () => IsIdle, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
@@ -136,6 +142,10 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         ApplyBackend();
         UpdateSequenceText();
         RegisterHotkeys();
+
+        RaisePropertyChanged(nameof(NeedsWindowTarget));
+
+        if (NeedsWindowTarget) DoRefreshWindows();
     }
 
     protected override void SaveSettings()
@@ -162,6 +172,9 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         _service = null;
 
         _editor = null;
+
+        _windows?.Dispose();
+        _windows = null;
 
         // 놓아 주지 않으면 앱이 살아 있는 동안 그 조합이 잠긴 채로 남는다.
         _hotkeys?.Dispose();

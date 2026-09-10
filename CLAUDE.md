@@ -67,6 +67,7 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 | `IInputAdapter` | `SendInputAdapter` · `PostMessageInputAdapter` · `InterceptionInputAdapter` | `InputAdapterFactory` |
 | `IUiAutomationAdapter` | `WindowsUiAutomationAdapter` | `UiAutomationAdapterFactory` |
 | `IGlobalHotkeyAdapter` | `GlobalHotkeyAdapter` | `GlobalHotkeyAdapterFactory` |
+| `IWindowTargetAdapter` | `Win32WindowTargetAdapter` | `WindowTargetAdapterFactory` |
 
 입력 어댑터는 `Input/` 에 있다. `Capture/Input/` 에는 미리보기 좌표 계산만 남는다
 (`PreviewInputRouter`, `PreviewInputMapper`, `CaptureTargetBounds`, `InputForwardResult`).
@@ -76,6 +77,10 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
 제대로 할 수 없고(대상 IME 가 그렇게 온 한/영 전환을 받지 않는다), 못 하는 것을 늘 false 만
 돌려주는 빈 메서드로 두면 부르는 쪽이 되는 줄 알고 쓰기 때문이다.
 필요한 쪽은 `adapter is IScanCodeInput` 으로 물어보고, 아니면 못 한다고 말한다.
+
+`PostMessage` 는 **보낼 창을 알아야 한다.** 진짜 커서를 안 움직이므로 "포커스를 가진 창" 에
+기댈 수 없다. 안 정해 주면 `WindowFromPoint` 로 마지막 좌표 아래 창에 보내는데, 나가긴
+나가지만 어디로 갔는지 알 수 없다 - 그래서 `IWindowTargetAdapter` 로 고르게 한다.
 
 `InputAdapterFactory.CreateWithFallback` 은 고른 경로를 못 쓸 때 다른 경로로 내려앉되
 `FellBackFrom` · `Reason` 을 함께 돌려준다. 조용히 다른 길로 보내면 안 된다 - 화면에 적는다.

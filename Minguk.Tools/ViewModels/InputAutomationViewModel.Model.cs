@@ -6,6 +6,7 @@ using ICSharpCode.AvalonEdit.Highlighting;
 using Minguk.Tools.Helper;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Sequencing;
+using Minguk.Tools.Input.Targets;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -30,6 +31,8 @@ public partial class InputAutomationViewModel
 
     public DelegateCommand DoClearTestPadCommand { get; private set; } = null!;
 
+    public DelegateCommand DoRefreshWindowsCommand { get; private set; } = null!;
+
     // ── 입력 경로 ────────────────────────────────────────────────────────
 
     public ObservableCollection<InputBackend> InputBackends { get; set; }
@@ -43,6 +46,22 @@ public partial class InputAutomationViewModel
 
     /// <summary>지금 어느 경로로 나가는지, 못 쓰면 왜 못 쓰는지.</summary>
     public string? AdapterStatus { get => GetProperty(() => AdapterStatus); set => SetProperty(() => AdapterStatus, value); }
+
+    // ── 대상 창 ──────────────────────────────────────────────────────────
+    //    PostMessage 만 쓴다. 진짜 커서를 안 움직이므로 "포커스를 가진 창" 에 기댈 수 없고,
+    //    어느 창에 넣을지 정해 줘야 한다.
+
+    public ObservableCollection<WindowTarget> WindowTargets { get; } = [];
+
+    /// <summary>고른 대상 창. null 이면 마지막 좌표 아래의 창으로 간다(어디일지 알 수 없다).</summary>
+    public WindowTarget? SelectedWindowTarget
+    {
+        get => GetProperty(() => SelectedWindowTarget);
+        set => SetProperty(() => SelectedWindowTarget, value, UpdateSequenceText);
+    }
+
+    /// <summary>대상 창을 골라야 하는 경로인지. 아니면 그 줄을 아예 접는다.</summary>
+    public bool NeedsWindowTarget => _service is not null && !_service.SupportsTyping;
 
     // ── 보낼 것 ──────────────────────────────────────────────────────────
 

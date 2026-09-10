@@ -8,6 +8,7 @@ using System.Windows.Input;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
 using Minguk.Tools.Input.Sequencing;
+using Minguk.Tools.Input.Targets;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -19,8 +20,10 @@ public partial class InputAutomationViewModel
     /// </summary>
     private void ApplyBackend() => Guard(() =>
     {
+        // 고른 대상 창을 넘긴다. 창이 닫혔으면 IntPtr.Zero 를 주어 어댑터가 예전처럼
+        // "마지막 좌표 아래 창" 으로 되돌아가게 한다 - 죽은 핸들에 보내면 조용히 사라진다.
         var selection = InputAdapterFactory.CreateWithFallback(
-            SelectedInputBackend, InputBackend.SendInput, () => IntPtr.Zero);
+            SelectedInputBackend, InputBackend.SendInput, ResolveTargetWindow);
 
         // 이전 어댑터를 버리지 않으면 드라이버 컨텍스트가 그대로 샌다.
         _adapter?.Dispose();
@@ -46,7 +49,82 @@ public partial class InputAutomationViewModel
 
         ApplyBackend();
         UpdateSequenceText();
+
+        RaisePropertyChanged(nameof(NeedsWindowTarget));
+
+        // 대상 창이 필요해졌는데 목록이 비어 있으면 한 번 채워 준다.
+        // 새로고침을 눌러야만 보이면 왜 비어 있는지 알기 어렵다.
+        if (NeedsWindowTarget && WindowTargets.Count == 0) DoRefreshWindows();
     }
+
+    // ── 대상 창 ──────────────────────────────────────────────────────────
+
+    /// <summary>어댑터에 넘길 창 핸들. 고른 것이 없거나 이미 닫혔으면 0.</summary>
+    private IntPtr ResolveTargetWindow()
+    {
+        if (SelectedWindowTarget is not { } target) return IntPtr.Zero;
+
+        if (_windows?.IsAlive(target.Handle) == true) return target.Handle;
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// 지금 떠 있는 창들을 다시 훑는다.
+    /// </summary>
+    /// <remarks>
+    /// 고르고 있던 창이 그대로 있으면 그 선택을 지킨다. 목록을 새로 만들 때마다 선택이
+    /// 풀리면 창 하나 늘었다고 다시 골라야 한다.
+    /// </remarks>
+    private void DoRefreshWindows() => Guard(() =>
+    {
+        _windows ??= WindowTargetAdapterFactory.Create();
+
+        var chosen = SelectedWindowTarget?.Handle;
+
+        WindowTargets.Clear();
+
+        // 이 앱 자신도 목록에 둔다. 화면 아래 시험 입력란으로 받아 보는 것이 흔한 쓰임이다.
+        foreach (var window in _windows.List()) WindowTargets.Add(window);
+
+        SelectedWindowTarget = WindowTargets.FirstOrDefault(w => w.Handle == chosen) is { Handle: not 0 } kept
+            ? kept
+            : null;
+
+        CurrentStep = $"창 {WindowTargets.Count}개를 찾았다";
+    });
+
+    /// <summary>
+    /// 커서 아래 창을 대상으로 집는다.
+    /// </summary>
+    /// <remarks>
+    /// 목록에서 고르는 것만으로는 부족하다. 제목이 같은 창이 여럿이면 어느 것인지 알 수 없고,
+    /// 대상 창을 눈으로 보면서 집는 편이 확실하다. 좌표 담기(F4)와 같은 이유로 단축키다.
+    /// </remarks>
+    private void PickWindowUnderCursor() => Guard(() =>
+    {
+        if (IsRunning || _adapter is null) return;
+
+        _windows ??= WindowTargetAdapterFactory.Create();
+
+        if (_adapter.GetCursorPosition() is not { } p)
+        {
+            // PostMessage 는 진짜 커서를 안 움직이지만 읽을 수는 있어야 한다.
+            CurrentStep = "커서 자리를 알 수 없어 창을 집지 못했다";
+            return;
+        }
+
+        if (_windows.FromPoint(p.X, p.Y) is not { } window)
+        {
+            CurrentStep = $"({p.X}, {p.Y}) 아래에 창이 없다";
+            return;
+        }
+
+        if (WindowTargets.All(w => w.Handle != window.Handle)) WindowTargets.Add(window);
+
+        SelectedWindowTarget = window;
+        CurrentStep = $"대상 창을 집었다 - {window.Display}";
+    });
 
     private void OnIsRunningChanged()
     {
@@ -161,10 +239,18 @@ public partial class InputAutomationViewModel
 
         var dropped = _plan.Steps.Count(s => SequenceStepKinds.NeedsScanCode(s.Kind));
 
-        if (dropped == 0) return null;
+        var lines = new List<string>();
 
-        return $"{_adapter?.Name} 경로는 스캔코드를 넣지 못해 글자·Enter·한/영 단계 {dropped}개가 빠집니다. "
-             + "그 단계를 보내려면 입력 경로를 SendInput 이나 Interception 으로 바꾸세요.";
+        if (dropped > 0)
+            lines.Add($"{_adapter?.Name} 경로는 스캔코드를 넣지 못해 글자·Enter·한/영 단계 {dropped}개가 빠집니다. "
+                      + "그 단계를 보내려면 입력 경로를 SendInput 이나 Interception 으로 바꾸세요.");
+
+        // 대상 창을 안 고르면 마지막 좌표 아래 창으로 간다. 나가긴 나가는데 어디로 갔는지
+        // 알 수 없어서, "끝남" 을 보고 됐다고 믿게 된다. 그 전에 말해 준다.
+        if (SelectedWindowTarget is null && _plan.Steps.Count > dropped)
+            lines.Add("대상 창을 고르지 않아 마지막 좌표 아래의 창으로 나갑니다 - 어디로 갈지 정하려면 창을 고르세요.");
+
+        return lines.Count == 0 ? null : string.Join(" / ", lines);
     }
 
     /// <summary>
@@ -191,7 +277,8 @@ public partial class InputAutomationViewModel
         [
             ("Ctrl+Alt+F5 1회", Key.F5, () => { if (IsIdle) DoRunOnce(); }),
             ("Ctrl+Alt+F6 반복/중지", Key.F6, ToggleLoop),
-            ("Ctrl+Alt+F4 좌표 담기", Key.F4, PickCursorPosition)
+            ("Ctrl+Alt+F4 좌표 담기", Key.F4, PickCursorPosition),
+            ("Ctrl+Alt+F3 대상 창 집기", Key.F3, PickWindowUnderCursor)
         ];
 
         var live = new List<string>();
