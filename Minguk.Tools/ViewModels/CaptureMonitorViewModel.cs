@@ -232,6 +232,19 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         set => SetProperty(() => IsMobDetectionOn, value, OnMobDetectionChanged);
     }
 
+    /// <summary>
+    /// 프레임 간 추적을 쓸지. 켜면 두 번 연속 보인 것만 내놓고 잠깐 놓친 것은 이어 준다.
+    /// </summary>
+    /// <remarks>
+    /// 끄고 켜서 견줄 수 있게 토글로 둔다. 기본은 켬 - 한 프레임짜리 헛것이 사라지는 값이
+    /// 0.5초 늦게 나타나는 값보다 크다.
+    /// </remarks>
+    public bool IsTrackingOn
+    {
+        get => GetProperty(() => IsTrackingOn);
+        set => SetProperty(() => IsTrackingOn, value, () => _tracker.Reset());
+    }
+
     /// <summary>이보다 자신 없는 것은 안 보여 준다.</summary>
     public double DetectMinimumScore
     {
@@ -476,6 +489,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
 
         // 켜진 채로 복구하지 않는다 - 화면을 열자마자 모델 68MB 를 읽으면 뜨는 것이 느려진다.
         DetectMinimumScore = GetSetting(nameof(DetectMinimumScore), 0.5);
+        IsTrackingOn = GetSetting(nameof(IsTrackingOn), true);
 
         if (_lastPreviewGroupHeight < 80)
             _lastPreviewGroupHeight = DefaultPreviewHeight;
@@ -570,6 +584,10 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         SetSetting(nameof(IsColumnAutoWidth), IsColumnAutoWidth);
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
         SetSetting(nameof(IsElementInspectEnabled), IsElementInspectEnabled);
+
+        // 문턱은 읽기만 하고 저장을 안 해 슬라이더를 움직여도 다음 실행에 안 남았다. 같이 저장한다.
+        SetSetting(nameof(DetectMinimumScore), DetectMinimumScore);
+        SetSetting(nameof(IsTrackingOn), IsTrackingOn);
 
         if (SelectedTarget is not null)
             SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));

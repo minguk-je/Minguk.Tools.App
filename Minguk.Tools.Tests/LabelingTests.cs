@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
+using Minguk.Tools.Vision.Inference;
 using Minguk.Tools.Vision.Labeling;
 using Minguk.Tools.Vision.Training;
 
@@ -21,6 +22,7 @@ internal static partial class Program
     private static void TestLabeling()
     {
         TestBoxEditing();
+        TestTracking();
 
         // ── 두 점 → 사각형 ──
 
@@ -321,5 +323,55 @@ internal static partial class Program
         Check("안쪽은 옮기기", Hit(200, 150) == BoxHandle.Inside, Hit(200, 150).ToString());
         Check("바깥은 아무것도 아님", Hit(200, 250) == BoxHandle.None, Hit(200, 250).ToString());
         Check("변에서 떨어진 바깥 자리는 변이 아니다", Hit(320, 100) == BoxHandle.None, Hit(320, 100).ToString());
+    }
+
+    /// <summary>
+    /// 프레임 간 추적. 한 번 튄 헛것은 안 내놓고, 두 번 본 것은 내놓고, 잠깐 놓쳐도 잇고, 오래 놓치면 버린다.
+    /// </summary>
+    private static void TestTracking()
+    {
+        static Detection At(double cx, double cy, float score = 0.8f) => new("봇", new LabelBox
+        {
+            ClassId = 0, CenterX = cx, CenterY = cy, Width = 0.1, Height = 0.1
+        }, score);
+
+        var tracker = new DetectionTracker();
+
+        // 1) 처음 본 것은 후보일 뿐이다.
+        var first = tracker.Update([At(0.3, 0.3)]);
+        Check("처음 본 것은 아직 안 내놓는다", first.Count == 0, $"{first.Count}개");
+
+        // 2) 같은 자리에 또 보이면 내놓는다.
+        var second = tracker.Update([At(0.31, 0.3)]);
+        Check("두 번 연속 보이면 내놓는다", second.Count == 1, $"{second.Count}개");
+
+        // 3) 한 프레임 놓쳐도 이어 준다.
+        var missedOnce = tracker.Update([]);
+        Check("한 번 놓쳐도 이어 준다", missedOnce.Count == 1, $"{missedOnce.Count}개");
+
+        // 4) 세 번 연속 놓치면 버린다 (MaxMisses 2).
+        tracker.Update([]);
+        var gone = tracker.Update([]);
+        Check("세 번 연속 놓치면 버린다", gone.Count == 0, $"{gone.Count}개, 추적 {tracker.Tracks.Count}개");
+
+        // 5) 한 프레임짜리 헛것은 진짜 옆에 나와도 안 내놓는다.
+        tracker.Reset();
+        tracker.Update([At(0.5, 0.5)]);
+        var withGhost = tracker.Update([At(0.5, 0.5), At(0.9, 0.9, 0.35f)]);
+        Check("한 프레임짜리 헛것은 안 내놓는다", withGhost.Count == 1 && Near(withGhost[0].Box.CenterX, 0.5),
+              $"{withGhost.Count}개");
+
+        // 6) 자리는 새 값 쪽으로 부드럽게 옮긴다 (0.6 비중). 0.03 은 폭 0.1 사각형에서 IoU 0.54 라 같은 몹으로 이어진다.
+        tracker.Reset();
+        tracker.Update([At(0.2, 0.2)]);
+        var moved = tracker.Update([At(0.23, 0.2)]);
+        Check("자리는 새 값 쪽으로 부드럽게", moved.Count == 1 && Near(moved[0].Box.CenterX, 0.218),
+              moved.Count == 1 ? $"x={moved[0].Box.CenterX:0.###}" : "없음");
+
+        // 7) 멀리 떨어진 둘은 따로 잇는다.
+        tracker.Reset();
+        tracker.Update([At(0.2, 0.2), At(0.8, 0.8)]);
+        var two = tracker.Update([At(0.2, 0.2), At(0.8, 0.8)]);
+        Check("떨어진 둘은 따로 잇는다", two.Count == 2, $"{two.Count}개");
     }
 }

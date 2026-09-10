@@ -101,6 +101,14 @@
                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
                               IsChecked="{Binding IsMobDetectionOn}"
                               ToolTip="학습한 모델로 0.25초에 한 번 찾아 점선으로 겹쳐 그린다. CPU 리드백이 켜져 있어야 한다." />
+            <!--
+                프레임 간 추적. 두 번 연속 보인 것만 내놓고 잠깐 놓친 것은 이어 준다.
+                한 프레임짜리 헛것(30~50%)이 사라진다. 끄고 켜서 견줄 수 있게 토글이다.
+            -->
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="추적"
+                              IsChecked="{Binding IsTrackingOn}"
+                              ToolTip="프레임 간 추적. 두 번 연속 보인 것만 내놓고(0.5초), 잠깐 놓친 것은 0.5초까지 이어 줍니다. 한 프레임짜리 헛것이 사라집니다." />
 
             <!--
                 찾기만 하면 자동화가 아니다. 찾은 것 중 가장 자신 있는 것의 가운데를 누른다.

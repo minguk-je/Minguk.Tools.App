@@ -43,6 +43,9 @@ public partial class CaptureMonitorViewModel
     private DetectorModel? _detector;
     private LabelClasses _detectClasses = new();
 
+    /// <summary>프레임 간 추적. <see cref="RunDetect"/> 한 곳에서만 만진다(한 번에 하나만 돈다).</summary>
+    private readonly DetectionTracker _tracker = new();
+
     /// <summary>
     /// 읽어 둔 모델 파일의 시각. 다시 학습하면 파일이 바뀌므로 이것으로 안다.
     /// </summary>
@@ -141,9 +144,13 @@ public partial class CaptureMonitorViewModel
         try
         {
             var watch = Stopwatch.StartNew();
-            var found = _detector!.Detect(_detectScratchPath!, _detectClasses, (float)DetectMinimumScore);
+            var raw = _detector!.Detect(_detectScratchPath!, _detectClasses, (float)DetectMinimumScore);
 
             watch.Stop();
+
+            // 추적이 켜져 있으면 두 번 연속 보인 것만 남기고 잠깐 놓친 것은 이어 준다.
+            // 누르기·자동 라벨도 이 결과를 쓴다 - 화면에 보이는 것과 누르는 것이 달라선 안 된다.
+            var found = IsTrackingOn ? _tracker.Update(raw) : raw;
 
             _latestDetections = found;
             Interlocked.Exchange(ref _latestDetectionTicks, Environment.TickCount64);
@@ -159,9 +166,11 @@ public partial class CaptureMonitorViewModel
                 // 찾은 것이 바뀌었으니 누르기 버튼 상태도 다시 본다.
                 ClickDetectionCommand.RaiseCanExecuteChanged();
 
+                var how = IsTrackingOn ? "추적, " : string.Empty;
+
                 DetectionStatus = found.Count == 0
-                    ? $"못 찾음 ({size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms)"
-                    : $"{found.Count}마리 ({size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms): " +
+                    ? $"못 찾음 ({how}{size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms)"
+                    : $"{found.Count}마리 ({how}{size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms): " +
                       string.Join(", ", found.Take(3).Select(d => d.Describe));
             }));
         }
@@ -194,6 +203,7 @@ public partial class CaptureMonitorViewModel
             Detections.Clear();
             DetectionStatus = null;
             ClickDetectionCommand.RaiseCanExecuteChanged();
+            _tracker.Reset();
 
             return;
         }
@@ -269,6 +279,7 @@ public partial class CaptureMonitorViewModel
 
                 _detectClasses = dataset.LoadClasses();
                 _detectorStamp = stamp;
+                _tracker.Reset();   // 새 모델의 사각형을 옛 모델의 것과 이어 붙이지 않는다
                 _detector = model;
                 _reloadSeenStamp = default;
 
