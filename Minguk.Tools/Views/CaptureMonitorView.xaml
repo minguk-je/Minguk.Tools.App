@@ -113,8 +113,16 @@
                                Glyph="{image:FreeImage ResourceName='Axialis/HardwareNetwork/16x16/mouse.png'}"
                                ToolTip="가장 자신 있는 몹의 가운데를 누른다. 입력 전달이 켜져 있어야 한다." />
 
-            <!-- 몇 마리를 몇 ms 에 찾았는지. 실제 속도가 여기 그대로 뜬다. -->
-            <dxb:BarStaticItem Content="{Binding DetectionStatus}" />
+            <!--
+                몇 마리를 몇 ms 에 찾았는지. 실제 속도가 여기 그대로 뜬다.
+
+                "왜 못 켜는지" 같은 긴 안내는 여기 두지 않는다. 값은 들어 있는데(로그로 확인)
+                이 메뉴 바의 정적 항목이 그 문구를 안 그렸다 - 짧은 "2마리 (…ms)" 는 그리면서.
+                타이밍(디스패처 지연)·캡처 중 여부·AutoSizeMode=Fill 까지 갈라 봤지만 이유를
+                못 밝혔고, Fill 은 넘침 화살표만 만들었다. 그런 안내는 아래 상태 줄로 간다
+                (TurnOffDetection 이 StatusText 에도 적는다).
+            -->
+            <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
         </dxb:MainMenuControl>
 
         <!-- ── 설정 첫 줄 ──────────────────────────────────────────── -->

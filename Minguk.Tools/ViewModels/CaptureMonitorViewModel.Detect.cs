@@ -129,8 +129,8 @@ public partial class CaptureMonitorViewModel
 
             DispatcherService?.BeginInvoke(() => Guard(() =>
             {
-                DetectionStatus = $"실패: {ex.Message}";
-                IsMobDetectionOn = false;   // 매 프레임 같은 오류를 쏟지 않는다
+                // 매 프레임 같은 오류를 쏟지 않는다
+                TurnOffDetection($"실패: {ex.Message}");
             }));
         }
         finally
@@ -161,16 +161,14 @@ public partial class CaptureMonitorViewModel
 
         if (!File.Exists(modelPath))
         {
-            DetectionStatus = $"학습한 모델이 없습니다. 라벨링 화면에서 먼저 학습하세요 ({DetectorTrainer.ModelFileName}).";
-            IsMobDetectionOn = false;
+            TurnOffDetection($"학습한 모델이 없습니다. 라벨링 화면에서 먼저 학습하세요 ({DetectorTrainer.ModelFileName}).");
 
             return;
         }
 
         if (LibTorchRuntime.Installed is not { } flavor)
         {
-            DetectionStatus = "libtorch 가 없습니다. 라벨링 화면에서 학습을 한 번 돌리면 같이 준비됩니다.";
-            IsMobDetectionOn = false;
+            TurnOffDetection("libtorch 가 없습니다. 라벨링 화면에서 학습을 한 번 돌리면 같이 준비됩니다.");
 
             return;
         }
@@ -209,8 +207,7 @@ public partial class CaptureMonitorViewModel
 
                 DispatcherService?.BeginInvoke(() => Guard(() =>
                 {
-                    DetectionStatus = $"모델을 못 읽었습니다: {ex.Message}";
-                    IsMobDetectionOn = false;
+                    TurnOffDetection($"모델을 못 읽었습니다: {ex.Message}");
                 }));
             }
         });
@@ -280,6 +277,29 @@ public partial class CaptureMonitorViewModel
         {
             _isForwardingClick = false;
         }
+    }
+
+    /// <summary>
+    /// 이유를 적고 끈다. <b>순서가 전부다.</b>
+    /// </summary>
+    /// <remarks>
+    /// 메시지를 적은 뒤에 토글을 끄면 안 된다. 끄는 순간 <see cref="OnMobDetectionChanged"/> 가
+    /// 다시 돌면서 <see cref="DetectionStatus"/> 를 지우므로, 방금 적은 이유가 사라진다.
+    /// 실제로 그랬다 - 모델이 없어 스스로 꺼지는데 화면에는 아무 말도 안 떠서,
+    /// 버튼이 아무 일도 안 하는 것처럼 보였다. 먼저 끄고 나서 적는다.
+    ///
+    /// 이걸 고치고도 안 떴다. 값은 들어 있는데(로그로 확인) 메뉴 바의 정적 항목이 이 문구를
+    /// 안 그린다 - 짧은 "2마리 (…ms)" 는 그리면서. 타이밍(디스패처 지연)·캡처 중 여부·
+    /// AutoSizeMode=Fill 까지 갈라 봤지만 <b>이유를 못 밝혔다</b>. 그래서 "왜 못 켜는지" 는
+    /// 이 화면의 상태 줄(<see cref="StatusText"/>)로도 보낸다. 그 줄은 확실히 그려지고,
+    /// 원래 그런 안내가 가는 자리다("요소 검사 중 - …" 도 거기 간다).
+    /// 값이 들어 있는지는 로그로 먼저 확인하고 화면을 의심하는 편이 빠르다.
+    /// </remarks>
+    private void TurnOffDetection(string reason)
+    {
+        IsMobDetectionOn = false;
+        DetectionStatus = reason;
+        StatusText = reason;
     }
 
     /// <summary>지난번에 죽으면서 남긴 임시 파일을 치운다. 지금 쓰는 것은 건드리지 않는다.</summary>
