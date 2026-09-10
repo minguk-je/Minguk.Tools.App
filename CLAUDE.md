@@ -119,8 +119,13 @@ OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 +
   어두운 테마에서 이 편집기만 흰 판으로 남는다. `Helper/SequenceScriptHighlighting` 이 색을 든다.
 - 테마가 어두운지는 이름(`Dark`·`Black`)으로 가르고, `*System` 테마는 레지스트리의
   `AppsUseLightTheme` 을 본다. DevExpress `Theme` 에는 그걸 알려 주는 것이 없다.
-- **UI 자동화 트리에 나오지 않는다.** 화면을 스크립트로 검증할 때 편집기 안의 글은
-  UIAutomation 으로 읽고 쓸 수 없다 - 좌표로 클릭해 포커스를 준 뒤 키를 보내야 한다.
+- **`TextEditor` 를 바로 얹으면 창 전체의 UI 자동화 트리가 빈다.** 실측으로 갈렸다 -
+  같은 화면의 버튼이 그리드 시절 37개에서 편집기를 넣은 뒤 0개가 됐다. 편집기만이 아니라
+  창에 있는 모든 것이 안 보인다(스크린 리더에도 그렇다). AvalonEdit 이 만드는 자동화 피어가
+  원인이라, `Markup/ScriptEditor` 로 감싸 평범한 `FrameworkElementAutomationPeer` 를 준다.
+  **AvalonEdit 을 다른 화면에 또 쓸 일이 생기면 `ScriptEditor` 를 쓴다.**
+- 그래도 편집기 안의 **글**은 UIAutomation 으로 읽고 쓸 수 없다 - 밖에서 검증하려면
+  좌표로 클릭해 포커스를 준 뒤 키를 보내야 한다.
 
 ## 검증
 

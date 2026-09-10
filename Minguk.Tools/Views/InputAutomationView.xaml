@@ -7,7 +7,6 @@
              xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
              xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
              xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
-             xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
              xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
              xmlns:markup="clr-namespace:Minguk.Tools.Markup"
              xmlns:sequencing="clr-namespace:Minguk.Tools.Input.Sequencing"
@@ -119,6 +118,8 @@
 
             <!--
                 AvalonEdit. WPF 용이라 AvaloniaEdit 이 아니다.
+                TextEditor 를 바로 쓰지 않고 markup:ScriptEditor 로 감싼 이유는 그쪽에 적어 두었다
+                (그냥 얹으면 창 전체의 UI 자동화 트리가 빈다).
                 Text 가 의존 속성이 아니어서 markup:AvalonEditText.Text 로 양방향을 잇는다.
 
                 DevExpress 경량 테마는 표준 WPF 컨트롤을 손대지 않으므로 색을 직접 준다 -
@@ -126,7 +127,7 @@
             -->
             <Border BorderBrush="{Binding EditorBorder}"
                     BorderThickness="1">
-                <avalonEdit:TextEditor Height="200"
+                <markup:ScriptEditor Height="200"
                                        Background="{Binding EditorBackground}"
                                        FontFamily="D2Coding, Consolas, Courier New"
                                        FontSize="13"
@@ -140,7 +141,7 @@
                         <!--  ViewModel 이 캐럿 자리에 줄을 끼우려면 편집기를 직접 잡아야 한다.  -->
                         <dxmvvm:UIObjectService x:Name="EditorObjectService" />
                     </dxmvvm:Interaction.Behaviors>
-                </avalonEdit:TextEditor>
+                </markup:ScriptEditor>
             </Border>
 
             <!--  틀린 줄이 있을 때만 뜬다. 늘 자리를 차지하면 멀쩡할 때도 눈이 간다.  -->
