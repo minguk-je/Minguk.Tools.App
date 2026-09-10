@@ -161,7 +161,7 @@ public partial class InputAutomationViewModel
 
         ScriptError = errors.Count == 0
             ? null
-            : string.Join("   ·   ", errors.Select(e => e.ToString()));
+            : string.Join(Environment.NewLine, errors.Select(e => e.ToString()));
 
         UpdateSequenceText();
     });
@@ -239,11 +239,20 @@ public partial class InputAutomationViewModel
     /// </summary>
     private string? DescribeDroppedSteps()
     {
-        if (_service is null || _service.SupportsTyping) return null;
-
-        var dropped = _plan.Steps.Count(SequenceStepKinds.NeedsScanCode);
+        if (_service is null || _adapter is null) return null;
 
         var lines = new List<string>();
+
+        // 창 메시지 경로는 대상 창의 "포커스를 가진 컨트롤" 로 들어간다. 버튼을 누르면
+        // 그 순간 포커스가 버튼으로 옮겨 가서 글자가 갈 곳을 잃는다. 실측으로 겪었다.
+        // 커널 입력 큐를 쓰는 경로(SendInput·Interception)는 이 문제가 없다.
+        if (!_adapter.RequiresForegroundTarget)
+            lines.Add("버튼으로 시작하면 포커스가 버튼으로 옮겨 가 입력이 갈 곳을 잃습니다 - "
+                      + "대상에 포커스를 둔 채 Ctrl+Alt+F5(1회) · Ctrl+Alt+F6(반복) 으로 시작하세요.");
+
+        if (_service.SupportsTyping) return lines.Count == 0 ? null : string.Join(Environment.NewLine, lines);
+
+        var dropped = _plan.Steps.Count(SequenceStepKinds.NeedsScanCode);
 
         if (dropped > 0)
             lines.Add($"{_adapter?.Name} 경로는 한/영 전환을 하지 못해 한/영 단계 {dropped}개가 빠집니다. "
@@ -255,7 +264,7 @@ public partial class InputAutomationViewModel
         if (SelectedWindowTarget is null && _plan.Steps.Count > dropped)
             lines.Add("대상 창을 고르지 않아 마지막 좌표 아래의 창으로 나갑니다 - 어디로 갈지 정하려면 창을 고르세요.");
 
-        return lines.Count == 0 ? null : string.Join(" / ", lines);
+        return lines.Count == 0 ? null : string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>

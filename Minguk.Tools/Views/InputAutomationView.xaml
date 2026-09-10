@@ -177,11 +177,15 @@
             </Border>
 
             <!--  틀린 줄이 있을 때만 뜬다. 늘 자리를 차지하면 멀쩡할 때도 눈이 간다.  -->
+            <!--  여러 줄이 될 수 있다. 한 줄에 이어 붙이면 뒤가 잘려서 정작 중요한 말이 안 보인다.  -->
             <dxlc:LayoutItem Label="고칠 줄"
                              Visibility="{Binding HasScriptError, Converter={StaticResource BoolToVisibility}}">
-                <dxe:TextEdit EditValue="{Binding ScriptError}"
+                <dxe:TextEdit AcceptsReturn="True"
+                              EditValue="{Binding ScriptError}"
                               Foreground="#D1242F"
-                              IsReadOnly="True" />
+                              IsReadOnly="True"
+                              TextWrapping="Wrap"
+                              VerticalContentAlignment="Top" />
             </dxlc:LayoutItem>
 
             <!--
@@ -191,9 +195,12 @@
             -->
             <dxlc:LayoutItem Label="이 경로에서는"
                              Visibility="{Binding HasPathWarning, Converter={StaticResource BoolToVisibility}}">
-                <dxe:TextEdit EditValue="{Binding PathWarning}"
+                <dxe:TextEdit AcceptsReturn="True"
+                              EditValue="{Binding PathWarning}"
                               Foreground="#BF6A02"
-                              IsReadOnly="True" />
+                              IsReadOnly="True"
+                              TextWrapping="Wrap"
+                              VerticalContentAlignment="Top" />
             </dxlc:LayoutItem>
         </dxlc:LayoutGroup>
 
