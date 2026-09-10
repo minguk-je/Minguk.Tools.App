@@ -252,7 +252,7 @@ public partial class InputAutomationViewModel
             // 대상 창의 "포커스를 가진 컨트롤" 로 들어간다. 버튼을 누르면 그 순간 포커스가
             // 버튼으로 옮겨 가서 글자가 갈 곳을 잃는다. 실측으로 겪었다.
             lines.Add("버튼으로 시작하면 포커스가 버튼으로 옮겨 가 입력이 갈 곳을 잃습니다 - "
-                      + "대상에 포커스를 둔 채 F11(1회) · F12(반복) 으로 시작하세요.");
+                      + "대상에 포커스를 둔 채 F5(1회) · F6(반복) 으로 시작하세요.");
 
             // 대상 창을 안 고르면 마지막 좌표 아래 창으로 간다. 나가긴 나가는데 어디로
             // 갔는지 알 수 없어서, "끝남" 을 보고 됐다고 믿게 된다. 그 전에 말해 준다.
@@ -289,12 +289,16 @@ public partial class InputAutomationViewModel
         _hotkeys = GlobalHotkeyAdapterFactory.Create();
 
         // RegisterHotKey 는 시스템 전역이다. 맨 키로 잡으면 이 화면이 열려 있는 동안
-        // 모든 앱에서 그 키를 빼앗는다 - F11 은 브라우저 전체화면, F12 는 개발자 도구,
+        // 모든 앱에서 그 키를 빼앗는다 - F5 는 브라우저 새로고침과 Visual Studio 의 디버그 시작,
         // F3 은 흔한 "다음 찾기" 다. 화면을 닫으면 돌려준다(ReleaseResources 가 푼다).
+        //
+        // F12 는 쓸 수 없다. 다른 프로그램이 쥐고 있어서가 아니라 Windows 가 디버거용으로
+        // 예약해 둔 것이다 - 맨 F12 와 Shift+F12 는 늘 1409(이미 등록됨)로 실패한다.
+        // 조합키를 얹으면(Ctrl+F12 등) 된다. 실측으로 확인했다.
         (string Label, Key Key, ModifierKeys Modifiers, Action Action)[] bindings =
         [
-            ("F11 1회", Key.F11, ModifierKeys.None, () => { if (IsIdle) DoRunOnce(); }),
-            ("F12 반복/중지", Key.F12, ModifierKeys.None, ToggleLoop),
+            ("F5 1회", Key.F5, ModifierKeys.None, () => { if (IsIdle) DoRunOnce(); }),
+            ("F6 반복/중지", Key.F6, ModifierKeys.None, ToggleLoop),
             ("F4 좌표 담기", Key.F4, ModifierKeys.None, PickCursorPosition),
             ("F3 대상 창 집기", Key.F3, ModifierKeys.None, PickWindowUnderCursor)
         ];
@@ -308,14 +312,17 @@ public partial class InputAutomationViewModel
             else failed.Add(label);
         }
 
+        // "다른 프로그램이 쥐고 있음" 이라고만 적었더니, Windows 가 예약한 키(F12)를
+        // 못 쓰는 것도 남의 탓으로 읽혔다. 원인을 단정하지 않는다.
         HotkeyStatus = failed.Count == 0
             ? string.Join(" · ", live)
-            : string.Join(" · ", live) + $"  (다른 프로그램이 쥐고 있음: {string.Join(", ", failed)})";
+            : string.Join(" · ", live)
+              + $"  (등록 실패: {string.Join(", ", failed)} - 다른 프로그램이 쥐고 있거나 Windows 가 예약한 키입니다)";
 
         Logger.Debug($"단축키 등록: 성공 {live.Count}, 실패 {failed.Count}");
     });
 
-    /// <summary>F12 는 하나로 시작과 중지를 겸한다. 도는 중에 다시 누르면 멈춘다.</summary>
+    /// <summary>F6 은 하나로 시작과 중지를 겸한다. 도는 중에 다시 누르면 멈춘다.</summary>
     private void ToggleLoop()
     {
         if (IsRunning) DoStop();

@@ -91,7 +91,7 @@ internal static class ViewSmokeProbe
             // 대신 이 경로에서만 필요한 안내(단축키로 시작 · 대상 창)가 떠야 한다.
             var warned = vm.PathWarning is not null
                          && !vm.PathWarning.Contains("빠집니다")
-                         && vm.PathWarning.Contains("F11")
+                         && vm.PathWarning.Contains("F5")
                          && vm.PathWarning.Contains("대상 창");
 
             if (quietOnSendInput && warned)
