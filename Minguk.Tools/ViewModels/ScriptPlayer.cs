@@ -157,10 +157,23 @@ public sealed class ScriptPlayer : ViewModelBase
 
     private void Start(bool loop)
     {
-        if (IsRunning) return;
+        // 단축키로 시작하는 사람은 이 화면을 못 본다. 왜 안 돌았는지는 로그에라도 남긴다.
+        if (IsRunning)
+        {
+            Logger.Info($"시작 요청을 무시했다 - 이미 도는 중({CurrentStep})");
+            return;
+        }
 
         var context = _resolve();
-        if (context is null) return;
+
+        if (context is null)
+        {
+            Logger.Info("시작 요청을 무시했다 - 돌릴 문맥이 없다(틀린 줄·빈 스크립트·입력 경로 없음)");
+            Chime(Chimes.Failed);
+            return;
+        }
+
+        Logger.Info($"스크립트 시작({(loop ? "반복" : "1회")}) - {StartDelaySeconds}초 대기");
 
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
@@ -169,6 +182,9 @@ public sealed class ScriptPlayer : ViewModelBase
 
         IsRunning = true;
         LoopCount = 0;
+
+        // 게임에 있는 사람은 이 화면을 못 본다. 받았다는 것을 소리로 알린다.
+        Chime(Chimes.Accepted);
 
         // Progress<T> 는 만든 스레드(여기서는 UI)로 보고를 넘겨 준다.
         var progress = new Progress<string>(symbol => CurrentStep = symbol);
@@ -186,6 +202,8 @@ public sealed class ScriptPlayer : ViewModelBase
 
             if (context.BeforeRun is not null) await context.BeforeRun();
 
+            Chime(Chimes.Started);
+
             do
             {
                 // 취소 토큰은 Task.Run 에 넘기지 않는다. 시작 전에 이미 취소돼 있으면 그 오버로드는
@@ -200,7 +218,7 @@ public sealed class ScriptPlayer : ViewModelBase
         }
         catch (Exception ex)
         {
-            NLog.LogManager.GetCurrentClassLogger().Error(ex, "스크립트를 돌리다 멈췄다");
+            Logger.Error(ex, "스크립트를 돌리다 멈췄다");
             CurrentStep = $"실패: {ex.Message}";
             failed = true;
         }
@@ -211,8 +229,37 @@ public sealed class ScriptPlayer : ViewModelBase
             if (!failed && CurrentStep?.StartsWith("실패") != true)
                 CurrentStep = token.IsCancellationRequested ? "중지함" : "끝남";
 
+            Logger.Info($"스크립트 끝: {CurrentStep} ({LoopCount}회)");
+            Chime(CurrentStep?.StartsWith("실패") == true || CurrentStep?.StartsWith("멈춤") == true ? Chimes.Failed : Chimes.Finished);
+
             MessengerUtility.SendMainMessage($"스크립트를 마쳤습니다. ({LoopCount}회)");
         }
+    }
+
+    private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+
+    /// <summary>
+    /// 소리 신호. 게임이 앞에 있으면 이 화면의 글자는 안 보인다 - F5 가 먹었는지, 돌기 시작했는지, 막혔는지를 귀로 안다.
+    /// 짧게 한 번: 받음(대기 시작) · 짧게 두 번: 돌기 시작 · 높게 한 번: 끝남 · 낮게 길게: 실패·막힘.
+    /// </summary>
+    private static void Chime((int Frequency, int Milliseconds)[] notes) => _ = Task.Run(() =>
+    {
+        try
+        {
+            foreach (var (frequency, milliseconds) in notes) System.Console.Beep(frequency, milliseconds);
+        }
+        catch
+        {
+            // 소리 장치가 없어도 스크립트는 돈다.
+        }
+    });
+
+    private static class Chimes
+    {
+        public static readonly (int, int)[] Accepted = [(880, 90)];
+        public static readonly (int, int)[] Started = [(880, 70), (1175, 90)];
+        public static readonly (int, int)[] Finished = [(1319, 120)];
+        public static readonly (int, int)[] Failed = [(330, 350)];
     }
 
     /// <summary>시작 전 대기. 남은 시간을 표시해 주지 않으면 사용자가 언제 옮겨야 할지 알 수 없다.</summary>

@@ -191,6 +191,12 @@
             -->
             <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
             <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
+
+            <!-- 대상이 관리자 권한인데 이 앱은 아닐 때만. 그 창에는 입력도 F5 도 못 닿는다(UIPI). -->
+            <dxb:BarButtonItem Command="{Binding RestartAsAdminCommand}"
+                               Content="관리자로 다시 시작"
+                               IsVisible="{Binding NeedsElevation, Mode=OneWay}"
+                               ToolTip="{Binding ElevationNote, Mode=OneWay}" />
         </dxb:ToolBarControl>
 
         <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->

@@ -540,6 +540,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             IsRunning = true;
             StatusText = $"캡처 중: {_captureSession.Target.Display}{SharedNote()}";
             MessengerUtility.SendMainMessage("캡처를 시작했습니다.");
+            RefreshElevationNote();
         }
         catch (Exception ex)
         {
@@ -1238,6 +1239,56 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
         StatusText = $"입력 경로: {_inputRouter.AdapterName}";
         Logger.Debug($"입력 경로를 {_inputRouter.AdapterName} 으로 바꿨다.");
+        RefreshElevationNote();
+    }
+
+    // ── 관리자 권한 ──────────────────────────────────────────────────────
+
+    /// <summary>대상이 관리자로 떠 있는데 이 앱은 아닐 때의 안내. 아니면 null. 화면이 "관리자로 다시 시작" 버튼을 이것으로 보인다.</summary>
+    public string? ElevationNote { get => GetProperty(() => ElevationNote); private set => SetProperty(() => ElevationNote, value, () => RaisePropertyChanged(nameof(NeedsElevation))); }
+
+    public bool NeedsElevation => ElevationNote is not null;
+
+    /// <summary>
+    /// 대상 창과 이 앱의 권한을 견준다. 게임이 관리자로 떠 있으면 일반 권한의 앱은 SendInput 도 전역 단축키(F5)도
+    /// 그 창에 못 닿는다(UIPI). 조용히 안 먹는 것보다 미리 말해 주는 편이 낫다 - 실제로 오버워치에서 F5 가 안 먹었다.
+    /// </summary>
+    protected void RefreshElevationNote()
+    {
+        string? note = null;
+
+        if (SelectedTarget is { Kind: CaptureTargetKind.Window, Handle: var handle } && handle != IntPtr.Zero
+            && !ProcessElevation.IsCurrentElevated && ProcessElevation.IsWindowElevated(handle) == true)
+        {
+            var viaDriver = _inputRouter?.AdapterName == "Interception";
+
+            note = viaDriver
+                ? "대상이 관리자 권한으로 떠 있습니다. 드라이버 경로라 입력은 들어가지만, 전역 단축키(F5·F9)는 그 창이 앞에 있는 동안 안 옵니다. 관리자로 다시 시작하세요."
+                : "대상이 관리자 권한으로 떠 있는데 이 앱은 아닙니다. 입력(SendInput)도 전역 단축키(F5·F9)도 그 창에 못 닿습니다. 관리자로 다시 시작하세요.";
+        }
+
+        if (note != ElevationNote)
+        {
+            ElevationNote = note;
+
+            if (note is not null)
+            {
+                StatusText = note;
+                Logger.Warn(note);
+            }
+        }
+    }
+
+    /// <summary>같은 실행 파일을 관리자로 띄우고 이 쪽은 닫는다. UAC 에서 거절하면 그대로 둔다.</summary>
+    public void RestartAsAdmin()
+    {
+        if (!ProcessElevation.TryRestartElevated(out var problem))
+        {
+            StatusText = $"관리자로 다시 시작하지 못했습니다: {problem}";
+            return;
+        }
+
+        Application.Current?.Shutdown();
     }
 
     /// <summary>PostMessage 경로가 메시지를 넣을 창. 대상이 모니터면 보낼 곳이 없다.</summary>

@@ -86,6 +86,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>F5 - 멈춰 있으면 계속, 쉬고 있으면 처음부터. 도는 중이면 아무것도 안 한다.</summary>
     private void RunOrContinue()
     {
+        Logger.Debug($"실행/계속 요청: 멈춤={Live.Debug.IsPaused}, 쉬는 중={Player.IsIdle}, 앞 창={ForegroundWindow.Describe()}");
+
         if (Live.Debug.IsPaused) Live.Debug.Continue();
         else if (Player.IsIdle) Player.RunOnce();
     }

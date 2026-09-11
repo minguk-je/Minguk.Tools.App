@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows.Input;
 
@@ -38,6 +38,11 @@ internal static partial class Program
         play!.Dispose();
         adapter.Press(Key.F5);
         Check("공용 단축키: 다 놓으면 시스템 등록을 푼다", received.Count == 3 && adapter.Registered.Count == 0, $"등록 {adapter.Registered.Count}개");
+
+        // 권한 견주기: 이 하네스 자신은 열어 볼 수 있으니 답이 나와야 하고, 없는 창은 모른다(null).
+        var own = Minguk.Tools.Input.ProcessElevation.IsProcessElevated((uint)Environment.ProcessId);
+        Check("권한: 자기 프로세스의 승격 여부를 읽고, 없는 창은 null", own == Minguk.Tools.Input.ProcessElevation.IsCurrentElevated
+              && Minguk.Tools.Input.ProcessElevation.IsWindowElevated(IntPtr.Zero) is null, $"자기={own}, 앱={Minguk.Tools.Input.ProcessElevation.IsCurrentElevated}");
 
         adapter.Refuse = true;
         var refused = hotkeys.Claim(Key.F12, ModifierKeys.None, "F12", () => { }, out var problem3);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Input;
@@ -65,6 +65,7 @@ public sealed class SharedHotkeys : ISharedHotkeys
             claim = _claims.TryGetValue(combo, out var queue) ? queue.LastOrDefault() : null;
         }
 
+        Logger.Debug($"단축키 {Describe(combo)} 눌림 → {claim?.Label ?? "(받는 화면 없음)"}");
         claim?.Action();
     }
 

@@ -339,6 +339,12 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   입력 자동화가 각자 F5 를 쥐면 같이 열린 화면은 등록에 실패해 게임에서 F5 가 안 먹었다(실측). 이제 화면은
   `Claim` 으로 쥐고(`HotkeyClaim`), 탭이 활성화되면(`DocumentViewModelBase.OnActivated`) 제 차례를 당긴다 -
   마지막에 본 화면이 받는다. 마지막 화면이 놓으면 시스템 등록도 푼다. `--vision` 이 가짜 어댑터로 본다.
+- **대상이 관리자 권한이면 이 앱도 관리자여야 한다** (`ProcessElevation`) - 낮은 무결성에서 높은 쪽으로는 SendInput 도
+  RegisterHotKey 의 전역 단축키(F5·F9)도 못 간다(UIPI). 캡처 시작·입력 경로 변경 때 `RefreshElevationNote` 가 견줘
+  `ElevationNote` 를 채우고, 화면은 "관리자로 다시 시작" 버튼(`RestartAsAdmin`, runas)을 보인다. 드라이버(Interception)는
+  입력은 넣지만 단축키는 여전히 안 온다. VS(관리자)에서 띄우면 앱도 관리자라 해당 없음.
+- **스크립트 실행은 소리로 알린다** (`ScriptPlayer.Chime`) - 게임이 앞에 있으면 화면 글자를 못 본다. 받음 한 번 ·
+  시작 두 번 · 끝 높게 · 실패 낮게 길게. 단축키 눌림(`SharedHotkeys.Fire`)·시작 무시 이유·끝 상태는 로그에 남긴다.
 - **앞 창 판정은 같은 프로세스면 통과** (`ForegroundWindow.IsInFront`) - 게임은 잡은 창 말고 IME·오버레이를 앞에
   두기도 해 핸들만 비교하면 게임이 앞에 있어도 막혔다. 막히면 앞 창이 무엇인지 메시지에 적는다.
 - **SendInput 키에는 스캔코드를 같이 싣는다** - wScan 이 0 이면 Raw Input 을 받는 게임에는 MakeCode 0 인 키가

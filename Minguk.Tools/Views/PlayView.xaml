@@ -150,6 +150,12 @@
                 아예 안 보였다(실측 - 스크립트 화면에서 "2마리" 가 어디에도 없었다). 자리가 남는 설정 줄에 둔다.
             -->
             <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
+
+            <!-- 대상이 관리자 권한인데 이 앱은 아닐 때만. 그 창에는 입력도 F5 도 못 닿는다(UIPI). -->
+            <dxb:BarButtonItem Command="{Binding RestartAsAdminCommand}"
+                               Content="관리자로 다시 시작"
+                               IsVisible="{Binding NeedsElevation, Mode=OneWay}"
+                               ToolTip="{Binding ElevationNote, Mode=OneWay}" />
         </dxb:ToolBarControl>
 
         <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
