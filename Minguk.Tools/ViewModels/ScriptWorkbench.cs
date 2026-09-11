@@ -137,6 +137,21 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     /// <summary>실시간 모드인가.</summary>
     public bool IsLive => _host.IsLive;
 
+    /// <summary>지금 언어의 완성. C# 은 Roslyn, 나머지는 null(편집기가 API 표로 돌아간다). 언어를 바꾸면 갈아 끼운다.</summary>
+    public IScriptCompletionSource? CompletionSource
+    {
+        get => GetProperty(() => CompletionSource);
+        private set => SetProperty(() => CompletionSource, value);
+    }
+
+    /// <summary>언어에 맞는 완성을 끼운다. C# 은 첫 호출이 느려 미리 한 번 부른다.</summary>
+    private void RefreshCompletionSource()
+    {
+        CompletionSource = ScriptCompletionSourceFactory.Create(SelectedLanguage, _host.IsLive);
+
+        if (CompletionSource is RoslynCompletionSource roslyn) _ = roslyn.WarmUpAsync();
+    }
+
     // ── 글과 파일 ────────────────────────────────────────────────────────
 
     /// <summary>편집기에 든 글. <b>이것이 원본이다</b> - 계획은 여기서 읽어 낸다.</summary>
@@ -261,6 +276,7 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
             _engine?.Dispose();
             _engine = ScriptEngineFactory.Create(SelectedLanguage);
             _shownLanguage = SelectedLanguage;
+            RefreshCompletionSource();
 
             foreach (var each in Languages)
             {
@@ -319,6 +335,7 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         _engine?.Dispose();
         _engine = ScriptEngineFactory.Create(SelectedLanguage);
         _shownLanguage = SelectedLanguage;
+        RefreshCompletionSource();
 
         if (_byLanguage.TryGetValue(SelectedLanguage, out var kept))
         {
@@ -367,6 +384,7 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         {
             _engine = ScriptEngineFactory.Create(SelectedLanguage);
             _shownLanguage = SelectedLanguage;
+            RefreshCompletionSource();
         }
 
         return _engine;

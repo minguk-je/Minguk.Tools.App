@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Threading;
 using System.Windows.Media;
 
 using ICSharpCode.AvalonEdit;
@@ -62,6 +63,9 @@ public sealed class ScriptEditor : TextEditor
         nameof(Breakpoints), typeof(ObservableCollection<int>), typeof(ScriptEditor),
         new PropertyMetadata(null, (d, e) => ((ScriptEditor)d).OnBreakpointsChanged(e)));
 
+    public static readonly DependencyProperty CompletionSourceProperty = DependencyProperty.Register(
+        nameof(CompletionSource), typeof(IScriptCompletionSource), typeof(ScriptEditor), new PropertyMetadata(null));
+
     public static readonly DependencyProperty CurrentLineProperty = DependencyProperty.Register(
         nameof(CurrentLine), typeof(int), typeof(ScriptEditor),
         new PropertyMetadata(0, (d, _) => ((ScriptEditor)d).OnCurrentLineChanged()));
@@ -71,6 +75,7 @@ public sealed class ScriptEditor : TextEditor
     private readonly BreakpointMargin _margin;
     private readonly ToolTip _errorTip = new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse };
     private CompletionWindow? _completion;
+    private CancellationTokenSource? _completionCts;
 
     public ScriptEditor()
     {
@@ -101,6 +106,15 @@ public sealed class ScriptEditor : TextEditor
     {
         get => (ObservableCollection<int>?)GetValue(BreakpointsProperty);
         set => SetValue(BreakpointsProperty, value);
+    }
+
+    /// <summary>
+    /// 언어를 아는 완성(C# 은 Roslyn). 없거나 빈 목록이면 API 표(<see cref="ScriptApiCatalog"/>)로 돌아간다.
+    /// </summary>
+    public IScriptCompletionSource? CompletionSource
+    {
+        get => (IScriptCompletionSource?)GetValue(CompletionSourceProperty);
+        set => SetValue(CompletionSourceProperty, value);
     }
 
     /// <summary>멈춘 줄(1부터). 0 이면 없음.</summary>
@@ -208,41 +222,77 @@ public sealed class ScriptEditor : TextEditor
             _completion.CompletionList.RequestInsertion(e);
     }
 
-    /// <summary>캐럿 앞 낱말을 앞글자로 삼아 목록을 연다. 맞는 것이 없으면 안 연다.</summary>
-    public void OpenCompletion()
+    /// <summary>
+    /// 캐럿 앞 낱말을 앞글자로 삼아 목록을 연다. 언어 완성이 있으면 그것을(비동기), 없으면 API 표를. 맞는 것이 없으면 안 연다.
+    /// </summary>
+    /// <remarks>
+    /// Roslyn 은 첫 호출이 1~2초라 기다리는 동안 타이핑을 막지 않는다. 결과가 왔을 때 캐럿이 낱말 시작보다 앞으로
+    /// 갔으면(지웠으면) 열지 않는다. 그 사이에 다시 부르면 앞선 요청은 접는다.
+    /// </remarks>
+    public async void OpenCompletion()
     {
-        if (IsReadOnly) return;
+        if (IsReadOnly || _completion is not null) return;
 
         var start = WordStart(CaretOffset);
         var prefix = Document.GetText(start, CaretOffset - start);
-        var matches = ScriptApiCatalog.Match(prefix).ToList();
 
-        if (matches.Count == 0)
+        _completionCts?.Cancel();
+        _completionCts = new CancellationTokenSource();
+        var token = _completionCts.Token;
+
+        List<ICompletionData> items = [];
+
+        if (CompletionSource is { } source)
         {
-            _completion?.Close();
-            return;
+            try
+            {
+                var suggestions = await source.GetAsync(Document.Text, CaretOffset, token);
+
+                foreach (var suggestion in suggestions)
+                    items.Add(new LanguageCompletionData(suggestion));
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception)
+            {
+                // 완성이 터져도 편집은 되어야 한다. 표로 돌아간다.
+                items.Clear();
+            }
+
+            if (token.IsCancellationRequested || _completion is not null) return;
+            if (CaretOffset < start || WordStart(CaretOffset) != start) return;
         }
 
-        if (_completion is not null) return;
+        if (items.Count == 0)
+        {
+            foreach (var (name, entry) in ScriptApiCatalog.Match(string.Empty))
+                items.Add(new ApiCompletionData(name, entry));
+        }
+
+        var current = Document.GetText(start, CaretOffset - start);
+
+        if (current.Length > 0 && !items.Any(i => i.Text.StartsWith(current, StringComparison.OrdinalIgnoreCase)))
+            return;
 
         var window = new CompletionWindow(TextArea)
         {
             StartOffset = start,
             CloseWhenCaretAtBeginning = true,
             CloseAutomatically = true,
-            Width = 360
+            Width = 420
         };
 
         // 전부 넣는다. 창이 StartOffset~캐럿 사이 글로 거르고, 첫 항목을 고른다.
-        foreach (var (name, entry) in ScriptApiCatalog.Match(string.Empty))
-            window.CompletionList.CompletionData.Add(new ApiCompletionData(name, entry));
+        foreach (var item in items) window.CompletionList.CompletionData.Add(item);
 
         window.Closed += (_, _) => _completion = null;
         _completion = window;
 
         window.Show();
 
-        if (prefix.Length > 0) window.CompletionList.SelectItem(prefix);
+        if (current.Length > 0) window.CompletionList.SelectItem(current);
     }
 
     /// <summary>캐럿 앞으로 낱말 글자가 이어지는 시작 자리.</summary>
@@ -258,6 +308,23 @@ public sealed class ScriptEditor : TextEditor
     /// <summary>낱말을 이루는 글자. 영문·숫자·밑줄과 한글(완성형·자모).</summary>
     private static bool IsIdentifierChar(char c)
         => char.IsLetterOrDigit(c) || c == '_' || c is (>= '가' and <= '힣') or (>= 'ㄱ' and <= 'ㆎ');
+
+    /// <summary>언어 완성(Roslyn)의 한 줄. 이름과 종류.</summary>
+    private sealed class LanguageCompletionData(CompletionSuggestion suggestion) : ICompletionData
+    {
+        public ImageSource? Image => null;
+
+        public string Text { get; } = suggestion.Text;
+
+        public object Content { get; } = suggestion.Kind.Length > 0 ? $"{suggestion.Display}   {suggestion.Kind}" : suggestion.Display;
+
+        public object Description { get; } = suggestion.Kind.Length > 0 ? $"{suggestion.Display} - {suggestion.Kind}" : suggestion.Display;
+
+        public double Priority => 0;
+
+        public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
+            => textArea.Document.Replace(completionSegment, Text);
+    }
 
     /// <summary>완성 목록의 한 줄. 이름은 그대로 넣고, 옆에 부르는 모양과 설명을 보여 준다.</summary>
     private sealed class ApiCompletionData(string name, ScriptApiEntry entry) : ICompletionData

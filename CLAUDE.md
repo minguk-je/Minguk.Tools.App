@@ -302,9 +302,17 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
 - 엔진이 준 `ScriptError`(줄 번호)를 `Errors` 로 받아 그 줄 아래에 물결선을 긋는다. 배경 렌더러
   (`IBackgroundRenderer`, Selection 층)라 글을 가리지 않는다. 마우스를 올리면 문장이 풍선으로 뜬다.
   XAML 은 `Errors="{Binding Script.Errors}"`.
-- 완성 목록은 `ScriptApiCatalog`(이름·한글 이름·인자·설명 표 하나)에서 나온다. 낱말 첫 글자를 치면 열리고
-  Ctrl+Space 로도 연다. 고르면 **이름만** 넣는다 - 괄호까지 넣으면 이미 친 괄호와 겹친다. 세 언어가 같은
-  이름을 쓰므로 목록도 하나다. 언어 고유 문법(for·def·let)은 안 한다.
+- 완성 목록은 두 갈래다. **C# 은 Roslyn**(`RoslynCompletionSource`, `IScriptCompletionSource`) - 전역 API·한글 이름·
+  지역 변수의 멤버·키워드까지 실제 컴파일러가 준다. 계획 모드는 전역 타입이 `SequenceScriptApi`, 실시간은
+  `LiveScriptApi` 라 실시간 전용 이름이 계획 모드 완성에는 안 나온다. **파이썬·자바스크립트는 API 표**
+  (`ScriptApiCatalog`)만 - 정적 분석기는 무겁고 얻는 것이 적어 안 얹는다. 편집기는 `CompletionSource` 가 있으면
+  그것을(비동기), 없거나 빈 목록이면 표를 쓴다. 낱말 첫 글자를 치면 열리고 Ctrl+Space 로도 연다. 고르면 **이름만**
+  넣는다 - 괄호까지 넣으면 이미 친 괄호와 겹친다.
+- Roslyn 완성은 `Microsoft.CodeAnalysis.CSharp.Features`(Scripting 과 같은 5.9.0) 가 필요하다. 어셈블리 약 20MB.
+  첫 호출 1.4초(MEF 구성 + 참조 읽기)라 워크벤치가 언어를 C# 으로 놓을 때 미리 한 번 부른다(`WarmUpAsync`); 그 뒤는
+  50ms. 문서는 `SourceCodeKind.Script` 인 **제출(submission) 프로젝트**에 `hostObjectType` 을 실어야 전역이 나오고,
+  `DocumentInfo` 도 따로 Script 로 만들어야 한다 - 기본(Regular)이면 "스크립트 코드만 제출할 수 있다" 로 터진다(실측).
+  참조는 이미 올라온 어셈블리 중 스크립트 엔진과 같은 것들(System.Runtime·Linq·Minguk.Tools 등)만 준다.
 - 파이썬 엔진이 심는 이름은 이 표에서 나온다. 자바스크립트 엔진은 인자 형이 붙은 대리자라 제 손으로 적되,
   `--views` 가 표의 이름을 전부 불러 어긋남을 잡는다. 구문 강조(xshd)는 아직 손으로 맞춘다.
 - **오프스크린에서 TextView 의 층은 안 그려진다.** 편집기를 통째로 `RenderTargetBitmap` 에 그려도 밑줄이

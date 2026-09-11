@@ -253,7 +253,8 @@
                                        SyntaxHighlighting="{Binding Script.Highlighting}"
                                        WordWrap="False"
                                        markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
-                                     Errors="{Binding Script.Errors, Mode=OneWay}">
+                                     CompletionSource="{Binding Script.CompletionSource, Mode=OneWay}"
+                                         Errors="{Binding Script.Errors, Mode=OneWay}">
                     <dxmvvm:Interaction.Behaviors>
                         <!--  ViewModel 이 캐럿 자리에 줄을 끼우려면 편집기를 직접 잡아야 한다.  -->
                         <dxmvvm:UIObjectService x:Name="EditorObjectService" />

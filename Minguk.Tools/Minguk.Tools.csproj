@@ -46,6 +46,8 @@
 			Scripting 패키지가 CodeAnalysis 본체를 함께 끌고 온다.
 		-->
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.9.0" />
+		<!-- C# 코드 완성(CompletionService). Scripting 과 같은 판이어야 한다. 수십 MB 라 설계 4단계에서 따로 결정해 넣었다. -->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="5.9.0" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
 		<!--  파이썬 스크립트. 진짜 CPython 을 껴안으므로 런타임은 첫 실행 때 받아 온다.  -->
 		<PackageReference Include="pythonnet" Version="3.1.0" />

@@ -294,6 +294,7 @@
                                          markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
                                          Breakpoints="{Binding Live.Debug.Breakpoints, Mode=OneWay}"
                                          CurrentLine="{Binding Live.Debug.PausedLine, Mode=OneWay}"
+                                         CompletionSource="{Binding Script.CompletionSource, Mode=OneWay}"
                                          Errors="{Binding Script.Errors, Mode=OneWay}"
                                          IsReadOnly="{Binding Script.IsLocked}"
                                          LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
