@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using DevExpress.Xpf.Core;
@@ -61,6 +62,9 @@ internal static class ViewSmokeProbe
             failures += CheckLabelingAssist();
             failures += CheckScriptPerLanguage();
             failures += CheckLossSparkline();
+            failures += CheckScriptApiCatalog();
+            failures += CheckErrorUnderline();
+            failures += CheckCompletion();
 
             app.Shutdown();
         });
@@ -521,6 +525,195 @@ internal static class ViewSmokeProbe
         }
 
         return failures;
+    }
+
+    /// <summary>
+    /// API 목록표. 이름이 겹치지 않고, 앞글자 고르기가 영문(대소문자 무시)·한글 둘 다 되고,
+    /// 자바스크립트 엔진이 심는 이름과 어긋나지 않는지.
+    /// </summary>
+    /// <remarks>
+    /// 자바스크립트 엔진은 인자 형이 붙은 대리자를 심어야 해서 표에서 자동으로 못 만든다. 대신 여기서
+    /// 실제로 엔진을 돌려 표의 이름을 하나씩 불러 본다 - 없는 이름이면 ReferenceError 로 나온다.
+    /// </remarks>
+    private static int CheckScriptApiCatalog()
+    {
+        var failures = 0;
+
+        try
+        {
+            var names = Minguk.Tools.Input.Scripting.ScriptApiCatalog.AllNames;
+            var unique = names.Distinct().Count() == names.Count;
+            Console.WriteLine($"[{(unique ? "PASS" : "FAIL")}] API 표 이름이 겹치지 않는다 — {names.Count}개");
+            if (!unique) failures++;
+
+            var korean = Minguk.Tools.Input.Scripting.ScriptApiCatalog.Match("글").Select(m => m.Name).ToList();
+            var english = Minguk.Tools.Input.Scripting.ScriptApiCatalog.Match("cl").Select(m => m.Name).ToList();
+            var ok = korean.SequenceEqual(["글자"]) && english.SequenceEqual(["Click", "ClickAt"]);
+            Console.WriteLine($"[{(ok ? "PASS" : "FAIL")}] 앞글자로 고른다 — 글→{string.Join(",", korean)} cl→{string.Join(",", english)}");
+            if (!ok) failures++;
+
+            // 자바스크립트로 표의 이름을 전부 불러 본다. 인자가 필요한 것은 안전한 값을 넣는다.
+            using var js = new Minguk.Tools.Input.Scripting.JavaScriptEngine();
+            var calls = string.Join("\n", Minguk.Tools.Input.Scripting.ScriptApiCatalog.Entries.SelectMany(e => new[] { e.Name, e.Korean }.Select(n =>
+                e.Parameters switch
+                {
+                    "" => $"{n}();",
+                    "text" => $"{n}(\"a\");",
+                    "button" => $"{n}();",
+                    "x, y" => $"{n}(1, 2);",
+                    "x, y, button" => $"{n}(1, 2);",
+                    _ => $"{n}(1);"
+                })));
+
+            var (plan, errors) = js.RunAsync(calls).GetAwaiter().GetResult();
+            var bound = errors.Count == 0 && plan.Steps.Count > 0;
+            Console.WriteLine($"[{(bound ? "PASS" : "FAIL")}] 자바스크립트 엔진이 표의 이름을 다 안다 — 단계 {plan.Steps.Count}개"
+                              + (errors.Count == 0 ? "" : $" / {errors[0]}"));
+            if (!bound) failures++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] API 표 — {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        return failures;
+    }
+
+    /// <summary>
+    /// 틀린 줄 아래에 빨간 물결선이 실제로 그려지는지. 오프스크린으로 그려 빨간 픽셀의 세로 자리를 본다.
+    /// </summary>
+    /// <remarks>
+    /// 1번 줄에 오류를 두었을 때보다 2번 줄에 두었을 때 빨간 픽셀이 더 아래에 있어야 한다.
+    /// 줄 높이를 숫자로 박아 두면 글꼴이 바뀔 때 검사가 먼저 깨진다.
+    /// </remarks>
+    private static int CheckErrorUnderline()
+    {
+        try
+        {
+            var first = RedTop(1);
+            var second = RedTop(2);
+            var none = RedTop(0);
+
+            var ok = first > 0 && second > first && none < 0;
+
+            Console.WriteLine(ok
+                ? $"[PASS] 틀린 줄에 빨간 밑줄 — 1번 줄 y={first}, 2번 줄 y={second}, 오류 없으면 없음"
+                : $"[FAIL] 틀린 줄에 빨간 밑줄 — 1번 줄 y={first}, 2번 줄 y={second}, 오류 없을 때 y={none}");
+
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 틀린 줄에 빨간 밑줄 — {ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
+
+        // 그 줄에 오류를 두고 그렸을 때 빨간 픽셀이 처음 나오는 y. 없으면 -1.
+        static int RedTop(int errorLine)
+        {
+            const int width = 240, height = 80;
+
+            var editor = new Minguk.Tools.Markup.ScriptEditor
+            {
+                Width = width,
+                Height = height,
+                FontSize = 13,
+                FontFamily = new FontFamily("Consolas"),
+                Text = "Type(\"안녕\");\nEnter();\nWait(100);",
+                Errors = errorLine > 0 ? [new Minguk.Tools.Input.Scripting.ScriptError(errorLine, "시험")] : []
+            };
+
+            // 줄 자리(VisualLines)는 편집기가 진짜 창에 붙어 스크롤 뷰어까지 배치돼야 나온다.
+            // Measure/Arrange 만으로는 비어 있었다. 완성 검사와 같이 보이지 않는 창에 담는다.
+            var host = new Window { Width = width + 20, Height = height + 40, ShowInTaskbar = false, WindowStyle = WindowStyle.None, Left = -5000, Top = -5000, Content = editor };
+            host.Show();
+            editor.UpdateLayout();
+
+            try
+            {
+            // 편집기를 통째로 오프스크린에 그리면 TextView 의 층(Layer)이 그려지지 않는다 - 그 층은 디스패처의
+            // 렌더 패스에서만 그려진다. 렌더러의 Draw 를 직접 불러 그 그림만 본다. 줄 자리는 TextView 가 준다.
+            var textView = editor.TextArea.TextView;
+            var visual = new DrawingVisual();
+
+            using (var dc = visual.RenderOpen())
+                foreach (var renderer in textView.BackgroundRenderers)
+                    renderer.Draw(textView, dc);
+
+            var target = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            target.Render(visual);
+
+            var pixels = new byte[width * height * 4];
+            target.CopyPixels(pixels, width * 4, 0);
+
+            // 투명 바탕의 Pbgra32 는 색이 알파로 곱해져 있다(1.2px 선은 가장자리가 반투명). 되돌려서 "붉은가" 만 본다.
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var i = ((y * width) + x) * 4;
+                int a = pixels[i + 3];
+                if (a < 60) continue;
+
+                int r = pixels[i + 2] * 255 / a, g = pixels[i + 1] * 255 / a, b = pixels[i] * 255 / a;
+                if (r > 150 && g < 110 && b < 110) return y;
+            }
+
+            return -1;
+            }
+            finally
+            {
+                host.Close();
+            }
+        }
+    }
+
+    /// <summary>낱말을 치면 완성 목록이 뜨고, 고르면 이름이 들어가는지.</summary>
+    private static int CheckCompletion()
+    {
+        try
+        {
+            var editor = new Minguk.Tools.Markup.ScriptEditor { Width = 300, Height = 100 };
+
+            // 창은 편집기가 화면에 붙어 있어야 뜬다. 보이지 않는 창에 담아 띄운다.
+            var host = new Window { Width = 320, Height = 140, ShowInTaskbar = false, WindowStyle = WindowStyle.None, Left = -5000, Top = -5000, Content = editor };
+            host.Show();
+
+            try
+            {
+                editor.Text = "";
+                editor.CaretOffset = 0;
+                editor.Document.Insert(0, "글");
+                editor.CaretOffset = 1;
+                editor.OpenCompletion();
+
+                var opened = editor.IsCompletionOpen;
+
+                // 목록에서 첫 항목을 넣는다 - 캐럿 앞 "글" 이 "글자" 로 바뀌어야 한다.
+                var inserted = false;
+                if (opened)
+                {
+                    editor.TextArea.PerformTextInput("(");
+                    inserted = editor.Text.StartsWith("글자(");
+                }
+
+                var ok = opened && inserted;
+                Console.WriteLine(ok
+                    ? $"[PASS] 코드 완성 — \"글\" 을 치면 목록이 뜨고 고르면 \"{editor.Text}\""
+                    : $"[FAIL] 코드 완성 — 열림 {opened}, 넣음 {inserted}, 글=\"{editor.Text}\"");
+
+                return ok ? 0 : 1;
+            }
+            finally
+            {
+                host.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 코드 완성 — {ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
     }
 
     /// <summary>loss 꺾은선이 실제로 선을 그리는지. 오프스크린으로 그려 선 색 픽셀을 센다.</summary>

@@ -184,8 +184,12 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     /// <summary>글에서 읽어 낸 계획. 실행할 때 이것으로 시퀀스를 만든다.</summary>
     public SequencePlan Plan { get; private set; } = new();
 
-    /// <summary>틀린 줄들. 없으면 빈 목록.</summary>
-    public IReadOnlyList<ScriptError> Errors { get; private set; } = [];
+    /// <summary>틀린 줄들. 없으면 빈 목록. 편집기가 이것으로 빨간 밑줄을 긋는다.</summary>
+    public IReadOnlyList<ScriptError> Errors
+    {
+        get => GetProperty(() => Errors) ?? [];
+        private set => SetProperty(() => Errors, value);
+    }
 
     /// <summary>틀린 줄들을 한 번에 모아 둔 글. 없으면 null.</summary>
     public string? ErrorText

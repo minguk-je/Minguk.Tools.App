@@ -270,6 +270,7 @@
                                          FontFamily="D2Coding, Consolas, Courier New"
                                          FontSize="13"
                                          markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
+                                     Errors="{Binding Script.Errors, Mode=OneWay}"
                                          IsReadOnly="{Binding Script.IsLocked}"
                                          LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
                                          ShowLineNumbers="True"

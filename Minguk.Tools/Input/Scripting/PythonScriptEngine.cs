@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -162,7 +162,7 @@ public sealed class PythonScriptEngine : IScriptEngine
     {
         scope.Set("api", api.ToPython());
 
-        foreach (var name in BoundNames)
+        foreach (var name in ScriptApiCatalog.AllNames)
             scope.Exec($"{name} = api.{name}");
 
         // MouseButton.Right 처럼 쓸 수 있게 한다.
@@ -183,21 +183,8 @@ public sealed class PythonScriptEngine : IScriptEngine
                    """);
     }
 
-    /// <summary>
-    /// 스크립트 범위에 심는 이름들.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="SequenceScriptApi"/> 에서 리플렉션으로 뽑지 않고 적어 둔다.
-    /// 뽑으면 나중에 그 클래스에 도우미 메서드를 하나 넣는 순간 스크립트에도 조용히 새 이름이
-    /// 생긴다. 무엇을 열어 줄지는 정해서 여는 편이 낫다.
-    /// API 를 늘리면 여기와 구문 강조(<c>Resource/SequenceScript.*.xshd</c>)를 같이 고친다.
-    /// </remarks>
-    private static readonly string[] BoundNames =
-    [
-        "Type", "TypeLine", "Enter", "ToggleHangul", "Click", "RightClick", "ClickAt",
-        "MoveTo", "Scroll", "Wait",
-        "글자", "줄입력", "엔터", "한영", "클릭", "우클릭", "이동", "이동클릭", "휠", "쉬기"
-    ];
+    // 심는 이름은 ScriptApiCatalog 가 든다. 예전에는 여기 따로 적어 두었는데, 자바스크립트 엔진·구문 강조·
+    // 완성 목록과 네댓 군데가 같은 목록을 들게 되어 하나로 모았다. API 를 늘리면 표와 xshd 를 고친다.
 
     /// <summary>파이썬 예외에서 줄 번호를 뽑는다. 못 뽑으면 0.</summary>
     private static int LineOf(PythonException ex)
