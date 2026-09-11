@@ -1,4 +1,4 @@
-﻿DevExpress WPF 컨트롤, WPF 개발자
+DevExpress WPF 컨트롤, WPF 개발자
 
 ## 이 프로젝트
 
@@ -343,6 +343,12 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   RegisterHotKey 의 전역 단축키(F5·F9)도 못 간다(UIPI). 캡처 시작·입력 경로 변경 때 `RefreshElevationNote` 가 견줘
   `ElevationNote` 를 채우고, 화면은 "관리자로 다시 시작" 버튼(`RestartAsAdmin`, runas)을 보인다. 드라이버(Interception)는
   입력은 넣지만 단축키는 여전히 안 온다. VS(관리자)에서 띄우면 앱도 관리자라 해당 없음.
+- **Interception 은 사람이 쓰는 그 장치 자리로 보낸다** - 드라이버는 자리(1~10 키보드, 11~20 마우스)로 보낸다. 늘 첫 자리로
+  보냈더니 마우스가 둘 붙은 PC(무선 콤보의 마우스 인터페이스가 11, 실제 마우스가 12)에서 오버워치가 조준·걷기를
+  무시했다(실측: SendInput 은 됐다, 몹 자리가 40번 넘게 1px 도 안 변함). `RawInputDeviceTracker` 가 Raw Input 을 뒤에서
+  받아 사람이 마지막으로 쓴 장치를 기억하고, `InterceptionInputAdapter.Resolve` 가 하드웨어 ID 와 VID·PID·MI 로 맞춰
+  그 자리를 고른다. 모르면 붙은 첫 자리(빈 자리는 건너뜀). 자리가 바뀌면 로그에 남는다. `--interception-probe` 는
+  자리 목록을 적고 3px 옮겨 본다(실제 입력 - 묶음에 안 넣음).
 - **스크립트 화면 단축키**: F5 실행/계속 · F6 중지(대기 중에도) · F10 한 줄 · F9 비상 정지(도는 동안만). 호출 로그
   (`ScriptConsole.Trace`)는 파일 로그에도 Debug 로 남긴다 - 게임에서 돌린 뒤 무엇을 불렀는지 나중에 본다.
 - **스크립트 실행은 소리로 알린다** (`ScriptPlayer.Chime`) - 게임이 앞에 있으면 화면 글자를 못 본다. 받음 한 번 ·
