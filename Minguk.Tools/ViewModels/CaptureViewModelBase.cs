@@ -527,7 +527,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
                 return;
             }
 
-            _captureSession = ScreenCaptureAdapterFactory.Create(SelectedTarget, EnableCpuReadback);
+            // 세션은 허브에서 받는다. 다른 화면이 같은 창을 잡고 있으면 그 세션을 나눠 쓴다 - 실제 캡처는 한 번이다.
+            _captureSession = CaptureSessionHubFactory.Default.Acquire(SelectedTarget, EnableCpuReadback);
             _captureSession.TargetFps = CaptureTargetFps;
             _captureSession.FrameArrived += OnFrameArrived;
             _captureSession.Notice += OnSessionNotice;
@@ -537,7 +538,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             _statisticsFlushTimer = new Timer(_ => FlushStats(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
 
             IsRunning = true;
-            StatusText = $"캡처 중: {_captureSession.Target.Display}";
+            StatusText = $"캡처 중: {_captureSession.Target.Display}{SharedNote()}";
             MessengerUtility.SendMainMessage("캡처를 시작했습니다.");
         }
         catch (Exception ex)
@@ -547,6 +548,14 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             Logger.Error(JsonConvert.SerializeObject(ex));
             ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName());
         }
+    }
+
+    /// <summary>다른 화면도 같은 창을 잡고 있으면 그 사실을. 프레임이 한 번만 잡히고 나뉜다는 것을 사람이 알게.</summary>
+    private string SharedNote()
+    {
+        var count = SelectedTarget is null ? 0 : CaptureSessionHubFactory.Default.ConsumerCount(SelectedTarget);
+
+        return count > 1 ? $" · 화면 {count}개가 세션 하나를 나눠 씀" : string.Empty;
     }
 
     protected void DoStop()
@@ -598,7 +607,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// CPU 리드백이 꺼져 있으면 켠다. <b>도는 중이면 세션을 다시 시작한다.</b>
     /// </summary>
     /// <remarks>
-    /// 리드백은 세션을 만들 때 정해진다(<see cref="ScreenCaptureAdapterFactory.Create"/>).
+    /// 리드백은 세션을 만들 때 정해진다(<see cref="ScreenCaptureAdapterFactory.Create"/>). 허브가 나눠 쓰는 세션이면
+    /// 허브가 알아서 리드백 있는 세션으로 갈아 끼우고 다른 화면에 알린다.
     /// 도는 중에 값만 바꾸면 아무것도 안 달라진다 - 몹 찾기에서 "알아서 켜 준다" 고 해 놓고
     /// 실제로는 헛것이었다. 껐다 켜는 것이 유일한 길이고, 통계 몇 초가 사라지는 것 말고는
     /// 잃는 것이 없다.
@@ -1450,7 +1460,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
                          $", GPU복사 {_gpuPreviewBridge?.LastCopyMs:n2}ms, 화면반영 {_gpuPreviewBridge?.LastPresentMs:n2}ms)");
 
         if (_captureSession is not null)
-            StatusText = $"캡처 중: {_captureSession.Target.Display} — {row.Fps:n0} fps, 지연 {row.AvgLatencyMs:n2} ms";
+            StatusText = $"캡처 중: {_captureSession.Target.Display} — {row.Fps:n0} fps, 지연 {row.AvgLatencyMs:n2} ms{SharedNote()}";
     }
 
     // ── 정리 ─────────────────────────────────────────────────────────────────

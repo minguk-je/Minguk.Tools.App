@@ -1,0 +1,262 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+using Vortice.Direct3D11;
+
+namespace Minguk.Tools.Capture;
+
+/// <summary>
+/// <see cref="ICaptureSessionHub"/> 의 구현. 대상마다 실제 세션 하나와 손잡이 여럿.
+/// </summary>
+/// <remarks>
+/// 프레임 콜백은 캡처 스레드에서 온다. 손잡이 목록은 잠금 아래 배열로 바꿔 끼우고, 콜백은 그 배열을 그대로 돈다 -
+/// 콜백 안에서 잠금을 잡으면 화면이 Stop 하는 동안(UI 스레드) 캡처 스레드가 기다리다 프레임이 밀린다.
+/// 세션을 만드는 것은 <see cref="ScreenCaptureAdapterFactory"/> 가 아니라 넘겨받은 함수다 - 검증이 가짜 세션을 꽂는다.
+/// </remarks>
+public sealed class SharedCaptureHub : ICaptureSessionHub
+{
+    private readonly Func<CaptureTarget, bool, IScreenCaptureAdapter> _create;
+    private readonly object _gate = new();
+    private readonly Dictionary<(CaptureTargetKind Kind, IntPtr Handle), Shared> _shared = new();
+
+    public SharedCaptureHub(Func<CaptureTarget, bool, IScreenCaptureAdapter> create) => _create = create;
+
+    public IScreenCaptureAdapter Acquire(CaptureTarget target, bool cpuReadback)
+    {
+        lock (_gate)
+        {
+            var key = (target.Kind, target.Handle);
+
+            if (!_shared.TryGetValue(key, out var shared))
+            {
+                shared = new Shared(this, target);
+                _shared[key] = shared;
+            }
+
+            var handle = new Handle(shared, cpuReadback);
+            shared.Add(handle);
+
+            return handle;
+        }
+    }
+
+    public int ConsumerCount(CaptureTarget target)
+    {
+        lock (_gate)
+            return _shared.TryGetValue((target.Kind, target.Handle), out var shared) ? shared.Count : 0;
+    }
+
+    private void Forget(Shared shared)
+    {
+        lock (_gate)
+        {
+            var key = (shared.Target.Kind, shared.Target.Handle);
+
+            if (_shared.TryGetValue(key, out var current) && ReferenceEquals(current, shared))
+                _shared.Remove(key);
+        }
+    }
+
+    /// <summary>대상 하나의 실제 세션과 그것을 나눠 쓰는 손잡이들.</summary>
+    private sealed class Shared
+    {
+        private readonly SharedCaptureHub _hub;
+        private readonly object _gate = new();
+        private Handle[] _handles = [];
+        private IScreenCaptureAdapter? _session;
+        private bool _sessionHasReadback;
+
+        public Shared(SharedCaptureHub hub, CaptureTarget target)
+        {
+            _hub = hub;
+            Target = target;
+        }
+
+        public CaptureTarget Target { get; }
+
+        public int Count => _handles.Length;
+
+        /// <summary>실제 세션. 아직 아무도 시작 안 했으면 null.</summary>
+        public IScreenCaptureAdapter? Session => _session;
+
+        public void Add(Handle handle)
+        {
+            lock (_gate) _handles = [.. _handles, handle];
+        }
+
+        public void Remove(Handle handle)
+        {
+            var last = false;
+
+            lock (_gate)
+            {
+                _handles = _handles.Where(h => !ReferenceEquals(h, handle)).ToArray();
+
+                if (_handles.Length == 0)
+                {
+                    DropSession();
+                    last = true;
+                }
+                else
+                {
+                    Reconcile();
+                }
+            }
+
+            if (last) _hub.Forget(this);
+        }
+
+        /// <summary>손잡이가 Start 했다. 세션이 없으면 만들고, 리드백·fps 를 손잡이들에 맞춘다.</summary>
+        public void OnHandleStarted() => Reconcile();
+
+        /// <summary>손잡이가 Stop 했다. 도는 손잡이가 하나도 없으면 세션을 놓는다.</summary>
+        public void OnHandleStopped() => Reconcile();
+
+        public void OnFpsChanged() => Reconcile();
+
+        /// <summary>
+        /// 세션 하나를 손잡이들의 요구에 맞춘다 - 도는 손잡이가 없으면 놓고, 있으면 만들고, 리드백이 모자라면
+        /// 새로 만들고, fps 는 가장 큰 값으로.
+        /// </summary>
+        private void Reconcile()
+        {
+            lock (_gate)
+            {
+                var running = _handles.Where(h => h.IsRunning).ToArray();
+
+                if (running.Length == 0)
+                {
+                    DropSession();
+                    return;
+                }
+
+                var wantsReadback = running.Any(h => h.WantsReadback);
+                var fps = running.Max(h => h.TargetFps);
+
+                // 리드백은 세션을 만들 때 정해진다. 없는 세션에 원하는 손잡이가 오면 새로 만든다.
+                if (_session is not null && wantsReadback && !_sessionHasReadback)
+                {
+                    DropSession();
+                    Notify("리드백을 켜려고 캡처를 다시 시작합니다 - 다른 화면이 같은 창을 잡고 있습니다.");
+                }
+
+                if (_session is null)
+                {
+                    var session = _hub._create(Target, wantsReadback);
+                    session.FrameArrived += OnFrameArrived;
+                    session.Notice += OnNotice;
+                    session.TargetFps = fps;
+                    session.Start();
+
+                    _session = session;
+                    _sessionHasReadback = wantsReadback;
+                    return;
+                }
+
+                if (_session.TargetFps != fps) _session.TargetFps = fps;
+            }
+        }
+
+        private void DropSession()
+        {
+            var session = _session;
+            if (session is null) return;
+
+            _session = null;
+            _sessionHasReadback = false;
+
+            session.FrameArrived -= OnFrameArrived;
+            session.Notice -= OnNotice;
+
+            try { session.Stop(); }
+            catch (Exception) { /* 놓는 길이다. 여기서 터져도 손잡이는 이미 떠났다. */ }
+
+            session.Dispose();
+        }
+
+        /// <summary>캡처 스레드. 도는 손잡이 전부에 같은 프레임을 준다. 픽셀은 이 콜백이 돌아가면 사라지므로 차례로.</summary>
+        private void OnFrameArrived(object? sender, CapturedFrameEventArgs e)
+        {
+            foreach (var handle in _handles)
+                if (handle.IsRunning) handle.RaiseFrame(e);
+        }
+
+        private void OnNotice(object? sender, string message) => Notify(message);
+
+        private void Notify(string message)
+        {
+            foreach (var handle in _handles) handle.RaiseNotice(message);
+        }
+    }
+
+    /// <summary>화면이 드는 손잡이. 예전 세션과 같은 얼굴이라 화면 코드는 그대로다.</summary>
+    private sealed class Handle : IScreenCaptureAdapter
+    {
+        private readonly Shared _shared;
+        private int _targetFps = 60;
+        private bool _disposed;
+
+        public Handle(Shared shared, bool wantsReadback)
+        {
+            _shared = shared;
+            WantsReadback = wantsReadback;
+        }
+
+        public bool WantsReadback { get; }
+
+        public string Name => _shared.Session?.Name is { } inner ? $"{inner} (공유 {_shared.Count})" : "공유 캡처";
+
+        public CaptureTarget Target => _shared.Session?.Target ?? _shared.Target;
+
+        public bool IsRunning { get; private set; }
+
+        public int TargetFps
+        {
+            get => _targetFps;
+            set
+            {
+                _targetFps = value;
+                if (IsRunning) _shared.OnFpsChanged();
+            }
+        }
+
+        public ID3D11Device? Device => _shared.Session?.Device;
+
+        public ID3D11DeviceContext? Context => _shared.Session?.Context;
+
+        public event EventHandler<CapturedFrameEventArgs>? FrameArrived;
+
+        public event EventHandler<string>? Notice;
+
+        public void Start()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(Handle));
+            if (IsRunning) return;
+
+            IsRunning = true;
+            _shared.OnHandleStarted();
+        }
+
+        public void Stop()
+        {
+            if (!IsRunning) return;
+
+            IsRunning = false;
+            _shared.OnHandleStopped();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _disposed = true;
+            IsRunning = false;
+            _shared.Remove(this);
+        }
+
+        internal void RaiseFrame(CapturedFrameEventArgs e) => FrameArrived?.Invoke(this, e);
+
+        internal void RaiseNotice(string message) => Notice?.Invoke(this, message);
+    }
+}

@@ -45,8 +45,14 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
   `TryFocusTargetWindow` 로 대상 창을 앞으로 가져온다.
 - 전역 단축키 소유: F8 담기 = 캡처·편집(`SupportsCollecting`), F5/F6 = 플레이와 입력 자동화(같이 열면 나중 것이 실패,
   상태에 적힌다). 두 화면이 같은 키를 쥐면 안 되는 이유가 이것이다.
-- 각 화면이 **제 캡처 세션**을 든다. 캡처 화면과 플레이 화면을 같이 켜면 같은 창을 두 번 잡는다 - 공유 세션과
-  스크립트가 읽는 인식 허브는 `docs/스크립트-설계.md` 2단계.
+- **캡처 세션은 허브에서 나눠 쓴다**(`Capture/ICaptureSessionHub` · `SharedCaptureHub` · `CaptureSessionHubFactory.Default`).
+  화면은 `Acquire(target, readback)` 로 손잡이(`IScreenCaptureAdapter`)를 받아 예전처럼 Start·Stop·Dispose 한다.
+  같은 창을 잡는 화면이 여럿이면 실제 WGC 세션은 하나고 프레임을 손잡이마다 나눠 준다(실측: 캡처·스크립트 화면이
+  같은 게임 창을 잡을 때 "캡처 시작" 로그 한 줄, 상태 줄에 "화면 2개가 세션 하나를 나눠 씀"). 실제 세션은 첫 손잡이가
+  Start 할 때 만들고 마지막 손잡이가 Stop 하면 놓는다. 리드백은 손잡이 중 하나라도 원하면 켜는데, 세션을 만들 때
+  정해지므로 없는 세션에 원하는 손잡이가 오면 세션을 새로 만들고 다른 손잡이에 알린다. fps 는 큰 값.
+  콜백은 잠금 없이 손잡이 배열 스냅샷을 돈다 - 콜백에서 잠금을 잡으면 UI 의 Stop 과 맞물려 프레임이 밀린다.
+  `--vision` 이 가짜 세션 공장으로 나눔·프레임 분배·리드백 갈아 끼움·놓기를 본다.
 - 검증: `--views` 가 세 화면을 만들고 메뉴 아이콘을 본다. 실시간은 `screens.ps1`(세 화면 차례로)·`live-game.ps1`(스크립트 화면에서 몹 찾기).
 
 ## ViewModel 작성 규칙
