@@ -373,5 +373,18 @@ internal static partial class Program
         tracker.Update([At(0.2, 0.2), At(0.8, 0.8)]);
         var two = tracker.Update([At(0.2, 0.2), At(0.8, 0.8)]);
         Check("떨어진 둘은 따로 잇는다", two.Count == 2, $"{two.Count}개");
+
+        // 8) 제 폭만큼 옮겨 가 안 겹쳐도(IoU 0) 가운데가 가까우면 같은 몹이다 - 유령이 안 생긴다.
+        tracker.Reset();
+        tracker.Update([At(0.2, 0.2)]);
+        var jumped = tracker.Update([At(0.31, 0.2)]);
+        Check("폭만큼 옮겨도 같은 몹으로 잇는다", jumped.Count == 1 && tracker.Tracks.Count == 1,
+              $"내놓음 {jumped.Count}개 · 추적 {tracker.Tracks.Count}개");
+
+        // 9) 폭의 두 배 넘게 옮기면 다른 몹이다.
+        tracker.Reset();
+        tracker.Update([At(0.2, 0.2)]);
+        tracker.Update([At(0.5, 0.2)]);
+        Check("멀리 뛰면 다른 몹이다", tracker.Tracks.Count == 2, $"추적 {tracker.Tracks.Count}개");
     }
 }

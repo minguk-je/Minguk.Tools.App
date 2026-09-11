@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -36,6 +36,16 @@ public sealed class DetectionTracker
     /// <summary>지난 것과 이만큼 겹치면 같은 몹이다. 검출 짝짓기(0.5)보다 느슨하다 - 몹이 움직인다.</summary>
     public double MatchIou { get; init; } = 0.3;
 
+    /// <summary>
+    /// 안 겹쳐도 가운데가 사각형 크기의 이만큼 안에 있으면 같은 몹이다.
+    /// </summary>
+    /// <remarks>
+    /// 640 모델은 한 번에 0.65초라 시선을 돌리면 그 사이 몹이 제 폭보다 더 옮겨 가 겹침이
+    /// 0 이 된다. 겹침만 보면 새 몹으로 갈라져, 옛 자리 사각형이 두 프레임 더 남아 유령이
+    /// 됐다 - 실제로 봇마다 오른쪽에 86% 짜리가 하나씩 더 붙었다. 가운데 거리로도 잇는다.
+    /// </remarks>
+    public double MatchDistance { get; init; } = 1.5;
+
     /// <summary>자리를 옮길 때 새 값의 비중. 1 이면 그대로 튀고 0 이면 안 움직인다.</summary>
     public double Smoothing { get; init; } = 0.6;
 
@@ -53,8 +63,9 @@ public sealed class DetectionTracker
         var usedTracks = new HashSet<Track>();
         var usedFound = new HashSet<int>();
 
-        // 겹침이 큰 짝부터 맺는다. 몹 둘이 붙어 있을 때 엉뚱한 쪽으로 이어지는 것을 줄인다.
-        var pairs = new List<(double Iou, Track Track, int Index)>();
+        // 잘 맞는 짝부터 맺는다. 몹 둘이 붙어 있을 때 엉뚱한 쪽으로 이어지는 것을 줄인다.
+        // 겹치는 짝(점수 1~2)이 거리로만 이은 짝(0~1)보다 늘 앞선다.
+        var pairs = new List<(double Fit, Track Track, int Index)>();
 
         foreach (var track in _tracks)
         {
@@ -63,11 +74,23 @@ public sealed class DetectionTracker
                 if (found[i].ClassId != track.ClassId) continue;
 
                 var iou = DetectionMatch.Iou(track.Box, found[i].Box);
-                if (iou >= MatchIou) pairs.Add((iou, track, i));
+                if (iou >= MatchIou)
+                {
+                    pairs.Add((1 + iou, track, i));
+                    continue;
+                }
+
+                var size = Math.Max(track.Box.Width, track.Box.Height);
+                var distance = Math.Sqrt(
+                    Math.Pow(track.Box.CenterX - found[i].Box.CenterX, 2) +
+                    Math.Pow(track.Box.CenterY - found[i].Box.CenterY, 2));
+
+                if (size > 0 && distance <= size * MatchDistance)
+                    pairs.Add((1 - (distance / (size * MatchDistance)), track, i));
             }
         }
 
-        foreach (var (_, track, index) in pairs.OrderByDescending(p => p.Iou))
+        foreach (var (_, track, index) in pairs.OrderByDescending(p => p.Fit))
         {
             if (usedTracks.Contains(track) || usedFound.Contains(index)) continue;
 
