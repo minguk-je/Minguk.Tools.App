@@ -36,6 +36,7 @@ internal static partial class Program
 
         if (args.Contains("--calibrate")) return Calibrate.Run();
         if (args.Contains("--fallback")) return FallbackProbe.Run();
+        if (args.Contains("--interception-probe")) return InterceptionProbe.Run();
         if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace Minguk.Tools.Input.Interop;
@@ -23,6 +23,7 @@ public static class InterceptionNative
     public const int KeyboardFirst = 1;
     public const int MaxKeyboard = 10;
     public const int MouseFirst = MaxKeyboard + 1;
+    public const int MaxMouse = 10;
 
     // 키 상태 플래그
     public const ushort KeyDown = 0x00;
@@ -94,4 +95,19 @@ public static class InterceptionNative
     /// <returns>실제로 보낸 스트로크 수.</returns>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int interception_send(IntPtr context, int device, ref Stroke stroke, uint count);
+
+    /// <summary>그 자리에 붙은 장치의 하드웨어 ID(UTF-16). 붙은 장치가 없으면 0 을 돌려준다.</summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint interception_get_hardware_id(IntPtr context, int device, byte[] buffer, uint size);
+
+    /// <summary>그 자리에 장치가 붙어 있으면 하드웨어 ID 를 준다. 비어 있으면 null.</summary>
+    public static string? HardwareId(IntPtr context, int device)
+    {
+        var buffer = new byte[1024];
+        var length = interception_get_hardware_id(context, device, buffer, (uint)buffer.Length);
+
+        if (length == 0 || length > buffer.Length) return null;
+
+        return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)length).TrimEnd('\0');
+    }
 }

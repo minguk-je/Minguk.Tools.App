@@ -44,6 +44,17 @@ internal static partial class Program
         Check("권한: 자기 프로세스의 승격 여부를 읽고, 없는 창은 null", own == Minguk.Tools.Input.ProcessElevation.IsCurrentElevated
               && Minguk.Tools.Input.ProcessElevation.IsWindowElevated(IntPtr.Zero) is null, $"자기={own}, 앱={Minguk.Tools.Input.ProcessElevation.IsCurrentElevated}");
 
+        // Raw Input 장치 이름 ↔ Interception 하드웨어 ID 맞추기(실측 문자열).
+        const string rawLogi = @"\?\HID#VID_046D&PID_C547&MI_00#8&1def9795&0&0000#{378de44c-56ef-11d1-bc8c-00a0c91405dd}";
+        const string idLogi = @"HID\VID_046D&PID_C547&REV_0402&MI_00 HID\VID_046D&PID_C547&MI_00 HID_DEVICE_SYSTEM_MOUSE";
+        const string idXenta = @"HID\VID_1D57&PID_FA60&REV_1108&MI_01 HID\VID_1D57&PID_FA60&MI_01 HID_DEVICE_SYSTEM_MOUSE";
+        const string idLogiKeyboard = @"HID\VID_046D&PID_C547&REV_0402&MI_01&Col01 HID\VID_046D&PID_C547&MI_01&Col01 HID_DEVICE_SYSTEM_KEYBOARD";
+        Check("장치 맞추기: VID·PID·MI 가 같은 자리만 고른다",
+              Minguk.Tools.Input.Interop.RawInputDeviceTracker.SameDevice(rawLogi, idLogi)
+              && !Minguk.Tools.Input.Interop.RawInputDeviceTracker.SameDevice(rawLogi, idXenta)
+              && !Minguk.Tools.Input.Interop.RawInputDeviceTracker.SameDevice(rawLogi, idLogiKeyboard)
+              && !Minguk.Tools.Input.Interop.RawInputDeviceTracker.SameDevice(rawLogi, null), "");
+
         adapter.Refuse = true;
         var refused = hotkeys.Claim(Key.F12, ModifierKeys.None, "F12", () => { }, out var problem3);
         Check("공용 단축키: 시스템이 거부하면 null 과 이유", refused is null && problem3 is not null && problem3.Contains("F12"), problem3 ?? "이유 없음");

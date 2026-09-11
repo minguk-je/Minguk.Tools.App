@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Minguk.Tools.Input.Interop;
 
@@ -45,7 +46,105 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
         }
 
         if (UnavailableReason is not null)
+        {
             Logger.Info($"Interception 을 쓸 수 없다: {UnavailableReason}");
+            return;
+        }
+
+        _firstKeyboard = FirstAttached(InterceptionNative.KeyboardFirst, InterceptionNative.MaxKeyboard) ?? InterceptionNative.KeyboardFirst;
+        _firstMouse = FirstAttached(InterceptionNative.MouseFirst, InterceptionNative.MaxMouse) ?? InterceptionNative.MouseFirst;
+
+        // 사람이 마지막으로 쓴 장치를 따라가려면 Raw Input 을 받을 창이 필요하다 - 메시지 루프가 있는 UI 스레드에서만.
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+
+        if (dispatcher is not null && dispatcher.CheckAccess())
+        {
+            try { _tracker = new RawInputDeviceTracker(); }
+            catch (Exception ex) { Logger.Warn(ex, "입력 장치 추적을 못 켰다. 붙은 첫 자리로 보낸다."); }
+        }
+
+        Logger.Info($"Interception 장치: {DescribeDevices()}");
+    }
+
+    private readonly int _firstKeyboard = InterceptionNative.KeyboardFirst;
+    private readonly int _firstMouse = InterceptionNative.MouseFirst;
+    private readonly RawInputDeviceTracker? _tracker;
+    private int _lastKeyboardDevice;
+    private int _lastMouseDevice;
+
+    /// <summary>키 스트로크를 보내는 자리(1~10). 사람이 마지막으로 누른 키보드, 모르면 붙은 첫 자리.</summary>
+    public int KeyboardDevice => Resolve(_tracker?.LastKeyboardName, InterceptionNative.KeyboardFirst, InterceptionNative.MaxKeyboard, _firstKeyboard, ref _lastKeyboardDevice);
+
+    /// <summary>마우스 스트로크를 보내는 자리(11~20). 사람이 마지막으로 움직인 마우스, 모르면 붙은 첫 자리.</summary>
+    public int MouseDevice => Resolve(_tracker?.LastMouseName, InterceptionNative.MouseFirst, InterceptionNative.MaxMouse, _firstMouse, ref _lastMouseDevice);
+
+    /// <summary>
+    /// 사람이 마지막으로 쓴 장치의 자리. 게임은 Raw Input 으로 장치를 구분하므로, 사람이 쓰는 바로 그 장치로 넣어야 게임이 본다.
+    /// </summary>
+    /// <remarks>
+    /// 마우스가 둘 붙은 PC 에서 첫 자리(무선 콤보의 마우스 인터페이스)로 보냈더니 오버워치가 무시했다(실측 - SendInput 은 됐다).
+    /// 자리가 바뀌면 한 번 남긴다 - 매 스트로크마다 적으면 로그가 넘친다.
+    /// </remarks>
+    private int Resolve(string? rawName, int first, int count, int fallback, ref int remembered)
+    {
+        var chosen = fallback;
+
+        if (rawName is not null)
+        {
+            for (var device = first; device < first + count; device++)
+            {
+                if (RawInputDeviceTracker.SameDevice(rawName, InterceptionNative.HardwareId(_context, device)))
+                {
+                    chosen = device;
+                    break;
+                }
+            }
+        }
+
+        if (chosen != remembered)
+        {
+            remembered = chosen;
+            Logger.Info($"Interception 보낼 자리 {chosen} ({(rawName is null ? "아직 사람 입력 없음 - 붙은 첫 자리" : "사람이 마지막으로 쓴 장치")})");
+        }
+
+        return chosen;
+    }
+
+    /// <summary>
+    /// 장치가 붙은 첫 자리. 없으면 null.
+    /// </summary>
+    /// <remarks>
+    /// 드라이버는 자리(1~10 키보드, 11~20 마우스)마다 장치 개체를 미리 만들어 두고, 실제 장치가 붙을 때 그 자리에
+    /// 연결한다. 빈 자리로 보내면 드라이버는 받았다고 하지만(보낸 수 1) 아래에 넘겨 줄 장치가 없어 아무 일도
+    /// 안 일어난다 - 오버워치에서 조준·걷기가 조용히 안 먹은 것이 이것이다(실측: 키보드 5개·마우스 2개가 붙은 PC).
+    /// 하드웨어 ID 가 있는 자리가 붙은 자리다.
+    /// </remarks>
+    private int? FirstAttached(int first, int count)
+    {
+        for (var device = first; device < first + count; device++)
+            if (InterceptionNative.HardwareId(_context, device) is not null) return device;
+
+        return null;
+    }
+
+    /// <summary>자리마다 무엇이 붙었는지. 진단용.</summary>
+    public string DescribeDevices()
+    {
+        if (!IsAvailable) return "(드라이버 없음)";
+
+        var parts = new List<string>();
+
+        for (var device = InterceptionNative.KeyboardFirst; device < InterceptionNative.MouseFirst + InterceptionNative.MaxMouse; device++)
+        {
+            var id = InterceptionNative.HardwareId(_context, device);
+            if (id is null) continue;
+
+            var role = device < InterceptionNative.MouseFirst ? "키보드" : "마우스";
+            var chosen = device == KeyboardDevice || device == MouseDevice ? "*" : string.Empty;
+            parts.Add($"{device}{chosen}={role} {id}");
+        }
+
+        return parts.Count == 0 ? "붙은 장치 없음" : string.Join(" · ", parts);
     }
 
     public string Name => "Interception";
@@ -123,7 +222,7 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
             Key = new InterceptionNative.KeyStroke { Code = scanCode, State = state }
         };
 
-        return Send(InterceptionNative.KeyboardFirst, ref stroke);
+        return Send(KeyboardDevice, ref stroke);
     }
 
     private static ushort DownState(MouseButton button) => button switch
@@ -156,7 +255,7 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
             }
         };
 
-        return Send(InterceptionNative.MouseFirst, ref stroke);
+        return Send(MouseDevice, ref stroke);
     }
 
     /// <summary>
@@ -177,6 +276,8 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
 
     public void Dispose()
     {
+        _tracker?.Dispose();
+
         if (_context == IntPtr.Zero) return;
 
         InterceptionNative.interception_destroy_context(_context);
