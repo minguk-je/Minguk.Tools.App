@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media.Imaging;
 
@@ -25,7 +25,7 @@ public sealed record DetectionSnapshot(
 /// 하고, 검증 하네스가 화면 없이 스크립트를 돌릴 수 없다. 허브 하나를 사이에 두면 화면은 올리기만,
 /// 스크립트는 읽기만 한다.
 ///
-/// 앱에 하나(<see cref="PerceptionHubFactory.Default"/>). 편집·플레이가 같이 켜져 있으면 나중에 올린 쪽이 보인다.
+/// 앱에 하나(<see cref="PerceptionHubFactory.Default"/>). 스크립트·플레이가 같이 켜져 있으면 나중에 올린 쪽이 보인다.
 /// 읽는 쪽은 스레드가 다르다(스크립트 스레드). 올리는 것은 불변 스냅샷으로, 프레임은 잠금 아래 복사본으로.
 /// </remarks>
 public interface IPerceptionHub

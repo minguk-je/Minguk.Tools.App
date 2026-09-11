@@ -417,7 +417,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// 이 화면에 저장된 값이 없으면 예전 캡처 모니터의 값을 쓴다.
     /// </summary>
     /// <remarks>
-    /// 화면을 셋으로 나누기 전에는 전부 "CaptureMonitorViewModel" 이름 아래 저장됐다. 편집·플레이 화면을
+    /// 화면을 셋으로 나누기 전에는 전부 "CaptureMonitorViewModel" 이름 아래 저장됐다. 스크립트·플레이 화면을
     /// 처음 열 때 대상 창·글자 영역·OCR 언어가 비어 있으면 사람이 전부 다시 골라야 한다. 한 번 저장하고
     /// 나면 제 값이 있으므로 그 뒤로는 안 본다.
     /// </remarks>

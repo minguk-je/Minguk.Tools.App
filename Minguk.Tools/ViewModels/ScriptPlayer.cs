@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -35,7 +35,7 @@ public sealed record ScriptRunContext(
 /// 스크립트를 실제로 돌리는 것 - 시작 전 대기, 한 바퀴/반복, 중지, 진행 표시, 실행 시간 상한.
 /// </summary>
 /// <remarks>
-/// 편집 화면(한 번씩 돌려 보기)과 플레이 화면(반복)이 같은 것을 써야 "편집에서는 되는데 플레이에서는
+/// 스크립트 화면(한 번씩 돌려 보기)과 플레이 화면(반복)이 같은 것을 써야 "스크립트 화면에서는 되는데 플레이에서는
 /// 안 되는" 일이 없다. 한 바퀴를 어떻게 도는지는 <see cref="ScriptRunContext"/> 가 정한다 - 계획 모드는
 /// 단계를 차례로 보내고, 실시간 모드는 엔진이 스크립트를 끝까지 돌린다.
 ///

@@ -7,7 +7,7 @@ namespace Minguk.Tools.Views.Parts;
 /// 스크립트도 그 경로로 나가므로 미리보기를 끈 동안에도 보여야 한다.
 /// </summary>
 /// <remarks>
-/// 편집·플레이 화면이 같은 줄을 쓴다. 캡처 화면은 순수하게 잡기만 하므로 이 줄이 없다 -
+/// 스크립트·플레이 화면이 같은 줄을 쓴다. 캡처 화면은 순수하게 잡기만 하므로 이 줄이 없다 -
 /// 미리보기를 눌러 게임을 조작하는 것은 개발·플레이의 일이다.
 /// </remarks>
 public partial class PreviewForwardBar : UserControl

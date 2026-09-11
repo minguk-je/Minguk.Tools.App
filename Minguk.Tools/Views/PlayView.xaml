@@ -147,7 +147,7 @@
 
             <!--
                 몇 마리를 몇 ms 에 찾았는지 · 글자 읽기 상태. 메뉴 줄(첫 줄)에 두었더니 항목이 많아 넘쳐서
-                아예 안 보였다(실측 - 편집 화면에서 "2마리" 가 어디에도 없었다). 자리가 남는 설정 줄에 둔다.
+                아예 안 보였다(실측 - 스크립트 화면에서 "2마리" 가 어디에도 없었다). 자리가 남는 설정 줄에 둔다.
             -->
             <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
         </dxb:ToolBarControl>
@@ -166,7 +166,7 @@
                              EditValue="{Binding SelectedScript}"
                              EditWidth="260"
                              IsEnabled="{Binding Player.IsIdle}"
-                             ToolTip="Scripts 폴더의 파일. 편집 화면에서 저장한 것이 여기 보인다.">
+                             ToolTip="Scripts 폴더의 파일. 스크립트 화면에서 저장한 것이 여기 보인다.">
                 <dxb:BarEditItem.EditSettings>
                     <dxe:ComboBoxEditSettings DisplayMember="Name"
                                               IsTextEditable="False"
@@ -243,7 +243,7 @@
                       VerticalContentAlignment="Top"
                       VerticalScrollBarVisibility="Auto" />
 
-        <!-- 고른 스크립트에 틀린 줄이 있으면 여기 뜬다. 고치는 것은 편집 화면에서. -->
+        <!-- 고른 스크립트에 틀린 줄이 있으면 여기 뜬다. 고치는 것은 스크립트 화면에서. -->
         <dxe:TextEdit MaxHeight="80"
                       Margin="4,0,4,4"
                       Foreground="#D1242F"

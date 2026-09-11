@@ -28,9 +28,9 @@ public sealed record ScriptFileItem(string Name, string Path)
 /// <b>편집은 없다</b> - 다른 PC 에서는 이 화면만 연다.
 /// </summary>
 /// <remarks>
-/// 편집 화면과 같은 바탕(잡기·보기)과 같은 실행기를 쓰고 껍데기만 다르다. 편집에서 되던 것이
+/// 스크립트 화면과 같은 바탕(잡기·보기)과 같은 실행기를 쓰고 껍데기만 다르다. 스크립트 화면에서 되던 것이
 /// 여기서 안 되는 일이 없게. 스크립트는 <see cref="ScriptFiles.DefaultDirectory"/> 에서 고른다 -
-/// 편집 화면이 저장하는 자리다.
+/// 스크립트 화면이 저장하는 자리다.
 ///
 /// 담기(F8)는 하지 않는다. 여기서 F8 을 쥐고 있으면 같이 열린 캡처 화면의 등록이 실패한다.
 /// 대신 F5(1회)·F6(반복/중지)을 쥔다 - 게임이 앞에 있어야 입력이 들어가므로 앱 밖에서 누를 수단이 있어야 한다.
@@ -117,7 +117,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
         if (Script.HasError)
         {
-            MessengerUtility.SendMainMessage("스크립트에 고칠 줄이 있습니다. 편집 화면에서 고치세요.");
+            MessengerUtility.SendMainMessage("스크립트에 고칠 줄이 있습니다. 스크립트 화면에서 고치세요.");
             return null;
         }
 
@@ -145,7 +145,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         SelectedScript = Scripts.FirstOrDefault(s => string.Equals(s.Path, chosen, StringComparison.OrdinalIgnoreCase));
 
         StatusText = Scripts.Count == 0
-            ? $"스크립트가 없습니다. 편집 화면에서 저장하면 여기 보입니다 ({ScriptFiles.DefaultDirectory})."
+            ? $"스크립트가 없습니다. 스크립트 화면에서 저장하면 여기 보입니다 ({ScriptFiles.DefaultDirectory})."
             : $"스크립트 {Scripts.Count}개 ({ScriptFiles.DefaultDirectory})";
     });
 

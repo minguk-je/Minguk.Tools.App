@@ -14,7 +14,7 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
 
 3번을 빠뜨리면 메뉴는 보이지만 탭이 비어서 열린다 — `MainViewLocator` 가 DI 에서 뷰를 꺼내기 때문이다.
 
-## 화면 셋: 캡처 · 편집 · 플레이
+## 화면 셋: 캡처 · 스크립트 · 플레이
 
 창을 잡는 화면이 셋이다(2026-09-11 에 캡처 모니터 하나를 나눴다). 한 화면에 담기·검출·OCR·스크립트를
 전부 얹으니 도구 줄이 넘쳤고, 플레이만 하는 PC 에 편집기·담기가 딸려 갔다.
@@ -22,7 +22,7 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
 | 화면 | ViewModel | 하는 일 |
 |---|---|---|
 | 캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 순수 캡처. 대상·fps·미리보기·프레임 저장·데이터셋에 담기(F8)·통계 표 |
-| 편집 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | 몹 찾기·추적·글자 영역·글자 읽기·이름표 읽기를 보면서 스크립트를 쓰고 한 번씩 돌린다. 담기(F8)도 된다 - 찾은 것이 라벨로 들어간다 |
+| 스크립트 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | 몹 찾기·추적·글자 영역·글자 읽기·이름표 읽기를 보면서 스크립트를 쓰고 한 번씩 돌린다. 담기(F8)도 된다 - 찾은 것이 라벨로 들어간다 |
 | 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 게임 연결, 미리보기 켜고 끄기, Scripts 폴더의 스크립트를 골라 1회(F5)·반복(F6). 편집 없음 |
 
 - **바탕 둘.** `CaptureViewModelBase`(잡기·미리보기·입력 전달·저장·담기·1초 통계) 위에
@@ -39,7 +39,7 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
 - **미리보기 판과 입력 전달 도구 줄은 `Views/Parts` 의 UserControl** 이다(`CapturePreviewPanel` · `PreviewForwardBar`).
   DataContext 를 물려받아 바탕의 커맨드에 묶이고, `UIObjectService` 이름(`PreviewImageObjectService` 등)도 그 안에
   있다. 겹그림(`DetectionOverlay`)은 판의 `Overlay` 에 화면이 얹는다 - 캡처 화면은 없는 프로퍼티에 묶이지 않게.
-- **스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`.** 편집·플레이·입력 자동화 셋이 같이 쓴다.
+- **스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`.** 스크립트·플레이·입력 자동화 셋이 같이 쓴다.
   입력 자동화 화면에 남은 스크립트 코드는 본보기 줄 끼우기(`DoAddStep`)뿐이다.
   스크립트 입력은 미리보기 입력 전달과 **같은 어댑터**(`_inputRouter.InputAdapter`)로 나가고, 보내기 직전에
   `TryFocusTargetWindow` 로 대상 창을 앞으로 가져온다.
@@ -47,7 +47,7 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
   상태에 적힌다). 두 화면이 같은 키를 쥐면 안 되는 이유가 이것이다.
 - 각 화면이 **제 캡처 세션**을 든다. 캡처 화면과 플레이 화면을 같이 켜면 같은 창을 두 번 잡는다 - 공유 세션과
   스크립트가 읽는 인식 허브는 `docs/스크립트-설계.md` 2단계.
-- 검증: `--views` 가 세 화면을 만들고 메뉴 아이콘을 본다. 실시간은 `screens.ps1`(세 화면 차례로)·`live-game.ps1`(편집 화면에서 몹 찾기).
+- 검증: `--views` 가 세 화면을 만들고 메뉴 아이콘을 본다. 실시간은 `screens.ps1`(세 화면 차례로)·`live-game.ps1`(스크립트 화면에서 몹 찾기).
 
 ## ViewModel 작성 규칙
 
@@ -308,9 +308,9 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
 - 투명 바탕의 Pbgra32 는 색이 알파로 곱해져 있다. 1.2px 선은 가장자리가 반투명이라 색을 그대로 견주면
   못 찾는다 - 알파로 되돌린 뒤 "붉은가" 만 본다.
 
-### 실시간 모드 (편집·플레이 화면)
+### 실시간 모드 (스크립트·플레이 화면)
 
-편집·플레이 화면의 스크립트는 **실시간 모드**로 돈다 - 부르면 곧바로 나가고, 화면을 읽을 수 있다.
+스크립트·플레이 화면의 스크립트는 **실시간 모드**로 돈다 - 부르면 곧바로 나가고, 화면을 읽을 수 있다.
 입력 자동화 화면은 계획 모드(적어 두었다 나중에 보냄) 그대로다. 두 모드는 같은 이름을 쓴다(`ScriptApiCatalog`).
 
 - **실체는 둘**: 계획 `SequenceScriptApi`, 실시간 `Input/Scripting/Live/LiveScriptApi`. 표(`ScriptApiCatalog`)의
@@ -649,9 +649,9 @@ CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 �
 **캡처 프레임마다 돌리는 실시간 겹쳐 그리기는 여전히 안 된다.** 30fps 면 한 장에 33ms 인데
 230ms 다. 대신 0.25초에 한 번은 넉넉하다 - 아래 「캡처 화면에서 찾기」가 그 갈래다.
 
-### 편집 화면에서 찾기
+### 스크립트 화면에서 찾기
 
-편집 화면(플레이 화면도 같다) 도구 줄의 **몹 찾기**를 켜면 프레임에서 몹을 찾아 미리보기 위에 점선으로
+스크립트 화면(플레이 화면도 같다) 도구 줄의 **몹 찾기**를 켜면 프레임에서 몹을 찾아 미리보기 위에 점선으로
 겹쳐 그린다. 옆에 몇 마리를 몇 ms 에 찾았는지 같이 뜬다.
 
 - **프레임마다 안 돌린다.** 0.25초에 한 번이고(`DetectIntervalMs`), 앞의 것이 아직 돌고

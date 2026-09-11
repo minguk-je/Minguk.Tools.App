@@ -8,7 +8,7 @@ using Minguk.Tools.Input;
 namespace Minguk.Tools.ViewModels;
 
 /// <summary>
-/// 편집 화면. 창을 잡아 몹 찾기·글자 읽기를 켜 놓고 <b>보면서</b> 스크립트를 쓰고 한 번씩 돌려 본다.
+/// 스크립트 화면. 창을 잡아 몹 찾기·글자 읽기를 켜 놓고 <b>보면서</b> 스크립트를 쓰고 한 번씩 돌려 본다.
 /// </summary>
 /// <remarks>
 /// 캡처 화면(담기)과 플레이 화면(반복 실행) 사이의 개발 자리다. 잡는 일은 <see cref="CaptureViewModelBase"/>,
@@ -33,7 +33,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
     public ScriptStudioViewModel()
     {
-        Caption = "편집";
+        Caption = "스크립트";
         CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/document-edit.png");
 
         Script = new ScriptWorkbench(new ScriptWorkbenchHost

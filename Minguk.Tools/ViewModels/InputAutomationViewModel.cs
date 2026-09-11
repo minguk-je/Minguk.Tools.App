@@ -46,7 +46,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     /// </summary>
     /// <remarks>
     /// 예전에는 이 화면이 전부 제 손으로 했다(언어별 글 기억, 디바운스 컴파일, 파일 열고 저장).
-    /// 편집·플레이 화면이 같은 일을 하게 되면서 <see cref="ScriptWorkbench"/> 로 옮겼다 - 세 벌이면
+    /// 스크립트·플레이 화면이 같은 일을 하게 되면서 <see cref="ScriptWorkbench"/> 로 옮겼다 - 세 벌이면
     /// 밑줄·완성 같은 것이 한쪽에만 붙는다. 설정 키(<c>Script.CSharp</c> 등)는 그대로라 저장된 글이 이어진다.
     /// </remarks>
     public ScriptWorkbench Script { get; }

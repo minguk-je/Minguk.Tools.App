@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="Minguk.Tools.Views.CaptureMonitorView"
+<UserControl x:Class="Minguk.Tools.Views.CaptureMonitorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -25,7 +25,7 @@
 
     <!--
         캡처 화면. 순수하게 잡는 일만 한다 - 대상을 골라 시작하고, 미리보기로 확인하고, 한 장을
-        데이터셋에 담거나 파일로 떨어뜨린다. 몹 찾기·글자 읽기·스크립트는 편집 화면, 반복 실행은 플레이 화면.
+        데이터셋에 담거나 파일로 떨어뜨린다. 몹 찾기·글자 읽기·스크립트는 스크립트 화면, 반복 실행은 플레이 화면.
         한 화면에 전부 얹었을 때 도구 줄이 넘쳐 글자 상태 칸이 밀려났던 것이 나눈 이유다.
     -->
 
@@ -96,7 +96,7 @@
                                Command="{Binding CollectFrameCommand}"
                                Content="데이터셋에 담기 (F8)"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
-                               ToolTip="라벨링 화면이 읽는 폴더에 한 장 담는다. 여기 담은 그림에 몹 사각형을 찍는다. F8 은 게임이 앞에 있어도 눌린다 - 담기면 알림음, 안 되면 거절음. 편집 화면에서 몹 찾기를 켜고 담으면 찾은 것이 라벨로 같이 들어간다." />
+                               ToolTip="라벨링 화면이 읽는 폴더에 한 장 담는다. 여기 담은 그림에 몹 사각형을 찍는다. F8 은 게임이 앞에 있어도 눌린다 - 담기면 알림음, 안 되면 거절음. 스크립트 화면에서 몹 찾기를 켜고 담으면 찾은 것이 라벨로 같이 들어간다." />
         </dxb:MainMenuControl>
 
         <!-- ── 설정 ────────────────────────────────────────────────── -->

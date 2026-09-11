@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 using Minguk.Tools.Capture;
 using Minguk.Tools.Vision.Ocr;
@@ -10,7 +10,7 @@ namespace Minguk.Tools.Input.Scripting.Live;
 /// 실시간 스크립트가 바깥에서 빌려 쓰는 것들 - 보낼 경로, 대상 창, 눈(인식 허브), 글자 읽기, 출력 칸.
 /// </summary>
 /// <remarks>
-/// API 는 화면을 모른다. 화면(편집·플레이)이 제 것을 이렇게 빌려 준다. 검증 하네스는 가짜 어댑터와
+/// API 는 화면을 모른다. 화면(스크립트·플레이)이 제 것을 이렇게 빌려 준다. 검증 하네스는 가짜 어댑터와
 /// 가짜 허브를 꽂아 화면 없이 스크립트를 돌린다.
 /// </remarks>
 public sealed class LiveScriptHost

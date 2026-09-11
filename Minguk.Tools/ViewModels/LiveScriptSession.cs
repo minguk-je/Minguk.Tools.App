@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,7 +16,7 @@ namespace Minguk.Tools.ViewModels;
 /// 화면이 실시간 스크립트를 돌릴 때 필요한 것을 한데 묶은 것 - API 에 빌려 줄 것들, 비상 정지, 출력 칸.
 /// </summary>
 /// <remarks>
-/// 편집·플레이 두 화면이 똑같이 한다. 화면마다 적으면 F9 나 잠금 하나를 한쪽에서만 고치게 된다.
+/// 스크립트·플레이 두 화면이 똑같이 한다. 화면마다 적으면 F9 나 잠금 하나를 한쪽에서만 고치게 된다.
 /// <see cref="Resolve"/> 가 <see cref="ScriptPlayer"/> 에 줄 문맥을 만든다: 한 바퀴 = 엔진이 스크립트를
 /// 실시간 API 로 끝까지 돌리는 것. 도는 동안 F9 를 쥐고, 끝나면 놓고 누르고 있던 키를 뗀다.
 /// </remarks>

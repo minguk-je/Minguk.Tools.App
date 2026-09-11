@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 
 namespace Minguk.Tools.Views.Parts;
@@ -7,7 +7,7 @@ namespace Minguk.Tools.Views.Parts;
 /// 잡은 화면을 보여 주는 판. 그림 + 입력 받기 + (화면이 얹는) 겹그림.
 /// </summary>
 /// <remarks>
-/// 캡처·편집·플레이 세 화면이 같은 미리보기를 쓴다. XAML 을 세 벌 두면 서비스 이름이나 이벤트 하나가
+/// 캡처·스크립트·플레이 세 화면이 같은 미리보기를 쓴다. XAML 을 세 벌 두면 서비스 이름이나 이벤트 하나가
 /// 한쪽에서만 고쳐진다. DataContext 는 얹은 화면 것을 그대로 물려받아 <c>CaptureViewModelBase</c> 의
 /// 커맨드와 <c>PreviewImage</c> 에 묶인다.
 ///
