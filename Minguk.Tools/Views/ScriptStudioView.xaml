@@ -399,7 +399,7 @@
 
                                      Command="{Binding ToggleBreakpointCommand}"
 
-                                     Content="중단점"
+                                     Content="중단점 (Ctrl+B)"
 
                                      ToolTip="캐럿이 있는 줄의 중단점을 켜고 끈다 (Ctrl+B). 편집기 왼쪽 여백을 눌러도 된다." />
                     <dx:SimpleButton Width="80"
@@ -410,6 +410,11 @@
                                      GlyphHeight="16"
                                      GlyphWidth="16" />
 
+                </dxlc:LayoutGroup>
+
+                <!-- 버튼 넷과 칸 셋을 한 줄에 두면 480px 에서 잘린다. 둘로 나눈다. -->
+                <dxlc:LayoutGroup VerticalAlignment="Bottom"
+                                  Orientation="Horizontal">
                     <dxlc:LayoutItem Label="시작 대기(초)"
                                      ToolTip="이 사이에 대상 창을 앞으로 가져와야 한다. 창을 골라 두었으면 알아서 앞으로 가져온다.">
                         <dxe:SpinEdit Width="60"
@@ -425,14 +430,8 @@
                     </dxlc:LayoutItem>
 
                     <dxlc:LayoutItem Label="디버그">
-
-
                         <dxe:TextEdit EditValue="{Binding Live.Debug.Status, Mode=OneWay}"
-
-
                                       IsReadOnly="True" />
-
-
                     </dxlc:LayoutItem>
                 </dxlc:LayoutGroup>
             </dxlc:LayoutGroup>

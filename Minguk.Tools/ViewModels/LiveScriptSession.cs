@@ -28,6 +28,7 @@ public sealed class LiveScriptSession : IDisposable
     private readonly Func<IOcrEngine?> _ocr;
     private readonly Func<Task> _activateTarget;
     private readonly Action<string> _notify;
+    private readonly Action<Action> _onUi;
     private readonly EmergencyStop _emergency = new();
 
     private LiveScriptApi? _api;
@@ -47,6 +48,7 @@ public sealed class LiveScriptSession : IDisposable
         _ocr = ocr;
         _activateTarget = activateTarget;
         _notify = notify;
+        _onUi = onUi;
         Console = new ScriptConsole(onUi);
         Debug = new ScriptDebugSession(onUi);
     }
@@ -87,6 +89,16 @@ public sealed class LiveScriptSession : IDisposable
         Debug.SupportsStepping = engine.SupportsStepping;
         Console.ClearCalls();
 
+        // 전역 단축키는 STA(UI) 스레드에서 걸어야 한다 - 스크립트 스레드에서 걸었더니 "STA 여야 합니다" 로 실패했다.
+        // BeforeRun 은 대기가 끝난 뒤 UI 스레드에서 돈다. 누르면 플레이어를 멈추고(토큰이 API 까지 이어진다) 누른 키를 뗀다.
+        var beforeRun = async () =>
+        {
+            if (!_emergency.Arm(() => { player.Stop(); _api?.ReleaseAll(); }, out var problem) && problem is not null)
+                _notify(problem);
+
+            await _activateTarget();
+        };
+
         return new ScriptRunContext(async (progress, token) =>
         {
             var host = new LiveScriptHost
@@ -105,18 +117,12 @@ public sealed class LiveScriptSession : IDisposable
             var api = new LiveScriptApi(host, token);
             _api = api;
 
-            // 도는 동안만 F9 를 쥔다. 못 쥐면 알리고 그냥 돈다 - 화면의 중지 버튼이 있다.
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(token);
-
-            if (!_emergency.Arm(() => { linked.Cancel(); api.ReleaseAll(); player.Stop(); }, out var problem) && problem is not null)
-                _notify(problem);
-
             progress.Report($"실시간 실행 중 - 비상 정지 {EmergencyStop.Label}");
 
             try
             {
                 // 줄 단위로 멈출 수 있는 언어에만 디버그 세션을 준다. C# 은 호출 로그로 본다.
-                var errors = await engine.RunLiveAsync(source, api, engine.SupportsStepping ? Debug : null, linked.Token);
+                var errors = await engine.RunLiveAsync(source, api, engine.SupportsStepping ? Debug : null, token);
 
                 if (errors.Count > 0)
                 {
@@ -125,7 +131,7 @@ public sealed class LiveScriptSession : IDisposable
                     return false;
                 }
 
-                if (api.Outcome == LiveScriptOutcome.Stopped || linked.IsCancellationRequested)
+                if (api.Outcome == LiveScriptOutcome.Stopped || token.IsCancellationRequested)
                     return false;
 
                 return true;
@@ -133,12 +139,13 @@ public sealed class LiveScriptSession : IDisposable
             finally
             {
                 api.ReleaseAll();
-                _emergency.Disarm();
+                // 단축키는 건 스레드(UI)에서 풀어야 한다.
+                _onUi(_emergency.Disarm);
                 Hub.WantsFrames = false;
                 Debug.Reset();
                 _api = null;
             }
-        }, _activateTarget);
+        }, beforeRun);
     }
 
     public void Dispose()
