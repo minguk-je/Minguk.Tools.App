@@ -66,6 +66,37 @@ public static class PreviewInputMapper
     }
 
     /// <summary>
+    /// Image 컨트롤 기준 좌표를 그림 안의 비율(0~1)로 바꾼다.
+    /// </summary>
+    /// <remarks>
+    /// 클릭 전달은 검은 띠를 누른 것을 거르지만, 영역을 끌 때는 그림 밖으로 조금 나가도
+    /// 가장자리로 접어 주는 편이 자연스럽다. <paramref name="clamp"/> 가 그 차이다.
+    /// </remarks>
+    public static bool TryMapToRatio(Point pointInControl, Size controlSize, Size sourceSize, bool clamp, out Point ratio)
+    {
+        ratio = default;
+
+        if (controlSize.Width <= 0 || controlSize.Height <= 0 || sourceSize.Width <= 0 || sourceSize.Height <= 0)
+            return false;
+
+        var scale = Math.Min(controlSize.Width / sourceSize.Width, controlSize.Height / sourceSize.Height);
+
+        var drawnWidth = sourceSize.Width * scale;
+        var drawnHeight = sourceSize.Height * scale;
+        var offsetX = (controlSize.Width - drawnWidth) / 2;
+        var offsetY = (controlSize.Height - drawnHeight) / 2;
+
+        var x = (pointInControl.X - offsetX) / drawnWidth;
+        var y = (pointInControl.Y - offsetY) / drawnHeight;
+
+        if (!clamp && (x < 0 || y < 0 || x > 1 || y > 1)) return false;
+
+        ratio = new Point(Math.Clamp(x, 0, 1), Math.Clamp(y, 0, 1));
+
+        return true;
+    }
+
+    /// <summary>
     /// 그림 안의 비율(0~1)을 화면 좌표로 바꾼다.
     /// </summary>
     /// <remarks>

@@ -111,6 +111,21 @@
                               ToolTip="프레임 간 추적. 두 번 연속 보인 것만 내놓고(0.5초), 잠깐 놓친 것은 0.5초까지 이어 줍니다. 한 프레임짜리 헛것이 사라집니다." />
 
             <!--
+                글자 읽기. 미리보기에서 끌어 정한 영역만 잘라 Windows 내장 OCR 에 넣는다.
+                영역 지정이 켜져 있는 동안은 미리보기 클릭이 게임으로 안 나간다.
+            -->
+            <dxb:BarItemSeparator />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="글자 영역"
+                              IsChecked="{Binding IsOcrRegionPicking}"
+                              ToolTip="켜고 미리보기에서 글자가 있는 자리를 끌어 사각형을 그립니다. 그리고 나면 알아서 꺼집니다. 그동안은 클릭이 게임으로 안 나갑니다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="글자 읽기"
+                              IsChecked="{Binding IsOcrOn}"
+                              ToolTip="정한 영역의 글자를 Windows 내장 OCR 로 0.5초에 한 번 읽습니다. 한글·영문·숫자. 읽은 글은 상태 줄과 미리보기에 뜹니다." />
+            <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
+
+            <!--
                 찾기만 하면 자동화가 아니다. 찾은 것 중 가장 자신 있는 것의 가운데를 누른다.
                 입력 전달이 켜져 있어야 나간다 - 찾는 것은 화면만 보지만 누르는 것은
                 남의 프로그램에 실제로 들어가므로, 켜는 일은 사람이 한 번 분명히 해야 한다.
@@ -282,6 +297,13 @@
                         <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseDownCommand}"
                                                EventName="MouseDown"
                                                PassEventArgsToCommand="True" />
+                        <!-- 글자 영역을 끌 때만 쓴다. 전달과 무관하다. -->
+                        <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseMoveCommand}"
+                                               EventName="MouseMove"
+                                               PassEventArgsToCommand="True" />
+                        <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseUpCommand}"
+                                               EventName="MouseUp"
+                                               PassEventArgsToCommand="True" />
                         <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseWheelCommand}"
                                                EventName="MouseWheel"
                                                PassEventArgsToCommand="True" />
@@ -309,6 +331,9 @@
                             마우스는 통과시킨다 - 미리보기는 클릭을 대상 창으로 넘기는 일을 한다.
                         -->
                         <markup:DetectionOverlay Detections="{Binding Detections}"
+                                                 OcrRegion="{Binding OcrRegion}"
+                                                 OcrRegionDraft="{Binding OcrRegionDraft}"
+                                                 OcrText="{Binding OcrText}"
                                                  Source="{Binding PreviewImage}" />
                     </Grid>
                 </Border>

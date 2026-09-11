@@ -68,18 +68,6 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             canSelect: true,
             icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/screen.png")));
 
-        // ── 입력 자동화 ───────────────────────────────────────────────────
-        rootItem.AddChildren(MenuItemModel.Create(
-            menu_cd: "1300",
-            menu_nm: "입력 자동화",
-            dll_nm: "Minguk.Tools.dll",
-            class_nm: "Minguk.Tools.Views.InputAutomationView",
-            is_enable: true,
-            isExpanded: true,
-            showInCollapsedMode: false,
-            canSelect: true,
-            icon: FreeImage.Instance?.CacheByteArray("axialis/hardwarenetwork/16x16/keyboard.png")));
-
         // ── 라벨링 ────────────────────────────────────────────────────────
         rootItem.AddChildren(MenuItemModel.Create(
             menu_cd: "1400",
@@ -92,6 +80,18 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             canSelect: true,
             // edit.png 는 없는 파일이었다 - 아이콘이 조용히 비었다. 스모크(--views)가 메뉴 아이콘을 검사한다.
             icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/picture-edit.png")));
+
+        // ── 입력 자동화 ───────────────────────────────────────────────────
+        rootItem.AddChildren(MenuItemModel.Create(
+            menu_cd: "1300",
+            menu_nm: "입력 자동화",
+            dll_nm: "Minguk.Tools.dll",
+            class_nm: "Minguk.Tools.Views.InputAutomationView",
+            is_enable: true,
+            isExpanded: true,
+            showInCollapsedMode: false,
+            canSelect: true,
+            icon: FreeImage.Instance?.CacheByteArray("axialis/hardwarenetwork/16x16/keyboard.png")));
 
         return menuItemList;
     }

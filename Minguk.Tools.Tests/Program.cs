@@ -125,6 +125,7 @@ internal static partial class Program
     {
         TestLabeling();
         TestDetection();
+        TestOcr();
     }
 
     /// <summary>시각 쪽만 돌린다. 커서와 키보드를 안 건드린다.</summary>

@@ -458,6 +458,8 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         ClickDetectionCommand = new DelegateCommand(DoClickDetection, () => Detections.Count > 0, false);
 
         OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
+        OnPreviewMouseMoveCommand = new DelegateCommand<MouseEventArgs>(OnPreviewMouseMove, false);
+        OnPreviewMouseUpCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseUp, false);
         OnPreviewMouseWheelCommand = new DelegateCommand<MouseWheelEventArgs>(OnPreviewMouseWheel, false);
         OnPreviewKeyDownCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyDown, false);
         OnPreviewKeyUpCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyUp, false);
@@ -486,6 +488,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         // 켜진 채로 복구하지 않는다 - 화면을 열자마자 모델 68MB 를 읽으면 뜨는 것이 느려진다.
         DetectMinimumScore = GetSetting(nameof(DetectMinimumScore), 0.5);
         IsTrackingOn = GetSetting(nameof(IsTrackingOn), true);
+        RestoreOcrRegion();
 
         // 한글을 그대로 넣으면 설정 파일에서 되읽을 때 깨진다(실측으로 "[紐⑤땲.." 로 나왔다).
         // Base64 로 감싸서 ASCII 로만 저장한다.
@@ -573,6 +576,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         // 문턱은 읽기만 하고 저장을 안 해 슬라이더를 움직여도 다음 실행에 안 남았다. 같이 저장한다.
         SetSetting(nameof(DetectMinimumScore), DetectMinimumScore);
         SetSetting(nameof(IsTrackingOn), IsTrackingOn);
+        SaveOcrRegion();
 
         if (SelectedTarget is not null)
             SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));
@@ -798,6 +802,9 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
 
         // 0.25초에 한 번만, 앞의 것이 끝났을 때만. 여기서 기다리면 프레임이 밀린다.
         MaybeDetect(e);
+
+        // 글자 읽기도 같은 규칙 - 0.5초에 한 번, 앞의 것이 끝났을 때만.
+        MaybeOcr(e);
 
         if (ShowPreview)
             TryPushPreview(e);
@@ -1156,6 +1163,13 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         // 전달이 꺼져 있어도 포커스는 준다. 켜자마자 키가 들어오게 하려는 것이다.
         // Image 는 Focusable 이 아니라서 여기가 아니라 Border 를 잡아야 한다.
         _previewSurface?.Focus();
+
+        // 글자 영역을 끄는 중이면 클릭이 아니라 영역의 시작점이다. 게임으로 보내지 않는다.
+        if (TryBeginOcrRegionPick(args.GetPosition(_previewImage)))
+        {
+            args.Handled = true;
+            return;
+        }
 
         // 요소 검사가 켜져 있으면 입력을 보내지 않고 무엇인지만 알아본다.
         if (IsElementInspectEnabled)
@@ -1629,6 +1643,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     protected override void ReleaseResources()
     {
         ReleaseHotkeys();
+        ReleaseOcr();
 
         // 모델은 68MB 를 물고 있고 libtorch 는 GPU 메모리를 잡는다. 화면을 닫으면 놓는다.
         ReleaseDetector();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
@@ -71,12 +71,88 @@ public sealed class DetectionOverlay : FrameworkElement
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
 
+    public static readonly DependencyProperty OcrRegionProperty = DependencyProperty.Register(
+        nameof(OcrRegion), typeof(Rect), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(Rect.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>글자를 읽는 자리(0~1). 비어 있으면 안 그린다.</summary>
+    public Rect OcrRegion
+    {
+        get => (Rect)GetValue(OcrRegionProperty);
+        set => SetValue(OcrRegionProperty, value);
+    }
+
+    public static readonly DependencyProperty OcrRegionDraftProperty = DependencyProperty.Register(
+        nameof(OcrRegionDraft), typeof(Rect), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(Rect.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>끄는 중인 글자 영역. 점선으로 그린다.</summary>
+    public Rect OcrRegionDraft
+    {
+        get => (Rect)GetValue(OcrRegionDraftProperty);
+        set => SetValue(OcrRegionDraftProperty, value);
+    }
+
+    public static readonly DependencyProperty OcrTextProperty = DependencyProperty.Register(
+        nameof(OcrText), typeof(string), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>마지막으로 읽은 글. 영역 아래에 붙인다.</summary>
+    public string? OcrText
+    {
+        get => (string?)GetValue(OcrTextProperty);
+        set => SetValue(OcrTextProperty, value);
+    }
+
+    /// <summary>글자 영역 색. 몹 색(황금각 팔레트)과 헷갈리지 않게 청록 하나로 고정한다.</summary>
+    private static readonly Color OcrColour = Color.FromRgb(0x00, 0xBC, 0xD4);
+
     protected override void OnRender(DrawingContext dc)
     {
-        if (Detections is not { Count: > 0 } detections) return;
         if (ComputeImageRect() is not { IsEmpty: false } area) return;
 
-        foreach (var detection in detections) Draw(dc, area, detection);
+        if (Detections is { Count: > 0 } detections)
+            foreach (var detection in detections) Draw(dc, area, detection);
+
+        DrawOcrRegion(dc, area, OcrRegionDraft, dashed: true, text: null);
+        DrawOcrRegion(dc, area, OcrRegion, dashed: false, text: OcrText);
+    }
+
+    private void DrawOcrRegion(DrawingContext dc, Rect area, Rect region, bool dashed, string? text)
+    {
+        if (region.IsEmpty || region.Width <= 0 || region.Height <= 0) return;
+
+        var rect = new Rect(
+            area.X + (region.X * area.Width),
+            area.Y + (region.Y * area.Height),
+            region.Width * area.Width,
+            region.Height * area.Height);
+
+        var pen = new Pen(new SolidColorBrush(OcrColour), 2d);
+        if (dashed) pen.DashStyle = new DashStyle([4, 3], 0);
+        pen.Freeze();
+
+        dc.DrawRectangle(null, pen, rect);
+
+        var caption = string.IsNullOrEmpty(text) ? "글자" : "글자: " + FirstLine(text, 60);
+        var formatted = new FormattedText(caption, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                                          new Typeface("Segoe UI"), 12d, Brushes.White,
+                                          VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+        var top = rect.Bottom + 2;
+        if (top + formatted.Height > area.Bottom) top = rect.Top - formatted.Height - 2;
+
+        var background = new SolidColorBrush(OcrColour) { Opacity = 0.85 };
+        background.Freeze();
+
+        dc.DrawRectangle(background, null, new Rect(rect.X, top, formatted.Width + 6, formatted.Height + 2));
+        dc.DrawText(formatted, new Point(rect.X + 3, top + 1));
+    }
+
+    private static string FirstLine(string text, int max)
+    {
+        var line = text.Split('\n')[0].TrimEnd('\r');
+        return line.Length <= max ? line : line[..max] + "…";
     }
 
     /// <summary>
