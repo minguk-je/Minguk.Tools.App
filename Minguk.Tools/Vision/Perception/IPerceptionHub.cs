@@ -14,7 +14,17 @@ public sealed record DetectionSnapshot(
     int FrameWidth,
     int FrameHeight,
     CaptureTarget? Target,
-    long Ticks);
+    long Ticks)
+{
+    /// <summary>
+    /// 이 검출이 본 프레임이 들어온 시각(TickCount64). 0 이면 모름.
+    /// </summary>
+    /// <remarks>
+    /// 올린 시각(<see cref="Ticks"/>)과 다르다 - 검출이 수백 ms 걸리므로, 올린 뒤라도 프레임은 그 전의 화면이다.
+    /// 조준이 "내가 겨눈 뒤의 화면인가" 를 가릴 때 이것을 본다.
+    /// </remarks>
+    public long FrameTicks { get; init; }
+}
 
 /// <summary>
 /// 인식 허브. 화면이 찾은 것(검출·이름표·프레임)을 올려 두고 스크립트가 읽어 간다.
@@ -50,7 +60,8 @@ public interface IPerceptionHub
 
     void PublishState(bool capturing, bool detecting, CaptureTarget? target);
 
-    void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight);
+    /// <param name="frameTicks">검출이 본 프레임이 들어온 시각(TickCount64). 모르면 0.</param>
+    void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0);
 
     /// <summary>프레임 한 벌을 복사해 둔다. Bgra32, 줄 간격 = 너비*4.</summary>
     void PublishFrame(byte[] bgra, int width, int height);

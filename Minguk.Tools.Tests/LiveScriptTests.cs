@@ -100,10 +100,17 @@ internal static partial class Program
             var cx = (int)(bounds.Left + (bounds.Width / 2));
             var cy = (int)(bounds.Top + (bounds.Height / 2));
 
-            var (errors, adapter, _) = Run(new RoslynScriptEngine(), $"조준({cx + 100}, {cy - 40}); 상대이동(3, -4);", new FakeHub(monitor), monitor, CancellationToken.None);
-            var moves = adapter.Calls.Where(c => c.StartsWith("MoveBy")).ToList();
+            var (errors, adapter, printed) = Run(new RoslynScriptEngine(), $"출력(조준({cx + 100}, {cy - 40})); 출력(조준({cx + 100}, {cy - 40})); 상대이동(3, -4);", new FakeHub(monitor) { FrameTicks = 1 }, monitor, CancellationToken.None);
+            var moves = adapter.Calls.Where(c => c.StartsWith("MoveBy")).Select(c => c[7..].Split(',').Select(int.Parse).ToArray()).ToList();
+            var aimMoves = moves.Take(moves.Count - 1).ToList();
 
-            Check("조준은 가운데에서 목표까지의 거리만큼 상대 이동", errors.Count == 0 && moves.SequenceEqual(["MoveBy 100,-40", "MoveBy 3,-4"]), string.Join(", ", moves) + (errors.Count > 0 ? " / " + errors[0] : ""));
+            Check("조준은 가운데에서 목표까지의 거리만큼, 30 넘으면 잘게 나눠 상대 이동",
+                  errors.Count == 0 && aimMoves.Sum(m => m[0]) == 100 && aimMoves.Sum(m => m[1]) == -40
+                  && aimMoves.All(m => Math.Abs(m[0]) <= 30 && Math.Abs(m[1]) <= 30) && aimMoves.Count == 4
+                  && moves[^1].SequenceEqual([3, -4]),
+                  string.Join(" ", moves.Select(m => $"({m[0]},{m[1]})")) + (errors.Count > 0 ? " / " + errors[0] : ""));
+
+            Check("같은 화면으로는 두 번 겨누지 않는다", printed.SequenceEqual(["True", "False"]) || printed.SequenceEqual(["true", "false"]), string.Join(", ", printed));
         }
 
         // ── 걷기: 누르고 있다가 반드시 뗀다 ──
@@ -288,12 +295,15 @@ internal static partial class Program
         public CaptureTarget? Target => target;
         public bool WantsFrames { get; set; }
 
-        public DetectionSnapshot? Latest { get; } = new(
+        /// <summary>검출이 본 프레임의 시각. 0 이면 모름(조준이 같은 화면 검사를 안 한다).</summary>
+        public long FrameTicks { get; init; }
+
+        public DetectionSnapshot? Latest => new(
             [new Detection("일반 봇", LabelBox.FromCorners(0, 0.45, 0.45, 0.55, 0.55), 0.9f)],
-            ["일반봇"], 1920, 1080, target, Environment.TickCount64);
+            ["일반봇"], 1920, 1080, target, Environment.TickCount64) { FrameTicks = FrameTicks };
 
         public void PublishState(bool capturing, bool detecting, CaptureTarget? target) { }
-        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight) { }
+        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0) { }
         public void PublishFrame(byte[] bgra, int width, int height) { }
         public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
     }

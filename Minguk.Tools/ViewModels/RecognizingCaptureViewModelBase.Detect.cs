@@ -113,6 +113,9 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         _lastDetectTicks = now;
 
+        // 이 프레임이 들어온 시각. 검출 결과에 실어 스크립트의 조준이 "겨눈 뒤의 화면인가" 를 가린다.
+        var frameTicks = now;
+
         // 픽셀은 이 콜백이 돌아가면 사라진다. 여기서 바로 파일로 떨어뜨린다(줄여서).
         (int Width, int Height) size;
 
@@ -152,10 +155,10 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
-        _ = System.Threading.Tasks.Task.Run(() => RunDetect(size));
+        _ = System.Threading.Tasks.Task.Run(() => RunDetect(size, frameTicks));
     }
 
-    private void RunDetect((int Width, int Height) size)
+    private void RunDetect((int Width, int Height) size, long frameTicks)
     {
         try
         {
@@ -175,7 +178,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             var names = IsNameplateOcrOn ? ReadNameplates(found) : new string[found.Count];
 
             // 스크립트가 읽어 가는 자리. 화면(Detections)은 UI 스레드 것이라 스크립트가 못 읽는다.
-            Hub.PublishDetections(found, names, size.Width, size.Height);
+            Hub.PublishDetections(found, names, size.Width, size.Height, frameTicks);
 
             // 화면에 닿는 것은 UI 스레드에서. 컬렉션을 캡처 스레드에서 고치면 그리는 중에 터진다.
             DispatcherService?.BeginInvoke(() => Guard(() =>

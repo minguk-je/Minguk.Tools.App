@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
@@ -49,8 +49,8 @@ public sealed class PerceptionHub : IPerceptionHub
         if (!capturing) _latest = null;
     }
 
-    public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight)
-        => _latest = new DetectionSnapshot(found, names, frameWidth, frameHeight, _target, Environment.TickCount64);
+    public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0)
+        => _latest = new DetectionSnapshot(found, names, frameWidth, frameHeight, _target, Environment.TickCount64) { FrameTicks = frameTicks };
 
     public void PublishFrame(byte[] bgra, int width, int height)
     {

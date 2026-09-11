@@ -78,7 +78,11 @@ public sealed class LiveScriptApi
     public void ToggleHangul() => Traced("ToggleHangul", "", () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.ToggleHangul }));
 
     /// <param name="button">비우면 좌클릭. MouseButton.Right · 숫자 · "right" 를 받는다 - 언어마다 넘기는 모양이 다르다.</param>
-    public void Click(object? button = null) => Traced("Click", ToButton(button).ToString(), () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Click, Button = ToButton(button) }));
+    public void Click(object? button = null) => Traced("Click", ToButton(button).ToString(), () =>
+    {
+        EnsureCursorInsideTarget();
+        Send(new SequenceStepDefinition { Kind = SequenceStepKind.Click, Button = ToButton(button) });
+    });
 
     public void RightClick() => Click(MouseButton.Right);
 
@@ -100,7 +104,8 @@ public sealed class LiveScriptApi
     /// 그런 창은 화면 가운데가 조준점이므로, 가운데에서 목표까지의 거리에 배율을 곱해 상대 이동으로 보낸다.
     /// 한 번에 딱 맞지 않을 수 있다 - 반복문에서 다시 찾고 다시 조준하면 점점 맞아 간다.
     /// </remarks>
-    public void Aim(int x, int y) => Traced("Aim", $"{x}, {y}", () => AimCore(x, y));
+    /// <returns>실제로 움직였으면 true. 겨눈 뒤로 새 화면이 아직 안 왔거나(같은 화면으로 두 번 겨누지 않는다), 이미 가운데면 false.</returns>
+    public bool Aim(int x, int y) => Traced("Aim", $"{x}, {y}", () => AimCore(x, y));
 
     /// <summary>지금 자리에서 이만큼 움직인다. 배율 없이 그대로.</summary>
     public void MoveBy(int deltaX, int deltaY) => Traced("MoveBy", $"{deltaX}, {deltaY}", () =>
@@ -109,8 +114,28 @@ public sealed class LiveScriptApi
         _host.Service.Adapter.MoveMouseBy(deltaX, deltaY);
     });
 
-    private void AimCore(int x, int y)
+    /// <summary>한 번에 보내는 상대 이동의 최대 크기(카운트). 넘으면 잘게 나눈다.</summary>
+    private const int MaxAimStep = 30;
+
+    /// <summary>나눈 걸음 사이 간격(ms). 게임이 커서를 가운데로 되돌릴 틈.</summary>
+    private const int AimStepGapMs = 4;
+
+    /// <summary>마지막으로 겨눈 시각(TickCount64). 이보다 앞선 프레임으로 찾은 자리로는 다시 겨누지 않는다.</summary>
+    private long _lastAimTicks;
+
+    /// <remarks>
+    /// <b>같은 화면으로 두 번 겨누지 않는다</b> - 검출은 0.5~1초에 한 번인데 반복문은 0.1초마다 돈다. 같은 몹 자리로
+    /// 예닐곱 번 겨누니 거리의 여섯 배를 돌아 몹을 지나쳐 흔들렸다(실측: 오버워치, 몹 자리가 0.7초마다 반대편으로 튐).
+    /// 몹 자리를 찾은 프레임이 마지막 조준보다 앞이면, 그 자리는 조준 전의 것이라 건너뛴다.
+    ///
+    /// <b>큰 이동은 잘게</b> - 한 번에 수백 카운트를 넣으면 게임이 커서를 가운데로 되돌리기 전에 OS 커서가 창 밖으로
+    /// 나가고, 이어진 클릭이 바탕 화면을 눌러 게임에서 빠져나왔다(실측: 앞 창이 "Program Manager" 가 됨).
+    /// </remarks>
+    private bool AimCore(int x, int y)
     {
+        if (_host.Hub.Latest is { FrameTicks: > 0 } snapshot && snapshot.FrameTicks <= _lastAimTicks)
+            return false;
+
         BeforeInput();
 
         var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
@@ -123,9 +148,51 @@ public sealed class LiveScriptApi
         var deltaX = (int)Math.Round((x - centerX) * _host.AimScale);
         var deltaY = (int)Math.Round((y - centerY) * _host.AimScale);
 
-        if (deltaX == 0 && deltaY == 0) return;
+        if (deltaX == 0 && deltaY == 0) return false;
 
-        _host.Service.Adapter.MoveMouseBy(deltaX, deltaY);
+        var steps = Math.Max(1, (int)Math.Ceiling(Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) / (double)MaxAimStep));
+        var sentX = 0;
+        var sentY = 0;
+
+        for (var i = 1; i <= steps; i++)
+        {
+            // 나눗셈 나머지가 끝에 몰리지 않게 누적으로 나눈다 - 합은 정확히 delta 다.
+            var stepX = (int)Math.Round(deltaX * i / (double)steps) - sentX;
+            var stepY = (int)Math.Round(deltaY * i / (double)steps) - sentY;
+
+            _host.Service.Adapter.MoveMouseBy(stepX, stepY);
+            sentX += stepX;
+            sentY += stepY;
+
+            if (i < steps) Wait(AimStepGapMs);
+        }
+
+        _lastAimTicks = Environment.TickCount64;
+        return true;
+    }
+
+    /// <summary>
+    /// 누르기 전에 커서가 대상 창 안에 있는지. 밖이면 게임이 되돌릴 틈을 잠깐 주고, 그래도 밖이면 누르지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 창 밖을 누르면 그 자리의 창(바탕 화면 등)이 앞으로 와 게임에서 빠져나간다. 입력이 앞 창에 들어가는 경로
+    /// (SendInput·Interception)에서, 창을 잡고 있을 때만 본다.
+    /// </remarks>
+    private void EnsureCursorInsideTarget()
+    {
+        if (!_host.RequiresForeground || _host.Target() is not { Kind: CaptureTargetKind.Window } target) return;
+        if (!CaptureTargetBounds.TryGet(target, out var bounds)) return;
+
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            if (_host.Service.Adapter.GetCursorPosition() is not { } cursor) return;
+            if (bounds.Contains(cursor.X, cursor.Y)) return;
+
+            if (attempt == 9)
+                throw Guard($"커서가 대상 창 밖({cursor.X}, {cursor.Y})이라 누르지 않았습니다 - 누르면 게임에서 빠져나갑니다. 조준 배율을 낮춰 보세요.");
+
+            Wait(10);
+        }
     }
 
     /// <summary>쉰다. 토큰으로 기다리므로 중지가 이 사이에 먹는다. 짧은 것은 로그에 안 남긴다 - 반복문이 초당 수십 줄을 만든다.</summary>
@@ -149,7 +216,7 @@ public sealed class LiveScriptApi
     public void 이동(int x, int y) => MoveTo(x, y);
     public void 이동클릭(int x, int y, object? button = null) => ClickAt(x, y, button);
     public void 휠(int notches) => Scroll(notches);
-    public void 조준(int x, int y) => Aim(x, y);
+    public bool 조준(int x, int y) => Aim(x, y);
     public void 상대이동(int deltaX, int deltaY) => MoveBy(deltaX, deltaY);
     public void 쉬기(int milliseconds) => Wait(milliseconds);
 
