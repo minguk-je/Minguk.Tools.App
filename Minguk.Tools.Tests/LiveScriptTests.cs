@@ -110,7 +110,7 @@ internal static partial class Program
                   && moves[^1].SequenceEqual([3, -4]),
                   string.Join(" ", moves.Select(m => $"({m[0]},{m[1]})")) + (errors.Count > 0 ? " / " + errors[0] : ""));
 
-            Check("멀면 겨누고 false, 새 화면이 오기 전에는 다시 안 겨눈다(false)", aimMoves.Count == 4 && printed.Select(p => p.ToLowerInvariant()).SequenceEqual(["false", "false"]), string.Join(", ", printed));
+            Check("멀면 겨누고 false, 새 화면이 오기 전에는 기다렸다가 안 겨눈다(false)", aimMoves.Count == 4 && printed.Select(p => p.ToLowerInvariant()).SequenceEqual(["false", "false"]), string.Join(", ", printed));
         }
 
         // ── 조준: 가운데 가까우면 맞음(true) ──

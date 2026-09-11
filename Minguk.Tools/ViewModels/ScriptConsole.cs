@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 using DevExpress.Mvvm;
 
@@ -28,7 +29,40 @@ public sealed class ScriptConsole : ViewModelBase
     private readonly Queue<ScriptCall> _calls = new();
     private readonly object _gate = new();
 
-    public ScriptConsole(Action<Action> onUi) => _onUi = onUi;
+    // 화면 갱신은 칸마다 하나만 걸어 둔다. 반복문이 초당 수천 번 부르면 화면 스레드에 수천 개가 쌓여
+    // 캡처·몹 찾기까지 밀렸다(실측). 걸린 갱신이 돌 때 그때의 최신 글을 만든다.
+    private readonly UiCoalescer _callsUi;
+    private readonly UiCoalescer _linesUi;
+    private readonly UiCoalescer _watchesUi;
+
+    // 파일 로그: 같은 호출이 같은 결과면 적지 않고 센다. 결과가 바뀔 때 몇 번 건너뛰었는지 붙인다.
+    private readonly Dictionary<string, (string Value, int Skipped)> _logged = new();
+
+    public ScriptConsole(Action<Action> onUi)
+    {
+        _onUi = onUi;
+        _callsUi = new UiCoalescer(onUi);
+        _linesUi = new UiCoalescer(onUi);
+        _watchesUi = new UiCoalescer(onUi);
+    }
+
+    /// <summary>화면 갱신을 하나만 걸어 두는 것. 걸린 것이 돌기 전에 또 오면 버린다 - 돌 때 최신 글을 만든다.</summary>
+    private sealed class UiCoalescer(Action<Action> onUi)
+    {
+        private int _pending;
+
+        public void Post(Func<string?> build, Action<string?> apply)
+        {
+            if (Interlocked.Exchange(ref _pending, 1) == 1) return;
+
+            onUi(() =>
+            {
+                // 만들기 전에 푼다. 만드는 사이에 온 것은 다음 갱신이 챙긴다.
+                Interlocked.Exchange(ref _pending, 0);
+                apply(build());
+            });
+        }
+    }
 
     /// <summary>출력 줄들. 최근 것이 아래.</summary>
     public string? Text { get => GetProperty(() => Text); private set => SetProperty(() => Text, value); }
@@ -42,53 +76,59 @@ public sealed class ScriptConsole : ViewModelBase
     /// <summary>API 를 한 번 부를 때마다. 스크립트 스레드에서 온다. 파일 로그에도 남긴다 - 게임에 있는 사람은 이 칸을 못 보고, 나중에 봐야 한다.</summary>
     public void Trace(ScriptCall call)
     {
-        string text;
-
-        Logger.Debug($"호출: {call}");
+        string? line = null;
 
         lock (_gate)
         {
             _calls.Enqueue(call);
             while (_calls.Count > MaxCalls) _calls.Dequeue();
-            text = string.Join(Environment.NewLine, _calls);
+
+            var value = $"{call.Arguments}|{call.Result}";
+
+            if (_logged.TryGetValue(call.Name, out var last) && last.Value == value)
+            {
+                _logged[call.Name] = (value, last.Skipped + 1);
+            }
+            else
+            {
+                line = last.Skipped > 0 ? $"호출: {call}  (앞의 같은 {call.Name} {last.Skipped}번 건너뜀)" : $"호출: {call}";
+                _logged[call.Name] = (value, 0);
+            }
         }
 
-        _onUi(() => CallsText = text);
+        if (line is not null) Logger.Debug(line);
+
+        _callsUi.Post(() => { lock (_gate) return string.Join(Environment.NewLine, _calls); }, text => CallsText = text);
     }
 
     /// <summary>실행을 새로 시작할 때. 호출 로그만 비운다 - 출력은 지난 실행과 견주고 싶을 수 있다.</summary>
     public void ClearCalls()
     {
-        lock (_gate) _calls.Clear();
+        lock (_gate)
+        {
+            _calls.Clear();
+            _logged.Clear();
+        }
 
         _onUi(() => CallsText = null);
     }
 
     public void Print(string line)
     {
-        string text;
-
         lock (_gate)
         {
             _lines.Enqueue($"{DateTime.Now:HH:mm:ss.fff}  {line}");
             while (_lines.Count > MaxLines) _lines.Dequeue();
-            text = string.Join(Environment.NewLine, _lines);
         }
 
-        _onUi(() => Text = text);
+        _linesUi.Post(() => { lock (_gate) return string.Join(Environment.NewLine, _lines); }, text => Text = text);
     }
 
     public void Watch(string name, string value)
     {
-        string text;
+        lock (_gate) _watches[name] = value;
 
-        lock (_gate)
-        {
-            _watches[name] = value;
-            text = string.Join(" · ", _watches.Select(p => $"{p.Key}={p.Value}"));
-        }
-
-        _onUi(() => Watches = text);
+        _watchesUi.Post(() => { lock (_gate) return string.Join(" · ", _watches.Select(p => $"{p.Key}={p.Value}")); }, text => Watches = text);
     }
 
     public void Clear()

@@ -191,6 +191,35 @@ public sealed class LiveScriptApi
 
     private double AimScale => _aimScale ??= _host.AimScale;
 
+    /// <summary>스크립트가 마지막으로 본 화면(몹들·가장가까운몹)의 프레임 시각. 0 이면 아직 안 봄.</summary>
+    private long _seenFrameTicks;
+
+    /// <summary>겨눈 뒤 새 화면을 이만큼(ms)까지 기다린다. 넘으면 false 로 돌아간다 - 몹 찾기가 멈췄을 수 있다.</summary>
+    private const int AimWaitMs = 1500;
+
+    /// <summary>이 프레임이 마지막 조준 뒤의 화면인가. 모르면(0) 그렇다고 본다.</summary>
+    private bool IsAfterLastAim(long frameTicks) => frameTicks <= 0 || _lastAimTicks <= 0 || frameTicks > _lastAimTicks + AimSettleMs;
+
+    /// <summary>
+    /// 겨눈 뒤의 새 화면이 허브에 올라올 때까지 기다린다.
+    /// </summary>
+    /// <remarks>
+    /// 쉬기 없는 반복문(<c>while (...) { if (조준(...)) 클릭(); }</c>)이 옛 화면에서 조준을 초당 수천 번 불러,
+    /// 호출 로그가 1분에 10MB 를 넘고 화면 스레드가 밀려 몹 찾기가 0.7초에서 1.8초로 늦어졌다(실측). 기다려 주면
+    /// 반복문이 저절로 몹 찾기 속도에 맞춰진다.
+    /// </remarks>
+    private void WaitForFreshFrame()
+    {
+        var deadline = Environment.TickCount64 + AimWaitMs;
+
+        while (Environment.TickCount64 < deadline)
+        {
+            if (_host.Hub.Latest is { } latest && IsAfterLastAim(latest.FrameTicks)) return;
+
+            Wait(15);
+        }
+    }
+
     /// <summary>조준 말고 다른 것이 시야를 움직였다. 다음 거리 변화는 배율 탓이 아니다.</summary>
     private void ForgetAim() => _lastAim = null;
 
@@ -204,8 +233,15 @@ public sealed class LiveScriptApi
     /// </remarks>
     private bool AimCore(int x, int y)
     {
-        if (_host.Hub.Latest is { FrameTicks: > 0 } snapshot && _lastAimTicks > 0 && snapshot.FrameTicks <= _lastAimTicks + AimSettleMs)
+        // 스크립트가 본 화면으로 판단한다. 아직 몹을 안 봤으면(좌표를 손으로 준 경우) 허브의 최신값으로.
+        var seen = _seenFrameTicks > 0 ? _seenFrameTicks : _host.Hub.Latest?.FrameTicks ?? 0;
+
+        if (!IsAfterLastAim(seen))
+        {
+            // 이 좌표는 겨누기 전 화면의 것이다. 새 화면을 기다렸다가, 움직이지 않고 돌아간다 - 다음 바퀴가 새 자리를 찾는다.
+            WaitForFreshFrame();
             return false;
+        }
 
         BeforeInput();
 
@@ -360,6 +396,11 @@ public sealed class LiveScriptApi
         if (!hub.IsDetecting) throw Guard("몹 찾기가 꺼져 있습니다 - 화면에서 몹 찾기를 켜세요.");
 
         var snapshot = hub.Latest;
+
+        // 스크립트가 본 화면. 조준은 이 화면이 겨눈 뒤의 것인지로 판단한다 - 허브의 최신값으로 보면, 몹을 찾은 뒤
+        // 조준하기 전 찰나에 새 화면이 올라온 경우 옛 자리로 한 번 더 겨눈다(실측: 같은 몹을 두 번 겨눠 지나침).
+        _seenFrameTicks = snapshot?.FrameTicks ?? 0;
+
         if (snapshot is null || snapshot.Found.Count == 0) return [];
 
         var target = _host.Target();
