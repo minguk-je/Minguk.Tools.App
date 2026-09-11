@@ -127,6 +127,12 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
         return null;
     }
 
+    /// <summary>
+    /// 사람이 마우스를 움직이는 것을 본 적이 있는가. 아니면 붙은 첫 자리로 보내는데, 그 자리가 게임이 보는 마우스가
+    /// 아닐 수 있다 - 실제로 아무 일도 안 일어났다(실측).
+    /// </summary>
+    public bool SawHumanMouse => _tracker?.LastMouseName is not null;
+
     /// <summary>자리마다 무엇이 붙었는지. 진단용.</summary>
     public string DescribeDevices()
     {

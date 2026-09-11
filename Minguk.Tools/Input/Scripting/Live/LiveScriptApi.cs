@@ -45,6 +45,8 @@ public enum LiveScriptOutcome
 /// </remarks>
 public sealed class LiveScriptApi
 {
+    private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+
     private readonly LiveScriptHost _host;
     private readonly CancellationToken _token;
     private readonly HashSet<ushort> _heldKeys = [];
@@ -171,8 +173,11 @@ public sealed class LiveScriptApi
     /// <summary>한 번에 보내는 상대 이동의 최대 크기(카운트). 넘으면 잘게 나눈다.</summary>
     private const int MaxAimStep = 30;
 
-    /// <summary>나눈 걸음 사이 간격(ms). 게임이 커서를 가운데로 되돌릴 틈.</summary>
+    /// <summary>나눈 걸음 사이 간격(ms). 게임이 커서를 가운데로 되돌릴 틈. 기다림 한 번이 실제로는 ~15ms 다.</summary>
     private const int AimStepGapMs = 4;
+
+    /// <summary>걸음 수 상한. 멀리 겨눌 때 걸음마다 기다리다 조준 하나가 1초를 넘었다(실측: 1,160ms).</summary>
+    private const int MaxAimSteps = 6;
 
     /// <summary>마지막으로 겨눈 시각(TickCount64). 이보다 앞선 프레임으로 찾은 자리로는 다시 겨누지 않는다.</summary>
     private long _lastAimTicks;
@@ -267,7 +272,9 @@ public sealed class LiveScriptApi
 
         if (deltaX == 0 && deltaY == 0) return onTarget;
 
-        var steps = Math.Max(1, (int)Math.Ceiling(Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) / (double)MaxAimStep));
+        Logger.Debug($"조준: 거리({offsetX:0}, {offsetY:0}) × 배율 {AimScale:0.00} → 보냄({deltaX}, {deltaY}){(onTarget ? " · 맞음" : string.Empty)}");
+
+        var steps = Math.Clamp((int)Math.Ceiling(Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) / (double)MaxAimStep), 1, MaxAimSteps);
         var sentX = 0;
         var sentY = 0;
 
@@ -311,12 +318,18 @@ public sealed class LiveScriptApi
         var moved = before - after;
         var fraction = moved / before;
 
-        if (fraction < 0.1 || fraction > 1.9) return;
+        if (fraction < 0.1 || fraction > 1.9)
+        {
+            Logger.Debug($"배율 배우기 버림: {before:0} → {after:0} (보낸 {sent}, 줄어든 비율 {fraction:0.00})");
+            return;
+        }
 
         var measured = Math.Clamp(sent / moved, 0.1, 20);
         var next = Math.Clamp((AimScale * 0.5) + (measured * 0.5), 0.1, 20);
 
         if (Math.Abs(next - AimScale) / AimScale < 0.02) return;
+
+        Logger.Info($"배율 {AimScale:0.00} → {next:0.00} ({before:0} → {after:0}, 보낸 {sent}, 잰 값 {measured:0.00})");
 
         _aimScale = next;
         _host.AimScaleLearned(next);

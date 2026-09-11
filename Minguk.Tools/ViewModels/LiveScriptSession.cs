@@ -93,6 +93,10 @@ public sealed class LiveScriptSession : IDisposable
         // BeforeRun 은 대기가 끝난 뒤 UI 스레드에서 돈다. 누르면 플레이어를 멈추고(토큰이 API 까지 이어진다) 누른 키를 뗀다.
         var beforeRun = async () =>
         {
+            // 드라이버 경로는 사람이 쓰는 바로 그 마우스로 보내야 게임이 본다. 아직 못 봤으면 지금 말해 준다.
+            if (service.Adapter is Minguk.Tools.Input.Adapters.InterceptionInputAdapter { SawHumanMouse: false })
+                _notify("마우스를 한 번 움직여 주세요 - Interception 이 어느 마우스로 보낼지 아직 모릅니다(붙은 첫 자리로 보냅니다).");
+
             if (!_emergency.Arm(() => { player.Stop(); _api?.ReleaseAll(); }, out var problem) && problem is not null)
                 _notify(problem);
 
