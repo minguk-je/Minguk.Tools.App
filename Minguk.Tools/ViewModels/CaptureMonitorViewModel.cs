@@ -58,7 +58,9 @@ public class FrameLogRow
 public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
 {
     /// <summary>그리드에 남겨 둘 줄 수. 오래 켜 두면 메모리를 먹으니 잘라 낸다.</summary>
-    private const int MaxRows = 600;
+    // 마지막 한 줄만 둔다. 600줄을 쌓아 봐야 보는 것은 맨 위 한 줄이었고("마지막 것만 봐도 될 것 같아"),
+    // 그 자리를 미리보기에 주는 편이 낫다. 비고에 적히던 알림은 상태 줄과 아래 바로 간다.
+    private const int MaxRows = 1;
 
     private readonly object _statisticsLock = new();
 
@@ -107,8 +109,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// </summary>
     private const int PreviewMaxHeight = 400;
 
-    /// <summary>미리보기 칸의 기본 높이(px).</summary>
-    private const double DefaultPreviewHeight = 320;
 
     /// <summary>클릭을 넘긴 뒤 이 앱으로 돌아오기까지 기다리는 시간(ms).</summary>
     private const int ReturnToThisWindowDelayMs = 120;
@@ -122,8 +122,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// </summary>
     private const int ActivationSettleDelayMs = 80;
 
-    /// <summary>미리보기를 껐다 켤 때 되살릴 높이. 끄면 행이 0 으로 접히므로 따로 기억한다.</summary>
-    private double _lastPreviewGroupHeight = DefaultPreviewHeight;
 
     /// <summary>
     /// 지난번에 고른 대상의 표시 이름.
@@ -135,7 +133,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     private string _lastSelectedTargetDisplay = string.Empty;
 
     /// <summary>미리보기 칸. 높이를 직접 넣고 빼려고 들고 있는다.</summary>
-    private LayoutGroup? _previewLayoutGroup;
 
     /// <summary>미리보기 Image 컨트롤. 누른 자리를 원본 좌표로 바꾸려면 컨트롤 크기가 필요하다.</summary>
     private System.Windows.Controls.Image? _previewImage;
@@ -332,7 +329,9 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     }
 
     /// <summary>캡처/미리보기 상한 콤보에 함께 쓰는 값들. 5 단위로 60 까지.</summary>
-    public virtual ObservableCollection<int> FpsOptions { get; set; } = new(new[] { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 });
+    // 1 은 시험용이다. 1초에 한 장이면 프레임 하나하나가 눈에 보여, 캡처·리드백·검출이 어느
+    // 프레임에서 무엇을 했는지 따라가기 쉽다. 캡처 상한과 미리보기 갱신 상한이 이 목록을 같이 쓴다.
+    public virtual ObservableCollection<int> FpsOptions { get; set; } = new(new[] { 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 });
 
     /// <summary>
     /// 미리보기에서 누른 것을 대상 창으로 넘길지.
@@ -476,7 +475,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// <summary>XAML 의 컨트롤을 잡아 온다. 베이스가 초기화 첫 단계에서 불러 준다.</summary>
     protected override void InitializeControls()
     {
-        _previewLayoutGroup = FindControl<LayoutGroup>("PreviewGroupObjectService");
         _previewImage = FindControl<System.Windows.Controls.Image>("PreviewImageObjectService");
         _previewSurface = FindControl<System.Windows.Controls.Border>("PreviewSurfaceObjectService");
         _gridView = FindControl<DevExpress.Xpf.Grid.GridControl>("GridObjectService")?.View as DevExpress.Xpf.Grid.TableView;
@@ -485,17 +483,9 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// <summary>지난번에 쓰던 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.</summary>
     protected override void RestoreSettings()
     {
-        _lastPreviewGroupHeight = GetSetting(nameof(_lastPreviewGroupHeight), DefaultPreviewHeight);
-
         // 켜진 채로 복구하지 않는다 - 화면을 열자마자 모델 68MB 를 읽으면 뜨는 것이 느려진다.
         DetectMinimumScore = GetSetting(nameof(DetectMinimumScore), 0.5);
         IsTrackingOn = GetSetting(nameof(IsTrackingOn), true);
-
-        if (_lastPreviewGroupHeight < 80)
-            _lastPreviewGroupHeight = DefaultPreviewHeight;
-
-        if (_previewLayoutGroup is not null)
-            _previewLayoutGroup.Height = _lastPreviewGroupHeight;
 
         // 한글을 그대로 넣으면 설정 파일에서 되읽을 때 깨진다(실측으로 "[紐⑤땲.." 로 나왔다).
         // Base64 로 감싸서 ASCII 로만 저장한다.
@@ -573,11 +563,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
 
     protected override void SaveSettings()
     {
-        // 켜져 있을 때의 높이만 의미가 있다. 꺼져 있으면 그룹이 숨겨져 있어 값이 미덥지 않다.
-        if (ShowPreview && _previewLayoutGroup is { Height: > 0 })
-            _lastPreviewGroupHeight = _previewLayoutGroup.Height;
-
-        SetSetting(nameof(_lastPreviewGroupHeight), _lastPreviewGroupHeight);
         SetSetting(nameof(ShowPreview), ShowPreview);
         SetSetting(nameof(CaptureTargetFps), CaptureTargetFps);
         SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
@@ -1398,15 +1383,9 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         {
             // GPU 경로는 픽셀을 CPU 로 내리지 않으므로 리드백이 필요 없다.
             // 그 경로를 못 쓰는 환경에서만 FallBackToCpuPreview 가 리드백을 요구한다.
-            if (_previewLayoutGroup is not null)
-                _previewLayoutGroup.Height = _lastPreviewGroupHeight;
-
+            // 높이는 안 만진다 - 미리보기는 남는 자리를 다 쓴다(통계 표가 한 줄이 되면서).
             return;
         }
-
-        // 끄기 전에 지금 높이를 기억해 둔다. 다시 켜면 그 높이로 돌아온다.
-        if (_previewLayoutGroup is { Height: > 0 })
-            _lastPreviewGroupHeight = _previewLayoutGroup.Height;
 
         HookPreviewRendering(false);
 

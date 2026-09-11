@@ -347,7 +347,10 @@ public static class LibTorchRuntime
     /// 스텝마다 끼는데, 그때마다 16개 스레드가 전부 깨어나 일감을 기다리며 바쁘게 돌아
     /// CPU 가 100% 로 보였다. 4개면 GPU 학습 속도는 거의 그대로고 CPU 만 내려간다.
     /// </remarks>
-    public static int CpuThreads { get; } = Math.Clamp(Environment.ProcessorCount / 4, 2, 8);
+    public static int CpuThreads { get; } =
+        int.TryParse(Environment.GetEnvironmentVariable("MINGUK_TORCH_THREADS"), out var forced) && forced > 0
+            ? forced   // 실험용. 스레드 수가 학습 속도에 얼마나 드는지 잴 때 밖에서 준다.
+            : Math.Clamp(Environment.ProcessorCount / 4, 2, 8);
 
     public static void Load(LibTorchFlavor flavor)
     {

@@ -7,6 +7,7 @@ using System.Threading;
 
 using System.Windows;
 
+using Minguk.Base.Utilities;
 using Minguk.Tools.Capture;
 using Minguk.Tools.Markup;
 using Minguk.Tools.Vision.Inference;
@@ -262,9 +263,15 @@ public partial class CaptureMonitorViewModel
         var stale = _detector;
         _detector = null;
 
-        DetectionStatus = stale is null
-            ? "모델을 읽는 중... (처음 한 번, 몇 초 걸립니다)"
-            : "다시 학습한 모델을 읽는 중...";
+        // 도구 줄의 짧은 글과 아래 바의 긴 글, 둘 다 쓴다. 도구 줄은 긴 한글을 안 그리는 일이 있고,
+        // 사용자는 "로딩 중인지, 끝났는지, 무엇을 읽었는지" 를 물었다.
+        var loadingMessage = stale is null
+            ? "몹 찾기: 학습한 모델을 읽는 중... (처음 한 번, 몇 초)"
+            : "몹 찾기: 다시 학습한 모델을 읽는 중...";
+
+        DetectionStatus = stale is null ? "모델 읽는 중..." : "새 모델 읽는 중...";
+        StatusText = loadingMessage;
+        MessengerUtility.SendMainMessage(loadingMessage);
 
         if (Interlocked.CompareExchange(ref _isDetectorLoading, 1, 0) != 0) return;
 
@@ -290,7 +297,21 @@ public partial class CaptureMonitorViewModel
                 _reloadSeenStamp = default;
 
                 _isDetectorLoading = 0;
-                DispatcherService?.BeginInvoke(() => DetectionStatus = "찾는 중...");
+
+                // 무엇을 읽었는지 한 줄로. 쪽지가 있으면 몇 번째 학습에 몇 장인지까지.
+                var manifest = model.Manifest;
+                var loaded = $"몹 찾기 준비됐습니다 - {manifest.Describe}"
+                             + (manifest.TrainCount > 0 ? $" · {manifest.TrainCount}번째 학습" : string.Empty)
+                             + (manifest.Images > 0 ? $" · 그림 {manifest.Images}장 · {manifest.Epochs}바퀴" : string.Empty)
+                             + (manifest.RecallFound is { } f && manifest.RecallLabels is { } l && l > 0 ? $" · 되찾기 {f}/{l}" : string.Empty)
+                             + $" · {_detectClasses.Count}종";
+
+                DispatcherService?.BeginInvoke(() =>
+                {
+                    DetectionStatus = "모델 읽음 · 찾는 중...";
+                    StatusText = loaded;
+                    MessengerUtility.SendMainMessage(loaded);
+                });
             }
             catch (Exception ex)
             {
