@@ -17,6 +17,8 @@ namespace Minguk.Tools.ViewModels;
 /// </remarks>
 public sealed class ScriptConsole : ViewModelBase
 {
+    private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+
     private const int MaxLines = 100;
     private const int MaxCalls = 200;
 
@@ -37,10 +39,12 @@ public sealed class ScriptConsole : ViewModelBase
     /// <summary>호출 로그. 시각 · 부른 것 · 결과 · 걸린 시간. 최근 것이 아래.</summary>
     public string? CallsText { get => GetProperty(() => CallsText); private set => SetProperty(() => CallsText, value); }
 
-    /// <summary>API 를 한 번 부를 때마다. 스크립트 스레드에서 온다.</summary>
+    /// <summary>API 를 한 번 부를 때마다. 스크립트 스레드에서 온다. 파일 로그에도 남긴다 - 게임에 있는 사람은 이 칸을 못 보고, 나중에 봐야 한다.</summary>
     public void Trace(ScriptCall call)
     {
         string text;
+
+        Logger.Debug($"호출: {call}");
 
         lock (_gate)
         {

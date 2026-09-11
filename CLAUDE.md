@@ -343,6 +343,8 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   RegisterHotKey 의 전역 단축키(F5·F9)도 못 간다(UIPI). 캡처 시작·입력 경로 변경 때 `RefreshElevationNote` 가 견줘
   `ElevationNote` 를 채우고, 화면은 "관리자로 다시 시작" 버튼(`RestartAsAdmin`, runas)을 보인다. 드라이버(Interception)는
   입력은 넣지만 단축키는 여전히 안 온다. VS(관리자)에서 띄우면 앱도 관리자라 해당 없음.
+- **스크립트 화면 단축키**: F5 실행/계속 · F6 중지(대기 중에도) · F10 한 줄 · F9 비상 정지(도는 동안만). 호출 로그
+  (`ScriptConsole.Trace`)는 파일 로그에도 Debug 로 남긴다 - 게임에서 돌린 뒤 무엇을 불렀는지 나중에 본다.
 - **스크립트 실행은 소리로 알린다** (`ScriptPlayer.Chime`) - 게임이 앞에 있으면 화면 글자를 못 본다. 받음 한 번 ·
   시작 두 번 · 끝 높게 · 실패 낮게 길게. 단축키 눌림(`SharedHotkeys.Fire`)·시작 무시 이유·끝 상태는 로그에 남긴다.
 - **앞 창 판정은 같은 프로세스면 통과** (`ForegroundWindow.IsInFront`) - 게임은 잡은 창 말고 IME·오버레이를 앞에

@@ -19,9 +19,19 @@ internal static class ForegroundWindow
     /// </remarks>
     public static bool IsInFront(IntPtr target)
     {
+        if (target == IntPtr.Zero) return false;
+
         var front = GetForegroundWindow();
 
-        if (front == IntPtr.Zero || target == IntPtr.Zero) return false;
+        // 창이 바뀌는 찰나에는 앞 창이 없다(0). 그 한순간에 스크립트를 끊지 않는다 - 잠깐 기다려 다시 본다.
+        for (var attempt = 0; front == IntPtr.Zero && attempt < 5; attempt++)
+        {
+            System.Threading.Thread.Sleep(20);
+            front = GetForegroundWindow();
+        }
+
+        // 그래도 없으면 아무 창도 입력을 받지 않는 상태다. 보내 봐야 어디로도 안 가니 막지 않는다.
+        if (front == IntPtr.Zero) return true;
         if (front == target) return true;
         if (GetAncestor(front, GA_ROOTOWNER) == target) return true;
 

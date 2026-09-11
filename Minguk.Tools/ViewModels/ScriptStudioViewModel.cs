@@ -92,6 +92,13 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         else if (Player.IsIdle) Player.RunOnce();
     }
 
+    /// <summary>F6 - 대기 중이든 도는 중이든 멈춘다. F9(비상 정지)는 도는 동안만 걸리므로 대기 중에는 이것뿐이다.</summary>
+    private void StopByHotkey()
+    {
+        Logger.Debug($"중지 요청(F6): 쉬는 중={Player.IsIdle}");
+        Player.Stop();
+    }
+
     /// <summary>F10 - 멈춰 있으면 다음 줄, 쉬고 있으면 첫 줄에서 멈추게 시작.</summary>
     private void Step()
     {
@@ -122,6 +129,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         (string Label, Key Key, System.Action Action)[] bindings =
         [
             ("F5 실행/계속", Key.F5, RunOrContinue),
+            ("F6 중지", Key.F6, StopByHotkey),
             ("F10 한 줄", Key.F10, Step)
         ];
 
