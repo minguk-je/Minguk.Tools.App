@@ -90,7 +90,7 @@ internal static class ViewSmokeProbe
         {
             var vm = InputAutomationViewModel.Create();
 
-            vm.ScriptText = """
+            vm.Script.Text = """
                             Type("가");
                             ToggleHangul();
                             Enter();
@@ -494,24 +494,24 @@ internal static class ViewSmokeProbe
         {
             var vm = InputAutomationViewModel.Create();
 
-            vm.ScriptText = "var mine = 1; // C# 에서 쓰던 글";
-            vm.SelectedScriptLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.JavaScript;
+            vm.Script.Text = "var mine = 1; // C# 에서 쓰던 글";
+            vm.Script.SelectedLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.JavaScript;
 
-            var swapped = vm.ScriptText is { } js && !js.Contains("mine = 1") && js.Length > 0;
-            Console.WriteLine($"[{(swapped ? "PASS" : "FAIL")}] 언어를 바꾸면 그 언어의 글이 올라온다 — {(vm.ScriptText ?? string.Empty).Split('\n')[0].Trim()}");
+            var swapped = vm.Script.Text is { } js && !js.Contains("mine = 1") && js.Length > 0;
+            Console.WriteLine($"[{(swapped ? "PASS" : "FAIL")}] 언어를 바꾸면 그 언어의 글이 올라온다 — {(vm.Script.Text ?? string.Empty).Split('\n')[0].Trim()}");
             if (!swapped) failures++;
 
-            vm.ScriptText = "let theirs = 2; // JavaScript 에서 쓰던 글";
-            vm.SelectedScriptLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.CSharp;
+            vm.Script.Text = "let theirs = 2; // JavaScript 에서 쓰던 글";
+            vm.Script.SelectedLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.CSharp;
 
-            var restored = vm.ScriptText?.Contains("mine = 1") == true;
-            Console.WriteLine($"[{(restored ? "PASS" : "FAIL")}] 돌아오면 쓰던 글이 그대로다 — {(vm.ScriptText ?? string.Empty).Split('\n')[0].Trim()}");
+            var restored = vm.Script.Text?.Contains("mine = 1") == true;
+            Console.WriteLine($"[{(restored ? "PASS" : "FAIL")}] 돌아오면 쓰던 글이 그대로다 — {(vm.Script.Text ?? string.Empty).Split('\n')[0].Trim()}");
             if (!restored) failures++;
 
-            vm.SelectedScriptLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.JavaScript;
+            vm.Script.SelectedLanguage = Minguk.Tools.Input.Scripting.ScriptLanguage.JavaScript;
 
-            var kept = vm.ScriptText?.Contains("theirs = 2") == true;
-            Console.WriteLine($"[{(kept ? "PASS" : "FAIL")}] 다른 언어의 글도 각자 남는다 — {(vm.ScriptText ?? string.Empty).Split('\n')[0].Trim()}");
+            var kept = vm.Script.Text?.Contains("theirs = 2") == true;
+            Console.WriteLine($"[{(kept ? "PASS" : "FAIL")}] 다른 언어의 글도 각자 남는다 — {(vm.Script.Text ?? string.Empty).Split('\n')[0].Trim()}");
             if (!kept) failures++;
         }
         catch (Exception ex)

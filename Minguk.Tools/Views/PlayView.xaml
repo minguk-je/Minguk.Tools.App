@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="Minguk.Tools.Views.PlayView"
+<UserControl x:Class="Minguk.Tools.Views.PlayView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -199,7 +199,6 @@
             </dxb:BarEditItem>
 
             <dxb:BarStaticItem Content="{Binding Player.CurrentStep, Mode=OneWay}" />
-            <dxb:BarStaticItem Content="{Binding HotkeyStatus, Mode=OneWay}" />
         </dxb:ToolBarControl>
 
         <!-- ── 상태 줄 ─────────────────────────────────────────────────── -->

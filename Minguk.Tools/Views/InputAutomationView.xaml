@@ -151,14 +151,14 @@
                 <dxlc:LayoutItem Label="언어">
                     <dxe:ComboBoxEdit Width="140"
                                       IsTextEditable="False"
-                                      ItemsSource="{Binding ScriptLanguages}"
-                                      SelectedItem="{Binding SelectedScriptLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                      ItemsSource="{Binding Script.Languages}"
+                                      SelectedItem="{Binding Script.SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </dxlc:LayoutItem>
 
                 <!--  파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다.  -->
                 <dxlc:LayoutItem Width="330"
                                  Label="엔진">
-                    <dxe:TextEdit EditValue="{Binding EngineStatus}"
+                    <dxe:TextEdit EditValue="{Binding Script.EngineStatus, Mode=OneWay}"
                                   IsReadOnly="True"
                                   NullText="준비됨" />
                 </dxlc:LayoutItem>
@@ -169,7 +169,7 @@
                 -->
                 <dxlc:LayoutItem Width="230"
                                  Label="파일">
-                    <dxe:TextEdit EditValue="{Binding ScriptFileLabel, Mode=OneWay}"
+                    <dxe:TextEdit EditValue="{Binding Script.FileLabel, Mode=OneWay}"
                                   IsReadOnly="True" />
                 </dxlc:LayoutItem>
             </dxlc:LayoutGroup>
@@ -178,18 +178,18 @@
                               Orientation="Horizontal"
                               VerticalAlignment="Top">
                 <dx:SimpleButton Width="80"
-                                 Command="{Binding DoNewScriptCommand}"
+                                 Command="{Binding Script.NewCommand}"
                                  Content="새로"
                                  ToolTip="본보기 글로 새로 시작한다. 파일과의 연결도 끊는다." />
                 <dx:SimpleButton Width="80"
-                                 Command="{Binding DoOpenScriptCommand}"
+                                 Command="{Binding Script.OpenCommand}"
                                  Content="열기"
                                  ToolTip="확장자를 보고 언어까지 맞춘다 (.csx · .py · .js)" />
                 <dx:SimpleButton Width="80"
-                                 Command="{Binding DoSaveScriptCommand}"
+                                 Command="{Binding Script.SaveCommand}"
                                  Content="저장" />
                 <dx:SimpleButton Width="110"
-                                 Command="{Binding DoSaveScriptAsCommand}"
+                                 Command="{Binding Script.SaveAsCommand}"
                                  Content="다른 이름으로" />
             </dxlc:LayoutGroup>
 
@@ -241,18 +241,18 @@
                 DevExpress 경량 테마는 표준 WPF 컨트롤을 손대지 않으므로 색을 직접 준다 -
                 안 그러면 어두운 테마에서 이 편집기만 흰 판으로 남는다.
             -->
-            <Border BorderBrush="{Binding EditorBorder}"
+            <Border BorderBrush="{Binding Script.EditorBorder}"
                     BorderThickness="1">
                 <markup:ScriptEditor Height="200"
-                                       Background="{Binding EditorBackground}"
+                                       Background="{Binding Script.EditorBackground}"
                                        FontFamily="D2Coding, Consolas, Courier New"
                                        FontSize="13"
-                                       Foreground="{Binding EditorForeground}"
-                                       LineNumbersForeground="{Binding EditorLineNumberForeground}"
+                                       Foreground="{Binding Script.EditorForeground}"
+                                       LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
                                        ShowLineNumbers="True"
-                                       SyntaxHighlighting="{Binding Highlighting}"
+                                       SyntaxHighlighting="{Binding Script.Highlighting}"
                                        WordWrap="False"
-                                       markup:AvalonEditText.Text="{Binding ScriptText, Mode=TwoWay}">
+                                       markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}">
                     <dxmvvm:Interaction.Behaviors>
                         <!--  ViewModel 이 캐럿 자리에 줄을 끼우려면 편집기를 직접 잡아야 한다.  -->
                         <dxmvvm:UIObjectService x:Name="EditorObjectService" />
@@ -263,9 +263,9 @@
             <!--  틀린 줄이 있을 때만 뜬다. 늘 자리를 차지하면 멀쩡할 때도 눈이 간다.  -->
             <!--  여러 줄이 될 수 있다. 한 줄에 이어 붙이면 뒤가 잘려서 정작 중요한 말이 안 보인다.  -->
             <dxlc:LayoutItem Label="고칠 줄"
-                             Visibility="{Binding HasScriptError, Converter={StaticResource BoolToVisibility}}">
+                             Visibility="{Binding Script.HasError, Converter={StaticResource BoolToVisibility}}">
                 <dxe:TextEdit AcceptsReturn="True"
-                              EditValue="{Binding ScriptError}"
+                              EditValue="{Binding Script.ErrorText, Mode=OneWay}"
                               Foreground="#D1242F"
                               IsReadOnly="True"
                               TextWrapping="Wrap"

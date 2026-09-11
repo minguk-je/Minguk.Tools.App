@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
-using System.Windows.Media;
 using DevExpress.Mvvm;
-using ICSharpCode.AvalonEdit.Highlighting;
 using Minguk.Tools.Helper;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Scripting;
@@ -29,14 +27,6 @@ public partial class InputAutomationViewModel
     public DelegateCommand<SequenceStepKind> DoAddStepCommand { get; private set; } = null!;
 
     public DelegateCommand DoResetStepsCommand { get; private set; } = null!;
-
-    public DelegateCommand DoNewScriptCommand { get; private set; } = null!;
-
-    public DelegateCommand DoOpenScriptCommand { get; private set; } = null!;
-
-    public DelegateCommand DoSaveScriptCommand { get; private set; } = null!;
-
-    public DelegateCommand DoSaveScriptAsCommand { get; private set; } = null!;
 
     public DelegateCommand DoClearTestPadCommand { get; private set; } = null!;
 
@@ -92,89 +82,6 @@ public partial class InputAutomationViewModel
     /// <summary>대상 창을 골라야 하는 경로인지. 아니면 그 줄을 아예 접는다.</summary>
     public bool NeedsWindowTarget => _service is not null && !_service.SupportsTyping;
 
-    // ── 스크립트 언어 ────────────────────────────────────────────────────
-
-    public ObservableCollection<ScriptLanguage> ScriptLanguages { get; }
-        = new((ScriptLanguage[])Enum.GetValues(typeof(ScriptLanguage)));
-
-    /// <summary>
-    /// 스크립트를 무슨 언어로 쓸지.
-    /// </summary>
-    /// <remarks>
-    /// 언어가 달라도 부르는 것은 같다(<see cref="SequenceScriptApi"/>). 그래서 바꾸면 글만
-    /// 새로 쓰면 되고, 그 뒤(순서 미리보기·반복·중지)는 손댈 것이 없다.
-    /// </remarks>
-    public ScriptLanguage SelectedScriptLanguage
-    {
-        get => GetProperty(() => SelectedScriptLanguage);
-        set => SetProperty(() => SelectedScriptLanguage, value, OnScriptLanguageChanged);
-    }
-
-    // ── 스크립트 파일 ────────────────────────────────────────────────────
-
-    /// <summary>지금 열어 둔 파일. 아직 저장한 적 없으면 null.</summary>
-    public string? ScriptFilePath
-    {
-        get => GetProperty(() => ScriptFilePath);
-        set => SetProperty(() => ScriptFilePath, value, () => RaisePropertyChanged(nameof(ScriptFileLabel)));
-    }
-
-    /// <summary>
-    /// 글이 마지막으로 저장된 뒤 바뀌었는지.
-    /// </summary>
-    /// <remarks>
-    /// 파일로 저장하지 않아도 글 자체는 설정에 남아 다음에 열 때 그대로 나온다. 그래서 이 표시는
-    /// "잃어버릴 수 있다" 는 경고가 아니라 "파일과 지금 글이 다르다" 는 뜻이다.
-    /// </remarks>
-    public bool IsScriptDirty
-    {
-        get => GetProperty(() => IsScriptDirty);
-        set => SetProperty(() => IsScriptDirty, value, () => RaisePropertyChanged(nameof(ScriptFileLabel)));
-    }
-
-    /// <summary>화면에 보여 줄 파일 이름. 안 바뀐 것과 바뀐 것을 * 로 가른다.</summary>
-    public string ScriptFileLabel
-    {
-        get
-        {
-            // 열어 둔 파일이 없으면 * 를 안 붙인다. 견줄 파일이 없는데 "다르다" 고 할 수 없다.
-            if (string.IsNullOrEmpty(ScriptFilePath)) return "(저장 안 함)";
-
-            var name = System.IO.Path.GetFileName(ScriptFilePath);
-
-            return IsScriptDirty ? name + " *" : name;
-        }
-    }
-
-    /// <summary>엔진이 준비되는 동안 무슨 일을 하는지. 파이썬은 처음에 11MB 를 받아 온다.</summary>
-    public string? EngineStatus { get => GetProperty(() => EngineStatus); set => SetProperty(() => EngineStatus, value); }
-
-    // ── 보낼 것 ──────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// 편집기에 든 스크립트. <b>이것이 원본이다</b> - 단계 목록은 여기서 읽어 낸다.
-    /// </summary>
-    /// <remarks>
-    /// 예전에는 그리드에 줄을 담았는데, 한 줄 고치는 데 마우스가 여러 번 필요하고 통째로
-    /// 복사하거나 남에게 주는 것이 안 됐다. 글로 두면 편집기가 이미 잘하는 일
-    /// (되돌리기·여러 줄 선택·찾아 바꾸기·붙여넣기)이 전부 따라온다.
-    /// 형식은 C# 이다 - <see cref="SequenceScriptApi"/> 가 스크립트에서 부를 수 있는 것들이다.
-    /// </remarks>
-    public string? ScriptText
-    {
-        get => GetProperty(() => ScriptText);
-        set => SetProperty(() => ScriptText, value, OnScriptTextChanged);
-    }
-
-    /// <summary>틀린 줄들을 한 번에 모아 둔 것. 없으면 null.</summary>
-    public string? ScriptError
-    {
-        get => GetProperty(() => ScriptError);
-        set => SetProperty(() => ScriptError, value, () => RaisePropertyChanged(nameof(HasScriptError)));
-    }
-
-    public bool HasScriptError => !string.IsNullOrEmpty(ScriptError);
-
     /// <summary>
     /// 고른 경로가 스크립트의 일부를 보내지 못할 때 무엇이 왜 빠지는지. 없으면 null.
     /// </summary>
@@ -189,31 +96,6 @@ public partial class InputAutomationViewModel
     }
 
     public bool HasPathWarning => !string.IsNullOrEmpty(PathWarning);
-
-    /// <summary>
-    /// 구문 강조 정의. 화면이 편집기의 SyntaxHighlighting 에 그대로 물린다.
-    /// </summary>
-    /// <remarks>
-    /// 화면에서 직접 고르지 않고 ViewModel 이 들고 있는 이유는, 테마에 따라 다른 것을 줘야
-    /// 하는데 그 판단이 XAML 에서 할 일이 아니기 때문이다.
-    /// </remarks>
-    public IHighlightingDefinition Highlighting
-    {
-        get => GetProperty(() => Highlighting);
-        set => SetProperty(() => Highlighting, value);
-    }
-
-    // ── 편집기 색 ────────────────────────────────────────────────────────
-    //    AvalonEdit 은 순수 WPF 컨트롤이라 DevExpress 경량 테마가 손대지 않는다.
-    //    화면이 뜰 때 옆의 테마 컨트롤에서 실제 색을 재 와 여기 넣는다(ApplyEditorTheme).
-
-    public Brush? EditorBackground { get => GetProperty(() => EditorBackground); set => SetProperty(() => EditorBackground, value); }
-
-    public Brush? EditorForeground { get => GetProperty(() => EditorForeground); set => SetProperty(() => EditorForeground, value); }
-
-    public Brush? EditorLineNumberForeground { get => GetProperty(() => EditorLineNumberForeground); set => SetProperty(() => EditorLineNumberForeground, value); }
-
-    public Brush? EditorBorder { get => GetProperty(() => EditorBorder); set => SetProperty(() => EditorBorder, value); }
 
     // ── 타이밍 ───────────────────────────────────────────────────────────
 

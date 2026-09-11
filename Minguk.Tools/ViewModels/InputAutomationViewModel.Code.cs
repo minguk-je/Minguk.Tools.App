@@ -53,45 +53,6 @@ public partial class InputAutomationViewModel
     });
 
     /// <summary>
-    /// 편집기 색을 지금 테마에 맞춘다.
-    /// </summary>
-    /// <remarks>
-    /// 색은 경량 테마 팔레트에서 읽는다(<see cref="SequenceScriptHighlighting"/>).
-    /// AvalonEdit 은 경량 테마를 안 타므로 이렇게 옮겨 주지 않으면 테마를 바꿔도 이 편집기만
-    /// 그대로 남는다.
-    /// </remarks>
-    private void ApplyEditorTheme() => Guard(() =>
-    {
-        EditorBackground = SequenceScriptHighlighting.Background;
-        EditorForeground = SequenceScriptHighlighting.Foreground;
-        EditorLineNumberForeground = SequenceScriptHighlighting.LineNumberForeground;
-        EditorBorder = SequenceScriptHighlighting.Border;
-        Highlighting = SequenceScriptHighlighting.Current;
-    });
-
-    /// <summary>
-    /// 테마가 바뀌면 편집기 색을 다시 잰다.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="LightweightThemeManager.CurrentThemeChanged"/> 를 듣는다. 테마 <b>이름</b>이
-    /// 바뀌는 이벤트가 아니라 실제로 새 팔레트가 들어온 뒤에 오는 것이라, 그때 읽으면 새 색이다.
-    ///
-    /// 정적 이벤트라 화면이 닫힐 때 반드시 풀어야 한다. 안 풀면 닫은 화면이 앱이 살아 있는
-    /// 동안 계속 붙들려 있는다.
-    /// </remarks>
-    private void OnApplicationThemeChanged(object? sender, EventArgs e)
-    {
-        if (DispatcherService is { } dispatcher)
-        {
-            dispatcher.BeginInvoke(ApplyEditorTheme);
-            return;
-        }
-
-        // 화면 밖(검증 하네스 같은 곳)에서는 서비스가 없다. 그래도 배선은 돌아야 한다.
-        System.Windows.Application.Current?.Dispatcher.BeginInvoke(ApplyEditorTheme);
-    }
-
-    /// <summary>
     /// Interception 을 고를 때 드라이버가 준비됐는지 보고, 아니면 무엇을 해야 하는지 적는다.
     /// </summary>
     /// <remarks>
@@ -249,6 +210,9 @@ public partial class InputAutomationViewModel
     {
         RaisePropertyChanged(nameof(IsIdle));
 
+        // 도는 동안 글을 잠근다. 도중에 바뀌면 무엇이 나갔는지 알 수 없다.
+        Script.IsLocked = IsRunning;
+
         DoRunOnceCommand.RaiseCanExecuteChanged();
         DoStartLoopCommand.RaiseCanExecuteChanged();
         DoStopCommand.RaiseCanExecuteChanged();
@@ -258,174 +222,11 @@ public partial class InputAutomationViewModel
     /// 스크립트에서 읽어 둔 계획으로 시퀀스를 만든다.
     /// 시작할 때 한 번 굳혀 두므로, 도는 도중에 글을 고쳐도 그 바퀴에는 영향이 없다.
     /// </summary>
-    private InputSequence BuildSequence() => _plan.Build(_service!, HoldTimeMs);
+    private InputSequence BuildSequence() => Script.Plan.Build(_service!, HoldTimeMs);
 
     // ── 스크립트 ─────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// 글이 바뀌면 잠시 묶어 두었다가 한 번만 돌린다.
-    /// </summary>
-    /// <remarks>
-    /// 글자 하나 칠 때마다 컴파일하면 안 된다. 느린 것도 문제지만, Roslyn 은 컴파일할 때마다
-    /// 메모리에 어셈블리를 새로 만들고 <b>그것은 언로드되지 않는다</b> - 치는 대로 쌓인다.
-    /// 타이핑이 멎은 뒤에 한 번만 돌린다.
-    /// </remarks>
-    private void OnScriptTextChanged()
-    {
-        // 파일과 지금 글이 다르다는 표시. 되읽기 전에 세워 둔다 - 되읽기는 뒤늦게 끝난다.
-        IsScriptDirty = true;
-
-        _debounce?.Dispose();
-        _debounce = new System.Threading.Timer(
-            _ => DispatcherService?.BeginInvoke(() => _ = RecompileAsync()),
-            null, DebounceMs, System.Threading.Timeout.Infinite);
-    }
-
-    /// <summary>타이핑이 멎기를 기다리는 시간.</summary>
-    private const int DebounceMs = 500;
-
-    /// <summary>
-    /// 언어를 갈아 끼운다. 손대지 않은 본보기면 새 언어 본보기로 바꾸고, 쓰던 글은 그대로 둔다.
-    /// </summary>
-    /// <remarks>
-    /// 쓰던 글을 지우면 안 된다 - 잘못 골랐을 때 되돌릴 방법이 없어진다. 새 언어로는
-    /// 컴파일되지 않을 테니 "고칠 줄" 에 그대로 뜬다.
-    ///
-    /// 다만 <b>아직 손대지 않은 본보기</b>는 지울 것이 없다. 그대로 두면 파이썬을 골라 놓고
-    /// C# 본보기를 보게 되고, 그 상태로 저장하면 C# 이 든 .py 파일이 나온다.
-    /// 그래서 열어 둔 파일이 없고 "지금 글 == 예전 언어의 본보기" 일 때만 갈아 끼운다.
-    /// </remarks>
-    private void OnScriptLanguageChanged() => Guard(() =>
-    {
-        if (_shownLanguage == SelectedScriptLanguage) return;
-
-        // 쓰던 글은 제 언어 칸에 넣어 둔다. 손대지 않은 본보기는 넣을 것이 없다.
-        StashShownScript();
-
-        _engine?.Dispose();
-        _engine = ScriptEngineFactory.Create(SelectedScriptLanguage);
-        _shownLanguage = SelectedScriptLanguage;
-
-        // 그 언어로 쓰던 글이 있으면 그것을, 없으면 그 언어의 본보기를 올린다.
-        if (_scriptsByLanguage.TryGetValue(SelectedScriptLanguage, out var kept))
-        {
-            ScriptText = kept.Text;
-            ScriptFilePath = kept.Path;
-            IsScriptDirty = kept.Dirty;
-        }
-        else
-        {
-            ScriptText = _engine.SampleSource;
-            ScriptFilePath = null;
-            IsScriptDirty = false;
-        }
-
-        _ = PrepareEngineAsync();
-    });
-
-    /// <summary>
-    /// 화면의 글을 지금 언어 칸에 넣는다. 손대지 않은 본보기는 넣지 않는다.
-    /// </summary>
-    /// <remarks>
-    /// 본보기까지 넣어 두면 그 언어로 돌아올 때 "쓰던 글" 로 취급돼, 나중에 본보기가
-    /// 바뀌어도 옛 본보기가 되살아난다. 본보기는 그때그때 엔진에서 받는 것이 맞다.
-    /// </remarks>
-    private void StashShownScript()
-    {
-        var text = ScriptText ?? string.Empty;
-        var untouchedSample = string.IsNullOrEmpty(ScriptFilePath) && IsSame(text, _engine?.SampleSource);
-
-        if (string.IsNullOrWhiteSpace(text) || untouchedSample)
-        {
-            _scriptsByLanguage.Remove(_shownLanguage);
-            return;
-        }
-
-        _scriptsByLanguage[_shownLanguage] = (text, ScriptFilePath, IsScriptDirty);
-    }
-
-    /// <summary>
-    /// 두 글이 같은 글인지. 줄 끝과 앞뒤 여백은 세지 않는다.
-    /// </summary>
-    /// <remarks>
-    /// 편집기를 거치면 줄 끝이 바뀔 수 있어 <c>==</c> 로는 손대지 않은 글도 달라 보인다.
-    /// </remarks>
-    private static bool IsSame(string? left, string? right)
-    {
-        if (left is null || right is null) return false;
-
-        return Normalize(left) == Normalize(right);
-
-        static string Normalize(string text)
-            => text.Replace("\r\n", "\n").Replace('\r', '\n').Trim();
-    }
-
-    /// <summary>
-    /// 엔진을 준비시키고, 끝나면 한 번 돌려 순서를 채운다.
-    /// </summary>
-    /// <remarks>
-    /// 파이썬은 처음 고를 때 런타임을 받아 온다(11MB). 그동안 화면이 멈춘 것처럼 보이지
-    /// 않도록 무슨 일을 하는 중인지 적는다.
-    /// </remarks>
-    private async Task PrepareEngineAsync()
-    {
-        if (_engine is null) return;
-
-        var engine = _engine;
-        var progress = new Progress<string>(message => EngineStatus = message);
-
-        await GuardAsync(async () =>
-        {
-            await engine.PrepareAsync(progress);
-
-            EngineStatus = engine.IsReady ? null : engine.UnavailableReason;
-
-            if (ReferenceEquals(engine, _engine)) await RecompileAsync();
-        });
-    }
-
-    /// <summary>
-    /// 글을 돌려 계획을 받아 온다. 실제 입력은 나가지 않는다 - 단계로 적힐 뿐이다.
-    /// </summary>
-    /// <remarks>
-    /// 틀린 줄이 있어도 나머지는 그대로 계획에 담는다. 오타 한 줄 때문에 순서 미리보기가
-    /// 통째로 비면 무엇을 고쳐야 하는지 오히려 알기 어렵다.
-    /// 대신 실행은 막는다 - 반쪽짜리 시퀀스가 나가는 것이 더 나쁘다.
-    /// </remarks>
-    private async Task RecompileAsync()
-    {
-        if (_engine is null) return;
-
-        // 앞선 것이 아직 돌고 있으면 접는다. 마지막 글만 의미가 있다.
-        _compileCts?.Cancel();
-        _compileCts?.Dispose();
-        _compileCts = new CancellationTokenSource();
-
-        var token = _compileCts.Token;
-        var source = ScriptText;
-
-        await GuardAsync(async () =>
-        {
-            try
-            {
-                var (plan, errors) = await _engine.RunAsync(source, token);
-
-                if (token.IsCancellationRequested) return;
-
-                _plan = plan;
-
-                ScriptError = errors.Count == 0
-                    ? null
-                    : string.Join(Environment.NewLine, errors.Select(e => e.ToString()));
-
-                UpdateSequenceText();
-            }
-            catch (OperationCanceledException)
-            {
-                // 더 새 글이 들어왔다는 뜻이다. 그쪽이 결과를 낸다.
-            }
-        });
-    }
+    //    언어·글·파일·컴파일은 Script(ScriptWorkbench) 가 한다. 여기 남은 것은 이 화면만의 것 -
+    //    본보기 줄을 캐럿 자리에 끼우는 버튼들.
 
     /// <summary>
     /// 고른 종류의 본보기 줄을 캐럿이 있는 줄 아래에 끼운다.
@@ -440,7 +241,7 @@ public partial class InputAutomationViewModel
 
         if (_editor is null)
         {
-            ScriptText = string.IsNullOrEmpty(ScriptText) ? line : ScriptText + Environment.NewLine + line;
+            Script.Text = string.IsNullOrEmpty(Script.Text) ? line : Script.Text + Environment.NewLine + line;
             return;
         }
 
@@ -457,7 +258,7 @@ public partial class InputAutomationViewModel
     {
         var line = SequenceScript.ToCSharp(new SequencePlan { Steps = [step] });
 
-        return SelectedScriptLanguage == ScriptLanguage.Python ? line.TrimEnd(';') : line;
+        return Script.SelectedLanguage == ScriptLanguage.Python ? line.TrimEnd(';') : line;
     }
 
     /// <summary>본보기 줄에 쓸 값. 이동만 지금 커서 자리를 쓴다 - (0,0) 은 쓸 일이 거의 없다.</summary>
@@ -498,95 +299,7 @@ public partial class InputAutomationViewModel
         _editor.Focus();
     }
 
-    private void DoResetSteps() => Guard(() => ScriptText = _engine?.SampleSource ?? string.Empty);
-
-    // ── 스크립트 파일 ────────────────────────────────────────────────────
-
-    /// <summary>본보기 글로 새로 시작한다. 파일과의 연결도 끊는다.</summary>
-    private void DoNewScript() => Guard(() =>
-    {
-        ScriptText = _engine?.SampleSource ?? string.Empty;
-        ScriptFilePath = null;
-        IsScriptDirty = false;
-    });
-
-    /// <summary>
-    /// 파일을 열어 글을 갈아 끼운다. 확장자로 언어까지 맞춘다.
-    /// </summary>
-    /// <remarks>
-    /// 언어를 먼저 바꾸고 글을 넣는다. 순서가 반대면 새 글을 예전 언어로 한 번 돌려
-    /// 헛된 오류가 화면에 스쳤다 사라진다.
-    /// </remarks>
-    private void DoOpenScript() => Guard(() =>
-    {
-        if (OpenFileDialogService is not { } dialog)
-        {
-            MessengerUtility.SendMainMessage("파일 열기 서비스를 찾지 못했습니다.");
-            return;
-        }
-
-        dialog.Filter = ScriptFiles.OpenFilter(SelectedScriptLanguage);
-        dialog.InitialDirectory = ScriptFiles.DefaultDirectory;
-
-        if (!dialog.ShowDialog()) return;
-
-        var path = dialog.File.GetFullName();
-        var text = System.IO.File.ReadAllText(path);
-
-        if (ScriptFiles.FromPath(path) is { } language && language != SelectedScriptLanguage)
-            SelectedScriptLanguage = language;
-
-        ScriptText = text;
-        ScriptFilePath = path;
-        IsScriptDirty = false;
-
-        Logger.Info($"스크립트를 열었다: {path}");
-        MessengerUtility.SendMainMessage($"{System.IO.Path.GetFileName(path)} 을(를) 열었습니다.");
-    });
-
-    /// <summary>저장한다. 아직 자리를 안 정했으면 물어본다.</summary>
-    private void DoSaveScript() => Guard(() =>
-    {
-        if (string.IsNullOrEmpty(ScriptFilePath))
-        {
-            DoSaveScriptAs();
-            return;
-        }
-
-        WriteScript(ScriptFilePath);
-    });
-
-    private void DoSaveScriptAs() => Guard(() =>
-    {
-        if (SaveFileDialogService is not { } dialog)
-        {
-            MessengerUtility.SendMainMessage("파일 저장 서비스를 찾지 못했습니다.");
-            return;
-        }
-
-        dialog.Filter = ScriptFiles.SaveFilter(SelectedScriptLanguage);
-        dialog.DefaultExt = ScriptFiles.Extension(SelectedScriptLanguage).TrimStart('.');
-        dialog.DefaultFileName = string.IsNullOrEmpty(ScriptFilePath)
-            ? "스크립트" + ScriptFiles.Extension(SelectedScriptLanguage)
-            : System.IO.Path.GetFileName(ScriptFilePath);
-        dialog.InitialDirectory = ScriptFiles.DefaultDirectory;
-
-        if (!dialog.ShowDialog()) return;
-
-        WriteScript(dialog.File.GetFullName());
-    });
-
-    private void WriteScript(string path)
-    {
-        // UTF-8 로 쓴다. 한글 이름을 쓸 수 있게 해 놓고 ANSI 로 쓰면 다른 PC 에서 깨진다.
-        System.IO.File.WriteAllText(path, ScriptText ?? string.Empty, new System.Text.UTF8Encoding(false));
-
-        ScriptFilePath = path;
-        IsScriptDirty = false;
-
-        Logger.Info($"스크립트를 저장했다: {path}");
-        MessengerUtility.SendMainMessage($"{System.IO.Path.GetFileName(path)} 에 저장했습니다.");
-    }
+    private void DoResetSteps() => Guard(() => Script.Text = Script.SampleSource);
 
     private void UpdateSequenceText() => Guard(() =>
     {
@@ -619,7 +332,7 @@ public partial class InputAutomationViewModel
 
             // 대상 창을 안 고르면 마지막 좌표 아래 창으로 간다. 나가긴 나가는데 어디로
             // 갔는지 알 수 없어서, "끝남" 을 보고 됐다고 믿게 된다. 그 전에 말해 준다.
-            if (SelectedWindowTarget is null && _plan.Steps.Count > 0)
+            if (SelectedWindowTarget is null && Script.Plan.Steps.Count > 0)
                 lines.Add("대상 창을 고르지 않아 마지막 좌표 아래의 창으로 나갑니다 - "
                           + "어디로 갈지 정하려면 창을 고르세요.");
         }
@@ -627,7 +340,7 @@ public partial class InputAutomationViewModel
         // ── 이 경로가 못 보내는 단계 ──
         if (!_service.SupportsHangulToggle)
         {
-            var dropped = _plan.Steps.Count(SequenceStepKinds.NeedsScanCode);
+            var dropped = Script.Plan.Steps.Count(SequenceStepKinds.NeedsScanCode);
 
             if (dropped > 0)
                 lines.Add($"{_adapter.Name} 경로는 한/영 전환을 하지 못해 한/영 단계 {dropped}개가 빠집니다. "
@@ -732,7 +445,7 @@ public partial class InputAutomationViewModel
     {
         if (_service is null || IsRunning) return;
 
-        if (HasScriptError)
+        if (Script.HasError)
         {
             // 반쪽짜리 시퀀스가 나가는 것보다 안 나가는 것이 낫다.
             MessengerUtility.SendMainMessage("스크립트에 고칠 줄이 있습니다.");

@@ -39,8 +39,8 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
 - **미리보기 판과 입력 전달 도구 줄은 `Views/Parts` 의 UserControl** 이다(`CapturePreviewPanel` · `PreviewForwardBar`).
   DataContext 를 물려받아 바탕의 커맨드에 묶이고, `UIObjectService` 이름(`PreviewImageObjectService` 등)도 그 안에
   있다. 겹그림(`DetectionOverlay`)은 판의 `Overlay` 에 화면이 얹는다 - 캡처 화면은 없는 프로퍼티에 묶이지 않게.
-- **스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`.** 편집·플레이가 같이 쓴다. 입력 자동화 화면은 아직
-  제 것(`InputAutomationViewModel.Code.cs`)을 들고 있다 - 같은 규칙을 베낀 것이니 옮길 때 그쪽을 지운다.
+- **스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`.** 편집·플레이·입력 자동화 셋이 같이 쓴다.
+  입력 자동화 화면에 남은 스크립트 코드는 본보기 줄 끼우기(`DoAddStep`)뿐이다.
   스크립트 입력은 미리보기 입력 전달과 **같은 어댑터**(`_inputRouter.InputAdapter`)로 나가고, 보내기 직전에
   `TryFocusTargetWindow` 로 대상 창을 앞으로 가져온다.
 - 전역 단축키 소유: F8 담기 = 캡처·편집(`SupportsCollecting`), F5/F6 = 플레이와 입력 자동화(같이 열면 나중 것이 실패,

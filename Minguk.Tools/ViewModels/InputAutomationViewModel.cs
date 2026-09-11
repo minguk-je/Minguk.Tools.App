@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Threading;
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
@@ -42,44 +41,20 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     /// <summary>대상 창을 찾아 주는 것. PostMessage 경로에서만 쓴다.</summary>
     private IWindowTargetAdapter? _windows;
 
-    /// <summary>스크립트에서 읽어 낸 계획. 실행할 때 이것으로 시퀀스를 만든다.</summary>
-    private SequencePlan _plan = new();
+    /// <summary>
+    /// 스크립트 문서 - 언어, 글, 파일, 계획, 틀린 줄, 편집기 색. XAML 은 <c>Script.Text</c> 처럼 묶는다.
+    /// </summary>
+    /// <remarks>
+    /// 예전에는 이 화면이 전부 제 손으로 했다(언어별 글 기억, 디바운스 컴파일, 파일 열고 저장).
+    /// 편집·플레이 화면이 같은 일을 하게 되면서 <see cref="ScriptWorkbench"/> 로 옮겼다 - 세 벌이면
+    /// 밑줄·완성 같은 것이 한쪽에만 붙는다. 설정 키(<c>Script.CSharp</c> 등)는 그대로라 저장된 글이 이어진다.
+    /// </remarks>
+    public ScriptWorkbench Script { get; }
 
-    /// <summary>스크립트를 돌려 단계를 받아 오는 것. 언어를 바꾸면 갈아 끼운다.</summary>
-    private IScriptEngine? _engine;
-
-    /// <summary>타이핑이 멎기를 기다리는 타이머.</summary>
-    private System.Threading.Timer? _debounce;
-
-    /// <summary>돌고 있는 컴파일을 접는 데 쓴다.</summary>
-    private CancellationTokenSource? _compileCts;
-
-    /// <summary>스크립트가 통째로 들어가는 설정 키.</summary>
+    /// <summary>언어별로 나누기 전, 스크립트가 통째로 들어가던 설정 키. 한 번 읽어 옮기는 데만 쓴다.</summary>
     private const string ScriptSettingKey = "Script";
 
-    /// <summary>
-    /// 언어마다 따로 둔 글. 언어를 바꾸면 쓰던 글을 여기 넣어 두고 그 언어의 글을 꺼낸다.
-    /// </summary>
-    /// <remarks>
-    /// 하나만 들고 있으면 파이썬으로 바꿔 놓고 C# 글을 보게 되고, 그 상태로 저장하면 C# 이 든
-    /// .py 가 나온다 - 실제로 "파이썬 골랐더니 스크립트는 C#" 이었다. 언어별로 기억하면
-    /// 왔다 갔다 해도 각자 것이 그대로 있다. 설정 키는 <c>Script.CSharp</c> 처럼 언어를 붙인다.
-    /// </remarks>
-    private readonly Dictionary<ScriptLanguage, (string Text, string? Path, bool Dirty)> _scriptsByLanguage = new();
-
-    /// <summary>지금 화면에 올라 있는 글이 어느 언어의 것인지. SetProperty 콜백은 예전 값을 안 알려 준다.</summary>
-    private ScriptLanguage _shownLanguage;
-
-    private static string ScriptKeyFor(ScriptLanguage language) => $"{ScriptSettingKey}.{language}";
-    private static string ScriptPathKeyFor(ScriptLanguage language) => $"{ScriptPathSettingKey}.{language}";
-
-    /// <summary>
-    /// 마지막으로 열었던 파일 경로가 들어가는 설정 키.
-    /// </summary>
-    /// <remarks>
-    /// 글 자체(<see cref="ScriptSettingKey"/>)도 따로 저장한다. 파일에 저장하지 않은 글이
-    /// 다음에 열 때 사라지면 안 되기 때문이다. 경로는 "무엇을 보고 있었나" 를 되살리는 데 쓴다.
-    /// </remarks>
+    /// <summary>언어별로 나누기 전의 파일 경로 키. 한 번 읽어 옮기는 데만 쓴다.</summary>
     private const string ScriptPathSettingKey = "ScriptPath";
 
     /// <summary>
@@ -103,10 +78,17 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         DoAddStepCommand = new DelegateCommand<SequenceStepKind>(DoAddStep, _ => IsIdle, false);
         DoResetStepsCommand = new DelegateCommand(DoResetSteps, () => IsIdle, false);
 
-        DoNewScriptCommand = new DelegateCommand(DoNewScript, () => IsIdle, false);
-        DoOpenScriptCommand = new DelegateCommand(DoOpenScript, () => IsIdle, false);
-        DoSaveScriptCommand = new DelegateCommand(DoSaveScript, () => true, false);
-        DoSaveScriptAsCommand = new DelegateCommand(DoSaveScriptAs, () => true, false);
+        Script = new ScriptWorkbench(new ScriptWorkbenchHost
+        {
+            GetSetting = (key, fallback) => GetSetting(key, fallback),
+            SetSetting = (key, value) => SetSetting(key, value),
+            OnUi = RunOnUi,
+            OpenDialog = () => OpenFileDialogService,
+            SaveDialog = () => SaveFileDialogService
+        });
+
+        // 계획이 새로 나오면 순서 미리보기를 다시 그린다.
+        Script.PlanChanged += (_, _) => UpdateSequenceText();
 
         // 도는 동안에도 눌린다. 한 바퀴 돌려 보고 지우고 다시 돌리는 것이 흔한 흐름이다.
         DoClearTestPadCommand = new DelegateCommand(() => TestPadText = string.Empty, () => true, false);
@@ -115,21 +97,22 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         DoInstallDriverCommand = new DelegateCommand(DoInstallDriver, () => IsIdle && CanInstallDriver, false);
     }
 
+    /// <summary>UI 스레드에서 돌린다. 검증 하네스처럼 서비스가 없는 자리에서도 배선은 돌아야 한다.</summary>
+    private static void RunOnUi(Action action)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+
+        if (dispatcher is null || dispatcher.CheckAccess()) action();
+        else dispatcher.BeginInvoke(action);
+    }
+
     // ── 생명주기 ─────────────────────────────────────────────────────────
-    // InitializeObservable() 은 구독할 이벤트가 없어 비워 둔다.
-    // 글이 바뀔 때 다시 읽는 것은 ScriptText 의 SetProperty 콜백이 한다.
+    // InitializeObservable() 은 구독할 이벤트가 없어 비워 둔다. 테마는 Script 가 스스로 듣는다.
 
     /// <remarks>
     /// 편집기를 못 잡아도 화면은 돈다 - 줄 담기가 캐럿 자리 대신 끝에 붙을 뿐이다.
     /// 그래서 여기서 막지 않는다.
     /// </remarks>
-    /// <remarks>
-    /// 테마가 바뀔 때 편집기 색을 다시 재려고 구독한다. 정적 이벤트라 <see cref="ReleaseResources"/>
-    /// 에서 반드시 풀어야 한다.
-    /// </remarks>
-    protected override void InitializeObservable()
-        => DevExpress.Xpf.Core.LightweightThemeManager.CurrentThemeChanged += OnApplicationThemeChanged;
-
     protected override void InitializeControls()
     {
 
@@ -145,39 +128,8 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
             ? backend
             : InputBackend.SendInput;
 
-        SelectedScriptLanguage = Enum.TryParse<ScriptLanguage>(
-            GetSetting(nameof(SelectedScriptLanguage), nameof(ScriptLanguage.CSharp)), out var language)
-            ? language
-            : ScriptLanguage.CSharp;
-
-        // 언어를 넣어도 SetProperty 의 콜백은 값이 같으면 안 돈다. 엔진은 여기서 확실히 만든다.
-        _engine ??= ScriptEngineFactory.Create(SelectedScriptLanguage);
-        _shownLanguage = SelectedScriptLanguage;
-
-        // 언어별로 저장해 둔 글을 전부 되읽는다. 지금 언어 것만 화면에 올린다.
-        foreach (var each in ScriptLanguages)
-        {
-            var text = GetSetting(ScriptKeyFor(each), string.Empty);
-            if (string.IsNullOrWhiteSpace(text)) continue;
-
-            var path = GetSetting(ScriptPathKeyFor(each), string.Empty);
-            _scriptsByLanguage[each] = (text, string.IsNullOrEmpty(path) ? null : path, false);
-        }
-
-        if (_scriptsByLanguage.TryGetValue(SelectedScriptLanguage, out var shown))
-        {
-            ScriptText = shown.Text;
-            ScriptFilePath = shown.Path;
-        }
-        else
-        {
-            // 언어별 저장이 생기기 전의 설정(Script / ScriptPath)은 그때 고른 언어의 것이다.
-            ScriptFilePath = GetSetting(ScriptPathSettingKey, string.Empty) is { Length: > 0 } saved ? saved : null;
-            RestoreScript();
-        }
-
-        // 되살린 글은 아직 아무것도 안 고친 상태다.
-        IsScriptDirty = false;
+        Script.Restore();
+        MigrateLegacyScript();
 
         HoldTimeMs = GetSetting(nameof(HoldTimeMs), 30);
         IntervalMs = GetSetting(nameof(IntervalMs), 60);
@@ -188,44 +140,44 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     }
 
     /// <summary>
-    /// 저장해 둔 스크립트를 되읽는다. 없으면 예전 JSON 을 글로 옮기고, 그것도 없으면 기본값.
+    /// 언어별 저장이 생기기 전의 설정(Script / ScriptPath / Steps)을 한 번 읽어 옮긴다.
     /// </summary>
     /// <remarks>
-    /// 설정 문자열 하나에 글을 통째로 넣는다. 단계마다 설정 키를 만들면 개수가 줄었을 때
-    /// 남는 키를 지워야 하는데, 그 뒤처리를 어디선가 빠뜨리면 예전 단계가 되살아난다.
+    /// 지금 언어의 글이 이미 언어별 키에 있으면 할 일이 없다. 없을 때만 옛 키를 본다 -
+    /// 자체 형식(글자 "..." / Enter)이면 C# 으로, 그보다 전의 JSON 단계 목록이면 그것도 C# 으로.
     /// </remarks>
-    private void RestoreScript()
+    private void MigrateLegacyScript()
     {
+        if (HasSetting($"{ScriptSettingKey}.{Script.SelectedLanguage}")) return;
+
+        var savedPath = GetSetting(ScriptPathSettingKey, string.Empty);
         var saved = GetSetting(ScriptSettingKey, string.Empty);
 
         if (!string.IsNullOrWhiteSpace(saved))
         {
-            // 예전에는 자체 형식(글자 "..." / Enter)이었다. 그 글은 C# 으로 컴파일되지 않으므로
-            // 한 번 읽어 옮겨 준다. 새로 쓰는 것은 전부 C# 이다.
-            ScriptText = SequenceScript.TryParse(saved, out var legacyPlan, out var legacyErrors) && legacyErrors.Count == 0
+            var moved = SequenceScript.TryParse(saved, out var legacyPlan, out var legacyErrors) && legacyErrors.Count == 0
                 ? SequenceScript.ToCSharp(legacyPlan)
                 : saved;
 
-            if (!ReferenceEquals(ScriptText, saved))
-                Logger.Info("예전 형식의 시퀀스를 C# 스크립트로 옮겼다.");
+            if (!ReferenceEquals(moved, saved)) Logger.Info("예전 형식의 시퀀스를 C# 스크립트로 옮겼다.");
 
+            Script.Text = moved;
+            Script.FilePath = savedPath.Length > 0 ? savedPath : null;
+            Script.IsDirty = false;
             return;
         }
 
         var legacy = GetSetting(LegacyStepsSettingKey, string.Empty);
 
-        if (!string.IsNullOrWhiteSpace(legacy))
-        {
-            var plan = SequencePlan.FromJson(legacy, out var error);
+        if (string.IsNullOrWhiteSpace(legacy)) return;
 
-            if (error is not null) Logger.Warn($"예전에 저장된 시퀀스를 읽지 못했다: {error}");
+        var plan = SequencePlan.FromJson(legacy, out var error);
 
-            ScriptText = SequenceScript.ToCSharp(plan);
-            Logger.Info("예전 JSON 시퀀스를 C# 스크립트로 옮겼다.");
-            return;
-        }
+        if (error is not null) Logger.Warn($"예전에 저장된 시퀀스를 읽지 못했다: {error}");
 
-        ScriptText = _engine?.SampleSource ?? string.Empty;
+        Script.Text = SequenceScript.ToCSharp(plan);
+        Script.IsDirty = false;
+        Logger.Info("예전 JSON 시퀀스를 C# 스크립트로 옮겼다.");
     }
 
     protected override void OnLoaded()
@@ -234,7 +186,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         UpdateSequenceText();
         RegisterHotkeys();
 
-        ApplyEditorTheme();
+        Script.ApplyEditorTheme();
         UpdateDriverNotice();
 
         RaisePropertyChanged(nameof(NeedsWindowTarget));
@@ -242,22 +194,14 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         if (NeedsWindowTarget) DoRefreshWindows();
 
         // 첫 준비가 유독 느리다(C# 은 첫 컴파일, 파이썬은 런타임 받기). 미리 치러 둔다.
-        _ = PrepareEngineAsync();
+        _ = Script.PrepareAsync();
     }
 
     protected override void SaveSettings()
     {
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
-        SetSetting(nameof(SelectedScriptLanguage), SelectedScriptLanguage.ToString());
 
-        // 화면의 글을 제 언어 칸에 넣고 언어별로 전부 저장한다.
-        StashShownScript();
-
-        foreach (var (language, script) in _scriptsByLanguage)
-        {
-            SetSetting(ScriptKeyFor(language), script.Text);
-            SetSetting(ScriptPathKeyFor(language), script.Path ?? string.Empty);
-        }
+        Script.Save();
 
         // 옛 키는 비운다. 남겨 두면 언어별 키가 없는 언어로 바꿨을 때 엉뚱한 언어의 글이 되살아난다.
         SetSetting(ScriptSettingKey, string.Empty);
@@ -281,19 +225,9 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         _adapter = null;
         _service = null;
 
-        DevExpress.Xpf.Core.LightweightThemeManager.CurrentThemeChanged -= OnApplicationThemeChanged;
-
         _editor = null;
 
-        _debounce?.Dispose();
-        _debounce = null;
-
-        _compileCts?.Cancel();
-        _compileCts?.Dispose();
-        _compileCts = null;
-
-        _engine?.Dispose();
-        _engine = null;
+        Script.Dispose();
 
         _windows?.Dispose();
         _windows = null;

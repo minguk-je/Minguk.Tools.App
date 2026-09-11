@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -58,9 +58,6 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
     public DelegateCommand RefreshScriptsCommand { get; }
 
     public DelegateCommand BrowseScriptCommand { get; }
-
-    /// <summary>어떤 단축키가 살아 있는지. 등록에 실패한 것도 여기 적는다.</summary>
-    public string? HotkeyStatus { get => GetProperty(() => HotkeyStatus); set => SetProperty(() => HotkeyStatus, value); }
 
     /// <summary>담기는 캡처 화면의 일이다. 여기서 F8 을 쥐면 그쪽 등록이 실패한다.</summary>
     protected override bool SupportsCollecting => false;
@@ -206,9 +203,10 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
             else failed.Add(label);
         }
 
-        HotkeyStatus = failed.Count == 0
-            ? string.Join(" · ", live)
-            : string.Join(" · ", live) + $"  (등록 실패: {string.Join(", ", failed)} - 다른 화면이나 프로그램이 쥐고 있습니다)";
+        // 도구 줄의 정적 항목은 넘치면 안 보인다. 상태 줄에 적는다.
+        StatusText = failed.Count == 0
+            ? $"단축키: {string.Join(" · ", live)}"
+            : $"단축키: {string.Join(" · ", live)}  (등록 실패: {string.Join(", ", failed)} - 다른 화면이나 프로그램이 쥐고 있습니다)";
     });
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
