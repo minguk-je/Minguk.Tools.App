@@ -108,24 +108,8 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
             return false;
         }
 
-        return SendScanCode(scanCode, IsExtendedKey(virtualKey), isKeyUp);
+        return SendScanCode(scanCode, VirtualKeys.IsExtendedKey(virtualKey), isKeyUp);
     }
-
-    /// <summary>
-    /// E0 확장 플래그가 필요한 가상 키인지.
-    /// MapVirtualKey 는 확장 여부를 알려 주지 않으므로 여기서 가려낸다.
-    /// 빠뜨리면 방향키가 넘패드 키로 들어간다.
-    /// </summary>
-    private static bool IsExtendedKey(ushort virtualKey) => virtualKey switch
-    {
-        0x21 or 0x22 or 0x23 or 0x24 => true,   // PageUp PageDown End Home
-        0x25 or 0x26 or 0x27 or 0x28 => true,   // Left Up Right Down
-        0x2D or 0x2E => true,                   // Insert Delete
-        0x5B or 0x5C or 0x5D => true,           // LWin RWin Apps
-        0xA3 => true,                           // RControl
-        0xA5 => true,                           // RMenu (오른쪽 Alt)
-        _ => false
-    };
 
     private bool SendScanCode(ushort scanCode, bool extended, bool isKeyUp)
     {

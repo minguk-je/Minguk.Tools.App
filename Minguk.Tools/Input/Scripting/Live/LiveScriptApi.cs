@@ -319,7 +319,38 @@ public sealed class LiveScriptApi
         foreach (var m in modifiers.AsEnumerable().Reverse()) Release(m);
     }
 
+    /// <summary>
+    /// 키를 그 시간만큼 누르고 있다가 뗀다. 게임에서 걷기 - <c>걷기("W", 500)</c>, 대각선은 <c>걷기("W+A", 300)</c>.
+    /// </summary>
+    /// <remarks>
+    /// 게임의 이동은 마우스가 아니라 W·A·S·D 를 누르고 있는 시간이다. 누르기·떼기를 따로 부르면 중간에 스크립트가
+    /// 터졌을 때 키가 눌린 채 남는다 - 여기서는 finally 로 반드시 뗀다. 기다리는 동안 중지가 먹는다.
+    /// </remarks>
+    public void Walk(string keys, int milliseconds) => Traced("Walk", $"{Quote(keys)}, {milliseconds}", () => WalkCore(keys, milliseconds));
+
+    private void WalkCore(string keys, int milliseconds)
+    {
+        if (string.IsNullOrWhiteSpace(keys)) throw new ArgumentException("키 이름이 비어 있습니다. \"W\" 나 \"W+A\" 처럼 적으세요.");
+
+        var parts = keys.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var pressed = parts.Select(ToVirtualKey).ToArray();
+
+        BeforeInput();
+
+        try
+        {
+            foreach (var key in pressed) Hold(key);
+
+            Wait(milliseconds);
+        }
+        finally
+        {
+            foreach (var key in pressed.AsEnumerable().Reverse()) Release(key);
+        }
+    }
+
     public void 키(string name) => Key(name);
+    public void 걷기(string keys, int milliseconds) => Walk(keys, milliseconds);
     public void 누르기(string name) => KeyDown(name);
     public void 떼기(string name) => KeyUp(name);
 

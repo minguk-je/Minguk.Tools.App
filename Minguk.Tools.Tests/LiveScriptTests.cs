@@ -106,6 +106,14 @@ internal static partial class Program
             Check("조준은 가운데에서 목표까지의 거리만큼 상대 이동", errors.Count == 0 && moves.SequenceEqual(["MoveBy 100,-40", "MoveBy 3,-4"]), string.Join(", ", moves) + (errors.Count > 0 ? " / " + errors[0] : ""));
         }
 
+        // ── 걷기: 누르고 있다가 반드시 뗀다 ──
+        {
+            var (errors, adapter, _) = Run(new RoslynScriptEngine(), "걷기(\"W+A\", 30);", new FakeHub(monitor), monitor, CancellationToken.None);
+            var keys = adapter.Calls.Where(c => c.StartsWith("Press") || c.StartsWith("Release")).ToList();
+
+            Check("걷기는 키들을 누르고 있다가 거꾸로 뗀다", errors.Count == 0 && keys.SequenceEqual(["Press 87", "Press 65", "Release 65", "Release 87"]), string.Join(", ", keys) + (errors.Count > 0 ? " / " + errors[0] : ""));
+        }
+
         // ── 호출 로그: 무엇을 불렀는지 남는다 ──
         {
             var calls = new List<ScriptCall>();

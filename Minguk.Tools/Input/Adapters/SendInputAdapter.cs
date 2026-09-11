@@ -189,18 +189,32 @@ public sealed class SendInputAdapter : IInputAdapter, IScanCodeInput
             }
         };
 
-        public static Input KeyInput(ushort virtualKey, bool isKeyUp) => new()
+        /// <summary>
+        /// 가상 키로 보내되 스캔코드도 같이 싣는다.
+        /// </summary>
+        /// <remarks>
+        /// wScan 을 비우면 Raw Input 으로 받는 쪽(게임)에는 MakeCode 가 0 인 키가 들어가 W·A·S·D 가 안 먹는다.
+        /// 가상 키 모드에서도 wScan 은 그대로 Raw Input 의 MakeCode 가 되므로 채워 둔다. 보통 창에는 아무 차이가 없다.
+        /// </remarks>
+        public static Input KeyInput(ushort virtualKey, bool isKeyUp)
         {
-            Type = INPUT_KEYBOARD,
-            Data = new InputUnion
+            var flags = isKeyUp ? KEYEVENTF_KEYUP : 0;
+            if (VirtualKeys.IsExtendedKey(virtualKey)) flags |= KEYEVENTF_EXTENDEDKEY;
+
+            return new Input
             {
-                Keyboard = new KeyboardInputData
+                Type = INPUT_KEYBOARD,
+                Data = new InputUnion
                 {
-                    VirtualKey = virtualKey,
-                    Flags = isKeyUp ? KEYEVENTF_KEYUP : 0
+                    Keyboard = new KeyboardInputData
+                    {
+                        VirtualKey = virtualKey,
+                        ScanCode = (ushort)MapVirtualKey(virtualKey, MAPVK_VK_TO_VSC),
+                        Flags = flags
+                    }
                 }
-            }
-        };
+            };
+        }
 
         /// <summary>
         /// 가상 키 자리를 비우고 스캔코드로 보낸다. KEYEVENTF_SCANCODE 가 그 뜻이다.
@@ -228,6 +242,11 @@ public sealed class SendInputAdapter : IInputAdapter, IScanCodeInput
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern uint SendInput(uint count, Input[] inputs, int size);
+
+        public const uint MAPVK_VK_TO_VSC = 0;
+
+        [DllImport("user32.dll")]
+        public static extern uint MapVirtualKey(uint code, uint mapType);
 
 
         [DllImport("user32.dll")]
