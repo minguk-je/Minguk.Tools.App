@@ -153,6 +153,23 @@ internal static partial class Program
             Check("조준 배율 배우기: 29% 만 줄면 배율을 올린다", learned.Count == 1 && learned[0] > 2.0 && learned[0] < 2.4, string.Join(", ", learned.Select(v => v.ToString("0.00"))));
         }
 
+        // ── 클릭(버튼, 누르는 시간) ──
+        {
+            var watch = Stopwatch.StartNew();
+            var (errors, adapter, _) = Run(new RoslynScriptEngine(), "클릭(80);", new FakeHub(monitor), monitor, CancellationToken.None);
+            watch.Stop();
+            var buttons = adapter.Calls.Where(c => c.StartsWith("Press") || c.StartsWith("Release")).ToList();
+
+            Check("클릭(80): 좌클릭을 80ms 누르고 있다가 뗀다", errors.Count == 0 && buttons.SequenceEqual(["Press Left", "Release Left"]) && watch.ElapsedMilliseconds >= 80,
+                  string.Join(", ", buttons) + $" ({watch.ElapsedMilliseconds}ms)" + (errors.Count > 0 ? " / " + errors[0] : ""));
+
+            var (jsErrors, jsAdapter, _) = Run(new JavaScriptEngine(), "클릭('Right', 20); 클릭(); 우클릭(10); 클릭(15);", new FakeHub(monitor), monitor, CancellationToken.None);
+            var jsButtons = jsAdapter.Calls.Where(c => c.StartsWith("Press") || c.StartsWith("Release")).ToList();
+
+            Check("클릭('Right', 20) · 클릭() · 우클릭(10) · 클릭(15): 자바스크립트", jsErrors.Count == 0 && jsButtons.SequenceEqual(["Press Right", "Release Right", "Press Left", "Release Left", "Press Right", "Release Right", "Press Left", "Release Left"]),
+                  string.Join(", ", jsButtons) + (jsErrors.Count > 0 ? " / " + jsErrors[0] : ""));
+        }
+
         // ── 걷기: 누르고 있다가 반드시 뗀다 ──
         {
             var (errors, adapter, _) = Run(new RoslynScriptEngine(), "걷기(\"W+A\", 30);", new FakeHub(monitor), monitor, CancellationToken.None);

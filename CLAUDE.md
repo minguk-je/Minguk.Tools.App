@@ -1,4 +1,4 @@
-﻿DevExpress WPF 컨트롤, WPF 개발자
+DevExpress WPF 컨트롤, WPF 개발자
 
 ## 이 프로젝트
 
@@ -343,6 +343,7 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   **큰 이동은 30 카운트씩 4ms 간격** - 한 번에 수백을 넣으면 OS 커서가 창 밖으로 나가 이어진 클릭이 바탕 화면을
   눌렀다(앞 창이 "Program Manager"). `Click` 은 커서가 대상 창 밖이면 100ms 기다려 보고 그래도 밖이면 안 누른다(가드).
   게임의 이동(걷기)은 W·A·S·D 를 누르고 있는 시간이다 - `걷기("W", 500)`. finally 로 반드시 뗀다.
+  `클릭(100)`·`클릭("Right", 100)`·`우클릭(100)` 도 같다(실시간만, 첫 인자가 숫자면 누르는 시간) - 누른 버튼은 적어 두어 비상 정지(`ReleaseAll`)가 뗀다.
 - **전역 단축키는 공용(`SharedHotkeysFactory.Default`)** - RegisterHotKey 는 한 조합을 한 창만 쥔다. 스크립트·플레이·
   입력 자동화가 각자 F5 를 쥐면 같이 열린 화면은 등록에 실패해 게임에서 F5 가 안 먹었다(실측). 이제 화면은
   `Claim` 으로 쥐고(`HotkeyClaim`), 탭이 활성화되면(`DocumentViewModelBase.OnActivated`) 제 차례를 당긴다 -

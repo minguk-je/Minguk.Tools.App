@@ -48,6 +48,7 @@ public sealed class LiveScriptApi
     private readonly LiveScriptHost _host;
     private readonly CancellationToken _token;
     private readonly HashSet<ushort> _heldKeys = [];
+    private readonly HashSet<MouseButton> _heldButtons = [];
     private readonly Queue<long> _inputTicks = new();
     private readonly object _gate = new();
 
@@ -78,18 +79,67 @@ public sealed class LiveScriptApi
     public void ToggleHangul() => Traced("ToggleHangul", "", () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.ToggleHangul }));
 
     /// <param name="button">비우면 좌클릭. MouseButton.Right · 숫자 · "right" 를 받는다 - 언어마다 넘기는 모양이 다르다.</param>
-    public void Click(object? button = null) => Traced("Click", ToButton(button).ToString(), () =>
+    /// <summary>
+    /// 마우스 버튼 한 번. <c>클릭()</c> 좌클릭 · <c>클릭(100)</c> 좌클릭을 100ms 누르고 있다가 뗌 ·
+    /// <c>클릭("Right")</c> · <c>클릭("Right", 100)</c>.
+    /// </summary>
+    /// <param name="buttonOrHold">
+    /// 숫자면 누르고 있을 시간(ms) - 게임에서 연사·차지처럼 누른 채로 있어야 할 때. 아니면 버튼(MouseButton · "Right").
+    /// 버튼 번호를 숫자로 받던 것은 버렸다 - <c>클릭(100)</c> 이 더 자주 쓰인다.
+    /// </param>
+    /// <param name="holdMs">버튼을 먼저 줄 때의 누르는 시간(ms). 0 이면 보통 클릭(누르는 시간은 화면의 설정).</param>
+    /// <remarks>누르고 있는 동안 중지가 먹고, 멈추거나 터져도 반드시 뗀다.</remarks>
+    public void Click(object? buttonOrHold = null, int holdMs = 0)
     {
-        EnsureCursorInsideTarget();
-        Send(new SequenceStepDefinition { Kind = SequenceStepKind.Click, Button = ToButton(button) });
-    });
+        var (button, hold) = buttonOrHold switch
+        {
+            int or long or double or float => (MouseButton.Left, (int)System.Convert.ToDouble(buttonOrHold, CultureInfo.InvariantCulture)),
+            _ => (ToButton(buttonOrHold), holdMs)
+        };
 
-    public void RightClick() => Click(MouseButton.Right);
+        ClickCore(button, hold);
+    }
+
+    private void ClickCore(MouseButton button, int holdMs)
+        => Traced("Click", holdMs > 0 ? $"{button}, {holdMs}" : button.ToString(), () =>
+        {
+            EnsureCursorInsideTarget();
+
+            if (holdMs <= 0)
+            {
+                Send(new SequenceStepDefinition { Kind = SequenceStepKind.Click, Button = button });
+                return;
+            }
+
+            HoldButton(button, holdMs);
+        });
+
+    /// <summary>버튼을 그 시간만큼 누르고 있다가 뗀다. 비상 정지(<see cref="ReleaseAll"/>)도 뗄 수 있게 누른 것을 적어 둔다.</summary>
+    private void HoldButton(MouseButton button, int holdMs)
+    {
+        BeforeInput();
+
+        lock (_gate) _heldButtons.Add(button);
+        _host.Service.Adapter.PressMouseButton(button);
+
+        try
+        {
+            Wait(holdMs);
+        }
+        finally
+        {
+            lock (_gate) _heldButtons.Remove(button);
+            _host.Service.Adapter.ReleaseMouseButton(button);
+        }
+    }
+
+    /// <summary>우클릭. <c>우클릭(100)</c> 이면 100ms 누르고 있다가 뗀다.</summary>
+    public void RightClick(int holdMs = 0) => ClickCore(MouseButton.Right, holdMs);
 
     public void ClickAt(int x, int y, object? button = null)
     {
         MoveTo(x, y);
-        Click(button);
+        ClickCore(ToButton(button), 0);
     }
 
     public void MoveTo(int x, int y) => Traced("MoveTo", $"{x}, {y}", () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.MoveTo, X = x, Y = y }));
@@ -276,8 +326,8 @@ public sealed class LiveScriptApi
     public void 줄입력(string text) => TypeLine(text);
     public void 엔터() => Enter();
     public void 한영() => ToggleHangul();
-    public void 클릭(object? button = null) => Click(button);
-    public void 우클릭() => RightClick();
+    public void 클릭(object? 버튼또는시간 = null, int 누르는시간 = 0) => Click(버튼또는시간, 누르는시간);
+    public void 우클릭(int 누르는시간 = 0) => RightClick(누르는시간);
     public void 이동(int x, int y) => MoveTo(x, y);
     public void 이동클릭(int x, int y, object? button = null) => ClickAt(x, y, button);
     public void 휠(int notches) => Scroll(notches);
@@ -490,17 +540,27 @@ public sealed class LiveScriptApi
     public void ReleaseAll()
     {
         ushort[] held;
+        MouseButton[] buttons;
 
         lock (_gate)
         {
             held = [.. _heldKeys];
             _heldKeys.Clear();
+            buttons = [.. _heldButtons];
+            _heldButtons.Clear();
         }
 
         foreach (var key in held)
         {
             try { _host.Service.Adapter.ReleaseKey(key); }
             catch (Exception) { /* 어댑터가 이미 닫혔을 수 있다. 떼려는 시도만 한다. */ }
+        }
+
+        // 누른 채로 멈추면 게임이 계속 쏜다.
+        foreach (var button in buttons)
+        {
+            try { _host.Service.Adapter.ReleaseMouseButton(button); }
+            catch (Exception) { }
         }
     }
 
