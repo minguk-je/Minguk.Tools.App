@@ -69,6 +69,10 @@ public static class ScriptApiCatalog
         // ── 실시간만: 화면을 읽거나 흐름을 다룬다 ──
         new("Aim", "조준", "x, y", "그 화면 좌표를 향해 마우스를 움직인 양으로 옮긴다. 커서를 잡는 게임에서 조준할 때(이동()은 안 먹는다). 겨눈 뒤 새 화면이 오기 전에는 다시 안 겨누고 false.", ScriptApiMode.Live),
         new("MoveBy", "상대이동", "dx, dy", "지금 자리에서 이만큼 움직인다.", ScriptApiMode.Live),
+        new("MouseDown", "버튼누르기", "button", "마우스 버튼을 누른 채로 둔다. 떼기 전까지.", ScriptApiMode.Live),
+        new("MouseUp", "버튼떼기", "button", "누르고 있던 마우스 버튼을 뗀다.", ScriptApiMode.Live),
+        new("Drag", "끌기", "x, y, button", "버튼을 누른 채 그 화면 좌표로 끌었다가 뗀다. 커서가 보이는 창(RPG)에서.", ScriptApiMode.Live),
+        new("DragBy", "상대끌기", "dx, dy, button", "버튼을 누른 채 이만큼 움직였다가 뗀다. RPG 의 우클릭 카메라 회전 - 상대끌기(200, 0, \"Right\").", ScriptApiMode.Live),
         new("Mobs", "몹들", "", "지금 화면에서 찾은 몹들. 없으면 빈 목록. 몹 찾기가 켜져 있어야 한다.", ScriptApiMode.Live),
         new("NearestMob", "가장가까운몹", "", "화면 가운데에서 가장 가까운 몹. 없으면 null.", ScriptApiMode.Live),
         new("WaitMob", "몹기다리기", "milliseconds", "몹이 보일 때까지 최대 ms 기다린다. 못 보면 null.", ScriptApiMode.Live),

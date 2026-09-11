@@ -170,6 +170,24 @@ internal static partial class Program
                   string.Join(", ", jsButtons) + (jsErrors.Count > 0 ? " / " + jsErrors[0] : ""));
         }
 
+        // ── 끌기·상대끌기·버튼누르기: 누른 채 움직였다 뗀다 ──
+        {
+            var (errors, adapter, _) = Run(new RoslynScriptEngine(), "상대끌기(90, 0, \"Right\"); 버튼누르기(); 버튼떼기();", new FakeHub(monitor), monitor, CancellationToken.None);
+            var calls = adapter.Calls.Where(c => c.StartsWith("Press") || c.StartsWith("Release") || c.StartsWith("MoveBy")).ToList();
+            var moves = calls.Where(c => c.StartsWith("MoveBy")).Select(c => int.Parse(c[7..].Split(',')[0])).ToList();
+
+            Check("상대끌기: 우버튼을 누른 채 나눠 움직였다 뗀다", errors.Count == 0 && calls[0] == "Press Right" && calls[^3] == "Release Right"
+                  && moves.Sum() == 90 && moves.Count == 3 && calls[^2] == "Press Left" && calls[^1] == "Release Left",
+                  string.Join(", ", calls) + (errors.Count > 0 ? " / " + errors[0] : ""));
+
+            var (dragErrors, dragAdapter, _) = Run(new RoslynScriptEngine(), "끌기(300, 400);", new FakeHub(monitor), monitor, CancellationToken.None);
+            var dragCalls = dragAdapter.Calls.Where(c => c.StartsWith("Press") || c.StartsWith("Release") || c.StartsWith("MoveTo")).ToList();
+
+            Check("끌기: 누른 채 그 자리로 옮겼다 뗀다", dragErrors.Count == 0 && dragCalls[0] == "Press Left" && dragCalls[^1] == "Release Left"
+                  && dragCalls.Any(c => c == "MoveTo 300,400"),
+                  string.Join(", ", dragCalls) + (dragErrors.Count > 0 ? " / " + dragErrors[0] : ""));
+        }
+
         // ── 걷기: 누르고 있다가 반드시 뗀다 ──
         {
             var (errors, adapter, _) = Run(new RoslynScriptEngine(), "걷기(\"W+A\", 30);", new FakeHub(monitor), monitor, CancellationToken.None);

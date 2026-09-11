@@ -170,6 +170,87 @@ public sealed class LiveScriptApi
         _host.Service.Adapter.MoveMouseBy(deltaX, deltaY);
     });
 
+    /// <summary>버튼을 누른 채로 둔다. <c>버튼떼기</c> 전까지. 비상 정지도 뗄 수 있게 적어 둔다.</summary>
+    public void MouseDown(object? button = null) => Traced("MouseDown", ToButton(button).ToString(), () =>
+    {
+        BeforeInput();
+
+        var pressed = ToButton(button);
+        lock (_gate) _heldButtons.Add(pressed);
+        _host.Service.Adapter.PressMouseButton(pressed);
+    });
+
+    /// <summary>누르고 있던 버튼을 뗀다.</summary>
+    public void MouseUp(object? button = null) => Traced("MouseUp", ToButton(button).ToString(), () =>
+    {
+        BeforeInput();
+
+        var pressed = ToButton(button);
+        lock (_gate) _heldButtons.Remove(pressed);
+        _host.Service.Adapter.ReleaseMouseButton(pressed);
+    });
+
+    /// <summary>
+    /// 버튼을 누른 채 그 화면 좌표로 끌었다가 뗀다. 커서가 보이는 창(RPG·보통 프로그램)에서.
+    /// </summary>
+    public void Drag(int x, int y, object? button = null)
+        => Traced("Drag", $"{x}, {y}, {ToButton(button)}", () => DragCore(ToButton(button), () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.MoveTo, X = x, Y = y })));
+
+    /// <summary>
+    /// 버튼을 누른 채 이만큼 움직였다가 뗀다. RPG 의 우클릭 카메라 회전처럼 커서 자리가 아니라 <b>움직인 양</b>이 중요한 곳에.
+    /// </summary>
+    /// <remarks>
+    /// <c>상대끌기(200, 0, "Right")</c> 면 오른쪽 버튼을 누른 채 오른쪽으로 200 카운트 돌린다. 조준과 같은 걸음 나누기를 쓴다.
+    /// </remarks>
+    public void DragBy(int deltaX, int deltaY, object? button = null)
+        => Traced("DragBy", $"{deltaX}, {deltaY}, {ToButton(button)}", () => DragCore(ToButton(button), () => SendRelative(deltaX, deltaY)));
+
+    /// <summary>누르고 → 움직이고 → 뗀다. 중간에 멈추거나 터져도 반드시 뗀다 - 누른 채 남으면 게임이 계속 끌린다.</summary>
+    private void DragCore(MouseButton button, Action move)
+    {
+        BeforeInput();
+        ForgetAim();
+
+        lock (_gate) _heldButtons.Add(button);
+        _host.Service.Adapter.PressMouseButton(button);
+
+        try
+        {
+            // 누르자마자 움직이면 게임이 누름을 놓치는 일이 있다. 한 박자 둔다.
+            Wait(_host.HoldTimeMs);
+            move();
+            Wait(_host.HoldTimeMs);
+        }
+        finally
+        {
+            lock (_gate) _heldButtons.Remove(button);
+            _host.Service.Adapter.ReleaseMouseButton(button);
+        }
+    }
+
+    /// <summary>상대 이동을 걸음으로 나눠 보낸다. 한 번에 크게 넣으면 커서가 창 밖으로 나간다 - 조준과 끌기가 같이 쓴다.</summary>
+    private void SendRelative(int deltaX, int deltaY)
+    {
+        if (deltaX == 0 && deltaY == 0) return;
+
+        var steps = Math.Clamp((int)Math.Ceiling(Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) / (double)MaxAimStep), 1, MaxAimSteps);
+        var sentX = 0;
+        var sentY = 0;
+
+        for (var i = 1; i <= steps; i++)
+        {
+            // 나눗셈 나머지가 끝에 몰리지 않게 누적으로 나눈다 - 합은 정확히 delta 다.
+            var stepX = (int)Math.Round(deltaX * i / (double)steps) - sentX;
+            var stepY = (int)Math.Round(deltaY * i / (double)steps) - sentY;
+
+            _host.Service.Adapter.MoveMouseBy(stepX, stepY);
+            sentX += stepX;
+            sentY += stepY;
+
+            if (i < steps) Wait(AimStepGapMs);
+        }
+    }
+
     /// <summary>한 번에 보내는 상대 이동의 최대 크기(카운트). 넘으면 잘게 나눈다.</summary>
     private const int MaxAimStep = 30;
 
@@ -274,22 +355,7 @@ public sealed class LiveScriptApi
 
         Logger.Debug($"조준: 거리({offsetX:0}, {offsetY:0}) × 배율 {AimScale:0.00} → 보냄({deltaX}, {deltaY}){(onTarget ? " · 맞음" : string.Empty)}");
 
-        var steps = Math.Clamp((int)Math.Ceiling(Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) / (double)MaxAimStep), 1, MaxAimSteps);
-        var sentX = 0;
-        var sentY = 0;
-
-        for (var i = 1; i <= steps; i++)
-        {
-            // 나눗셈 나머지가 끝에 몰리지 않게 누적으로 나눈다 - 합은 정확히 delta 다.
-            var stepX = (int)Math.Round(deltaX * i / (double)steps) - sentX;
-            var stepY = (int)Math.Round(deltaY * i / (double)steps) - sentY;
-
-            _host.Service.Adapter.MoveMouseBy(stepX, stepY);
-            sentX += stepX;
-            sentY += stepY;
-
-            if (i < steps) Wait(AimStepGapMs);
-        }
+        SendRelative(deltaX, deltaY);
 
         _lastAimTicks = Environment.TickCount64;
         return onTarget;
@@ -380,6 +446,10 @@ public sealed class LiveScriptApi
     public void 이동(int x, int y) => MoveTo(x, y);
     public void 이동클릭(int x, int y, object? button = null) => ClickAt(x, y, button);
     public void 휠(int notches) => Scroll(notches);
+    public void 버튼누르기(object? 버튼 = null) => MouseDown(버튼);
+    public void 버튼떼기(object? 버튼 = null) => MouseUp(버튼);
+    public void 끌기(int x, int y, object? 버튼 = null) => Drag(x, y, 버튼);
+    public void 상대끌기(int dx, int dy, object? 버튼 = null) => DragBy(dx, dy, 버튼);
     public bool 조준(int x, int y) => Aim(x, y);
     public void 상대이동(int deltaX, int deltaY) => MoveBy(deltaX, deltaY);
     public void 쉬기(int milliseconds) => Wait(milliseconds);
