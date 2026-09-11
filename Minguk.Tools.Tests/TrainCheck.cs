@@ -21,7 +21,7 @@ namespace Minguk.Tools.Tests;
 /// </remarks>
 internal static class TrainCheck
 {
-    public static int Run(string root, int epochs, int width, int height, double? learningRate = null)
+    public static int Run(string root, int epochs, int width, int height, double? learningRate = null, bool useImageCache = true)
     {
         var dataset = new LabelDataset(root);
 
@@ -47,7 +47,9 @@ internal static class TrainCheck
         {
             if (learningRate is { } lr) Console.WriteLine($"학습률: {lr}");
 
-            var result = DetectorTrainer.TrainAsync(dataset, epochs, progress, CancellationToken.None, width, height, learningRate)
+            if (!useImageCache) Console.WriteLine("그림 캐시 끔 - 매 바퀴 원본을 읽는다");
+
+            var result = DetectorTrainer.TrainAsync(dataset, epochs, progress, CancellationToken.None, width, height, learningRate, useImageCache: useImageCache)
                 .GetAwaiter().GetResult();
 
             Console.WriteLine($"학습 끝: {result}");

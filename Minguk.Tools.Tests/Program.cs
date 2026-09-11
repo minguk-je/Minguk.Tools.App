@@ -66,7 +66,8 @@ internal static partial class Program
             var epochs = int.Parse(ArgValue(args, "--epochs=") ?? "20", CultureInfo.InvariantCulture);
             var size = (ArgValue(args, "--size=") ?? "320x180").Split('x');
             double? lr = ArgValue(args, "--lr=") is { } l ? double.Parse(l, CultureInfo.InvariantCulture) : null;
-            return TrainCheck.Run(trainRoot, epochs, int.Parse(size[0], CultureInfo.InvariantCulture), int.Parse(size[1], CultureInfo.InvariantCulture), lr);
+            return TrainCheck.Run(trainRoot, epochs, int.Parse(size[0], CultureInfo.InvariantCulture), int.Parse(size[1], CultureInfo.InvariantCulture), lr,
+                                  useImageCache: !args.Contains("--no-cache"));
         }
 
         // 라벨·학습 준비·추론 변환만 본다. 입력 어댑터를 안 만들므로 커서와 키보드를
