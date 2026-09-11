@@ -35,8 +35,11 @@ public sealed class ScriptConsole : ViewModelBase
     private readonly UiCoalescer _linesUi;
     private readonly UiCoalescer _watchesUi;
 
-    // 파일 로그: 같은 호출이 같은 결과면 적지 않고 센다. 결과가 바뀔 때 몇 번 건너뛰었는지 붙인다.
-    private readonly Dictionary<string, (string Value, int Skipped)> _logged = new();
+    // 파일 로그: 같은 호출이 같은 결과면 적지 않고 센다. 결과가 바뀔 때, 그리고 적어도 2초에 한 번은 적는다 -
+    // 안 그러면 같은 호출만 되풀이하는 동안(클릭 700ms 같은) 로그에 아무것도 안 남아 뭘 했는지 못 본다(실측).
+    private readonly Dictionary<string, (string Value, int Skipped, long Ticks)> _logged = new();
+
+    private const int LogEveryMs = 2000;
 
     public ScriptConsole(Action<Action> onUi)
     {
@@ -84,15 +87,17 @@ public sealed class ScriptConsole : ViewModelBase
             while (_calls.Count > MaxCalls) _calls.Dequeue();
 
             var value = $"{call.Arguments}|{call.Result}";
+            var now = Environment.TickCount64;
+            _logged.TryGetValue(call.Name, out var last);
 
-            if (_logged.TryGetValue(call.Name, out var last) && last.Value == value)
+            if (last.Value == value && now - last.Ticks < LogEveryMs)
             {
-                _logged[call.Name] = (value, last.Skipped + 1);
+                _logged[call.Name] = (value, last.Skipped + 1, last.Ticks);
             }
             else
             {
                 line = last.Skipped > 0 ? $"호출: {call}  (앞의 같은 {call.Name} {last.Skipped}번 건너뜀)" : $"호출: {call}";
-                _logged[call.Name] = (value, 0);
+                _logged[call.Name] = (value, 0, now);
             }
         }
 
