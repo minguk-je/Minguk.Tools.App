@@ -227,6 +227,11 @@
                 </dxb:BarEditItem.EditSettings>
             </dxb:BarEditItem>
 
+            <dxb:BarCheckItem Content="배율 자동"
+                              IsChecked="{Binding Player.IsAimScaleAuto}"
+                              IsEnabled="{Binding Player.IsIdle}"
+                              ToolTip="조준이 겨눈 결과를 보고 배율을 스스로 맞춘다. 맞춘 값은 저장돼 다음에도 쓴다." />
+
             <dxb:BarEditItem Content="반복 횟수"
                              EditValue="{Binding Player.MaxLoops}"
                              EditWidth="70"

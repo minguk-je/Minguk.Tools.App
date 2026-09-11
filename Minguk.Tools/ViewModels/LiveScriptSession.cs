@@ -112,7 +112,15 @@ public sealed class LiveScriptSession : IDisposable
                 Watch = Console.Watch,
                 Trace = Console.Trace,
                 HoldTimeMs = player.HoldTimeMs,
-                AimScale = player.AimScale
+                AimScale = player.AimScale,
+                AimScaleLearned = player.IsAimScaleAuto
+                    ? learned =>
+                    {
+                        var percent = (int)Math.Round(learned * 100);
+                        Console.Print($"조준 배율을 {percent}% 로 맞췄습니다.");
+                        _onUi(() => player.AimScalePercent = percent);
+                    }
+                    : null
             };
 
             var api = new LiveScriptApi(host, token);

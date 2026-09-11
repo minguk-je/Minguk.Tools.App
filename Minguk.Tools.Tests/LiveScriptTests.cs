@@ -110,7 +110,47 @@ internal static partial class Program
                   && moves[^1].SequenceEqual([3, -4]),
                   string.Join(" ", moves.Select(m => $"({m[0]},{m[1]})")) + (errors.Count > 0 ? " / " + errors[0] : ""));
 
-            Check("같은 화면으로는 두 번 겨누지 않는다", printed.SequenceEqual(["True", "False"]) || printed.SequenceEqual(["true", "false"]), string.Join(", ", printed));
+            Check("멀면 겨누고 false, 새 화면이 오기 전에는 다시 안 겨눈다(false)", aimMoves.Count == 4 && printed.Select(p => p.ToLowerInvariant()).SequenceEqual(["false", "false"]), string.Join(", ", printed));
+        }
+
+        // ── 조준: 가운데 가까우면 맞음(true) ──
+        {
+            Minguk.Tools.Capture.Input.CaptureTargetBounds.TryGet(monitor, out var bounds);
+            var cx = (int)(bounds.Left + (bounds.Width / 2));
+            var cy = (int)(bounds.Top + (bounds.Height / 2));
+
+            var (errors, _, printed) = Run(new RoslynScriptEngine(), $"출력(조준({cx + 5}, {cy - 3}));", new FakeHub(monitor), monitor, CancellationToken.None);
+            Check("조준: 가운데 8px 안이면 맞았다(true)", errors.Count == 0 && printed.Select(p => p.ToLowerInvariant()).SequenceEqual(["true"]), string.Join(", ", printed));
+        }
+
+        // ── 조준 배율 배우기: 겨눈 뒤 거리가 29% 만 줄면 배율을 올린다 ──
+        {
+            var learned = new List<double>();
+            var hub = new FakeHub(monitor) { FrameTicks = 1 };
+            var host = new LiveScriptHost
+            {
+                Service = new InputService(new RecordingAdapter()),
+                RequiresForeground = false,
+                Target = () => monitor,
+                Hub = hub,
+                Print = _ => { },
+                Watch = (_, _) => { },
+                HoldTimeMs = 1,
+                AimScale = 1.0,
+                AimScaleLearned = learned.Add
+            };
+
+            var api = new LiveScriptApi(host, CancellationToken.None);
+            Minguk.Tools.Capture.Input.CaptureTargetBounds.TryGet(monitor, out var bounds);
+            var cx = (int)(bounds.Left + (bounds.Width / 2));
+            var cy = (int)(bounds.Top + (bounds.Height / 2));
+
+            // 200px 겨눔 → 새 화면에서 142px 남음(29% 줄어듦) → 배율은 200/58 ≈ 3.45 쪽으로 반 따라가 약 2.2.
+            api.Aim(cx + 200, cy);
+            hub.FrameTicks = Environment.TickCount64 + 1000;
+            api.Aim(cx + 142, cy);
+
+            Check("조준 배율 배우기: 29% 만 줄면 배율을 올린다", learned.Count == 1 && learned[0] > 2.0 && learned[0] < 2.4, string.Join(", ", learned.Select(v => v.ToString("0.00"))));
         }
 
         // ── 걷기: 누르고 있다가 반드시 뗀다 ──
@@ -296,7 +336,7 @@ internal static partial class Program
         public bool WantsFrames { get; set; }
 
         /// <summary>검출이 본 프레임의 시각. 0 이면 모름(조준이 같은 화면 검사를 안 한다).</summary>
-        public long FrameTicks { get; init; }
+        public long FrameTicks { get; set; }
 
         public DetectionSnapshot? Latest => new(
             [new Detection("일반 봇", LabelBox.FromCorners(0, 0.45, 0.45, 0.55, 0.55), 0.9f)],

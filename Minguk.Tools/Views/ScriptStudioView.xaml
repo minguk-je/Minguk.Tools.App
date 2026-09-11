@@ -433,11 +433,16 @@
                     </dxlc:LayoutItem>
 
                     <dxlc:LayoutItem Label="조준 배율(%)"
-                                     ToolTip="조준(x, y) 이 화면 가운데에서 목표까지의 거리에 곱하는 값. 게임 감도에 맞춰 조절한다 - 모자라면 올리고 넘치면 내린다.">
-                        <dxe:SpinEdit Width="64"
-                                      EditValue="{Binding Player.AimScalePercent}"
-                                      MaxValue="2000"
-                                      MinValue="1" />
+                                     ToolTip="조준(x, y) 이 화면 가운데에서 목표까지의 거리에 곱하는 값. 게임 감도마다 다르다. 자동을 켜 두면 겨눈 결과를 보고 스스로 맞춘다.">
+                        <StackPanel Orientation="Horizontal">
+                            <dxe:SpinEdit Width="64"
+                                          EditValue="{Binding Player.AimScalePercent}"
+                                          MaxValue="2000"
+                                          MinValue="1" />
+                            <dxe:CheckEdit Margin="6,0,0,0"
+                                           Content="자동"
+                                           EditValue="{Binding Player.IsAimScaleAuto}" />
+                        </StackPanel>
                     </dxlc:LayoutItem>
 
                     <dxlc:LayoutItem Label="진행">

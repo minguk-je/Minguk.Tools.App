@@ -109,6 +109,9 @@ public sealed class ScriptPlayer : ViewModelBase
 
     public double AimScale => Math.Max(1, AimScalePercent) / 100.0;
 
+    /// <summary>조준이 겨눈 결과를 보고 배율을 스스로 맞추는가. 켜 두면 "조준 배율" 칸이 돌면서 고쳐진다.</summary>
+    public bool IsAimScaleAuto { get => GetProperty(() => IsAimScaleAuto); set => SetProperty(() => IsAimScaleAuto, value); }
+
     /// <summary>한 번 실행이 이보다 오래 돌면 멈춘다(초). 0 이면 상한 없음. 끝나지 않는 반복문의 안전장치.</summary>
     public int RunTimeLimitSeconds { get => GetProperty(() => RunTimeLimitSeconds); set => SetProperty(() => RunTimeLimitSeconds, value); }
 
@@ -123,6 +126,7 @@ public sealed class ScriptPlayer : ViewModelBase
         MaxLoops = get(nameof(MaxLoops), 0);
         RunTimeLimitSeconds = get(nameof(RunTimeLimitSeconds), 600);
         AimScalePercent = get(nameof(AimScalePercent), 100);
+        IsAimScaleAuto = get(nameof(IsAimScaleAuto), 1) != 0;
     }
 
     public void Save(Action<string, int> set)
@@ -134,6 +138,7 @@ public sealed class ScriptPlayer : ViewModelBase
         set(nameof(MaxLoops), MaxLoops);
         set(nameof(RunTimeLimitSeconds), RunTimeLimitSeconds);
         set(nameof(AimScalePercent), AimScalePercent);
+        set(nameof(IsAimScaleAuto), IsAimScaleAuto ? 1 : 0);
     }
 
     // ── 실행 ─────────────────────────────────────────────────────────────

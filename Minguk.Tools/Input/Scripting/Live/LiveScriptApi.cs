@@ -104,13 +104,17 @@ public sealed class LiveScriptApi
     /// 그런 창은 화면 가운데가 조준점이므로, 가운데에서 목표까지의 거리에 배율을 곱해 상대 이동으로 보낸다.
     /// 한 번에 딱 맞지 않을 수 있다 - 반복문에서 다시 찾고 다시 조준하면 점점 맞아 간다.
     /// </remarks>
-    /// <returns>실제로 움직였으면 true. 겨눈 뒤로 새 화면이 아직 안 왔거나(같은 화면으로 두 번 겨누지 않는다), 이미 가운데면 false.</returns>
+    /// <returns>
+    /// 맞았으면(겨눈 뒤의 새 화면에서 목표가 가운데 <see cref="LiveScriptHost.AimTolerancePx"/> 안) true - 이때 누르면 된다.
+    /// 아직 멀어 움직였거나, 겨눈 뒤 새 화면이 아직 안 왔으면 false.
+    /// </returns>
     public bool Aim(int x, int y) => Traced("Aim", $"{x}, {y}", () => AimCore(x, y));
 
     /// <summary>지금 자리에서 이만큼 움직인다. 배율 없이 그대로.</summary>
     public void MoveBy(int deltaX, int deltaY) => Traced("MoveBy", $"{deltaX}, {deltaY}", () =>
     {
         BeforeInput();
+        ForgetAim();
         _host.Service.Adapter.MoveMouseBy(deltaX, deltaY);
     });
 
@@ -123,6 +127,23 @@ public sealed class LiveScriptApi
     /// <summary>마지막으로 겨눈 시각(TickCount64). 이보다 앞선 프레임으로 찾은 자리로는 다시 겨누지 않는다.</summary>
     private long _lastAimTicks;
 
+    /// <summary>
+    /// 겨눈 뒤 이만큼(ms) 안에 들어온 프레임도 버린다. 게임이 그리고, 화면에 오르고, 캡처가 받기까지 몇 프레임 걸려
+    /// 그 사이의 프레임은 겨누기 전 화면이다(실측: 가끔 거리가 전혀 안 줄어든 프레임이 끼었다).
+    /// </summary>
+    private const int AimSettleMs = 80;
+
+    /// <summary>지금 쓰는 배율(카운트/px). 처음엔 화면의 칸, 겨눌 때마다 배운다.</summary>
+    private double? _aimScale;
+
+    /// <summary>마지막 조준의 거리(px)와 보낸 양(카운트). 다음 새 화면에서 얼마나 줄었는지로 배율을 배운다.</summary>
+    private (double OffsetX, double OffsetY, int CountX, int CountY)? _lastAim;
+
+    private double AimScale => _aimScale ??= _host.AimScale;
+
+    /// <summary>조준 말고 다른 것이 시야를 움직였다. 다음 거리 변화는 배율 탓이 아니다.</summary>
+    private void ForgetAim() => _lastAim = null;
+
     /// <remarks>
     /// <b>같은 화면으로 두 번 겨누지 않는다</b> - 검출은 0.5~1초에 한 번인데 반복문은 0.1초마다 돈다. 같은 몹 자리로
     /// 예닐곱 번 겨누니 거리의 여섯 배를 돌아 몹을 지나쳐 흔들렸다(실측: 오버워치, 몹 자리가 0.7초마다 반대편으로 튐).
@@ -133,7 +154,7 @@ public sealed class LiveScriptApi
     /// </remarks>
     private bool AimCore(int x, int y)
     {
-        if (_host.Hub.Latest is { FrameTicks: > 0 } snapshot && snapshot.FrameTicks <= _lastAimTicks)
+        if (_host.Hub.Latest is { FrameTicks: > 0 } snapshot && _lastAimTicks > 0 && snapshot.FrameTicks <= _lastAimTicks + AimSettleMs)
             return false;
 
         BeforeInput();
@@ -145,10 +166,20 @@ public sealed class LiveScriptApi
 
         var centerX = bounds.Left + (bounds.Width / 2);
         var centerY = bounds.Top + (bounds.Height / 2);
-        var deltaX = (int)Math.Round((x - centerX) * _host.AimScale);
-        var deltaY = (int)Math.Round((y - centerY) * _host.AimScale);
+        var offsetX = x - centerX;
+        var offsetY = y - centerY;
 
-        if (deltaX == 0 && deltaY == 0) return false;
+        LearnAimScale(offsetX, offsetY);
+
+        var onTarget = Math.Abs(offsetX) <= _host.AimTolerancePx && Math.Abs(offsetY) <= _host.AimTolerancePx;
+        var deltaX = (int)Math.Round(offsetX * AimScale);
+        var deltaY = (int)Math.Round(offsetY * AimScale);
+
+        // 맞았어도 남은 몇 px 은 마저 당긴다. 다음 판정도 새 화면으로 하도록 시각은 늘 남긴다.
+        _lastAimTicks = Environment.TickCount64;
+        _lastAim = (offsetX, offsetY, deltaX, deltaY);
+
+        if (deltaX == 0 && deltaY == 0) return onTarget;
 
         var steps = Math.Max(1, (int)Math.Ceiling(Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) / (double)MaxAimStep));
         var sentX = 0;
@@ -168,7 +199,41 @@ public sealed class LiveScriptApi
         }
 
         _lastAimTicks = Environment.TickCount64;
-        return true;
+        return onTarget;
+    }
+
+    /// <summary>
+    /// 지난 조준 뒤 거리가 얼마나 줄었는지로 배율(카운트/px)을 배운다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜</b> - 필요한 배율은 게임·감도·해상도·시야각마다 다르다. 오버워치에서 100% 로 겨누니 한 번에 거리의 29% 만
+    /// 줄었다(실측: 203→143→102, -228→-195→-106 ...). 사람이 340% 를 찾아 넣게 하지 말고, 겨눈 결과를 보고 맞춘다.
+    /// 보낸 양 ÷ 실제로 줄어든 거리 = 배율. 지나친 값을 막으려고 한 번에 반만 따라가고, 한 축에서 15카운트·20px 넘게
+    /// 움직였을 때만 배운다. 목표가 바뀌었을 수 있는 경우(거리가 거의 안 줄거나 반대로 두 배 넘게 넘어감)는 버린다.
+    /// </remarks>
+    private void LearnAimScale(double offsetX, double offsetY)
+    {
+        if (_host.AimScaleLearned is null || _lastAim is not { } last) return;
+
+        // 많이 움직인 축으로 본다. 위아래는 대개 몇 px 이라 잡음이 크다.
+        var (before, after, sent) = Math.Abs(last.CountX) >= Math.Abs(last.CountY)
+            ? (last.OffsetX, offsetX, last.CountX)
+            : (last.OffsetY, offsetY, last.CountY);
+
+        if (Math.Abs(sent) < 15 || Math.Abs(before) < 20) return;
+
+        var moved = before - after;
+        var fraction = moved / before;
+
+        if (fraction < 0.1 || fraction > 1.9) return;
+
+        var measured = Math.Clamp(sent / moved, 0.1, 20);
+        var next = Math.Clamp((AimScale * 0.5) + (measured * 0.5), 0.1, 20);
+
+        if (Math.Abs(next - AimScale) / AimScale < 0.02) return;
+
+        _aimScale = next;
+        _host.AimScaleLearned(next);
     }
 
     /// <summary>

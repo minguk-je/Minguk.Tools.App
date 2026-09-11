@@ -47,6 +47,17 @@ public sealed class LiveScriptHost
     /// </remarks>
     public double AimScale { get; init; } = 1.0;
 
+    /// <summary>
+    /// 조준이 스스로 맞춘 배율을 알려 받는 곳. null 이면 배율을 배우지 않는다(주어진 <see cref="AimScale"/> 그대로).
+    /// </summary>
+    /// <remarks>
+    /// 화면은 이것을 받아 "조준 배율(%)" 칸을 고치고 저장한다 - 다음 실행은 맞춘 배율로 시작한다.
+    /// </remarks>
+    public Action<double>? AimScaleLearned { get; init; }
+
+    /// <summary>화면 가운데에서 이 거리(px) 안이면 "맞았다" 로 본다.</summary>
+    public int AimTolerancePx { get; init; } = 8;
+
     /// <summary>초당 입력 호출 상한. 끝나지 않는 반복문이 입력을 쏟아붓지 않게.</summary>
     public int MaxInputsPerSecond { get; init; } = 30;
 }
