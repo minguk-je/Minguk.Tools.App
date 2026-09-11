@@ -94,6 +94,23 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// <summary>담을 때 방금 찾은 것을 라벨로 같이 준다. 라벨링 화면은 그리는 곳이 아니라 틀린 것만 고치는 곳이 된다.</summary>
     protected override IReadOnlyList<Detection> DetectionsForLabels => FreshDetections;
 
+    /// <summary>
+    /// 1초 요약 뒤에 찾기·글자 상태를 덧붙인다.
+    /// </summary>
+    /// <remarks>
+    /// 도구 줄의 정적 항목(BarStaticItem)은 이 문구를 안 그릴 때가 있다 - 메뉴 줄에서도, 설정 줄로 옮겨서도
+    /// "2마리 (640x360, 520ms)" 가 비어 있었다(실측, 짧은 글은 그리기도 한다). 아래 상태 줄은 확실히 그려지고
+    /// 1초마다 새로 쓰이므로 여기에 같이 적는다.
+    /// </remarks>
+    protected override void OnStatisticsRow(FrameLogRow row)
+    {
+        base.OnStatisticsRow(row);
+
+        var extra = string.Join(" · ", new[] { DetectionStatus, OcrStatus }.Where(x => !string.IsNullOrEmpty(x)));
+
+        if (extra.Length > 0) StatusText = $"{StatusText} · {extra}";
+    }
+
     protected override void RestoreSettings()
     {
         base.RestoreSettings();
