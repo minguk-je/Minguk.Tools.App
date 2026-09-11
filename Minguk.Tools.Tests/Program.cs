@@ -46,6 +46,13 @@ internal static partial class Program
             return root is null ? DetectCheck.Run(score) : DetectCheck.Run(new Minguk.Tools.Vision.Labeling.LabelDataset(root), score);
         }
 
+        // 실시간 경로(WPF 로 줄인 PNG)와 파일 경로가 같은 답을 내는지. --scale-check[=<폴더>] [--side=640]
+        if (args.Any(a => a.StartsWith("--scale-check", StringComparison.OrdinalIgnoreCase)))
+        {
+            var side = int.Parse(ArgValue(args, "--side=") ?? "640", CultureInfo.InvariantCulture);
+            return ScaleCheck.Run(ArgValue(args, "--scale-check="), side);
+        }
+
         // 지정한 폴더로 학습하고 곧바로 되찾는지 센다. 조건을 바꿔 가며 여러 번 돌릴 때.
         // --train-check=<폴더> [--epochs=20] [--size=320x180]
         if (ArgValue(args, "--train-check=") is { } trainRoot)

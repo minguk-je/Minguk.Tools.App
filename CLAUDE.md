@@ -554,6 +554,9 @@ CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 �
   읽는다(`LoadDetector`). 이게 없을 때는 화면을 닫았다 열어야 했다. **쓰는 도중에 읽지
   않는다** - 69MB 를 쓰는 동안 시각이 계속 바뀌므로 같은 시각이 2초 유지된 뒤에 읽는다.
   돌고 있는 추론이 옛 모델을 쓰는 중일 수 있어 필드를 먼저 비우고 끝나기를 기다렸다 놓는다.
+- **실시간 경로와 파일 경로는 같은 답을 낸다**(`--scale-check` 실측: 원본 62/64 · 평균 81%,
+  WPF 로 640 으로 줄인 PNG 60/64 · 80%. 차이는 가장 작은 봇 둘뿐). 실시간에서 흔들리면
+  경로가 아니라 **거리**(학습 범위 밖의 작은 봇)와 **움직임**(0.65초 사이 이동)을 본다.
 - **추론용 임시 PNG 는 모델이 보는 크기 이상으로 만든다**(`Math.Max(320, InputWidth)`). 320 으로
   고정했더니 640x360 모델이 320 짜리를 도로 키워 봐서, 되찾기 검사(원본)는 97% 인데 실시간은
   작은 봇을 못 봤다. 상태 줄의 "(320x180, …ms)" 가 그 임시 그림 크기다.
@@ -639,6 +642,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --fallback            # 드�
 dotnet run --project Minguk.Tools.Tests -c Debug -- --calibrate           # 정규화 규칙 실측
 dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-bench        # 추론 속도 (libtorch 필요)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 학습한 모델이 라벨을 되찾는지 (libtorch 필요)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --scale-check         # 실시간 경로(WPF 축소 PNG)와 파일 경로가 같은 답인지
 ```
 
 - `--views` · `--vision` · `--detect-bench` 외에는 **커서와 키보드를 가져간다.** 돌리는 동안 손을 떼야 한다.
