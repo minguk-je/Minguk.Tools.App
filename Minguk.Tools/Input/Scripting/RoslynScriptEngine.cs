@@ -179,7 +179,10 @@ public sealed class RoslynScriptEngine : IScriptEngine
         }
     }, token);
 
-    public async Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, CancellationToken token = default)
+    /// <summary>못 한다. 스크립트 어셈블리는 디버거를 붙일 자리가 없다. 호출 로그가 그 몫을 한다.</summary>
+    public bool SupportsStepping => false;
+
+    public async Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, ScriptDebugSession? debug = null, CancellationToken token = default)
     {
         var text = source ?? string.Empty;
 

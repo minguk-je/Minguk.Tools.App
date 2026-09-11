@@ -292,12 +292,19 @@
                                          FontFamily="D2Coding, Consolas, Courier New"
                                          FontSize="13"
                                          markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
-                                     Errors="{Binding Script.Errors, Mode=OneWay}"
+                                         Breakpoints="{Binding Live.Debug.Breakpoints, Mode=OneWay}"
+                                         CurrentLine="{Binding Live.Debug.PausedLine, Mode=OneWay}"
+                                         Errors="{Binding Script.Errors, Mode=OneWay}"
                                          IsReadOnly="{Binding Script.IsLocked}"
                                          LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
                                          ShowLineNumbers="True"
                                          SyntaxHighlighting="{Binding Script.Highlighting}"
-                                         WordWrap="False" />
+                                         WordWrap="False">
+                        <dxmvvm:Interaction.Behaviors>
+                            <!--  캐럿 줄에 중단점을 찍으려면 편집기를 직접 잡아야 한다.  -->
+                            <dxmvvm:UIObjectService x:Name="EditorObjectService" />
+                        </dxmvvm:Interaction.Behaviors>
+                    </markup:ScriptEditor>
                 </Border>
 
                 <!-- 틀린 줄이 있을 때만 뜬다. 여러 줄이 될 수 있다. -->
@@ -314,34 +321,87 @@
                                   VerticalScrollBarVisibility="Auto" />
                 </dxlc:LayoutItem>
 
-                <!-- 출력() 이 적는 줄과 보기() 의 최신값. 디버그 창의 첫 조각이다. -->
-                <dxlc:LayoutItem Label="출력"
-                                 VerticalAlignment="Bottom">
-                    <dxe:TextEdit MaxHeight="120"
-                                  AcceptsReturn="True"
-                                  EditValue="{Binding Live.Console.Text, Mode=OneWay}"
-                                  FontFamily="D2Coding, Consolas, Courier New"
-                                  IsReadOnly="True"
-                                  TextWrapping="Wrap"
-                                  VerticalContentAlignment="Top"
-                                  VerticalScrollBarVisibility="Auto" />
-                </dxlc:LayoutItem>
-                <dxlc:LayoutItem Label="보기"
-                                 VerticalAlignment="Bottom">
-                    <dxe:TextEdit EditValue="{Binding Live.Console.Watches, Mode=OneWay}"
-                                  IsReadOnly="True" />
-                </dxlc:LayoutItem>
+                <!--
+                    디버그 창. 출력() · 호출 로그 · 변수(보기()와 멈춘 자리의 지역 변수) · 중단점.
+                    탭으로 둔 것은 자리 때문이다 - 넷을 나란히 두면 편집기가 좁아진다.
+                -->
+                <dxlc:LayoutGroup Height="170"
+                                  VerticalAlignment="Bottom"
+                                  View="Tabs">
+                    <dxlc:LayoutGroup Header="출력">
+                        <dxe:TextEdit AcceptsReturn="True"
+                                      EditValue="{Binding Live.Console.Text, Mode=OneWay}"
+                                      FontFamily="D2Coding, Consolas, Courier New"
+                                      IsReadOnly="True"
+                                      TextWrapping="Wrap"
+                                      VerticalContentAlignment="Top"
+                                      VerticalScrollBarVisibility="Auto" />
+                    </dxlc:LayoutGroup>
+                    <dxlc:LayoutGroup Header="호출">
+                        <dxe:TextEdit AcceptsReturn="True"
+                                      EditValue="{Binding Live.Console.CallsText, Mode=OneWay}"
+                                      FontFamily="D2Coding, Consolas, Courier New"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      IsReadOnly="True"
+                                      TextWrapping="NoWrap"
+                                      VerticalContentAlignment="Top"
+                                      VerticalScrollBarVisibility="Auto" />
+                    </dxlc:LayoutGroup>
+                    <dxlc:LayoutGroup Header="변수"
+                                      Orientation="Vertical">
+                        <dxlc:LayoutItem Label="보기">
+                            <dxe:TextEdit EditValue="{Binding Live.Console.Watches, Mode=OneWay}"
+                                          IsReadOnly="True" />
+                        </dxlc:LayoutItem>
+                        <!-- 멈춘 줄의 지역 변수. JavaScript·Python 만. C# 은 비어 있다. -->
+                        <dxe:TextEdit AcceptsReturn="True"
+                                      EditValue="{Binding Live.Debug.Locals, Mode=OneWay}"
+                                      FontFamily="D2Coding, Consolas, Courier New"
+                                      IsReadOnly="True"
+                                      NullText="멈춘 줄의 변수가 여기 뜹니다 (JavaScript·Python)"
+                                      VerticalContentAlignment="Top"
+                                      VerticalScrollBarVisibility="Auto" />
+                    </dxlc:LayoutGroup>
+                    <dxlc:LayoutGroup Header="중단점"
+                                      Orientation="Vertical">
+                        <TextBlock Margin="4"
+                                   Opacity="0.7"
+                                   Text="편집기 왼쪽 여백을 누르거나 Ctrl+B 로 켜고 끕니다. 한 줄씩(F10)은 JavaScript·Python 만 됩니다."
+                                   TextWrapping="Wrap" />
+                        <ListBox MaxHeight="90"
+                                 ItemsSource="{Binding Live.Debug.Breakpoints}" />
+                    </dxlc:LayoutGroup>
+                </dxlc:LayoutGroup>
 
                 <dxlc:LayoutGroup VerticalAlignment="Bottom"
                                   Orientation="Horizontal">
-                    <dx:SimpleButton Width="100"
+                    <dx:SimpleButton Width="96"
                                      Height="28"
-                                     Command="{Binding Player.RunOnceCommand}"
-                                     Content="한 번 실행"
+                                     Command="{Binding RunOrContinueCommand}"
+                                     Content="실행 (F5)"
                                      Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
                                      GlyphHeight="16"
                                      GlyphWidth="16"
                                      ToolTip="시작 전 대기 뒤 대상 창을 앞으로 가져와 스크립트를 실시간으로 돌린다. 부르는 것이 곧바로 나간다. 위 도구 줄의 입력 경로로 나가고, 도는 동안 F9 가 비상 정지다." />
+                    <dx:SimpleButton Width="88"
+
+                                     Height="28"
+
+                                     Command="{Binding StepCommand}"
+
+                                     Content="한 줄 (F10)"
+
+                                     ToolTip="멈춰 있으면 다음 줄로, 아니면 첫 줄에서 멈추게 시작한다. JavaScript·Python 만." />
+
+                    <dx:SimpleButton Width="80"
+
+                                     Height="28"
+
+                                     Command="{Binding ToggleBreakpointCommand}"
+
+                                     Content="중단점"
+
+                                     ToolTip="캐럿이 있는 줄의 중단점을 켜고 끈다 (Ctrl+B). 편집기 왼쪽 여백을 눌러도 된다." />
                     <dx:SimpleButton Width="80"
                                      Height="28"
                                      Command="{Binding Player.StopCommand}"
@@ -362,6 +422,17 @@
                     <dxlc:LayoutItem Label="진행">
                         <dxe:TextEdit EditValue="{Binding Player.CurrentStep, Mode=OneWay}"
                                       IsReadOnly="True" />
+                    </dxlc:LayoutItem>
+
+                    <dxlc:LayoutItem Label="디버그">
+
+
+                        <dxe:TextEdit EditValue="{Binding Live.Debug.Status, Mode=OneWay}"
+
+
+                                      IsReadOnly="True" />
+
+
                     </dxlc:LayoutItem>
                 </dxlc:LayoutGroup>
             </dxlc:LayoutGroup>

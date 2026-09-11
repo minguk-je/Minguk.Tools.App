@@ -1,9 +1,15 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Windows.Input;
 
+using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
 
 using Minguk.Image;
 using Minguk.Tools.Input;
+using Minguk.Tools.Input.Hotkeys;
+using Minguk.Tools.Input.Scripting.Live;
+using Minguk.Tools.Markup;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -30,6 +36,18 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
     /// <summary>실시간 실행에 필요한 것들 - 출력 칸, 비상 정지, API 에 빌려 줄 것.</summary>
     public LiveScriptSession Live { get; }
+
+    /// <summary>F5. 멈춰 있으면 계속, 아니면 처음부터.</summary>
+    public DelegateCommand RunOrContinueCommand { get; }
+
+    /// <summary>F10. 멈춰 있으면 다음 줄, 아니면 첫 줄에서 멈추게 시작.</summary>
+    public DelegateCommand StepCommand { get; }
+
+    /// <summary>캐럿이 있는 줄의 중단점을 켜고 끈다. 편집기 여백을 눌러도 된다.</summary>
+    public DelegateCommand ToggleBreakpointCommand { get; }
+
+    private IGlobalHotkeyAdapter? _studioHotkeys;
+    private ScriptEditor? _editor;
 
     public ScriptStudioViewModel()
     {
@@ -59,7 +77,67 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         // 도는 동안 글을 잠근다. 도중에 바뀌면 무엇이 나갔는지 알 수 없다.
         Player.RunningChanged += (_, _) => Script.IsLocked = Player.IsRunning;
+
+        RunOrContinueCommand = new DelegateCommand(RunOrContinue, false);
+        StepCommand = new DelegateCommand(Step, false);
+        ToggleBreakpointCommand = new DelegateCommand(() => _editor?.ToggleBreakpointAtCaret(), false);
     }
+
+    /// <summary>F5 - 멈춰 있으면 계속, 쉬고 있으면 처음부터. 도는 중이면 아무것도 안 한다.</summary>
+    private void RunOrContinue()
+    {
+        if (Live.Debug.IsPaused) Live.Debug.Continue();
+        else if (Player.IsIdle) Player.RunOnce();
+    }
+
+    /// <summary>F10 - 멈춰 있으면 다음 줄, 쉬고 있으면 첫 줄에서 멈추게 시작.</summary>
+    private void Step()
+    {
+        if (Live.Debug.IsPaused)
+        {
+            Live.Debug.StepNext();
+            return;
+        }
+
+        if (!Player.IsIdle) return;
+
+        if (!Script.Engine.SupportsStepping)
+        {
+            StatusText = "C# 스크립트는 한 줄씩 밟을 수 없습니다(Roslyn 스크립트에는 디버거가 없다). 호출 로그로 보거나 JavaScript·Python 을 쓰세요.";
+            return;
+        }
+
+        Live.Debug.Mode = ScriptStepMode.Step;
+        Player.RunOnce();
+    }
+
+    /// <summary>
+    /// F5·F10 을 전역으로 쥔다. 게임이 앞에 있어야 입력이 들어가므로 앱 밖에서 누를 수단이 있어야 한다.
+    /// 플레이·입력 자동화 화면도 F5 를 쥔다 - 같이 열려 있으면 나중에 연 쪽이 실패하고 상태 줄에 적힌다.
+    /// </summary>
+    private void RegisterStudioHotkeys() => Guard(() =>
+    {
+        _studioHotkeys = GlobalHotkeyAdapterFactory.Create();
+
+        (string Label, Key Key, System.Action Action)[] bindings =
+        [
+            ("F5 실행/계속", Key.F5, RunOrContinue),
+            ("F10 한 줄", Key.F10, Step)
+        ];
+
+        var live = new List<string>();
+        var failed = new List<string>();
+
+        foreach (var (label, key, action) in bindings)
+        {
+            if (_studioHotkeys.TryRegister(key, ModifierKeys.None, action)) live.Add(label);
+            else failed.Add(label);
+        }
+
+        StatusText = failed.Count == 0
+            ? $"단축키: {string.Join(" · ", live)} · 도는 동안 F9 비상 정지"
+            : $"단축키: {string.Join(" · ", live)}  (등록 실패: {string.Join(", ", failed)} - 다른 화면이나 프로그램이 쥐고 있습니다)";
+    });
 
     /// <summary>UI 스레드에서 돌린다. 검증 하네스처럼 서비스가 없는 자리에서도 배선은 돌아야 한다.</summary>
     private static void RunOnUi(System.Action action)
@@ -93,10 +171,18 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         Player.Save((key, value) => SetSetting(key, value));
     }
 
+    protected override void InitializeControls()
+    {
+        base.InitializeControls();
+
+        _editor = FindControl<ScriptEditor>("EditorObjectService");
+    }
+
     protected override void OnLoaded()
     {
         base.OnLoaded();
 
+        RegisterStudioHotkeys();
         Script.ApplyEditorTheme();
 
         // 첫 준비가 유독 느리다(C# 은 첫 컴파일, 파이썬은 런타임 받기). 미리 치러 둔다.
@@ -106,6 +192,12 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     protected override void ReleaseResources()
     {
         Player.Stop();
+
+        // 놓아 주지 않으면 앱이 살아 있는 동안 그 키가 잠긴 채로 남는다.
+        _studioHotkeys?.Dispose();
+        _studioHotkeys = null;
+        _editor = null;
+
         Live.Dispose();
         Script.Dispose();
 

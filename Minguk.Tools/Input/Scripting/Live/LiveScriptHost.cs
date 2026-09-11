@@ -32,6 +32,9 @@ public sealed class LiveScriptHost
 
     public required Action<string, string> Watch { get; init; }
 
+    /// <summary>API 를 한 번 부를 때마다. 호출 로그 칸이 받는다. 없으면 안 남긴다.</summary>
+    public Action<ScriptCall>? Trace { get; init; }
+
     /// <summary>키·버튼을 누르고 있는 시간.</summary>
     public int HoldTimeMs { get; init; } = 30;
 

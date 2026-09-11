@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -64,7 +65,7 @@ public sealed class LiveScriptApi
 
     // ── 계획 모드와 같은 이름들 - 곧바로 나간다 ─────────────────────────
 
-    public void Type(string text) => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = text ?? string.Empty });
+    public void Type(string text) => Traced("Type", Quote(text), () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Type, Text = text ?? string.Empty }));
 
     public void TypeLine(string text)
     {
@@ -72,12 +73,12 @@ public sealed class LiveScriptApi
         Enter();
     }
 
-    public void Enter() => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Enter });
+    public void Enter() => Traced("Enter", "", () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Enter }));
 
-    public void ToggleHangul() => Send(new SequenceStepDefinition { Kind = SequenceStepKind.ToggleHangul });
+    public void ToggleHangul() => Traced("ToggleHangul", "", () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.ToggleHangul }));
 
     /// <param name="button">비우면 좌클릭. MouseButton.Right · 숫자 · "right" 를 받는다 - 언어마다 넘기는 모양이 다르다.</param>
-    public void Click(object? button = null) => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Click, Button = ToButton(button) });
+    public void Click(object? button = null) => Traced("Click", ToButton(button).ToString(), () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Click, Button = ToButton(button) }));
 
     public void RightClick() => Click(MouseButton.Right);
 
@@ -87,16 +88,18 @@ public sealed class LiveScriptApi
         Click(button);
     }
 
-    public void MoveTo(int x, int y) => Send(new SequenceStepDefinition { Kind = SequenceStepKind.MoveTo, X = x, Y = y });
+    public void MoveTo(int x, int y) => Traced("MoveTo", $"{x}, {y}", () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.MoveTo, X = x, Y = y }));
 
-    public void Scroll(int notches) => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Scroll, Notches = notches });
+    public void Scroll(int notches) => Traced("Scroll", notches.ToString(), () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Scroll, Notches = notches }));
 
-    /// <summary>쉰다. 토큰으로 기다리므로 중지가 이 사이에 먹는다.</summary>
+    /// <summary>쉰다. 토큰으로 기다리므로 중지가 이 사이에 먹는다. 짧은 것은 로그에 안 남긴다 - 반복문이 초당 수십 줄을 만든다.</summary>
     public void Wait(int milliseconds)
     {
         ThrowIfStopping();
 
         if (milliseconds <= 0) return;
+
+        if (milliseconds >= 500) _host.Trace?.Invoke(new ScriptCall(DateTime.Now, "Wait", milliseconds.ToString(), "", 0));
 
         if (_token.WaitHandle.WaitOne(milliseconds)) ThrowIfStopping();
     }
@@ -115,7 +118,19 @@ public sealed class LiveScriptApi
     // ── 화면 읽기 ────────────────────────────────────────────────────────
 
     /// <summary>지금 찾은 몹들. 화면 픽셀 자리로.</summary>
-    public IReadOnlyList<ScriptMob> Mobs()
+    public IReadOnlyList<ScriptMob> Mobs() => Traced("Mobs", "", MobsCore);
+
+    /// <summary>화면 가운데에서 가장 가까운 몹. 없으면 null.</summary>
+    public ScriptMob? NearestMob() => Traced("NearestMob", "", NearestMobCore);
+
+    /// <summary>몹이 보일 때까지 최대 ms 기다린다. 50ms 마다 본다. 못 보면 null.</summary>
+    public ScriptMob? WaitMob(int milliseconds) => Traced("WaitMob", milliseconds.ToString(), () => WaitMobCore(milliseconds));
+
+    /// <summary>그 자리(0~1 비율)의 글자를 읽는다.</summary>
+    public string ReadText(double x, double y, double width, double height)
+        => Traced("ReadText", $"{x:0.###}, {y:0.###}, {width:0.###}, {height:0.###}", () => ReadTextCore(x, y, width, height));
+
+    private IReadOnlyList<ScriptMob> MobsCore()
     {
         ThrowIfStopping();
 
@@ -146,8 +161,7 @@ public sealed class LiveScriptApi
         return mobs;
     }
 
-    /// <summary>화면 가운데에서 가장 가까운 몹. 없으면 null.</summary>
-    public ScriptMob? NearestMob()
+    private ScriptMob? NearestMobCore()
     {
         var target = _host.Target();
         if (target is null || !CaptureTargetBounds.TryGet(target, out var bounds)) return null;
@@ -155,17 +169,16 @@ public sealed class LiveScriptApi
         var cx = bounds.Left + (bounds.Width / 2);
         var cy = bounds.Top + (bounds.Height / 2);
 
-        return Mobs().OrderBy(m => ((m.CenterX - cx) * (m.CenterX - cx)) + ((m.CenterY - cy) * (m.CenterY - cy))).FirstOrDefault();
+        return MobsCore().OrderBy(m => ((m.CenterX - cx) * (m.CenterX - cx)) + ((m.CenterY - cy) * (m.CenterY - cy))).FirstOrDefault();
     }
 
-    /// <summary>몹이 보일 때까지 최대 ms 기다린다. 50ms 마다 본다. 못 보면 null.</summary>
-    public ScriptMob? WaitMob(int milliseconds)
+    private ScriptMob? WaitMobCore(int milliseconds)
     {
         var deadline = Environment.TickCount64 + Math.Max(0, milliseconds);
 
         while (true)
         {
-            var nearest = NearestMob();
+            var nearest = NearestMobCore();
             if (nearest is not null) return nearest;
 
             if (Environment.TickCount64 >= deadline) return null;
@@ -174,8 +187,7 @@ public sealed class LiveScriptApi
         }
     }
 
-    /// <summary>그 자리(0~1 비율)의 글자를 읽는다.</summary>
-    public string ReadText(double x, double y, double width, double height)
+    private string ReadTextCore(double x, double y, double width, double height)
     {
         ThrowIfStopping();
 
@@ -204,8 +216,11 @@ public sealed class LiveScriptApi
 
     /// <summary>글자에서 숫자만. 없으면 null.</summary>
     public int? ReadNumber(double x, double y, double width, double height)
+        => Traced("ReadNumber", $"{x:0.###}, {y:0.###}, {width:0.###}, {height:0.###}", () => ReadNumberCore(x, y, width, height));
+
+    private int? ReadNumberCore(double x, double y, double width, double height)
     {
-        var digits = new string(ReadText(x, y, width, height).Where(char.IsDigit).ToArray());
+        var digits = new string(ReadTextCore(x, y, width, height).Where(char.IsDigit).ToArray());
 
         return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
     }
@@ -219,7 +234,14 @@ public sealed class LiveScriptApi
     // ── 키 ───────────────────────────────────────────────────────────────
 
     /// <summary>이름으로 키 한 번. "F" · "Space" · "Enter" · "Ctrl+Shift+1".</summary>
-    public void Key(string name)
+    public void Key(string name) => Traced("Key", Quote(name), () => KeyCore(name));
+
+    /// <summary>키를 누른 채로 둔다. 비상 정지가 <see cref="ReleaseAll"/> 로 전부 뗀다.</summary>
+    public void KeyDown(string name) => Traced("KeyDown", Quote(name), () => KeyDownCore(name));
+
+    public void KeyUp(string name) => Traced("KeyUp", Quote(name), () => KeyUpCore(name));
+
+    private void KeyCore(string name)
     {
         var (modifiers, key) = ParseKey(name);
 
@@ -239,8 +261,7 @@ public sealed class LiveScriptApi
         }
     }
 
-    /// <summary>키를 누른 채로 둔다. 비상 정지가 <see cref="ReleaseAll"/> 로 전부 뗀다.</summary>
-    public void KeyDown(string name)
+    private void KeyDownCore(string name)
     {
         var (modifiers, key) = ParseKey(name);
 
@@ -250,7 +271,7 @@ public sealed class LiveScriptApi
         Hold(key);
     }
 
-    public void KeyUp(string name)
+    private void KeyUpCore(string name)
     {
         var (modifiers, key) = ParseKey(name);
 
@@ -304,6 +325,39 @@ public sealed class LiveScriptApi
     public void 출력(object? value) => Print(value);
 
     public void 보기(string name, object? value) => Watch(name, value);
+
+    // ── 호출 기록 ────────────────────────────────────────────────────────
+
+    /// <summary>부른 것·인자·결과·걸린 시간을 남긴다. 터지면 그 사연도 남기고 그대로 던진다.</summary>
+    private T Traced<T>(string name, string arguments, Func<T> body)
+    {
+        var watch = Stopwatch.StartNew();
+
+        try
+        {
+            var result = body();
+            _host.Trace?.Invoke(new ScriptCall(DateTime.Now, name, arguments, Describe(result), watch.Elapsed.TotalMilliseconds));
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _host.Trace?.Invoke(new ScriptCall(DateTime.Now, name, arguments, "! " + ex.Message, watch.Elapsed.TotalMilliseconds));
+            throw;
+        }
+    }
+
+    private void Traced(string name, string arguments, Action body)
+        => Traced<object?>(name, arguments, () => { body(); return null; });
+
+    private static string Describe(object? result) => result switch
+    {
+        null => "",
+        string text => Quote(text),
+        IReadOnlyList<ScriptMob> mobs => mobs.Count == 0 ? "없음" : $"{mobs.Count}마리: {mobs[0]}",
+        _ => result.ToString() ?? ""
+    };
+
+    private static string Quote(string? text) => text is null ? "null" : $"\"{text}\"";
 
     // ── 안쪽 ─────────────────────────────────────────────────────────────
 

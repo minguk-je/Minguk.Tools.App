@@ -337,6 +337,26 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
 - 검증: `--vision` 의 실시간 검사는 **가짜 어댑터**(누른 것을 적기만)와 가짜 허브로 돈다. 입력은 절대 실제로 안 나간다.
   MoveTo 는 부드럽게 여러 걸음이라 "마지막 걸음이 몹 자리" 로 본다.
 
+### 디버그 (스크립트 화면)
+
+- **호출 로그**: `LiveScriptApi` 가 API 를 부를 때마다 `ScriptCall`(시각·이름·인자·결과·걸린 시간)을 `LiveScriptHost.Trace` 로
+  넘기고 `ScriptConsole.CallsText` 에 쌓인다(최근 200개). C# 스크립트는 한 줄씩 밟을 수 없어 이것이 디버거 몫이다.
+  `쉬기()` 는 500ms 이상만 남긴다 - 반복문이 초당 수십 줄을 만든다.
+- **중단점·한 줄씩**은 `ScriptDebugSession` 이 든다. 화면(UI)은 `Breakpoints` 컬렉션을 고치고 계속(F5)·한 줄(F10)을 누르고,
+  엔진(스크립트 스레드)은 줄마다 `ShouldBreak` 를 묻고 `Pause` 에서 기다린다. 컬렉션은 UI 것이라 스레드용 집합을 따로
+  두고 바뀔 때 갈아 끼운다. 멈춘 채로 중지하면 토큰이 깨워 그 자리에서 끝난다.
+- **JavaScript** 는 Jint 디버거(`Options.Debugger.Enabled`, `InitialStepMode=Into`, `Debugger.Step` 이벤트). 사용자 글은
+  `Execute(source, "script")` 로 이름을 붙이고 `info.Location.SourceFile` 로 우리 껍데기 함수(shim)와 가른다 - 껍데기 안이면
+  `StepMode.Over`. 변수는 `CurrentScopeChain` 의 `BindingNames`/`GetBindingValue`, 우리가 심은 이름과 함수는 뺀다.
+- **Python** 은 `sys.settrace`. 사용자 글을 `PythonEngine.Compile(source, "<script>")` 로 이름 붙여 `Execute` 하고, 추적 함수가
+  `co_filename == '<script>'` 인 줄에서만 `__dbg.ShouldBreak/Pause`(`PythonDebugBridge`)를 부른다. 멈춘 동안 GIL 을 쥔 채
+  기다린다 - 파이썬 스레드가 하나뿐이라 괜찮다.
+- **C#** 은 `SupportsStepping=false`. Roslyn 스크립트 어셈블리에는 디버거를 붙일 자리가 없다. 한 줄(F10)을 누르면 상태 줄이 그렇게 말한다.
+- 편집기(`ScriptEditor`): 왼쪽 여백(`BreakpointMargin`, AbstractMargin)을 누르면 중단점, Ctrl+B 도 같다. `CurrentLine` 이 0 이
+  아니면 그 줄을 노랗게 칠하고 굴린다. 여백은 `OnRender` 에 투명 판을 깔아야 클릭이 온다 - 안 그린 자리는 히트 테스트에 안 걸린다.
+- 스크립트 화면 단축키: F5 실행/계속, F10 한 줄, F9 비상 정지(도는 동안). 플레이·입력 자동화도 F5 를 쥐므로 같이 열면 나중 것이 실패한다.
+- 검증(`--vision`): 가짜 어댑터로 JS 중단점(2번 줄에서 멈춤·변수 `a=1`·계속하면 끝), 한 줄씩(1→2→3), 멈춘 채 중지, 호출 로그.
+
 ## 몹 검출 (이미지 캡처 → 라벨링 → 학습 → 추론)
 
 화면에서 몹을 **찾는** 것이 목표다(사각형 + 이름). 무슨 몹인지만 맞히는 분류가 아니다 -

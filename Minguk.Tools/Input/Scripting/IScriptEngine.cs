@@ -64,7 +64,11 @@ public interface IScriptEngine : IDisposable
     /// 중지·F9·<c>끝()</c> 으로 멈춘 것은 오류가 아니라 빈 목록이다. 안전장치가 막은 것과 스크립트가
     /// 터진 것은 오류로 온다. 어느 쪽인지는 <see cref="Live.LiveScriptApi.Outcome"/> 을 보고 가른다.
     /// </remarks>
-    Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, Live.LiveScriptApi api, CancellationToken token = default);
+    Task<IReadOnlyList<ScriptError>> RunLiveAsync(
+        string? source, Live.LiveScriptApi api, Live.ScriptDebugSession? debug = null, CancellationToken token = default);
+
+    /// <summary>줄 단위로 멈출 수 있는가(중단점·한 줄씩). C# 은 못 한다 - Roslyn 스크립트는 디버거 없이 돈다.</summary>
+    bool SupportsStepping { get; }
 }
 
 /// <summary>스크립트 언어.</summary>

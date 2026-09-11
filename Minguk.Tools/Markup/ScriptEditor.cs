@@ -1,5 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Windows;
 using System.Windows.Automation.Peers;
@@ -18,7 +20,7 @@ using Minguk.Tools.Input.Scripting;
 namespace Minguk.Tools.Markup;
 
 /// <summary>
-/// 스크립트 편집기. <see cref="TextEditor"/> 에 세 가지를 얹었다 - 자동화 피어, 틀린 줄의 빨간 밑줄, 코드 완성.
+/// 스크립트 편집기. <see cref="TextEditor"/> 에 얹은 것 - 자동화 피어, 틀린 줄의 빨간 밑줄, 코드 완성, 중단점 여백, 멈춘 줄 칠하기.
 /// </summary>
 /// <remarks>
 /// <b>자동화 피어</b> - AvalonEdit 을 그냥 얹었더니 <b>창 전체의 UI 자동화 트리가 비었다.</b> 실측으로
@@ -36,24 +38,49 @@ namespace Minguk.Tools.Markup;
 /// 세 언어가 같은 이름을 쓰므로 목록도 하나다. 언어 고유 문법(for, def, let)까지는 안 한다 - C# 전체 완성은
 /// Roslyn Features 패키지가 수십 MB 라 따로 결정할 일이다(docs/스크립트-설계.md 4단계).
 /// Ctrl+Space 로도 연다. 고르면 이름만 넣는다 - 괄호까지 넣으면 이미 친 괄호와 겹친다.
+///
+/// <b>중단점과 멈춘 줄</b> - 왼쪽 여백(<see cref="BreakpointMargin"/>)을 누르면 그 줄이 <see cref="Breakpoints"/> 에
+/// 들고 나며 빨간 점이 찍힌다. 컬렉션은 디버그 세션 것이라 편집기가 직접 고친다 - 커맨드로 올렸다 내리면 줄 번호를
+/// 두 번 옮겨 적게 된다. <see cref="CurrentLine"/> 이 0 이 아니면 그 줄을 노랗게 칠하고 보이는 자리로 굴린다.
 /// </remarks>
 public sealed class ScriptEditor : TextEditor
 {
     /// <summary>밑줄 색. 화면의 "고칠 줄" 글자색과 같다.</summary>
     public static readonly Color UnderlineColor = Color.FromRgb(0xD1, 0x24, 0x2F);
 
+    /// <summary>중단점 점 색.</summary>
+    public static readonly Color BreakpointColor = Color.FromRgb(0xE5, 0x14, 0x00);
+
+    /// <summary>멈춘 줄 바탕색. 반투명이라 글이 그대로 보인다.</summary>
+    public static readonly Color CurrentLineColor = Color.FromArgb(0x66, 0xFF, 0xE0, 0x66);
+
     public static readonly DependencyProperty ErrorsProperty = DependencyProperty.Register(
         nameof(Errors), typeof(IReadOnlyList<ScriptError>), typeof(ScriptEditor),
         new PropertyMetadata(null, (d, _) => ((ScriptEditor)d).OnErrorsChanged()));
 
+    public static readonly DependencyProperty BreakpointsProperty = DependencyProperty.Register(
+        nameof(Breakpoints), typeof(ObservableCollection<int>), typeof(ScriptEditor),
+        new PropertyMetadata(null, (d, e) => ((ScriptEditor)d).OnBreakpointsChanged(e)));
+
+    public static readonly DependencyProperty CurrentLineProperty = DependencyProperty.Register(
+        nameof(CurrentLine), typeof(int), typeof(ScriptEditor),
+        new PropertyMetadata(0, (d, _) => ((ScriptEditor)d).OnCurrentLineChanged()));
+
     private readonly ErrorUnderlineRenderer _underline;
+    private readonly CurrentLineRenderer _currentLine;
+    private readonly BreakpointMargin _margin;
     private readonly ToolTip _errorTip = new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse };
     private CompletionWindow? _completion;
 
     public ScriptEditor()
     {
         _underline = new ErrorUnderlineRenderer(this);
+        _currentLine = new CurrentLineRenderer(this);
+        TextArea.TextView.BackgroundRenderers.Add(_currentLine);
         TextArea.TextView.BackgroundRenderers.Add(_underline);
+
+        _margin = new BreakpointMargin(this);
+        TextArea.LeftMargins.Insert(0, _margin);
 
         TextArea.TextEntered += OnTextEntered;
         TextArea.TextEntering += OnTextEntering;
@@ -69,6 +96,20 @@ public sealed class ScriptEditor : TextEditor
         set => SetValue(ErrorsProperty, value);
     }
 
+    /// <summary>중단점 줄 번호들(1부터). 여백을 누르면 여기에 넣고 뺀다.</summary>
+    public ObservableCollection<int>? Breakpoints
+    {
+        get => (ObservableCollection<int>?)GetValue(BreakpointsProperty);
+        set => SetValue(BreakpointsProperty, value);
+    }
+
+    /// <summary>멈춘 줄(1부터). 0 이면 없음.</summary>
+    public int CurrentLine
+    {
+        get => (int)GetValue(CurrentLineProperty);
+        set => SetValue(CurrentLineProperty, value);
+    }
+
     /// <summary>지금 완성 목록이 떠 있는지. 검증에서 본다.</summary>
     public bool IsCompletionOpen => _completion is not null;
 
@@ -78,6 +119,38 @@ public sealed class ScriptEditor : TextEditor
     {
         _errorTip.IsOpen = false;
         TextArea.TextView.InvalidateLayer(KnownLayer.Selection);
+    }
+
+    // ── 중단점 ───────────────────────────────────────────────────────────
+
+    /// <summary>캐럿이 있는 줄의 중단점을 켜고 끈다 (Ctrl+B · 버튼).</summary>
+    public void ToggleBreakpointAtCaret() => ToggleBreakpoint(TextArea.Caret.Line);
+
+    public void ToggleBreakpoint(int line)
+    {
+        var points = Breakpoints;
+        if (points is null || line < 1) return;
+
+        if (points.Contains(line)) points.Remove(line);
+        else points.Add(line);
+    }
+
+    private void OnBreakpointsChanged(DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is ObservableCollection<int> old) old.CollectionChanged -= OnBreakpointCollectionChanged;
+        if (e.NewValue is ObservableCollection<int> now) now.CollectionChanged += OnBreakpointCollectionChanged;
+
+        _margin.InvalidateVisual();
+    }
+
+    private void OnBreakpointCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => _margin.InvalidateVisual();
+
+    private void OnCurrentLineChanged()
+    {
+        TextArea.TextView.InvalidateLayer(KnownLayer.Background);
+
+        var line = CurrentLine;
+        if (line > 0 && line <= Document.LineCount) ScrollToLine(line);
     }
 
     // ── 밑줄 풍선 ────────────────────────────────────────────────────────
@@ -108,6 +181,11 @@ public sealed class ScriptEditor : TextEditor
         if (e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.Control)
         {
             OpenCompletion();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.B && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            ToggleBreakpointAtCaret();
             e.Handled = true;
         }
     }
@@ -189,10 +267,10 @@ public sealed class ScriptEditor : TextEditor
         public string Text { get; } = name;
 
         /// <summary>목록에 보이는 것. "글자(text)  글자를 하나씩 누른다" 처럼 이름·인자·설명을 한 줄에.</summary>
-        public object Content { get; } = $"{name}({entry.Parameters})   {entry.Summary}";
+        public object Content { get; } = $"{name}({entry.Parameters})   {entry.DisplaySummary}";
 
         /// <summary>고른 항목 옆에 뜨는 풍선. 영문·한글 이름이 같은 것임을 알려 준다.</summary>
-        public object Description { get; } = $"{entry.Signature} = {entry.KoreanSignature}{Environment.NewLine}{entry.Summary}";
+        public object Description { get; } = $"{entry.Signature} = {entry.KoreanSignature}{Environment.NewLine}{entry.DisplaySummary}";
 
         public double Priority => 0;
 
@@ -262,6 +340,109 @@ public sealed class ScriptEditor : TextEditor
             var pen = new Pen(new SolidColorBrush(UnderlineColor), 1.2);
             pen.Freeze();
             return pen;
+        }
+    }
+
+    /// <summary>멈춘 줄을 노랗게 칠한다. 맨 아래 층이라 글과 선택이 그 위에 그대로 보인다.</summary>
+    private sealed class CurrentLineRenderer(ScriptEditor owner) : IBackgroundRenderer
+    {
+        private static readonly Brush Fill = MakeBrush();
+
+        public KnownLayer Layer => KnownLayer.Background;
+
+        public void Draw(TextView textView, DrawingContext drawingContext)
+        {
+            var lineNumber = owner.CurrentLine;
+            if (lineNumber <= 0 || textView.Document is null || lineNumber > textView.Document.LineCount) return;
+
+            textView.EnsureVisualLines();
+
+            var line = textView.Document.GetLineByNumber(lineNumber);
+
+            foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, line))
+                drawingContext.DrawRectangle(Fill, null, new Rect(0, rect.Top, Math.Max(textView.ActualWidth, rect.Right), rect.Height));
+        }
+
+        private static Brush MakeBrush()
+        {
+            var brush = new SolidColorBrush(CurrentLineColor);
+            brush.Freeze();
+            return brush;
+        }
+    }
+
+    /// <summary>줄 번호 왼쪽의 좁은 띠. 중단점을 빨간 점으로 그리고, 누르면 그 줄의 중단점을 켜고 끈다.</summary>
+    private sealed class BreakpointMargin : AbstractMargin
+    {
+        private const double Width = 16;
+        private static readonly Brush Dot = MakeBrush();
+        private readonly ScriptEditor _owner;
+
+        public BreakpointMargin(ScriptEditor owner)
+        {
+            _owner = owner;
+            Cursor = Cursors.Arrow;
+        }
+
+        protected override Size MeasureOverride(Size availableSize) => new(Width, 0);
+
+        protected override void OnTextViewChanged(TextView? oldTextView, TextView? newTextView)
+        {
+            if (oldTextView is not null) oldTextView.VisualLinesChanged -= OnVisualLinesChanged;
+            if (newTextView is not null) newTextView.VisualLinesChanged += OnVisualLinesChanged;
+
+            base.OnTextViewChanged(oldTextView, newTextView);
+            InvalidateVisual();
+        }
+
+        private void OnVisualLinesChanged(object? sender, EventArgs e) => InvalidateVisual();
+
+        protected override void OnRender(DrawingContext drawingContext)
+        {
+            base.OnRender(drawingContext);
+
+            // 아무것도 안 그린 자리는 히트 테스트에 안 걸려 클릭이 안 온다. 투명 판을 깔아 띠 전체가 눌리게 한다.
+            drawingContext.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, ActualWidth, ActualHeight));
+
+            var points = _owner.Breakpoints;
+            var textView = TextView;
+
+            if (points is null || points.Count == 0 || textView is null || !textView.VisualLinesValid) return;
+
+            foreach (var visualLine in textView.VisualLines)
+            {
+                var lineNumber = visualLine.FirstDocumentLine.LineNumber;
+                if (!points.Contains(lineNumber)) continue;
+
+                var top = visualLine.GetTextLineVisualYPosition(visualLine.TextLines[0], VisualYPosition.LineTop) - textView.VerticalOffset;
+                var height = visualLine.Height;
+                var radius = Math.Min(6, height / 2 - 1);
+
+                drawingContext.DrawEllipse(Dot, null, new Point(Width / 2, top + (height / 2)), radius, radius);
+            }
+        }
+
+        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnMouseLeftButtonDown(e);
+
+            var textView = TextView;
+            if (textView is null) return;
+
+            var y = e.GetPosition(this).Y + textView.VerticalOffset;
+            var visualLine = textView.GetVisualLineFromVisualTop(y);
+
+            if (visualLine is null) return;
+
+            _owner.ToggleBreakpoint(visualLine.FirstDocumentLine.LineNumber);
+            e.Handled = true;
+        }
+
+        private static Brush MakeBrush()
+        {
+            var brush = new SolidColorBrush(BreakpointColor);
+            brush.Freeze();
+            return brush;
         }
     }
 }

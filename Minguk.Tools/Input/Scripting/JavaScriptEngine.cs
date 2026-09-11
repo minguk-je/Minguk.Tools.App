@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Linq;
+using System.Text;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Jint;
+using Jint.Runtime.Debugger;
 using Jint.Runtime;
 using Minguk.Tools.Input.Sequencing;
 
@@ -85,24 +87,62 @@ public sealed class JavaScriptEngine : IScriptEngine
         }, token);
     }
 
-    public Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, CancellationToken token = default)
+    /// <summary>된다. Jint 의 디버거가 문장마다 알려 준다.</summary>
+    public bool SupportsStepping => true;
+
+    public Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, ScriptDebugSession? debug = null, CancellationToken token = default)
     {
         var text = source ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(text)) return Task.FromResult<IReadOnlyList<ScriptError>>([]);
 
-        return Task.Run(() => ExecuteLive(text, api, token));
+        return Task.Run(() => ExecuteLive(text, api, debug, token));
     }
+
+    /// <summary>사용자 글의 이름. 디버거가 문장마다 알려 줄 때 우리 껍데기 함수(shim)와 가른다.</summary>
+    private const string UserSource = "script";
+
+    /// <summary>변수 목록에서 뺄 이름 - 우리가 심은 것들.</summary>
+    private static readonly HashSet<string> HiddenNames =
+    [
+        .. ScriptApiCatalog.LiveNames, "api", "MouseButton",
+        // 전역 범위에 늘 있는 붙박이들. 함수(생성자)는 값으로 걸러지지만 이것들은 객체·상수라 이름으로 뺀다.
+        "Infinity", "NaN", "undefined", "globalThis", "Atomics", "Intl", "JSON", "Math", "Reflect", "Temporal", "console"
+    ];
 
     /// <summary>
     /// 실시간으로 돌린다. 시간 상한이 없다 - 게임을 보며 도는 스크립트는 사용자가 멈출 때까지 돈다.
     /// 멈추는 것은 토큰(중지·F9·시간 상한)이다.
     /// </summary>
-    private static IReadOnlyList<ScriptError> ExecuteLive(string source, LiveScriptApi api, CancellationToken token)
+    private static IReadOnlyList<ScriptError> ExecuteLive(string source, LiveScriptApi api, ScriptDebugSession? debug, CancellationToken token)
     {
-        var engine = new Engine(options => options
-            .LimitRecursion(64)
-            .CancellationToken(token));
+        var engine = new Engine(options =>
+        {
+            options.LimitRecursion(64).CancellationToken(token);
+
+            if (debug is not null)
+            {
+                // 문장마다 Step 이 온다. 거기서 중단점·한 줄씩을 본다. 중단점이 없어도 켜 둔다 -
+                // 도는 중에 중단점을 찍을 수 있어야 한다. 문장마다 한 번 묻는 값은 게임 스크립트에서 표가 안 난다.
+                options.Debugger.Enabled = true;
+                options.Debugger.InitialStepMode = StepMode.Into;
+            }
+        });
+
+        if (debug is not null)
+        {
+            engine.Debugger.Step += (_, info) =>
+            {
+                // 우리 껍데기 함수 안이면 넘긴다. 사용자 글의 줄만 멈출 자리다.
+                if (info.Location.SourceFile != UserSource) return StepMode.Over;
+
+                var line = info.Location.Start.Line;
+
+                if (debug.ShouldBreak(line)) debug.Pause(line, DescribeLocals(info), token);
+
+                return StepMode.Into;
+            };
+        }
 
         try
         {
@@ -116,9 +156,9 @@ public sealed class JavaScriptEngine : IScriptEngine
 
             // 표의 이름마다 api 를 감싸는 함수를 만든다. 대리자를 하나씩 적지 않아도 되고, 인자는 그대로 넘어간다.
             engine.Execute(string.Join("\n",
-                ScriptApiCatalog.LiveNames.Select(n => $"function {n}() {{ return api.{n}.apply(api, arguments); }}")));
+                ScriptApiCatalog.LiveNames.Select(n => $"function {n}() {{ return api.{n}.apply(api, arguments); }}")), "shim");
 
-            engine.Execute(source);
+            engine.Execute(source, UserSource);
 
             return [];
         }
@@ -138,6 +178,40 @@ public sealed class JavaScriptEngine : IScriptEngine
         {
             return [new ScriptError(LineOf(ex), ex.Message)];
         }
+    }
+
+    /// <summary>멈춘 자리의 변수들. 우리가 심은 이름과 함수는 뺀다. 너무 길면 자른다.</summary>
+    private static string DescribeLocals(DebugInformation info)
+    {
+        var text = new StringBuilder();
+        var count = 0;
+
+        foreach (var scope in info.CurrentScopeChain)
+        {
+            foreach (var name in scope.BindingNames)
+            {
+                if (HiddenNames.Contains(name) || name.StartsWith("__", StringComparison.Ordinal)) continue;
+
+                string value;
+
+                try
+                {
+                    var bound = scope.GetBindingValue(name);
+                    if (bound is Jint.Native.Function.Function) continue;
+                    value = bound?.ToString() ?? "undefined";
+                }
+                catch (Exception)
+                {
+                    value = "?";
+                }
+
+                text.AppendLine($"{name}={value}");
+
+                if (++count >= 40) return text.ToString().TrimEnd();
+            }
+        }
+
+        return text.ToString().TrimEnd();
     }
 
     private static (SequencePlan, IReadOnlyList<ScriptError>) Execute(string source, CancellationToken token)

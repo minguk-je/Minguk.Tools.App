@@ -48,10 +48,14 @@ public sealed class LiveScriptSession : IDisposable
         _activateTarget = activateTarget;
         _notify = notify;
         Console = new ScriptConsole(onUi);
+        Debug = new ScriptDebugSession(onUi);
     }
 
     /// <summary>출력 칸. XAML 이 <c>Live.Console.Text</c> 로 묶는다.</summary>
     public ScriptConsole Console { get; }
+
+    /// <summary>중단점·한 줄씩·멈춘 자리. XAML 이 <c>Live.Debug.*</c> 로 묶는다.</summary>
+    public ScriptDebugSession Debug { get; }
 
     public IPerceptionHub Hub { get; init; } = PerceptionHubFactory.Default;
 
@@ -80,6 +84,9 @@ public sealed class LiveScriptSession : IDisposable
         var source = script.Text;
         var engine = script.Engine;
 
+        Debug.SupportsStepping = engine.SupportsStepping;
+        Console.ClearCalls();
+
         return new ScriptRunContext(async (progress, token) =>
         {
             var host = new LiveScriptHost
@@ -91,6 +98,7 @@ public sealed class LiveScriptSession : IDisposable
                 Ocr = _ocr,
                 Print = Console.Print,
                 Watch = Console.Watch,
+                Trace = Console.Trace,
                 HoldTimeMs = player.HoldTimeMs
             };
 
@@ -107,7 +115,8 @@ public sealed class LiveScriptSession : IDisposable
 
             try
             {
-                var errors = await engine.RunLiveAsync(source, api, linked.Token);
+                // 줄 단위로 멈출 수 있는 언어에만 디버그 세션을 준다. C# 은 호출 로그로 본다.
+                var errors = await engine.RunLiveAsync(source, api, engine.SupportsStepping ? Debug : null, linked.Token);
 
                 if (errors.Count > 0)
                 {
@@ -126,6 +135,7 @@ public sealed class LiveScriptSession : IDisposable
                 api.ReleaseAll();
                 _emergency.Disarm();
                 Hub.WantsFrames = false;
+                Debug.Reset();
                 _api = null;
             }
         }, _activateTarget);

@@ -148,7 +148,7 @@ public sealed class PythonScriptEngine : IScriptEngine
             {
                 using (Py.GIL())
                 {
-                    using var compiled = PythonEngine.Compile(text, "script.py", RunFlagType.File);
+                    using var compiled = PythonEngine.Compile(text, UserFile, RunFlagType.File);
                 }
 
                 return (IReadOnlyList<ScriptError>)[];
@@ -160,7 +160,10 @@ public sealed class PythonScriptEngine : IScriptEngine
         }, token);
     }
 
-    public async Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, CancellationToken token = default)
+    /// <summary>된다. sys.settrace 가 줄마다 알려 준다.</summary>
+    public bool SupportsStepping => true;
+
+    public async Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, ScriptDebugSession? debug = null, CancellationToken token = default)
     {
         var text = source ?? string.Empty;
 
@@ -173,10 +176,13 @@ public sealed class PythonScriptEngine : IScriptEngine
             if (!_started) return [new ScriptError(0, _startFailure ?? "파이썬이 준비되지 않았습니다.")];
         }
 
-        return await Task.Run(() => ExecuteLive(text, api, token));
+        return await Task.Run(() => ExecuteLive(text, api, debug, token));
     }
 
-    private static IReadOnlyList<ScriptError> ExecuteLive(string source, LiveScriptApi api, CancellationToken token)
+    /// <summary>사용자 글을 컴파일할 때 붙이는 이름. 추적 함수가 우리 글과 사용자 글을 이것으로 가른다.</summary>
+    private const string UserFile = "<script>";
+
+    private static IReadOnlyList<ScriptError> ExecuteLive(string source, LiveScriptApi api, ScriptDebugSession? debug, CancellationToken token)
     {
         try
         {
@@ -185,7 +191,34 @@ public sealed class PythonScriptEngine : IScriptEngine
                 using var scope = Py.CreateScope();
 
                 BindLive(scope, api);
-                scope.Exec(source);
+
+                // 줄마다 부르는 추적 함수. 사용자 글(<script>)의 줄에서만 묻고, 멈출 줄이면 변수들을 글로 만들어 넘긴다.
+                if (debug is not null)
+                {
+                    scope.Set("__dbg", new PythonDebugBridge(debug, token).ToPython());
+                    scope.Set("__names", ScriptApiCatalog.LiveNames.Concat(["api", "MouseButton"]).ToArray());
+                    scope.Exec("""
+                               import sys as __sys
+                               __skip = set(__names)
+                               def __trace(frame, event, arg):
+                                   if frame.f_code.co_filename != '<script>':
+                                       return None
+                                   if event == 'line' and __dbg.ShouldBreak(frame.f_lineno):
+                                       __dbg.Pause(frame.f_lineno, '\n'.join(f'{k}={v!r}' for k, v in frame.f_locals.items() if not k.startswith('_') and k not in __skip))
+                                   return __trace
+                               __sys.settrace(__trace)
+                               """);
+                }
+
+                try
+                {
+                    using var compiled = PythonEngine.Compile(source, UserFile, RunFlagType.File);
+                    scope.Execute(compiled);
+                }
+                finally
+                {
+                    if (debug is not null) scope.Exec("__sys.settrace(None)");
+                }
             }
 
             return [];

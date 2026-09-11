@@ -94,6 +94,73 @@ internal static partial class Program
             Check("중지하면 쉬기() 사이에 멈추고 오류가 아니다", errors.Count == 0 && watch.ElapsedMilliseconds < 2000, $"{watch.ElapsedMilliseconds}ms, 오류 {errors.Count}");
         }
 
+        // ── 호출 로그: 무엇을 불렀는지 남는다 ──
+        {
+            var calls = new List<ScriptCall>();
+            var (errors, _, _) = Run(new RoslynScriptEngine(), "이동(10, 20); 클릭();", new FakeHub(monitor), monitor, CancellationToken.None, calls.Add);
+
+            var names = calls.Select(c => c.Name).ToList();
+            Check("호출 로그가 부른 것을 남긴다", errors.Count == 0 && names.SequenceEqual(["MoveTo", "Click"]), string.Join(", ", calls));
+        }
+
+        // ── JavaScript 중단점: 2번 줄에서 멈추고, 변수가 보이고, 계속하면 끝난다 ──
+        {
+            var debug = new ScriptDebugSession(a => a());
+            debug.Breakpoints.Add(2);
+
+            var paused = new ManualResetEventSlim(false);
+            debug.Paused += (_, _) => paused.Set();
+
+            var printed = new List<string>();
+            IReadOnlyList<ScriptError>? errors = null;
+
+            var run = System.Threading.Tasks.Task.Run(() =>
+                errors = RunWithDebug(new JavaScriptEngine(), "var a = 1;\nvar b = a + 1;\n출력(b);", debug, monitor, printed));
+
+            var hit = paused.Wait(5000);
+            var line = debug.PausedLine;
+            var locals = debug.Locals ?? string.Empty;
+
+            debug.Continue();
+            var finished = run.Wait(5000);
+
+            Check("JS 중단점에서 멈춘다", hit && line == 2, $"멈춤 {hit}, 줄 {line}");
+            Check("JS 멈춘 자리의 변수가 보인다", locals.Contains("a=1"), locals.Replace("\n", " / "));
+            Check("JS 계속하면 끝까지 돈다", finished && errors is { Count: 0 } && printed.Contains("2"), $"끝 {finished}, 출력 {string.Join(",", printed)}");
+        }
+
+        // ── JavaScript 한 줄씩: 1번 줄에서 멈추고 F10 마다 다음 줄 ──
+        {
+            var debug = new ScriptDebugSession(a => a()) { Mode = ScriptStepMode.Step };
+            var lines = new List<int>();
+            var paused = new AutoResetEvent(false);
+            debug.Paused += (_, _) => { lines.Add(debug.PausedLine); paused.Set(); };
+
+            var run = System.Threading.Tasks.Task.Run(() => RunWithDebug(new JavaScriptEngine(), "var a = 1;\nvar b = 2;\n출력(a + b);", debug, monitor, []));
+
+            for (var i = 0; i < 3 && paused.WaitOne(3000); i++) debug.StepNext();
+
+            var finished = run.Wait(5000);
+            Check("JS 한 줄씩 밟는다", finished && lines.Take(3).SequenceEqual([1, 2, 3]), string.Join(",", lines));
+        }
+
+        // ── 멈춘 채로 중지하면 그 자리에서 끝난다 ──
+        {
+            var debug = new ScriptDebugSession(a => a());
+            debug.Breakpoints.Add(1);
+            var paused = new ManualResetEventSlim(false);
+            debug.Paused += (_, _) => paused.Set();
+
+            using var cts = new CancellationTokenSource();
+            var run = System.Threading.Tasks.Task.Run(() => RunWithDebug(new JavaScriptEngine(), "var a = 1;\n출력(a);", debug, monitor, [], cts.Token));
+
+            paused.Wait(5000);
+            cts.Cancel();
+            var finished = run.Wait(3000);
+
+            Check("멈춘 채로 중지하면 끝난다", finished && run.Result.Count == 0, $"끝 {finished}");
+        }
+
         // ── 문법 검사는 돌리지 않고 줄 번호를 준다 ──
         {
             var adapter = new RecordingAdapter();
@@ -127,7 +194,7 @@ internal static partial class Program
     }
 
     private static (IReadOnlyList<ScriptError> Errors, RecordingAdapter Adapter, List<string> Printed) Run(
-        IScriptEngine engine, string source, FakeHub hub, CaptureTarget target, CancellationToken token)
+        IScriptEngine engine, string source, FakeHub hub, CaptureTarget target, CancellationToken token, Action<ScriptCall>? trace = null)
     {
         var adapter = new RecordingAdapter();
         var printed = new List<string>();
@@ -140,13 +207,36 @@ internal static partial class Program
             Hub = hub,
             Print = printed.Add,
             Watch = (name, value) => printed.Add($"{name}={value}"),
+            Trace = trace,
             HoldTimeMs = 1
         };
 
         var api = new LiveScriptApi(host, token);
-        var errors = engine.RunLiveAsync(source, api, token).GetAwaiter().GetResult();
+        var errors = engine.RunLiveAsync(source, api, debug: null, token: token).GetAwaiter().GetResult();
 
         return (errors, adapter, printed);
+    }
+
+    /// <summary>디버그 세션을 물려 돌린다. 멈춤은 세션의 Paused 로 알 수 있다.</summary>
+    private static IReadOnlyList<ScriptError> RunWithDebug(
+        IScriptEngine engine, string source, ScriptDebugSession debug, CaptureTarget target, List<string> printed, CancellationToken token = default)
+    {
+        var host = new LiveScriptHost
+        {
+            Service = new InputService(new RecordingAdapter()),
+            RequiresForeground = false,
+            Target = () => target,
+            Hub = new FakeHub(target),
+            Print = printed.Add,
+            Watch = (name, value) => printed.Add($"{name}={value}"),
+            HoldTimeMs = 1
+        };
+
+        var api = new LiveScriptApi(host, token);
+        var result = engine.RunLiveAsync(source, api, debug, token).GetAwaiter().GetResult();
+
+        debug.Reset();
+        return result;
     }
 
     /// <summary>누른 것을 적기만 하는 어댑터. 실제로는 아무것도 안 나간다.</summary>
