@@ -38,6 +38,15 @@ public sealed class LiveScriptHost
     /// <summary>키·버튼을 누르고 있는 시간.</summary>
     public int HoldTimeMs { get; init; } = 30;
 
+    /// <summary>
+    /// 조준 배율. 화면 가운데에서 목표까지의 거리(픽셀)에 이것을 곱해 마우스를 움직인다.
+    /// </summary>
+    /// <remarks>
+    /// 게임은 마우스가 움직인 양을 제 감도로 시야 회전에 바꾼다. 픽셀 하나를 옮기는 데 몇 카운트가 드는지는
+    /// 게임·감도·해상도마다 달라 사람이 맞춘다. 1.0 에서 시작해, 조준이 모자라면 올리고 넘치면 내린다.
+    /// </remarks>
+    public double AimScale { get; init; } = 1.0;
+
     /// <summary>초당 입력 호출 상한. 끝나지 않는 반복문이 입력을 쏟아붓지 않게.</summary>
     public int MaxInputsPerSecond { get; init; } = 30;
 }

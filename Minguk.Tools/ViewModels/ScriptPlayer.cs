@@ -104,6 +104,11 @@ public sealed class ScriptPlayer : ViewModelBase
     /// <summary>반복 최대 횟수. 0 이면 중지할 때까지.</summary>
     public int MaxLoops { get => GetProperty(() => MaxLoops); set => SetProperty(() => MaxLoops, value); }
 
+    /// <summary>조준 배율(%). 100 이면 화면 픽셀 하나에 마우스 한 카운트. 게임 감도에 맞춰 사람이 조절한다.</summary>
+    public int AimScalePercent { get => GetProperty(() => AimScalePercent); set => SetProperty(() => AimScalePercent, value); }
+
+    public double AimScale => Math.Max(1, AimScalePercent) / 100.0;
+
     /// <summary>한 번 실행이 이보다 오래 돌면 멈춘다(초). 0 이면 상한 없음. 끝나지 않는 반복문의 안전장치.</summary>
     public int RunTimeLimitSeconds { get => GetProperty(() => RunTimeLimitSeconds); set => SetProperty(() => RunTimeLimitSeconds, value); }
 
@@ -117,6 +122,7 @@ public sealed class ScriptPlayer : ViewModelBase
         StartDelaySeconds = get(nameof(StartDelaySeconds), 5);
         MaxLoops = get(nameof(MaxLoops), 0);
         RunTimeLimitSeconds = get(nameof(RunTimeLimitSeconds), 600);
+        AimScalePercent = get(nameof(AimScalePercent), 100);
     }
 
     public void Save(Action<string, int> set)
@@ -127,6 +133,7 @@ public sealed class ScriptPlayer : ViewModelBase
         set(nameof(StartDelaySeconds), StartDelaySeconds);
         set(nameof(MaxLoops), MaxLoops);
         set(nameof(RunTimeLimitSeconds), RunTimeLimitSeconds);
+        set(nameof(AimScalePercent), AimScalePercent);
     }
 
     // ── 실행 ─────────────────────────────────────────────────────────────

@@ -62,6 +62,15 @@ public interface IInputAdapter : IDisposable
 
     bool MoveMouseTo(int screenX, int screenY);
 
+    /// <summary>
+    /// 지금 자리에서 이만큼 움직인다(상대 이동).
+    /// </summary>
+    /// <remarks>
+    /// 게임처럼 커서를 붙잡는 창은 절대 좌표 이동을 무시하고 움직인 양만 본다(Raw Input 의 상대 이동).
+    /// 그런 창에서 조준하려면 이것이어야 한다. 보통 창에서는 <see cref="MoveMouseTo"/> 가 낫다.
+    /// </remarks>
+    bool MoveMouseBy(int deltaX, int deltaY);
+
     bool PressMouseButton(MouseButton button);
 
     bool ReleaseMouseButton(MouseButton button);

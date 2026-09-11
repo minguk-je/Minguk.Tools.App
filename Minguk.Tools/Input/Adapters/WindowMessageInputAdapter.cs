@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace Minguk.Tools.Input.Adapters;
@@ -65,6 +65,10 @@ public sealed class WindowMessageInputAdapter : IInputAdapter, ICharacterInput, 
 
         return PostMouse(NativeMethods.WM_MOUSEMOVE, wParam: 0);
     }
+
+    /// <summary>마지막 자리에서 이만큼 옮긴 자리로 WM_MOUSEMOVE. 창 메시지에는 "움직인 양" 이 없어 이것이 최선이다.</summary>
+    public bool MoveMouseBy(int deltaX, int deltaY)
+        => MoveMouseTo(_lastScreenPoint.X + deltaX, _lastScreenPoint.Y + deltaY);
 
     public bool PressMouseButton(MouseButton button)
         => PostMouse(DownMessage(button), ButtonFlag(button));

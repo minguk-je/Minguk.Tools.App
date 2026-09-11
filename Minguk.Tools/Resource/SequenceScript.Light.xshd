@@ -59,6 +59,34 @@
             <Word>이동클릭</Word>
             <Word>휠</Word>
             <Word>쉬기</Word>
+            <Word>Aim</Word>
+            <Word>MoveBy</Word>
+            <Word>Mobs</Word>
+            <Word>NearestMob</Word>
+            <Word>WaitMob</Word>
+            <Word>ReadText</Word>
+            <Word>ReadNumber</Word>
+            <Word>Key</Word>
+            <Word>KeyDown</Word>
+            <Word>KeyUp</Word>
+            <Word>IsStopped</Word>
+            <Word>Print</Word>
+            <Word>Watch</Word>
+            <Word>Stop</Word>
+            <Word>조준</Word>
+            <Word>상대이동</Word>
+            <Word>몹들</Word>
+            <Word>가장가까운몹</Word>
+            <Word>몹기다리기</Word>
+            <Word>읽기</Word>
+            <Word>숫자읽기</Word>
+            <Word>키</Word>
+            <Word>누르기</Word>
+            <Word>떼기</Word>
+            <Word>중지되었나</Word>
+            <Word>출력</Word>
+            <Word>보기</Word>
+            <Word>끝</Word>
         </Keywords>
 
         <Keywords color="Keyword">

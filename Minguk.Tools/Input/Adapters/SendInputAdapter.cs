@@ -66,6 +66,10 @@ public sealed class SendInputAdapter : IInputAdapter, IScanCodeInput
             normalizedX,
             normalizedY));
 
+    /// <summary>상대 이동. 절대 플래그 없이 dx·dy 만 보내면 움직인 양으로 들어간다 - 커서를 잡는 게임이 보는 것이 이것이다.</summary>
+    public bool MoveMouseBy(int deltaX, int deltaY)
+        => Send(NativeMethods.MouseInput(NativeMethods.MOUSEEVENTF_MOVE, deltaX, deltaY));
+
     public bool PressMouseButton(MouseButton button) => Send(NativeMethods.MouseInput(DownFlag(button)));
 
     public bool ReleaseMouseButton(MouseButton button) => Send(NativeMethods.MouseInput(UpFlag(button)));

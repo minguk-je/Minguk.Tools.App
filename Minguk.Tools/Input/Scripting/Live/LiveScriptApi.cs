@@ -92,6 +92,42 @@ public sealed class LiveScriptApi
 
     public void Scroll(int notches) => Traced("Scroll", notches.ToString(), () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Scroll, Notches = notches }));
 
+    /// <summary>
+    /// 그 화면 좌표를 향해 마우스를 <b>움직인 양</b>으로 옮긴다. 게임처럼 커서를 잡는 창에서 조준할 때.
+    /// </summary>
+    /// <remarks>
+    /// 커서를 잡는 창은 절대 좌표 이동(<see cref="MoveTo"/>)을 무시한다 - 실제로 오버워치에서 이동()이 아무 일도 안 했다.
+    /// 그런 창은 화면 가운데가 조준점이므로, 가운데에서 목표까지의 거리에 배율을 곱해 상대 이동으로 보낸다.
+    /// 한 번에 딱 맞지 않을 수 있다 - 반복문에서 다시 찾고 다시 조준하면 점점 맞아 간다.
+    /// </remarks>
+    public void Aim(int x, int y) => Traced("Aim", $"{x}, {y}", () => AimCore(x, y));
+
+    /// <summary>지금 자리에서 이만큼 움직인다. 배율 없이 그대로.</summary>
+    public void MoveBy(int deltaX, int deltaY) => Traced("MoveBy", $"{deltaX}, {deltaY}", () =>
+    {
+        BeforeInput();
+        _host.Service.Adapter.MoveMouseBy(deltaX, deltaY);
+    });
+
+    private void AimCore(int x, int y)
+    {
+        BeforeInput();
+
+        var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
+
+        if (!CaptureTargetBounds.TryGet(target, out var bounds))
+            throw Guard("대상 창의 자리를 알 수 없습니다 - 창이 닫혔거나 최소화됐습니다.");
+
+        var centerX = bounds.Left + (bounds.Width / 2);
+        var centerY = bounds.Top + (bounds.Height / 2);
+        var deltaX = (int)Math.Round((x - centerX) * _host.AimScale);
+        var deltaY = (int)Math.Round((y - centerY) * _host.AimScale);
+
+        if (deltaX == 0 && deltaY == 0) return;
+
+        _host.Service.Adapter.MoveMouseBy(deltaX, deltaY);
+    }
+
     /// <summary>쉰다. 토큰으로 기다리므로 중지가 이 사이에 먹는다. 짧은 것은 로그에 안 남긴다 - 반복문이 초당 수십 줄을 만든다.</summary>
     public void Wait(int milliseconds)
     {
@@ -113,6 +149,8 @@ public sealed class LiveScriptApi
     public void 이동(int x, int y) => MoveTo(x, y);
     public void 이동클릭(int x, int y, object? button = null) => ClickAt(x, y, button);
     public void 휠(int notches) => Scroll(notches);
+    public void 조준(int x, int y) => Aim(x, y);
+    public void 상대이동(int deltaX, int deltaY) => MoveBy(deltaX, deltaY);
     public void 쉬기(int milliseconds) => Wait(milliseconds);
 
     // ── 화면 읽기 ────────────────────────────────────────────────────────

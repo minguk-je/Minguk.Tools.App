@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using Minguk.Tools.Input.Interop;
 
@@ -70,6 +70,10 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
             x: nx,
             y: ny);
     }
+
+    /// <summary>상대 이동. 드라이버의 기본 이동이 이것이다 - 진짜 마우스가 움직인 것과 구분되지 않는다.</summary>
+    public bool MoveMouseBy(int deltaX, int deltaY)
+        => SendMouse(state: 0, flags: InterceptionNative.MouseMoveRelative, x: deltaX, y: deltaY);
 
     public bool PressMouseButton(MouseButton button) => SendMouse(DownState(button));
 

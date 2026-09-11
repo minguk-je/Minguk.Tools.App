@@ -111,7 +111,8 @@ public sealed class LiveScriptSession : IDisposable
                 Print = Console.Print,
                 Watch = Console.Watch,
                 Trace = Console.Trace,
-                HoldTimeMs = player.HoldTimeMs
+                HoldTimeMs = player.HoldTimeMs,
+                AimScale = player.AimScale
             };
 
             var api = new LiveScriptApi(host, token);

@@ -222,6 +222,7 @@
                         -->
                         <markup:DetectionOverlay Detections="{Binding Detections}"
                                                  OcrRegion="{Binding OcrRegion}"
+                                                 ShowOcrRegion="{Binding IsOcrRegionVisible}"
                                                  OcrRegionDraft="{Binding OcrRegionDraft}"
                                                  OcrText="{Binding OcrText}"
                                                  Source="{Binding PreviewImage}" />
@@ -423,6 +424,14 @@
                                       IsEnabled="{Binding Player.IsIdle}"
                                       MaxValue="60"
                                       MinValue="0" />
+                    </dxlc:LayoutItem>
+
+                    <dxlc:LayoutItem Label="조준 배율(%)"
+                                     ToolTip="조준(x, y) 이 화면 가운데에서 목표까지의 거리에 곱하는 값. 게임 감도에 맞춰 조절한다 - 모자라면 올리고 넘치면 내린다.">
+                        <dxe:SpinEdit Width="64"
+                                      EditValue="{Binding Player.AimScalePercent}"
+                                      MaxValue="2000"
+                                      MinValue="1" />
                     </dxlc:LayoutItem>
 
                     <dxlc:LayoutItem Label="진행">

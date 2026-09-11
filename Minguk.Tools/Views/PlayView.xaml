@@ -210,6 +210,17 @@
                 </dxb:BarEditItem.EditSettings>
             </dxb:BarEditItem>
 
+            <dxb:BarEditItem Content="조준 배율(%)"
+                             EditValue="{Binding Player.AimScalePercent}"
+                             EditWidth="64"
+                             IsEnabled="{Binding Player.IsIdle}"
+                             ToolTip="조준(x, y) 이 화면 가운데에서 목표까지의 거리에 곱하는 값. 게임 감도에 맞춰 조절한다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:SpinEditSettings MaxValue="2000"
+                                          MinValue="1" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
             <dxb:BarEditItem Content="반복 횟수"
                              EditValue="{Binding Player.MaxLoops}"
                              EditWidth="70"
@@ -259,6 +270,7 @@
                 <parts:CapturePreviewPanel.Overlay>
                     <markup:DetectionOverlay Detections="{Binding Detections}"
                                              OcrRegion="{Binding OcrRegion}"
+                                                 ShowOcrRegion="{Binding IsOcrRegionVisible}"
                                              OcrRegionDraft="{Binding OcrRegionDraft}"
                                              OcrText="{Binding OcrText}"
                                              Source="{Binding PreviewImage}" />

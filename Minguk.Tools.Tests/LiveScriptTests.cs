@@ -94,6 +94,18 @@ internal static partial class Program
             Check("중지하면 쉬기() 사이에 멈추고 오류가 아니다", errors.Count == 0 && watch.ElapsedMilliseconds < 2000, $"{watch.ElapsedMilliseconds}ms, 오류 {errors.Count}");
         }
 
+        // ── 조준: 화면 가운데에서 목표까지의 거리만큼 상대 이동 ──
+        {
+            Minguk.Tools.Capture.Input.CaptureTargetBounds.TryGet(monitor, out var bounds);
+            var cx = (int)(bounds.Left + (bounds.Width / 2));
+            var cy = (int)(bounds.Top + (bounds.Height / 2));
+
+            var (errors, adapter, _) = Run(new RoslynScriptEngine(), $"조준({cx + 100}, {cy - 40}); 상대이동(3, -4);", new FakeHub(monitor), monitor, CancellationToken.None);
+            var moves = adapter.Calls.Where(c => c.StartsWith("MoveBy")).ToList();
+
+            Check("조준은 가운데에서 목표까지의 거리만큼 상대 이동", errors.Count == 0 && moves.SequenceEqual(["MoveBy 100,-40", "MoveBy 3,-4"]), string.Join(", ", moves) + (errors.Count > 0 ? " / " + errors[0] : ""));
+        }
+
         // ── 호출 로그: 무엇을 불렀는지 남는다 ──
         {
             var calls = new List<ScriptCall>();
@@ -250,6 +262,7 @@ internal static partial class Program
         public bool RequiresForegroundTarget => false;
         public (int X, int Y)? GetCursorPosition() => (0, 0);
         public bool MoveMouseTo(int screenX, int screenY) { Calls.Add($"MoveTo {screenX},{screenY}"); return true; }
+        public bool MoveMouseBy(int deltaX, int deltaY) { Calls.Add($"MoveBy {deltaX},{deltaY}"); return true; }
         public bool PressMouseButton(MouseButton button) { Calls.Add($"Press {button}"); return true; }
         public bool ReleaseMouseButton(MouseButton button) { Calls.Add($"Release {button}"); return true; }
         public bool ClickMouseButton(MouseButton button) { Calls.Add($"Click {button}"); return true; }
