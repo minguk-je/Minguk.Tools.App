@@ -82,6 +82,17 @@ public sealed class DetectionOverlay : FrameworkElement
         set => SetValue(OcrRegionProperty, value);
     }
 
+    /// <summary>글자 영역을 그릴지. 글자 읽기가 꺼져 있으면 안 그린다 - 읽지도 않는 영역이 화면에 남아 있으면 "저게 뭐지" 가 된다.</summary>
+    public static readonly DependencyProperty ShowOcrRegionProperty = DependencyProperty.Register(
+        nameof(ShowOcrRegion), typeof(bool), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public bool ShowOcrRegion
+    {
+        get => (bool)GetValue(ShowOcrRegionProperty);
+        set => SetValue(ShowOcrRegionProperty, value);
+    }
+
     public static readonly DependencyProperty OcrRegionDraftProperty = DependencyProperty.Register(
         nameof(OcrRegionDraft), typeof(Rect), typeof(DetectionOverlay),
         new FrameworkPropertyMetadata(Rect.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -115,7 +126,7 @@ public sealed class DetectionOverlay : FrameworkElement
             foreach (var detection in detections) Draw(dc, area, detection);
 
         DrawOcrRegion(dc, area, OcrRegionDraft, dashed: true, text: null);
-        DrawOcrRegion(dc, area, OcrRegion, dashed: false, text: OcrText);
+        if (ShowOcrRegion) DrawOcrRegion(dc, area, OcrRegion, dashed: false, text: OcrText);
     }
 
     private void DrawOcrRegion(DrawingContext dc, Rect area, Rect region, bool dashed, string? text)

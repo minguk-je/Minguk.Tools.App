@@ -46,19 +46,37 @@ public abstract partial class RecognizingCaptureViewModelBase
     public bool IsOcrOn
     {
         get => GetProperty(() => IsOcrOn);
-        set => SetProperty(() => IsOcrOn, value, OnOcrChanged);
+        set => SetProperty(() => IsOcrOn, value, () =>
+        {
+            RaisePropertyChanged(nameof(IsOcrRegionVisible));
+            OnOcrChanged();
+        });
     }
 
-    /// <summary>켜면 미리보기에서 끄는 사각형이 글자 영역이 된다. 끌고 나면 알아서 꺼진다.</summary>
+    /// <summary>켜면 미리보기에서 끄는 사각형이 글자 영역이 된다. 끌고 나면 알아서 꺼진다. 끌지 않고 누르기만 하면 있던 영역을 지운다.</summary>
     public bool IsOcrRegionPicking
     {
         get => GetProperty(() => IsOcrRegionPicking);
         set => SetProperty(() => IsOcrRegionPicking, value, () =>
         {
-            if (IsOcrRegionPicking) StatusText = "미리보기에서 글자가 있는 자리를 끌어 사각형을 그리세요.";
+            RaisePropertyChanged(nameof(IsOcrRegionVisible));
+
+            if (IsOcrRegionPicking)
+                StatusText = OcrRegion.IsEmpty || OcrRegion.Width <= 0
+                    ? "미리보기에서 글자가 있는 자리를 끌어 사각형을 그리세요."
+                    : "미리보기에서 끌어 새로 그리거나, 끌지 않고 누르기만 하면 영역을 지웁니다.";
             else _ocrPickStart = null;
         });
     }
+
+    /// <summary>
+    /// 글자 영역을 미리보기에 그릴지. 글자 읽기가 켜져 있거나 끄는 중일 때만.
+    /// </summary>
+    /// <remarks>
+    /// 읽지도 않는 영역이 늘 떠 있으면 "저 글자 박스는 뭐지" 가 된다(실제로 그랬다). 저장은 그대로 남겨 두고
+    /// 글자 읽기를 켜면 다시 보인다.
+    /// </remarks>
+    public bool IsOcrRegionVisible => IsOcrOn || IsOcrRegionPicking;
 
     /// <summary>읽을 자리. 캡처 화면 안의 0~1 비율. 비어 있으면 아직 안 정한 것이다.</summary>
     public Rect OcrRegion
@@ -406,9 +424,17 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         var rect = new Rect(start, ratio);
 
-        // 클릭과 끌기를 가른다. 점짜리 영역은 읽을 것이 없다.
+        // 클릭과 끌기를 가른다. 점짜리 영역은 읽을 것이 없다 - 있던 영역이 있으면 그것을 지우는 뜻으로 받는다.
         if (rect.Width < 0.005 || rect.Height < 0.005)
         {
+            if (!OcrRegion.IsEmpty && OcrRegion.Width > 0)
+            {
+                OcrRegion = Rect.Empty;
+                if (IsOcrOn) TurnOffOcr("글자 영역을 지웠습니다. 다시 읽으려면 영역을 새로 그리세요.");
+                else StatusText = "글자 영역을 지웠습니다.";
+                return;
+            }
+
             StatusText = "영역이 너무 작습니다. 글자를 감싸도록 끌어 주세요.";
             return;
         }
