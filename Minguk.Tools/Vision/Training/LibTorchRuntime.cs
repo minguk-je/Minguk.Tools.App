@@ -367,6 +367,12 @@ public static class LibTorchRuntime
             // 그때 게임이 도는 카드(사용률 높은 쪽)를 피할 수 있다. CUDA 는 여기서 처음 초기화된다.
             if (!_gpuChosen) SelectGpu(null);
 
+            // OpenMP 스레드가 GPU 답을 기다리는 동안 바쁘게 도는(스핀) 것을 끈다. 기본은 일이 끝난 뒤에도
+            // 한동안 코어를 붙들고 다음 일을 기다려서, 0.7초에 한 번 찾는 몹 찾기가 코어 4.5개를 썼다.
+            // 일이 없으면 바로 쉬게 한다. 스레드 수 제한과 별개로, libtorch 를 올리기 전에 줘야 먹는다.
+            SetProcessEnvironment("KMP_BLOCKTIME", "0");
+            SetProcessEnvironment("OMP_WAIT_POLICY", "PASSIVE");
+
             // 순서가 있다. c10 -> torch_cpu -> torch_cuda -> torch 로, 기대는 쪽을 먼저 올린다.
             foreach (var name in new[] { "c10.dll", "torch_cpu.dll", "c10_cuda.dll", "torch_cuda.dll", "torch.dll" })
             {
