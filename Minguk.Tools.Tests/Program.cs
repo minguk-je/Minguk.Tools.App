@@ -37,6 +37,9 @@ internal static partial class Program
         if (args.Contains("--calibrate")) return Calibrate.Run();
         if (args.Contains("--fallback")) return FallbackProbe.Run();
         if (args.Contains("--interception-probe")) return InterceptionProbe.Run();
+
+        // 크기를 바꿔 학습하고 추론 시간까지 잰다. 모델을 덮어쓰므로(.bak 로 남긴다) 평소 검증 밖.
+        if (args.Contains("--train")) return TrainRun.Run(args);
         if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.
@@ -141,7 +144,7 @@ internal static partial class Program
     }
 
     /// <summary>시각 쪽만 돌린다. 커서와 키보드를 안 건드린다.</summary>
-    private static string? ArgValue(string[] args, string prefix)
+    internal static string? ArgValue(string[] args, string prefix)
         => args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) is { } hit ? hit[prefix.Length..] : null;
 
     private static int RunVisionOnly()
