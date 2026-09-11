@@ -16,7 +16,7 @@ using Minguk.Tools.Vision.Training;
 
 namespace Minguk.Tools.ViewModels;
 
-public partial class CaptureMonitorViewModel
+public abstract partial class RecognizingCaptureViewModelBase
 {
     /// <summary>
     /// 얼마에 한 번 찾을지.

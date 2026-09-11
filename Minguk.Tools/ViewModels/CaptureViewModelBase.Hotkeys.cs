@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Media;
 using System.Windows.Input;
 using Minguk.Tools.Input.Hotkeys;
@@ -6,7 +6,7 @@ using Minguk.Tools.Input.Hotkeys;
 namespace Minguk.Tools.ViewModels;
 
 /// <summary>
-/// 캡처 모니터의 전역 단축키. 게임을 앞에 둔 채로 데이터셋에 담는다.
+/// 캡처 화면들의 전역 단축키. 게임을 앞에 둔 채로 데이터셋에 담는다.
 /// </summary>
 /// <remarks>
 /// 몹을 모으는 일은 게임 안에서 한다. 몹이 보일 때마다 이 앱으로 넘어와 버튼을 누르고
@@ -16,7 +16,7 @@ namespace Minguk.Tools.ViewModels;
 /// 입력 자동화 화면이 F3~F6 을 쥔다. 두 화면이 같이 열려 있을 수 있으므로 겹치지 않는
 /// 키를 쓴다. 겹치면 나중에 연 화면의 등록이 실패한다.
 /// </remarks>
-public partial class CaptureMonitorViewModel
+public abstract partial class CaptureViewModelBase
 {
     /// <summary>담기 단축키. 화면에 적는 이름과 실제 키를 한 곳에서 맞춘다.</summary>
     public const string CollectHotkeyLabel = "F8";
@@ -32,8 +32,8 @@ public partial class CaptureMonitorViewModel
     /// 담겼는지 모르면 몇 번씩 누르게 되고, 그러면 같은 장면이 여러 장 쌓인다.
     /// 버튼으로 담을 때는 상태 줄이 보이니 소리를 내지 않는다.
     /// </remarks>
-    private const int CollectFromButton = 1;
-    private const int CollectFromHotkey = 2;
+    protected const int CollectFromButton = 1;
+    protected const int CollectFromHotkey = 2;
 
     private void RegisterHotkeys()
     {

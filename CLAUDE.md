@@ -14,6 +14,41 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
 
 3번을 빠뜨리면 메뉴는 보이지만 탭이 비어서 열린다 — `MainViewLocator` 가 DI 에서 뷰를 꺼내기 때문이다.
 
+## 화면 셋: 캡처 · 편집 · 플레이
+
+창을 잡는 화면이 셋이다(2026-09-11 에 캡처 모니터 하나를 나눴다). 한 화면에 담기·검출·OCR·스크립트를
+전부 얹으니 도구 줄이 넘쳤고, 플레이만 하는 PC 에 편집기·담기가 딸려 갔다.
+
+| 화면 | ViewModel | 하는 일 |
+|---|---|---|
+| 캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 순수 캡처. 대상·fps·미리보기·프레임 저장·데이터셋에 담기(F8)·통계 표 |
+| 편집 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | 몹 찾기·추적·글자 영역·글자 읽기·이름표 읽기를 보면서 스크립트를 쓰고 한 번씩 돌린다. 담기(F8)도 된다 - 찾은 것이 라벨로 들어간다 |
+| 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 게임 연결, 미리보기 켜고 끄기, Scripts 폴더의 스크립트를 골라 1회(F5)·반복(F6). 편집 없음 |
+
+- **바탕 둘.** `CaptureViewModelBase`(잡기·미리보기·입력 전달·저장·담기·1초 통계) 위에
+  `RecognizingCaptureViewModelBase`(`.Detect.cs` 찾기 · `.Ocr.cs` 글자). 캡처 화면은 첫 바탕만 쓴다 -
+  담기만 하는 화면에 68MB 모델과 libtorch GPU 메모리를 물릴 이유가 없다.
+- 바탕이 열어 둔 자리: `OnFramePixels(e)`(캡처 스레드, 기다리면 안 됨) · `TryInterceptPreviewMouseDown` ·
+  `OnPreviewMouseMove/Up` · `DetectionsForLabels` · `SupportsCollecting` · `OnStatisticsRow` · `OnRunningStateChanged`.
+  파생 화면은 `RestoreSettings/SaveSettings/ReleaseResources` 에서 반드시 `base` 를 부른다.
+- 바탕 이름은 `...Base` 로 끝난다. `DocumentViewModelBase` 가 로거·뷰 이름을 "ViewModel 로 끝나는 첫 타입" 에서
+  구하므로, 바탕 이름이 `ViewModel` 로 끝나면 세 화면이 한 이름으로 찍힌다.
+- **설정 키는 파생 화면 이름으로** 저장된다(`AppSettingUtility` 가 실제 타입을 쓴다). 그래서 캡처와 플레이가
+  대상 창·fps 를 각자 기억한다. 나누기 전 값(`CaptureMonitorViewModel.*`)은 `GetSettingOrLegacy` 가 처음 한 번
+  물려준다 - 대상 창·문턱·추적·글자 영역·OCR 언어.
+- **미리보기 판과 입력 전달 도구 줄은 `Views/Parts` 의 UserControl** 이다(`CapturePreviewPanel` · `PreviewForwardBar`).
+  DataContext 를 물려받아 바탕의 커맨드에 묶이고, `UIObjectService` 이름(`PreviewImageObjectService` 등)도 그 안에
+  있다. 겹그림(`DetectionOverlay`)은 판의 `Overlay` 에 화면이 얹는다 - 캡처 화면은 없는 프로퍼티에 묶이지 않게.
+- **스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`.** 편집·플레이가 같이 쓴다. 입력 자동화 화면은 아직
+  제 것(`InputAutomationViewModel.Code.cs`)을 들고 있다 - 같은 규칙을 베낀 것이니 옮길 때 그쪽을 지운다.
+  스크립트 입력은 미리보기 입력 전달과 **같은 어댑터**(`_inputRouter.InputAdapter`)로 나가고, 보내기 직전에
+  `TryFocusTargetWindow` 로 대상 창을 앞으로 가져온다.
+- 전역 단축키 소유: F8 담기 = 캡처·편집(`SupportsCollecting`), F5/F6 = 플레이와 입력 자동화(같이 열면 나중 것이 실패,
+  상태에 적힌다). 두 화면이 같은 키를 쥐면 안 되는 이유가 이것이다.
+- 각 화면이 **제 캡처 세션**을 든다. 캡처 화면과 플레이 화면을 같이 켜면 같은 창을 두 번 잡는다 - 공유 세션과
+  스크립트가 읽는 인식 허브는 `docs/스크립트-설계.md` 2단계.
+- 검증: `--views` 가 세 화면을 만들고 메뉴 아이콘을 본다. 실시간은 `screens.ps1`(세 화면 차례로)·`live-game.ps1`(편집 화면에서 몹 찾기).
+
 ## ViewModel 작성 규칙
 
 `DocumentViewModelBase` 가 생명주기·서비스·예외를 다 들고 있다. 화면은 필요한 단계만 채운다.
@@ -568,9 +603,9 @@ CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 �
 **캡처 프레임마다 돌리는 실시간 겹쳐 그리기는 여전히 안 된다.** 30fps 면 한 장에 33ms 인데
 230ms 다. 대신 0.25초에 한 번은 넉넉하다 - 아래 「캡처 화면에서 찾기」가 그 갈래다.
 
-### 캡처 화면에서 찾기
+### 편집 화면에서 찾기
 
-캡처 모니터 도구 줄의 **몹 찾기**를 켜면 프레임에서 몹을 찾아 미리보기 위에 점선으로
+편집 화면(플레이 화면도 같다) 도구 줄의 **몹 찾기**를 켜면 프레임에서 몹을 찾아 미리보기 위에 점선으로
 겹쳐 그린다. 옆에 몇 마리를 몇 ms 에 찾았는지 같이 뜬다.
 
 - **프레임마다 안 돌린다.** 0.25초에 한 번이고(`DetectIntervalMs`), 앞의 것이 아직 돌고
@@ -678,7 +713,7 @@ CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 �
 
 ### 화면
 
-- 데이터셋 자리는 **캡처 모니터와 라벨링이 같이 본다**(`LabelDataset.ConfiguredRoot`,
+- 데이터셋 자리는 **캡처 화면과 라벨링이 같이 본다**(`LabelDataset.ConfiguredRoot`,
   앱 전체 키 `Vision.DatasetRoot`). 화면마다 설정을 들면 한쪽에서만 폴더를 바꿔 놓고
   담은 그림이 왜 안 보이는지 한참 찾게 된다.
 - **그림을 넘길 때 자동으로 저장한다.** 수백 장을 찍는 일이라 장마다 저장을 누르게 하면

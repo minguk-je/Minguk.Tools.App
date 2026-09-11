@@ -1,0 +1,58 @@
+﻿<UserControl x:Class="Minguk.Tools.Views.Parts.PreviewForwardBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
+             xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm">
+
+    <UserControl.Resources>
+        <dxmvvm:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <!-- 미리보기를 켰을 때만 쓰는 것들. 툴바째 숨겨 조건을 한 군데로 모은다. -->
+    <dxb:ToolBarControl AllowCustomizationMenu="False"
+                        AllowQuickCustomization="False"
+                        TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                        TextBlock.FontSize="{DynamicResource BaseFontSize}"
+                        Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+
+        <dxb:BarEditItem Content="갱신 상한"
+                         EditValue="{Binding PreviewTargetFps}"
+                         EditWidth="70"
+                         ToolTip="미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다.">
+            <dxb:BarEditItem.EditSettings>
+                <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                          ItemsSource="{Binding FpsOptions}" />
+            </dxb:BarEditItem.EditSettings>
+        </dxb:BarEditItem>
+
+        <dxb:BarStaticItem Content="{Binding PreviewFpsText, Mode=OneWay}"
+                           ToolTip="지금 화면에 올라가고 있는 실제 fps. 왼쪽 값은 상한일 뿐이다." />
+
+        <dxb:BarItemSeparator />
+
+        <dxb:BarCheckItem Content="입력 전달"
+                          IsChecked="{Binding IsInputForwardingEnabled}"
+                          IsEnabled="{Binding IsInputForwardingAvailable}"
+                          ToolTip="미리보기 클릭·키를 대상 창으로 보낸다. 요소 검사가 켜져 있으면 쓸 수 없다." />
+
+        <dxb:BarCheckItem Content="요소 검사"
+                          IsChecked="{Binding IsElementInspectEnabled}"
+                          ToolTip="미리보기를 누르면 그 자리의 UI 요소를 상태 줄에 보여 준다. 켜져 있는 동안은 입력을 전달하지 않는다." />
+
+        <dxb:BarEditItem Content="경로"
+                         EditValue="{Binding SelectedInputBackend}"
+                         EditWidth="130"
+                         ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다(관리자 권한 대상이면 이 앱도 관리자로). PostMessage: 포커스를 안 뺏지만 창 메시지를 읽는 보통 프로그램에만 통한다 - DirectX 게임은 Raw Input 으로 마우스를 읽어 메시지가 나가도 반응이 없다(오버워치 실측). 게임은 SendInput 이나 Interception 드라이버. 스크립트도 이 경로로 나간다.">
+            <dxb:BarEditItem.EditSettings>
+                <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                          ItemsSource="{Binding InputBackends}" />
+            </dxb:BarEditItem.EditSettings>
+        </dxb:BarEditItem>
+
+        <dxb:BarCheckItem Content="클릭 후 돌아오기"
+                          IsChecked="{Binding IsReturnFocusAfterClickEnabled}"
+                          IsEnabled="{Binding IsInputForwardingEnabled}"
+                          ToolTip="클릭이 대상에 닿은 뒤 커서와 포커스를 이 창으로 되돌린다. 끄면 대상 창이 앞에 남는다." />
+    </dxb:ToolBarControl>
+</UserControl>

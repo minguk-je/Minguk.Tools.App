@@ -223,19 +223,24 @@ public sealed class PreviewInputRouter
 
     /// <summary>
     /// 대상이 창이면 앞으로 가져온다. 모니터면 할 일이 없다 — 클릭이 알아서 포커스를 옮긴다.
+    /// 스크립트를 돌리기 직전에도 부른다 - SendInput 은 앞에 있는 창으로 가므로.
     /// </summary>
-    private void FocusTargetWindow()
+    /// <returns>실제로 끌어올렸으면 true. 이미 앞에 있었거나 창이 아니면 false.</returns>
+    public bool TryFocusTargetWindow()
     {
         var target = _targetProvider();
 
         if (target is null || target.Kind != CaptureTargetKind.Window || target.Handle == IntPtr.Zero)
-            return;
+            return false;
 
         if (NativeMethods.GetForegroundWindow() == target.Handle)
-            return;
+            return false;
 
         NativeMethods.SetForegroundWindow(target.Handle);
+        return true;
     }
+
+    private void FocusTargetWindow() => TryFocusTargetWindow();
 
     private static class NativeMethods
     {

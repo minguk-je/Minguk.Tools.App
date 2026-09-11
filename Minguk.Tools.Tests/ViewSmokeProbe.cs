@@ -40,6 +40,8 @@ internal static class ViewSmokeProbe
             failures += Check("LabelingView 생성", () => new LabelingView());
             failures += Check("DashboardView 생성", () => new DashboardView());
             failures += Check("CaptureMonitorView 생성", () => new CaptureMonitorView());
+            failures += Check("ScriptStudioView 생성", () => new ScriptStudioView());
+            failures += Check("PlayView 생성", () => new PlayView());
             failures += Check("ConfigView 생성", () => new ConfigView());
 
             // FindMenuItem 은 Instance 가 한 번 만들어진 뒤에만 찾는다. 앱에서는 메뉴가 먼저
@@ -48,6 +50,8 @@ internal static class ViewSmokeProbe
 
             failures += CheckMenu("Minguk.Tools.Views.InputAutomationView");
             failures += CheckMenu("Minguk.Tools.Views.CaptureMonitorView");
+            failures += CheckMenu("Minguk.Tools.Views.ScriptStudioView");
+            failures += CheckMenu("Minguk.Tools.Views.PlayView");
             failures += CheckMenu("Minguk.Tools.Views.DashboardView");
             failures += CheckMenu("Minguk.Tools.Views.LabelingView");
 

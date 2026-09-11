@@ -30,7 +30,7 @@ public partial class LabelingViewModel
 
     // ── 데이터셋 ─────────────────────────────────────────────────────────
 
-    /// <summary>폴더를 다시 훑는다. 캡처 모니터에서 새로 담은 그림도 이때 들어온다.</summary>
+    /// <summary>폴더를 다시 훑는다. 캡처 화면에서 새로 담은 그림도 이때 들어온다.</summary>
     private void DoReload() => Guard(() =>
     {
         SaveCurrentIfDirty();
@@ -73,7 +73,7 @@ public partial class LabelingViewModel
         else
         {
             StatusText = Items.Count == 0
-                ? $"담긴 그림이 없습니다. 캡처 모니터에서 담거나 {_dataset.ImageDirectory} 에 넣으세요."
+                ? $"담긴 그림이 없습니다. 캡처 화면에서 담거나 {_dataset.ImageDirectory} 에 넣으세요."
                 : $"{Items.Count}장을 읽었습니다.";
         }
 
@@ -108,7 +108,7 @@ public partial class LabelingViewModel
 
         DatasetRoot = dialog.ResultPath;
 
-        // 바로 저장한다. 캡처 모니터가 이 값을 보고 담으므로, 화면을 닫을 때까지
+        // 바로 저장한다. 캡처 화면이 이 값을 보고 담으므로, 화면을 닫을 때까지
         // 미뤄 두면 그동안 담은 그림이 옛 폴더로 간다.
         LabelDataset.ConfiguredRoot = DatasetRoot;
 

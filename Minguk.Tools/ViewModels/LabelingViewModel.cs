@@ -19,7 +19,7 @@ namespace Minguk.Tools.ViewModels;
 /// <remarks>
 /// <b>어디에 서 있는 화면인가</b>
 ///
-/// 캡처 모니터가 그림을 모으고(<c>데이터셋에 담기</c>), 여기서 라벨을 찍고, 그 라벨로
+/// 캡처 화면이 그림을 모으고(<c>데이터셋에 담기</c>), 여기서 라벨을 찍고, 그 라벨로
 /// 학습한 모델을 <c>Inference/OnnxDmlEngine</c> 이 돌린다. 지금은 그 가운데 토막이다.
 ///
 /// <b>자동으로 저장한다</b>
@@ -77,7 +77,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
     }
 
     /// <summary>
-    /// 데이터셋 자리는 캡처 모니터와 <b>같이</b> 본다. 그래서 화면별 설정이 아니라
+    /// 데이터셋 자리는 캡처 화면과 <b>같이</b> 본다. 그래서 화면별 설정이 아니라
     /// <see cref="LabelDataset.ConfiguredRoot"/> 를 쓴다.
     /// </summary>
     protected override void RestoreSettings()

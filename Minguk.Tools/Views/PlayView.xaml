@@ -1,0 +1,243 @@
+﻿<UserControl x:Class="Minguk.Tools.Views.PlayView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
+             xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+             xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
+             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
+             xmlns:markup="clr-namespace:Minguk.Tools.Markup"
+             xmlns:parts="clr-namespace:Minguk.Tools.Views.Parts"
+             xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+             Style="{DynamicResource BaseControlStyle}"
+             FontFamily="{DynamicResource BaseFontFamily}"
+             FontSize="{DynamicResource BaseFontSize}"
+             DataContext="{dxmvvm:ViewModelSource Type={x:Type viewModels:PlayViewModel}}"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance {x:Type viewModels:PlayViewModel},
+                                              IsDesignTimeCreatable=False}"
+             d:DesignHeight="500"
+             d:DesignWidth="900">
+
+    <!--
+        플레이 화면. 게임 창을 연결하고, 미리보기를 켰다 껐다 하고, 저장해 둔 스크립트를 골라 돌린다.
+        편집은 없다 - 다른 PC 에서는 이 화면만 연다.
+    -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <dxmvvm:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <dxmvvm:BooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"
+                                                 Inverse="True" />
+
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <dxmvvm:Interaction.Behaviors>
+        <dxmvvm:DispatcherService />
+
+        <!-- 폴더 밖의 스크립트를 찾아볼 때. -->
+        <dxmvvm:OpenFileDialogService />
+
+        <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
+                               EventName="Loaded" />
+        <dxmvvm:EventToCommand Command="{Binding OnUnloadedCommand}"
+                               EventName="Unloaded" />
+    </dxmvvm:Interaction.Behaviors>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ── 게임 연결 ─────────────────────────────────────────────── -->
+        <dxb:MainMenuControl AllowCustomizationMenu="False"
+                             DockPanel.Dock="Top"
+                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                             TextBlock.FontSize="{DynamicResource BaseFontSize}">
+
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding RefreshTargetsCommand}"
+                               Content="새로 고침"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                               ToolTip="연결할 수 있는 창·모니터 목록을 다시 훑는다." />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoStartCommand}"
+                               Content="연결"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}"
+                               ToolTip="고른 창을 잡기 시작한다. 몹 찾기와 미리보기가 이 위에서 돈다." />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoStopCommand}"
+                               Content="끊기"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}" />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                              Content="몹 찾기"
+                              Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
+                              IsChecked="{Binding IsMobDetectionOn}"
+                              ToolTip="학습한 모델로 0.25초에 한 번 찾는다. 미리보기를 켜면 점선으로 보인다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="추적"
+                              IsChecked="{Binding IsTrackingOn}"
+                              ToolTip="프레임 간 추적. 한 프레임짜리 헛것이 사라진다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="이름표 읽기"
+                              IsChecked="{Binding IsNameplateOcrOn}"
+                              ToolTip="찾은 몹마다 머리 위 글자를 읽어 캡션에 붙인다. 한국어(ko)여야 한글이 읽힌다." />
+
+            <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
+        </dxb:MainMenuControl>
+
+        <dxb:ToolBarControl AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            DockPanel.Dock="Top"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+
+            <dxb:BarEditItem Content="게임"
+                             EditValue="{Binding SelectedTarget}"
+                             EditWidth="420"
+                             IsEnabled="{Binding IsNotRunning}"
+                             ToolTip="잡을 창. 전체화면 게임은 모니터로 잡는 경우가 많다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings DisplayMember="Display"
+                                              IsTextEditable="False"
+                                              ItemsSource="{Binding Targets}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <dxb:BarEditItem Content="fps"
+                             EditValue="{Binding CaptureTargetFps}"
+                             EditWidth="70"
+                             ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                              ItemsSource="{Binding FpsOptions}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarCheckItem Content="미리보기"
+                              IsChecked="{Binding ShowPreview}"
+                              ToolTip="잡은 화면을 보여 준다. 끄면 캡처와 몹 찾기는 계속 돌고 그리기만 쉰다." />
+        </dxb:ToolBarControl>
+
+        <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 경로 · 클릭 후 돌아오기 -->
+        <parts:PreviewForwardBar DockPanel.Dock="Top" />
+
+        <!-- ── 스크립트 ─────────────────────────────────────────────── -->
+        <dxb:ToolBarControl AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            DockPanel.Dock="Top"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+
+            <dxb:BarEditItem Content="스크립트"
+                             EditValue="{Binding SelectedScript}"
+                             EditWidth="260"
+                             IsEnabled="{Binding Player.IsIdle}"
+                             ToolTip="Scripts 폴더의 파일. 편집 화면에서 저장한 것이 여기 보인다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings DisplayMember="Name"
+                                              IsTextEditable="False"
+                                              ItemsSource="{Binding Scripts}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding RefreshScriptsCommand}"
+                               Content="다시 훑기"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}" />
+            <dxb:BarButtonItem BarItemDisplayMode="Content"
+                               Command="{Binding BrowseScriptCommand}"
+                               Content="찾아보기..."
+                               ToolTip="폴더 밖의 스크립트를 고른다." />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding Player.RunOnceCommand}"
+                               Content="1회 실행 (F5)"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}" />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding Player.StartLoopCommand}"
+                               Content="반복 (F6)"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play_forward.png'}" />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding Player.StopCommand}"
+                               Content="중지 (F6)"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}" />
+
+            <dxb:BarEditItem Content="시작 대기(초)"
+                             EditValue="{Binding Player.StartDelaySeconds}"
+                             EditWidth="60"
+                             IsEnabled="{Binding Player.IsIdle}"
+                             ToolTip="이 사이에 게임 창을 앞으로. 창을 골라 두었으면 알아서 앞으로 가져온다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:SpinEditSettings MaxValue="60"
+                                          MinValue="0" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <dxb:BarEditItem Content="반복 횟수"
+                             EditValue="{Binding Player.MaxLoops}"
+                             EditWidth="70"
+                             IsEnabled="{Binding Player.IsIdle}"
+                             ToolTip="0 이면 중지할 때까지 돈다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:SpinEditSettings MaxValue="100000"
+                                          MinValue="0" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <dxb:BarStaticItem Content="{Binding Player.CurrentStep, Mode=OneWay}" />
+            <dxb:BarStaticItem Content="{Binding HotkeyStatus, Mode=OneWay}" />
+        </dxb:ToolBarControl>
+
+        <!-- ── 상태 줄 ─────────────────────────────────────────────────── -->
+        <dxe:TextEdit Margin="4,0,4,4"
+                      DockPanel.Dock="Bottom"
+                      EditValue="{Binding StatusText, Mode=OneWay}"
+                      IsReadOnly="True"
+                      ShowBorder="False" />
+
+        <!-- 고른 스크립트에 틀린 줄이 있으면 여기 뜬다. 고치는 것은 편집 화면에서. -->
+        <dxe:TextEdit MaxHeight="80"
+                      Margin="4,0,4,4"
+                      Foreground="#D1242F"
+                      AcceptsReturn="True"
+                      DockPanel.Dock="Bottom"
+                      EditValue="{Binding Script.ErrorText, Mode=OneWay}"
+                      IsReadOnly="True"
+                      TextWrapping="Wrap"
+                      Visibility="{Binding Script.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+        <Grid Margin="4,0,4,4">
+            <parts:CapturePreviewPanel Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <parts:CapturePreviewPanel.Overlay>
+                    <markup:DetectionOverlay Detections="{Binding Detections}"
+                                             OcrRegion="{Binding OcrRegion}"
+                                             OcrRegionDraft="{Binding OcrRegionDraft}"
+                                             OcrText="{Binding OcrText}"
+                                             Source="{Binding PreviewImage}" />
+                </parts:CapturePreviewPanel.Overlay>
+            </parts:CapturePreviewPanel>
+
+            <!-- 미리보기를 끈 동안. 캡처가 돌고 있는지는 상태 줄이 말한다. -->
+            <TextBlock HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Opacity="0.6"
+                       Text="미리보기 꺼짐 - 연결과 몹 찾기는 그대로 돈다."
+                       Visibility="{Binding ShowPreview, Converter={StaticResource InverseBooleanToVisibilityConverter}}" />
+        </Grid>
+
+    </DockPanel>
+</UserControl>

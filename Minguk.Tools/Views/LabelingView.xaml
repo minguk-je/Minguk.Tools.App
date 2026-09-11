@@ -76,7 +76,7 @@
                 <dx:SimpleButton Width="90"
                                  Command="{Binding DoReloadCommand}"
                                  Content="다시 읽기"
-                                 ToolTip="캡처 모니터에서 새로 담은 그림을 가져옵니다." />
+                                 ToolTip="캡처 화면에서 새로 담은 그림을 가져옵니다." />
 
                 <dxlc:LayoutItem Width="150"
                                  Label="진행">

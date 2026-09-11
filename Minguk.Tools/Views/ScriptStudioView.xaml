@@ -1,0 +1,330 @@
+<UserControl x:Class="Minguk.Tools.Views.ScriptStudioView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+             xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
+             xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+             xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
+             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
+             xmlns:markup="clr-namespace:Minguk.Tools.Markup"
+             xmlns:parts="clr-namespace:Minguk.Tools.Views.Parts"
+             xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+             Style="{DynamicResource BaseControlStyle}"
+             FontFamily="{DynamicResource BaseFontFamily}"
+             FontSize="{DynamicResource BaseFontSize}"
+             DataContext="{dxmvvm:ViewModelSource Type={x:Type viewModels:ScriptStudioViewModel}}"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance {x:Type viewModels:ScriptStudioViewModel},
+                                              IsDesignTimeCreatable=False}"
+             d:DesignHeight="600"
+             d:DesignWidth="1200">
+
+    <!--
+        편집 화면. 왼쪽은 잡은 화면(몹 찾기·글자 읽기를 겹쳐 보여 준다), 오른쪽은 스크립트.
+        보면서 쓰고, 한 번씩 돌려 본다. 반복해서 돌리는 것은 플레이 화면이다.
+    -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <dxmvvm:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <dxmvvm:Interaction.Behaviors>
+        <!-- 캡처 콜백은 스레드풀에서 돈다. 화면에 닿는 일은 이것으로 넘긴다. -->
+        <dxmvvm:DispatcherService />
+
+        <!-- 스크립트를 파일로 열고 저장한다. -->
+        <dxmvvm:OpenFileDialogService />
+        <dxmvvm:SaveFileDialogService />
+
+        <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
+                               EventName="Loaded" />
+        <dxmvvm:EventToCommand Command="{Binding OnUnloadedCommand}"
+                               EventName="Unloaded" />
+    </dxmvvm:Interaction.Behaviors>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ── 동작 ─────────────────────────────────────────────────── -->
+        <dxb:MainMenuControl AllowCustomizationMenu="False"
+                             DockPanel.Dock="Top"
+                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                             TextBlock.FontSize="{DynamicResource BaseFontSize}">
+
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding RefreshTargetsCommand}"
+                               Content="새로 고침"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                               ToolTip="캡처할 수 있는 창·모니터 목록을 다시 훑는다." />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoStartCommand}"
+                               Content="시작"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}" />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoStopCommand}"
+                               Content="중지"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}" />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding CollectFrameCommand}"
+                               Content="담기 (F8)"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
+                               ToolTip="한 장을 데이터셋에 담는다. 몹 찾기가 켜져 있으면 찾은 것이 라벨로 같이 들어간다 - 라벨링은 틀린 것만 고치면 된다." />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                              Content="몹 찾기"
+                              Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
+                              IsChecked="{Binding IsMobDetectionOn}"
+                              ToolTip="학습한 모델로 0.25초에 한 번 찾아 점선으로 겹쳐 그린다. CPU 리드백이 필요하면 알아서 켠다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="추적"
+                              IsChecked="{Binding IsTrackingOn}"
+                              ToolTip="프레임 간 추적. 두 번 연속 보인 것만 내놓고(0.5초), 잠깐 놓친 것은 0.5초까지 이어 줍니다. 한 프레임짜리 헛것이 사라집니다." />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding ClickDetectionCommand}"
+                               Content="찾은 것 누르기"
+                               Glyph="{image:FreeImage ResourceName='Axialis/HardwareNetwork/16x16/mouse.png'}"
+                               ToolTip="가장 자신 있는 몹의 가운데를 누른다. 입력 전달이 켜져 있어야 한다." />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="글자 영역"
+                              IsChecked="{Binding IsOcrRegionPicking}"
+                              ToolTip="켜고 미리보기에서 글자가 있는 자리를 끌어 사각형을 그립니다. 그리고 나면 알아서 꺼집니다. 그동안은 클릭이 게임으로 안 나갑니다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="글자 읽기"
+                              IsChecked="{Binding IsOcrOn}"
+                              ToolTip="정한 영역의 글자를 Windows 내장 OCR 로 0.5초에 한 번 읽습니다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="이름표 읽기"
+                              IsChecked="{Binding IsNameplateOcrOn}"
+                              ToolTip="몹 찾기가 찾은 몹마다 머리 위 글자(이름표)를 읽어 캡션에 붙입니다. 한국어(ko)여야 한글이 읽힙니다." />
+            <!-- 한국어 팩은 숫자 0 을 "이" 로 읽기도 한다. 숫자·영문은 en-US, 한글은 ko. -->
+            <dxb:BarEditItem Content="언어"
+                             EditValue="{Binding SelectedOcrLanguage}"
+                             EditWidth="80"
+                             ToolTip="OCR 언어. 숫자·영문 칸은 en-US, 한글 이름표는 ko 가 정확합니다. 바꾸면 다음 읽기부터 적용됩니다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                              ItemsSource="{Binding OcrLanguages}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <!-- 긴 안내는 여기 안 그려질 때가 있다(메뉴 바의 정적 항목). 그런 것은 아래 상태 줄로 간다. -->
+            <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
+            <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
+        </dxb:MainMenuControl>
+
+        <!-- ── 설정 ────────────────────────────────────────────────── -->
+        <dxb:ToolBarControl AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            DockPanel.Dock="Top"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+
+            <dxb:BarEditItem Content="대상"
+                             EditValue="{Binding SelectedTarget}"
+                             EditWidth="420"
+                             IsEnabled="{Binding IsNotRunning}">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings DisplayMember="Display"
+                                              IsTextEditable="False"
+                                              ItemsSource="{Binding Targets}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <dxb:BarEditItem Content="fps"
+                             EditValue="{Binding CaptureTargetFps}"
+                             EditWidth="70"
+                             ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                              ItemsSource="{Binding FpsOptions}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <dxb:BarCheckItem Content="CPU 리드백"
+                              IsChecked="{Binding EnableCpuReadback}"
+                              IsEnabled="{Binding IsNotRunning}"
+                              ToolTip="GPU 프레임을 CPU 메모리로 내린다. 몹 찾기·글자 읽기·담기가 필요하면 알아서 켠다." />
+
+            <dxb:BarItemSeparator />
+
+            <dxb:BarCheckItem Content="미리보기"
+                              IsChecked="{Binding ShowPreview}"
+                              ToolTip="캡처 중인 화면을 그대로 보여 준다. 찾은 몹과 글자 영역이 그 위에 겹쳐진다." />
+        </dxb:ToolBarControl>
+
+        <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 경로 · 클릭 후 돌아오기 -->
+        <parts:PreviewForwardBar DockPanel.Dock="Top" />
+
+        <!-- ── 상태 줄 ─────────────────────────────────────────────────── -->
+        <dxe:TextEdit Margin="4,0,4,4"
+                      DockPanel.Dock="Bottom"
+                      EditValue="{Binding StatusText, Mode=OneWay}"
+                      IsReadOnly="True"
+                      ShowBorder="False" />
+
+        <!-- 미리보기(왼쪽) | 스크립트(오른쪽). 경계는 끌 수 있다. -->
+        <dxlc:LayoutControl Margin="4,0,4,4"
+                            Padding="0"
+                            ItemSpace="4"
+                            Orientation="Horizontal">
+
+            <dxlc:LayoutGroup ItemSpace="0"
+                              Orientation="Vertical"
+                              View="Group"
+                              Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+
+                <parts:CapturePreviewPanel>
+                    <parts:CapturePreviewPanel.Overlay>
+                        <!--
+                            찾은 몹을 점선으로 겹쳐 그린다. Source 로 원본 크기만 받아 Uniform 레터박스를
+                            스스로 계산한다. 글자 영역과 읽은 글도 같이 그린다.
+                        -->
+                        <markup:DetectionOverlay Detections="{Binding Detections}"
+                                                 OcrRegion="{Binding OcrRegion}"
+                                                 OcrRegionDraft="{Binding OcrRegionDraft}"
+                                                 OcrText="{Binding OcrText}"
+                                                 Source="{Binding PreviewImage}" />
+                    </parts:CapturePreviewPanel.Overlay>
+                </parts:CapturePreviewPanel>
+            </dxlc:LayoutGroup>
+
+            <dxlc:LayoutGroup Width="480"
+                              dxlc:LayoutControl.AllowHorizontalSizing="True"
+                              Header="스크립트"
+                              ItemSpace="4"
+                              Orientation="Vertical"
+                              View="GroupBox">
+
+                <dxlc:LayoutGroup VerticalAlignment="Top"
+                                  Orientation="Horizontal">
+                    <dxlc:LayoutItem Label="언어">
+                        <dxe:ComboBoxEdit Width="120"
+                                          IsEnabled="{Binding Script.IsEditable}"
+                                          IsTextEditable="False"
+                                          ItemsSource="{Binding Script.Languages}"
+                                          SelectedItem="{Binding Script.SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </dxlc:LayoutItem>
+
+                    <!-- 파일과 지금 글이 다르면 * 가 붙는다. 저장하지 않아도 글은 설정에 남는다. -->
+                    <dxlc:LayoutItem Label="파일">
+                        <dxe:TextEdit EditValue="{Binding Script.FileLabel, Mode=OneWay}"
+                                      IsReadOnly="True" />
+                    </dxlc:LayoutItem>
+                </dxlc:LayoutGroup>
+
+                <dxlc:LayoutGroup HorizontalAlignment="Left"
+                                  VerticalAlignment="Top"
+                                  Orientation="Horizontal">
+                    <dx:SimpleButton Width="64"
+                                     Command="{Binding Script.NewCommand}"
+                                     Content="새로"
+                                     ToolTip="본보기 글로 새로 시작한다. 파일과의 연결도 끊는다." />
+                    <dx:SimpleButton Width="64"
+                                     Command="{Binding Script.OpenCommand}"
+                                     Content="열기"
+                                     ToolTip="확장자를 보고 언어까지 맞춘다 (.csx · .py · .js)" />
+                    <dx:SimpleButton Width="64"
+                                     Command="{Binding Script.SaveCommand}"
+                                     Content="저장"
+                                     ToolTip="플레이 화면은 Scripts 폴더에 저장한 것을 고른다." />
+                    <dx:SimpleButton Width="100"
+                                     Command="{Binding Script.SaveAsCommand}"
+                                     Content="다른 이름으로" />
+                </dxlc:LayoutGroup>
+
+                <!-- 파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다. -->
+                <dxlc:LayoutItem Label="엔진"
+                                 Visibility="{Binding Script.HasEngineStatus, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <dxe:TextEdit EditValue="{Binding Script.EngineStatus, Mode=OneWay}"
+                                  IsReadOnly="True" />
+                </dxlc:LayoutItem>
+
+                <!--
+                    AvalonEdit. TextEditor 를 바로 쓰지 않고 markup:ScriptEditor 로 감싼 이유는 그쪽에 적어 두었다.
+                    Text 가 의존 속성이 아니어서 markup:AvalonEditText.Text 로 양방향을 잇는다.
+                    DevExpress 경량 테마는 표준 WPF 컨트롤을 손대지 않으므로 색을 직접 준다.
+                -->
+                <Border BorderBrush="{Binding Script.EditorBorder}"
+                        BorderThickness="1">
+                    <markup:ScriptEditor Background="{Binding Script.EditorBackground}"
+                                         Foreground="{Binding Script.EditorForeground}"
+                                         FontFamily="D2Coding, Consolas, Courier New"
+                                         FontSize="13"
+                                         markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
+                                         IsReadOnly="{Binding Script.IsLocked}"
+                                         LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
+                                         ShowLineNumbers="True"
+                                         SyntaxHighlighting="{Binding Script.Highlighting}"
+                                         WordWrap="False" />
+                </Border>
+
+                <!-- 틀린 줄이 있을 때만 뜬다. 여러 줄이 될 수 있다. -->
+                <dxlc:LayoutItem VerticalAlignment="Bottom"
+                                 Label="고칠 줄"
+                                 Visibility="{Binding Script.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <dxe:TextEdit MaxHeight="90"
+                                  VerticalContentAlignment="Top"
+                                  Foreground="#D1242F"
+                                  AcceptsReturn="True"
+                                  EditValue="{Binding Script.ErrorText, Mode=OneWay}"
+                                  IsReadOnly="True"
+                                  TextWrapping="Wrap"
+                                  VerticalScrollBarVisibility="Auto" />
+                </dxlc:LayoutItem>
+
+                <dxlc:LayoutGroup VerticalAlignment="Bottom"
+                                  Orientation="Horizontal">
+                    <dx:SimpleButton Width="100"
+                                     Height="28"
+                                     Command="{Binding Player.RunOnceCommand}"
+                                     Content="한 번 실행"
+                                     Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
+                                     GlyphHeight="16"
+                                     GlyphWidth="16"
+                                     ToolTip="시작 전 대기 뒤 대상 창을 앞으로 가져와 한 바퀴 보낸다. 미리보기의 입력 경로로 나간다." />
+                    <dx:SimpleButton Width="80"
+                                     Height="28"
+                                     Command="{Binding Player.StopCommand}"
+                                     Content="중지"
+                                     Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
+                                     GlyphHeight="16"
+                                     GlyphWidth="16" />
+
+                    <dxlc:LayoutItem Label="시작 대기(초)"
+                                     ToolTip="이 사이에 대상 창을 앞으로 가져와야 한다. 창을 골라 두었으면 알아서 앞으로 가져온다.">
+                        <dxe:SpinEdit Width="60"
+                                      EditValue="{Binding Player.StartDelaySeconds}"
+                                      IsEnabled="{Binding Player.IsIdle}"
+                                      MaxValue="60"
+                                      MinValue="0" />
+                    </dxlc:LayoutItem>
+
+                    <dxlc:LayoutItem Label="진행">
+                        <dxe:TextEdit EditValue="{Binding Player.CurrentStep, Mode=OneWay}"
+                                      IsReadOnly="True" />
+                    </dxlc:LayoutItem>
+                </dxlc:LayoutGroup>
+            </dxlc:LayoutGroup>
+        </dxlc:LayoutControl>
+
+    </DockPanel>
+</UserControl>

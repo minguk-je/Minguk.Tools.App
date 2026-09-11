@@ -56,10 +56,10 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             canSelect: true,
             icon: FreeImage.Instance?.CacheByteArray("axialis/business/16x16/business_report.png")));
 
-        // ── 샘플 화면 2 : 캡처 모니터 ─────────────────────────────────────
+        // ── 캡처 : 순수하게 잡고 담는다 ───────────────────────────────────
         rootItem.AddChildren(MenuItemModel.Create(
             menu_cd: "1200",
-            menu_nm: "캡처 모니터",
+            menu_nm: "캡처",
             dll_nm: "Minguk.Tools.dll",
             class_nm: "Minguk.Tools.Views.CaptureMonitorView",
             is_enable: true,
@@ -80,6 +80,30 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             canSelect: true,
             // edit.png 는 없는 파일이었다 - 아이콘이 조용히 비었다. 스모크(--views)가 메뉴 아이콘을 검사한다.
             icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/picture-edit.png")));
+
+        // ── 편집 : 몹 찾기·글자 읽기를 보면서 스크립트를 쓴다 ─────────────
+        rootItem.AddChildren(MenuItemModel.Create(
+            menu_cd: "1500",
+            menu_nm: "편집",
+            dll_nm: "Minguk.Tools.dll",
+            class_nm: "Minguk.Tools.Views.ScriptStudioView",
+            is_enable: true,
+            isExpanded: true,
+            showInCollapsedMode: false,
+            canSelect: true,
+            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/document-edit.png")));
+
+        // ── 플레이 : 게임을 연결하고 저장된 스크립트를 돌린다 ─────────────
+        rootItem.AddChildren(MenuItemModel.Create(
+            menu_cd: "1600",
+            menu_nm: "플레이",
+            dll_nm: "Minguk.Tools.dll",
+            class_nm: "Minguk.Tools.Views.PlayView",
+            is_enable: true,
+            isExpanded: true,
+            showInCollapsedMode: false,
+            canSelect: true,
+            icon: FreeImage.Instance?.CacheByteArray("axialis/multimedia/16x16/button_green_play.png")));
 
         // ── 입력 자동화 ───────────────────────────────────────────────────
         rootItem.AddChildren(MenuItemModel.Create(

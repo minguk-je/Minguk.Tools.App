@@ -1,0 +1,64 @@
+﻿<UserControl x:Class="Minguk.Tools.Views.Parts.CapturePreviewPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:parts="clr-namespace:Minguk.Tools.Views.Parts">
+
+    <!--
+        입력은 Border 가 받는다. Image 에는 Background 가 없어서 그림 바깥(검은 띠)이
+        히트 테스트에 안 걸리는데, Border 는 배경이 칠해져 있어 전 영역이 잡힌다.
+        Focusable 이 있어야 키 입력이 들어온다 — Image 는 Focusable 이 아니므로
+        누를 때 이 Border 에 포커스를 준다. 그래서 여기에도 UIObjectService 를 둔다.
+        좌표는 Image 기준으로 재므로 Image 에도 하나 있다.
+        
+        서비스 이름(PreviewSurfaceObjectService · PreviewImageObjectService)은 CaptureViewModelBase 가
+        InitializeControls 에서 찾는 이름이다. 이 컨트롤을 얹은 화면의 DataContext(그 ViewModel)에 등록된다.
+    -->
+    <Border Background="#202020"
+            Focusable="True">
+
+        <dxmvvm:Interaction.Behaviors>
+            <dxmvvm:UIObjectService x:Name="PreviewSurfaceObjectService" />
+
+            <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseDownCommand}"
+                                   EventName="MouseDown"
+                                   PassEventArgsToCommand="True" />
+            <!-- 글자 영역을 끌 때만 쓴다. 전달과 무관하다. -->
+            <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseMoveCommand}"
+                                   EventName="MouseMove"
+                                   PassEventArgsToCommand="True" />
+            <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseUpCommand}"
+                                   EventName="MouseUp"
+                                   PassEventArgsToCommand="True" />
+            <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseWheelCommand}"
+                                   EventName="MouseWheel"
+                                   PassEventArgsToCommand="True" />
+            <dxmvvm:EventToCommand Command="{Binding OnPreviewKeyDownCommand}"
+                                   EventName="KeyDown"
+                                   PassEventArgsToCommand="True" />
+            <dxmvvm:EventToCommand Command="{Binding OnPreviewKeyUpCommand}"
+                                   EventName="KeyUp"
+                                   PassEventArgsToCommand="True" />
+        </dxmvvm:Interaction.Behaviors>
+
+        <Grid>
+            <!--
+                Stretch=Uniform 이라 원본 비율을 지킨다. 축소해서 보여 주는 용도이므로
+                BitmapScalingMode 는 LowQuality(선형 보간)로 둔다 — 60fps 로 갱신할 때
+                HighQuality 로 두면 축소 비용이 UI 스레드를 잡아먹는다.
+            -->
+            <Image RenderOptions.BitmapScalingMode="LowQuality"
+                   Source="{Binding PreviewImage}"
+                   Stretch="Uniform">
+
+                <dxmvvm:Interaction.Behaviors>
+                    <dxmvvm:UIObjectService x:Name="PreviewImageObjectService" />
+                </dxmvvm:Interaction.Behaviors>
+            </Image>
+
+            <!-- 화면이 얹는 겹그림(찾은 몹 점선 등). 없으면 비어 있다. 마우스는 통과시킨다. -->
+            <ContentPresenter Content="{Binding Overlay, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}"
+                              IsHitTestVisible="False" />
+        </Grid>
+    </Border>
+</UserControl>

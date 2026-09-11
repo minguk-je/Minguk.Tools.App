@@ -19,7 +19,7 @@ using Minguk.Tools.Vision.Ocr;
 namespace Minguk.Tools.ViewModels;
 
 /// <summary>
-/// 캡처 화면의 한 영역에서 글자를 읽는다.
+/// 잡은 화면의 한 영역에서 글자를 읽는다.
 /// </summary>
 /// <remarks>
 /// <b>영역을 정해서 읽는다</b> - 화면 전체를 읽으면 느리고(1080p 에 수백 ms) 엉뚱한 글이
@@ -31,7 +31,7 @@ namespace Minguk.Tools.ViewModels;
 /// <b>영역 지정 중에는 클릭이 게임으로 안 나간다.</b> 같은 미리보기 위에서 끌기 때문에,
 /// 지정 모드가 켜져 있으면 마우스 다운을 여기서 먼저 가로챈다.
 /// </remarks>
-public partial class CaptureMonitorViewModel
+public abstract partial class RecognizingCaptureViewModelBase
 {
     private const int OcrIntervalMs = 500;
 
@@ -41,9 +41,6 @@ public partial class CaptureMonitorViewModel
 
     /// <summary>영역을 끌기 시작한 자리(비율). 없으면 끄는 중이 아니다.</summary>
     private Point? _ocrPickStart;
-
-    public DelegateCommand<MouseEventArgs> OnPreviewMouseMoveCommand { get; private set; } = null!;
-    public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseUpCommand { get; private set; } = null!;
 
     /// <summary>글자 읽기를 돌릴지.</summary>
     public bool IsOcrOn
@@ -381,7 +378,7 @@ public partial class CaptureMonitorViewModel
         return true;
     }
 
-    private void OnPreviewMouseMove(MouseEventArgs args)
+    protected override void OnPreviewMouseMove(MouseEventArgs args)
     {
         if (_ocrPickStart is not { } start || _previewImage is null) return;
 
@@ -391,7 +388,7 @@ public partial class CaptureMonitorViewModel
             OcrRegionDraft = new Rect(start, ratio);
     }
 
-    private void OnPreviewMouseUp(MouseButtonEventArgs args) => Guard(() =>
+    protected override void OnPreviewMouseUp(MouseButtonEventArgs args) => Guard(() =>
     {
         if (_ocrPickStart is not { } start || _previewImage is null) return;
 
@@ -423,7 +420,7 @@ public partial class CaptureMonitorViewModel
 
     private void RestoreOcrRegion()
     {
-        var parts = GetSetting(OcrRegionSettingKey, string.Empty).Split(',');
+        var parts = GetSettingOrLegacy(OcrRegionSettingKey, string.Empty).Split(',');
 
         if (parts.Length == 4
             && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)

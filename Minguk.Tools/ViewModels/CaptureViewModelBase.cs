@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -17,7 +18,6 @@ using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using System.Windows;
 using System.Diagnostics;
-using DevExpress.Xpf.LayoutControl;
 using Minguk.Tools.Automation;
 using Minguk.Tools.Capture.Input;
 using Minguk.Tools.Input;
@@ -50,18 +50,24 @@ public class FrameLogRow
 }
 
 /// <summary>
-/// 캡처 모니터. Windows.Graphics.Capture 로 창/모니터를 잡고 그 성능을 눈으로 본다.
-///
-/// 프레임 콜백은 스레드풀에서 돈다(<see cref="WgcCaptureSession"/> 참조).
-/// 그래서 콜백에서는 카운터만 올리고, 그리드에 넣는 일은 1초마다 한 번 디스패처로 넘긴다.
+/// 화면을 잡는 화면들의 공통 바탕. Windows.Graphics.Capture 로 창/모니터를 잡고, 미리보기에 올리고,
+/// 미리보기에서 일어난 입력을 대상으로 넘기고, 한 장을 파일·데이터셋으로 떨어뜨린다.
 /// </summary>
-public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposable
+/// <remarks>
+/// <b>왜 베이스인가</b> - 캡처(담기)·편집(몹 찾기·글자·스크립트)·플레이(스크립트 실행) 세 화면이
+/// 모두 "창을 잡아 미리보기에 올리는 일" 을 똑같이 한다. 한 화면(캡처 모니터)에 전부 얹었더니
+/// 도구 줄이 넘쳤고, 플레이만 하는 PC 에 편집기·담기까지 딸려 갔다. 잡는 일은 여기 한 벌만 두고
+/// 화면은 그 위에 제 것만 얹는다.
+///
+/// 프레임 콜백은 스레드풀에서 돈다(<see cref="WgcCaptureSession"/> 참조). 콜백에서는 카운터만
+/// 올리고 화면에 닿는 일은 1초마다 한 번 디스패처로 넘긴다. 파생 화면은 <see cref="OnFramePixels"/>
+/// 로 프레임을 받고, <see cref="OnStatisticsRow"/> 로 1초 요약을 받는다.
+///
+/// 설정 키는 파생 화면의 이름으로 저장된다(AppSettingUtility 가 실제 타입 이름을 쓴다). 그래서
+/// 캡처 화면과 플레이 화면이 대상 창·fps 를 각자 기억한다 - 게임 창과 데이터 모으는 창이 다를 수 있다.
+/// </remarks>
+public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDisposable
 {
-    /// <summary>그리드에 남겨 둘 줄 수. 오래 켜 두면 메모리를 먹으니 잘라 낸다.</summary>
-    // 마지막 한 줄만 둔다. 600줄을 쌓아 봐야 보는 것은 맨 위 한 줄이었고("마지막 것만 봐도 될 것 같아"),
-    // 그 자리를 미리보기에 주는 편이 낫다. 비고에 적히던 알림은 상태 줄과 아래 바로 간다.
-    private const int MaxRows = 1;
-
     private readonly object _statisticsLock = new();
 
     /// <summary>
@@ -72,7 +78,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     private Timer? _statisticsFlushTimer;
 
     /// <summary>타이머 스레드에서 서비스 컨테이너를 뒤지지 않도록, 시작할 때 UI 스레드에서 한 번 꺼내 둔다.</summary>
-    private IDispatcherService? _uiDispatcher;
+    protected IDispatcherService? _uiDispatcher;
 
     // 콜백에서 쌓고 1초마다 비우는 통계
     private int _frameCountInSecond;
@@ -120,7 +126,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// 그 전에 클릭을 보내면 대상이 그것을 활성화 클릭으로 먹어서 아무 일도 안 일어난다.
     /// 이미 앞에 있던 창이면 기다리지 않는다.
     /// </summary>
-    private const int ActivationSettleDelayMs = 80;
+    protected const int ActivationSettleDelayMs = 80;
 
 
     /// <summary>
@@ -135,16 +141,13 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// <summary>미리보기 칸. 높이를 직접 넣고 빼려고 들고 있는다.</summary>
 
     /// <summary>미리보기 Image 컨트롤. 누른 자리를 원본 좌표로 바꾸려면 컨트롤 크기가 필요하다.</summary>
-    private System.Windows.Controls.Image? _previewImage;
+    protected System.Windows.Controls.Image? _previewImage;
 
     /// <summary>입력을 받는 Border. 키를 받으려면 여기에 포커스가 있어야 한다.</summary>
-    private System.Windows.Controls.Border? _previewSurface;
+    protected System.Windows.Controls.Border? _previewSurface;
 
-    /// <summary>통계 그리드의 뷰. 새 줄이 들어올 때 맨 위를 유지하려고 들고 있는다.</summary>
-    private DevExpress.Xpf.Grid.TableView? _gridView;
-
-    /// <summary>미리보기에서 일어난 입력을 대상 창으로 흘려보내는 쪽.</summary>
-    private PreviewInputRouter? _inputRouter;
+    /// <summary>미리보기에서 일어난 입력을 대상 창으로 흘려보내는 쪽. 스크립트 실행기도 이 어댑터를 같이 쓴다.</summary>
+    protected PreviewInputRouter? _inputRouter;
 
     /// <summary>요소 검사에 쓰는 UI 자동화 경로.</summary>
     private IUiAutomationAdapter? _uiAutomation;
@@ -156,7 +159,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// 그대로 받으면 같은 자리를 여러 번 누르게 된다. 실제로 로그에 같은 좌표가
     /// 밀리초 단위로 수십 번 찍혔다.
     /// </summary>
-    private bool _isForwardingClick;
+    protected bool _isForwardingClick;
 
     /// <summary>
     /// GPU 경로. 캡처 텍스처를 CPU 를 거치지 않고 바로 화면에 올린다.
@@ -196,7 +199,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     public DelegateCommand RefreshTargetsCommand { get; set; }
     public DelegateCommand DoStartCommand { get; set; }
     public DelegateCommand DoStopCommand { get; set; }
-    public DelegateCommand DoClearCommand { get; set; }
     public DelegateCommand SaveFrameCommand { get; set; }
 
     public DelegateCommand CollectFrameCommand { get; set; } = null!;
@@ -219,48 +221,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         get => GetProperty(() => EnableCpuReadback);
         set => SetProperty(() => EnableCpuReadback, value);
     }
-
-    // ── 몹 찾기 ──────────────────────────────────────────────────────────
-
-    /// <summary>학습한 모델로 프레임에서 몹을 찾을지.</summary>
-    public bool IsMobDetectionOn
-    {
-        get => GetProperty(() => IsMobDetectionOn);
-        set => SetProperty(() => IsMobDetectionOn, value, OnMobDetectionChanged);
-    }
-
-    /// <summary>
-    /// 프레임 간 추적을 쓸지. 켜면 두 번 연속 보인 것만 내놓고 잠깐 놓친 것은 이어 준다.
-    /// </summary>
-    /// <remarks>
-    /// 끄고 켜서 견줄 수 있게 토글로 둔다. 기본은 켬 - 한 프레임짜리 헛것이 사라지는 값이
-    /// 0.5초 늦게 나타나는 값보다 크다.
-    /// </remarks>
-    public bool IsTrackingOn
-    {
-        get => GetProperty(() => IsTrackingOn);
-        set => SetProperty(() => IsTrackingOn, value, () => _tracker.Reset());
-    }
-
-    /// <summary>이보다 자신 없는 것은 안 보여 준다.</summary>
-    public double DetectMinimumScore
-    {
-        get => GetProperty(() => DetectMinimumScore);
-        set => SetProperty(() => DetectMinimumScore, value);
-    }
-
-    /// <summary>몇 마리를 몇 ms 에 찾았는지. 실제 속도가 여기 그대로 뜬다.</summary>
-    public string? DetectionStatus
-    {
-        get => GetProperty(() => DetectionStatus);
-        set => SetProperty(() => DetectionStatus, value);
-    }
-
-    /// <summary>찾은 것들. 미리보기 위에 겹쳐 그린다.</summary>
-    public System.Collections.ObjectModel.ObservableCollection<Markup.PredictedBox> Detections { get; } = [];
-
-    /// <summary>가장 자신 있는 몹을 누른다.</summary>
-    public DelegateCommand ClickDetectionCommand { get; set; } = null!;
 
     public CaptureTarget? SelectedTarget
     {
@@ -294,28 +254,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     {
         get => GetProperty(() => PreviewImage);
         set => SetProperty(() => PreviewImage, value);
-    }
-
-    /// <summary>
-    /// 그리드의 열 너비·순서·정렬·필터를 문자열로 뽑고 되돌린다.
-    /// View 의 &lt;dxmvvm:LayoutSerializationService x:Name="GridLayoutService" /&gt; 가 실체다.
-    /// </summary>
-    private ILayoutSerializationService GridLayoutService
-        => ServiceContainer.GetService<ILayoutSerializationService>("GridLayoutService");
-
-    /// <summary>
-    /// 그리드 열 구성의 판 번호. 열을 추가·삭제·개명하면 올린다.
-    ///
-    /// 저장된 레이아웃은 그때의 열 구성을 담고 있어서, 열이 바뀐 뒤 그대로 되돌리면
-    /// 새 열이 숨겨진 채로 나온다. 판이 다르면 저장본을 버리고 기본 배치로 시작한다.
-    /// </summary>
-    private const int GridLayoutVersion = 2;
-
-    /// <summary>열 너비를 내용에 맞춘다. 끄면 사용자가 조절한 너비가 유지된다.</summary>
-    public bool IsColumnAutoWidth
-    {
-        get => GetProperty(() => IsColumnAutoWidth);
-        set => SetProperty(() => IsColumnAutoWidth, value);
     }
 
     /// <summary>
@@ -406,6 +344,8 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     }
 
     public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseDownCommand { get; private set; } = null!;
+    public DelegateCommand<MouseEventArgs> OnPreviewMouseMoveCommand { get; private set; } = null!;
+    public DelegateCommand<MouseButtonEventArgs> OnPreviewMouseUpCommand { get; private set; } = null!;
     public DelegateCommand<MouseWheelEventArgs> OnPreviewMouseWheelCommand { get; private set; } = null!;
     public DelegateCommand<KeyEventArgs> OnPreviewKeyDownCommand { get; private set; } = null!;
     public DelegateCommand<KeyEventArgs> OnPreviewKeyUpCommand { get; private set; } = null!;
@@ -436,26 +376,18 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
 
     public virtual ObservableCollection<CaptureTarget> Targets { get; set; } = new();
 
-    public virtual ObservableCollection<FrameLogRow> Rows { get; set; } = new();
-
-    public static CaptureMonitorViewModel Create() => ViewModelSource.Create(() => new CaptureMonitorViewModel());
-
-    public CaptureMonitorViewModel()
+    protected CaptureViewModelBase()
     {
-        Caption = "캡처 모니터";
         PreviewTargetFps = 60;
         CaptureTargetFps = 60;
-        CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/screen.png");
 
         // 탭을 닫으면 화면은 사라져도 캡처 세션은 남는다. 여기서 끊어 준다.
         OnUnloadedCommand = new DelegateCommand(DisposeSession, false);
         RefreshTargetsCommand = new DelegateCommand(RefreshTargets, () => !IsRunning, false);
         DoStartCommand = new DelegateCommand(DoStart, () => !IsRunning && SelectedTarget is not null, false);
         DoStopCommand = new DelegateCommand(DoStop, () => IsRunning, false);
-        DoClearCommand = new DelegateCommand(DoClear, false);
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning, false);
-        CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning, false);
-        ClickDetectionCommand = new DelegateCommand(DoClickDetection, () => Detections.Count > 0, false);
+        CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning && SupportsCollecting, false);
 
         OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
         OnPreviewMouseMoveCommand = new DelegateCommand<MouseEventArgs>(OnPreviewMouseMove, false);
@@ -474,30 +406,33 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         IsReturnFocusAfterClickEnabled = true;
     }
 
-    /// <summary>XAML 의 컨트롤을 잡아 온다. 베이스가 초기화 첫 단계에서 불러 준다.</summary>
+    /// <summary>XAML 의 컨트롤을 잡아 온다. 파생 화면은 base 를 부르고 제 것을 더 잡는다.</summary>
     protected override void InitializeControls()
     {
         _previewImage = FindControl<System.Windows.Controls.Image>("PreviewImageObjectService");
         _previewSurface = FindControl<System.Windows.Controls.Border>("PreviewSurfaceObjectService");
-        _gridView = FindControl<DevExpress.Xpf.Grid.GridControl>("GridObjectService")?.View as DevExpress.Xpf.Grid.TableView;
     }
 
-    /// <summary>지난번에 쓰던 설정을 되살린다. 베이스가 OnLoaded 직전에 불러 준다.</summary>
+    /// <summary>
+    /// 이 화면에 저장된 값이 없으면 예전 캡처 모니터의 값을 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// 화면을 셋으로 나누기 전에는 전부 "CaptureMonitorViewModel" 이름 아래 저장됐다. 편집·플레이 화면을
+    /// 처음 열 때 대상 창·글자 영역·OCR 언어가 비어 있으면 사람이 전부 다시 골라야 한다. 한 번 저장하고
+    /// 나면 제 값이 있으므로 그 뒤로는 안 본다.
+    /// </remarks>
+    protected T GetSettingOrLegacy<T>(string key, T fallback)
+        => HasSetting(key)
+            ? GetSetting(key, fallback)
+            : AppSettingUtility.Get($"Minguk.Tools.ViewModels.CaptureMonitorViewModel.{key}", fallback);
+
+    /// <summary>지난번에 쓰던 설정을 되살린다. 파생 화면은 base 를 부르고 제 것을 더 읽는다.</summary>
     protected override void RestoreSettings()
     {
-        // 켜진 채로 복구하지 않는다 - 화면을 열자마자 모델 68MB 를 읽으면 뜨는 것이 느려진다.
-        DetectMinimumScore = GetSetting(nameof(DetectMinimumScore), 0.5);
-        IsTrackingOn = GetSetting(nameof(IsTrackingOn), true);
-        RestoreOcrRegion();
-        IsNameplateOcrOn = GetSetting(nameof(IsNameplateOcrOn), false);
-
-        var ocrLanguage = GetSetting(nameof(SelectedOcrLanguage), Vision.Ocr.OcrEngineFactory.PreferredLanguage);
-        SelectedOcrLanguage = OcrLanguages.Contains(ocrLanguage) ? ocrLanguage : OcrLanguages[0];
-
         // 한글을 그대로 넣으면 설정 파일에서 되읽을 때 깨진다(실측으로 "[紐⑤땲.." 로 나왔다).
         // Base64 로 감싸서 ASCII 로만 저장한다.
         // 이 방식 이전에 저장된 값은 생 문자열이므로 그때는 그대로 쓴다.
-        var savedTarget = GetSetting(nameof(SelectedTarget), string.Empty);
+        var savedTarget = GetSettingOrLegacy(nameof(SelectedTarget), string.Empty);
 
         _lastSelectedTargetDisplay = Base64Utility.IsBase64(savedTarget)
             ? Base64Utility.Decode(savedTarget)
@@ -513,66 +448,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
             ? backend
             : InputBackend.SendInput;
         ShowPreview = GetSetting(nameof(ShowPreview), false);
-
-        // 자동 너비와 배치 복원은 반드시 이 순서로, 그리드가 자리를 잡은 뒤에 넣는다.
-        //
-        // IsColumnAutoWidth 는 첨부 속성을 거쳐 ApplyColumnAutoWidth 를 부르는데,
-        // 그게 모든 열의 Width 를 "지금 그려진 너비(ActualWidth)"로 고정해 버린다.
-        // 배치를 먼저 복원해도 이게 나중에 돌면 복원한 너비가 그대로 지워진다.
-        // ContextIdle 은 Background 보다 낮다. 그리드 로딩과 그에 딸린 바인딩 적용
-        // (IsColumnAutoWidth -> ApplyColumnAutoWidth, 이게 열 너비를 다시 쓴다)이
-        // 모두 끝난 뒤에 우리 배치를 얹기 위해 이 우선순위를 쓴다.
-        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
-            System.Windows.Threading.DispatcherPriority.ContextIdle,
-            new Action(() =>
-            {
-                IsColumnAutoWidth = GetSetting(nameof(IsColumnAutoWidth), false);
-                RestoreGridLayout();
-            }));
-    }
-
-    /// <summary>
-    /// 지난번 그리드 상태를 되돌린다.
-    ///
-    /// 저장본이 깨져 있거나 열 구성이 바뀌었으면 예외가 난다. 그때는 그냥 기본 배치로 둔다 —
-    /// 그리드 하나 때문에 화면 전체가 안 열리면 곤란하다.
-    /// </summary>
-    private void RestoreGridLayout()
-    {
-        if (GetSetting(nameof(GridLayoutVersion), 0) != GridLayoutVersion)
-        {
-            Logger.Debug("그리드 열 구성이 바뀌었다. 저장된 배치를 버리고 기본으로 시작한다.");
-            return;
-        }
-
-        var layout = GetSetting(nameof(GridLayoutService), string.Empty);
-        if (string.IsNullOrEmpty(layout))
-            return;
-
-        try
-        {
-            // 저장된 배치에는 검색 창이 펼쳐져 있었는지(ActualShowSearchPanel)도 들어 있다. 그대로 복원하면 XAML 의
-            // ShowSearchPanelMode=Never 를 무시하고 펼친 채로 굳는다 - 모드를 다시 놓고 HideSearchPanel 을 불러도,
-            // DXSerializer.AllowProperty 로 막아도 안 됐다. 그래서 그 항목을 글에서 지우고 복원한다.
-            // 마지막 한 줄만 보는 통계 표에 검색 창은 필요 없다.
-            layout = System.Text.RegularExpressions.Regex.Replace(layout, "<property name=\"ActualShowSearchPanel\">[^<]*</property>", string.Empty);
-
-            GridLayoutService.Deserialize(layout);
-
-            var grid = FindControl<DevExpress.Xpf.Grid.GridControl>("GridObjectService");
-
-            var widths = grid is null
-                ? "(그리드 못 잡음)"
-                : string.Join(", ", grid.Columns.Select(column =>
-                    $"{column.FieldName}:{column.Width.Value}/{column.Width.UnitType}/실제{column.ActualWidth:n0}"));
-
-            Logger.Debug($"그리드 상태 복원 완료. 너비=[{widths}]");
-
-        }
-        catch (Exception ex)
-        {
-            Logger.Warn(ex, "그리드 상태 복원 실패. 기본 배치로 시작한다.");
-        }
     }
 
     protected override void SaveSettings()
@@ -580,29 +455,11 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         SetSetting(nameof(ShowPreview), ShowPreview);
         SetSetting(nameof(CaptureTargetFps), CaptureTargetFps);
         SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
-        SetSetting(nameof(IsColumnAutoWidth), IsColumnAutoWidth);
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
         SetSetting(nameof(IsElementInspectEnabled), IsElementInspectEnabled);
 
-        // 문턱은 읽기만 하고 저장을 안 해 슬라이더를 움직여도 다음 실행에 안 남았다. 같이 저장한다.
-        SetSetting(nameof(DetectMinimumScore), DetectMinimumScore);
-        SetSetting(nameof(IsTrackingOn), IsTrackingOn);
-        SaveOcrRegion();
-        SetSetting(nameof(IsNameplateOcrOn), IsNameplateOcrOn);
-        SetSetting(nameof(SelectedOcrLanguage), SelectedOcrLanguage ?? string.Empty);
-
         if (SelectedTarget is not null)
             SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));
-
-        try
-        {
-            SetSetting(nameof(GridLayoutService), GridLayoutService.Serialize());
-            SetSetting(nameof(GridLayoutVersion), GridLayoutVersion);
-        }
-        catch (Exception ex)
-        {
-            Logger.Warn(ex, "그리드 상태 저장 실패");
-        }
     }
 
     protected override void OnLoaded()
@@ -618,7 +475,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         RefreshTargets();
 
         // 게임을 앞에 둔 채로 담을 수 있게. 화면을 닫으면 ReleaseResources 가 푼다.
-        RegisterHotkeys();
+        if (SupportsCollecting) RegisterHotkeys();
     }
 
     /// <summary>캡처할 수 있는 창과 모니터를 다시 훑는다.</summary>
@@ -654,7 +511,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         }
     }
 
-    private void DoStart()
+    protected void DoStart()
     {
         if (SelectedTarget is null)
             return;
@@ -692,7 +549,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         }
     }
 
-    private void DoStop()
+    protected void DoStop()
     {
         try
         {
@@ -706,30 +563,6 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
             Logger.Error(JsonConvert.SerializeObject(ex));
             ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName());
         }
-    }
-
-    private void DoClear() => Rows.Clear();
-
-    /// <summary>
-    /// 그리드를 항상 맨 위가 보이게 유지한다.
-    ///
-    /// 새 줄은 0번 자리에 끼워 넣는다. 그러면 보고 있던 줄이 한 칸씩 아래로 밀리고
-    /// 포커스도 그 줄을 따라 내려가서, 가만히 둬도 화면이 계속 흘러내린다.
-    /// 최신 줄을 보는 화면이므로 맨 위에 붙여 둔다.
-    ///
-    /// 값이 이미 0 일 때는 건드리지 않는다. 1초마다 같은 값을 다시 넣으면
-    /// 그때마다 포커스 변경이 돌아 사용자가 고른 셀이 풀린다.
-    /// </summary>
-    private void KeepGridAtTop()
-    {
-        if (_gridView is null)
-            return;
-
-        if (_gridView.TopRowIndex != 0)
-            _gridView.TopRowIndex = 0;
-
-        if (_gridView.FocusedRowHandle != 0)
-            _gridView.FocusedRowHandle = 0;
     }
 
     /// <summary>다음 프레임 한 장을 PNG 로 떨어뜨린다. 캡처 내용을 눈으로 확인하는 용도.</summary>
@@ -752,7 +585,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     private void DoCollectFrame() => RequestCollectFrame(CollectFromButton);
 
     /// <summary>버튼과 단축키가 같은 길로 온다. 두 벌로 두면 한쪽만 고쳐진다.</summary>
-    private void RequestCollectFrame(int source)
+    protected void RequestCollectFrame(int source)
     {
         // 픽셀이 CPU 로 안 내려오면 담을 것이 없다. 버튼을 회색으로 두고 이유를 안 알려 주면
         // "몹을 모을 수가 없다" 가 된다 - 실제로 그랬다. 알아서 켜고 그렇게 적는다.
@@ -770,7 +603,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// 실제로는 헛것이었다. 껐다 켜는 것이 유일한 길이고, 통계 몇 초가 사라지는 것 말고는
     /// 잃는 것이 없다.
     /// </remarks>
-    private void EnsureCpuReadback(string why)
+    protected void EnsureCpuReadback(string why)
     {
         if (EnableCpuReadback) return;
 
@@ -813,15 +646,44 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         if (collectSource != 0)
             TryCollectFrame(e, collectSource == CollectFromHotkey);
 
-        // 0.25초에 한 번만, 앞의 것이 끝났을 때만. 여기서 기다리면 프레임이 밀린다.
-        MaybeDetect(e);
-
-        // 글자 읽기도 같은 규칙 - 0.5초에 한 번, 앞의 것이 끝났을 때만.
-        MaybeOcr(e);
+        // 몹 찾기·글자 읽기처럼 프레임을 보는 일은 파생 화면이 한다. 여기서 기다리면 프레임이 밀린다.
+        OnFramePixels(e);
 
         if (ShowPreview)
             TryPushPreview(e);
     }
+
+    // ── 파생 화면이 끼어드는 자리 ──────────────────────────────────────────
+
+    /// <summary>
+    /// 프레임이 올 때마다. <b>캡처 스레드</b>다. 여기서 기다리면 프레임이 밀린다 - 시간이 됐을 때만
+    /// 백그라운드로 하나 띄우고 바로 돌아와야 한다.
+    /// </summary>
+    protected virtual void OnFramePixels(CapturedFrameEventArgs e) { }
+
+    /// <summary>
+    /// 미리보기를 눌렀을 때 먼저 물어본다. true 면 클릭을 대상 창으로 보내지 않는다
+    /// (글자 영역을 끄는 중이면 그 시작점이다).
+    /// </summary>
+    protected virtual bool TryInterceptPreviewMouseDown(Point pointInControl) => false;
+
+    /// <summary>미리보기 위에서 마우스가 움직였다. 전달과 무관하다 - 영역 끌기 같은 일에 쓴다.</summary>
+    protected virtual void OnPreviewMouseMove(MouseEventArgs args) { }
+
+    /// <summary>미리보기 위에서 마우스를 뗐다.</summary>
+    protected virtual void OnPreviewMouseUp(MouseButtonEventArgs args) { }
+
+    /// <summary>담을 때 라벨로 같이 쓸 검출. 몹 찾기가 없는 화면은 빈 목록이다.</summary>
+    protected virtual IReadOnlyList<Minguk.Tools.Vision.Inference.Detection> DetectionsForLabels => [];
+
+    /// <summary>
+    /// 이 화면이 데이터셋에 담는 일(F8)을 하는지. 플레이 화면은 안 한다 - 거기서 F8 을 쥐고 있으면
+    /// 같이 열린 캡처 화면의 등록이 실패한다.
+    /// </summary>
+    protected virtual bool SupportsCollecting => true;
+
+    /// <summary>캡처 시작·중지가 바뀌었다. 파생 화면은 제 커맨드의 CanExecute 를 여기서 다시 본다.</summary>
+    protected virtual void OnRunningStateChanged() { }
 
     // ── 미리보기 ─────────────────────────────────────────────────────────
 
@@ -1149,10 +1011,10 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// 미리보기에서 일어난 마우스 이벤트를 넘겨도 되는 상태인지.
     /// 전달이 꺼져 있거나, 캡처 중이 아니거나, 컨트롤을 못 잡았으면 아무것도 하지 않는다.
     /// </summary>
-    private bool CanForwardInput => IsInputForwardingEnabled && IsRunning && _previewImage is not null && _inputRouter is not null;
+    protected bool CanForwardInput => IsInputForwardingEnabled && IsRunning && _previewImage is not null && _inputRouter is not null;
 
     /// <summary>미리보기 Image 컨트롤의 현재 크기와 캡처 원본 크기.</summary>
-    private (System.Windows.Size Control, System.Windows.Size Source) PreviewSizes => (
+    protected (System.Windows.Size Control, System.Windows.Size Source) PreviewSizes => (
         new System.Windows.Size(_previewImage!.ActualWidth, _previewImage.ActualHeight),
         new System.Windows.Size(_lastFrameWidth, _lastFrameHeight));
 
@@ -1177,8 +1039,8 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         // Image 는 Focusable 이 아니라서 여기가 아니라 Border 를 잡아야 한다.
         _previewSurface?.Focus();
 
-        // 글자 영역을 끄는 중이면 클릭이 아니라 영역의 시작점이다. 게임으로 보내지 않는다.
-        if (TryBeginOcrRegionPick(args.GetPosition(_previewImage)))
+        // 파생 화면이 먼저 먹을 수 있다(글자 영역을 끄는 중이면 시작점). 그러면 게임으로 보내지 않는다.
+        if (TryInterceptPreviewMouseDown(args.GetPosition(_previewImage)))
         {
             args.Handled = true;
             return;
@@ -1233,7 +1095,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// 미리보기를 손으로 누른 것과 모델이 찾아낸 몹을 누르는 것이 <b>같은 길</b>을 타야 한다.
     /// 두 벌로 두면 한쪽만 고쳐져 손으로 누를 때는 되는데 자동으로는 안 되는 일이 생긴다.
     /// </remarks>
-    private async System.Threading.Tasks.Task<Capture.Input.InputForwardResult> SendClickAsync(
+    protected async System.Threading.Tasks.Task<Capture.Input.InputForwardResult> SendClickAsync(
         Point screenPoint, bool didActivate, Input.MouseButton button, string what)
     {
         // 커서를 옮기기 전에 지금 자리를 적어 둔다. 돌아올 때 쓴다.
@@ -1376,7 +1238,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     /// 전달이 안 됐으면 왜 안 됐는지 상태 줄에 띄운다.
     /// 조용히 넘기면 "클릭이 안 된다" 는 것만 보이고 이유를 알 수 없다.
     /// </summary>
-    private void ReportInputForward(Capture.Input.InputForwardResult result, string inputKind)
+    protected void ReportInputForward(Capture.Input.InputForwardResult result, string inputKind)
     {
         if (result == Capture.Input.InputForwardResult.Sent)
         {
@@ -1473,7 +1335,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
             // 몹 찾기가 켜져 있으면 방금 찾은 것을 라벨로 같이 쓴다. 그러면 라벨링 화면은
             // 그리는 곳이 아니라 틀린 것만 고치는 곳이 된다. 찾은 것이 없으면 라벨 파일을
             // 안 만든다 - 빈 라벨은 "여기엔 몹이 없다" 를 가르치는 것이라 사람이 봐야 한다.
-            var found = FreshDetections;
+            var found = DetectionsForLabels;
             if (found.Count > 0)
                 LabelFile.Save(dataset.LabelPathFor(path), found.Select(d => d.Box));
 
@@ -1515,7 +1377,7 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
     }
 
     /// <summary>다음 1초 요약 줄에 붙일 메모. 어느 스레드에서 불려도 된다.</summary>
-    private void Note(string message)
+    protected void Note(string message)
     {
         lock (_statisticsLock)
         {
@@ -1569,18 +1431,15 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
             Note = note
         };
 
-        _uiDispatcher?.BeginInvoke(() => AddRow(row));
+        _uiDispatcher?.BeginInvoke(() => OnStatisticsRow(row));
     }
 
-    private void AddRow(FrameLogRow row)
+    /// <summary>
+    /// 1초 요약이 나왔다. UI 스레드. 미리보기 fps 와 상태 줄을 채운다.
+    /// 통계 표가 있는 화면은 이것을 override 해 base 를 부른 뒤 표에 넣는다.
+    /// </summary>
+    protected virtual void OnStatisticsRow(FrameLogRow row)
     {
-        Rows.Insert(0, row);
-
-        while (Rows.Count > MaxRows)
-            Rows.RemoveAt(Rows.Count - 1);
-
-        KeepGridAtTop();
-
         PreviewFps = Interlocked.Exchange(ref _presentedFrameCountInSecond, 0);
         row.PreviewFps = PreviewFps;
 
@@ -1605,6 +1464,8 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         RefreshTargetsCommand.RaiseCanExecuteChanged();
         SaveFrameCommand.RaiseCanExecuteChanged();
         CollectFrameCommand.RaiseCanExecuteChanged();
+
+        OnRunningStateChanged();
     }
 
     private void ResetStats()
@@ -1652,15 +1513,10 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         }
     }
 
-    /// <summary>탭이 닫힐 때. 베이스가 SaveSettings 다음에 불러 준다.</summary>
+    /// <summary>탭이 닫힐 때. 베이스가 SaveSettings 다음에 불러 준다. 파생 화면은 제 것을 놓고 base 를 부른다.</summary>
     protected override void ReleaseResources()
     {
         ReleaseHotkeys();
-        ReleaseOcr();
-
-        // 모델은 68MB 를 물고 있고 libtorch 는 GPU 메모리를 잡는다. 화면을 닫으면 놓는다.
-        ReleaseDetector();
-
         DisposeSession();
     }
 

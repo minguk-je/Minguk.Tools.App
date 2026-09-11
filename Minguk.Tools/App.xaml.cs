@@ -123,6 +123,8 @@ public partial class App : Application
             // 새 화면을 추가하면 ① 여기에 AddTransient ② MainMenu 에 항목 추가, 두 곳을 손대면 된다.
             builder.Services.AddTransient<DashboardView>();
             builder.Services.AddTransient<CaptureMonitorView>();
+            builder.Services.AddTransient<ScriptStudioView>();
+            builder.Services.AddTransient<PlayView>();
             builder.Services.AddTransient<InputAutomationView>();
             builder.Services.AddTransient<LabelingView>();
 
