@@ -9,10 +9,10 @@
              xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
              xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
              xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
-             xmlns:markup="clr-namespace:Minguk.Tools.Markup"
              xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
              xmlns:dependency="clr-namespace:Minguk.Base.Dependency;assembly=Minguk.Base"
              xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
+             xmlns:markup="clr-namespace:Minguk.Tools.Markup"
              xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
              Style="{DynamicResource BaseControlStyle}"
              FontFamily="{DynamicResource BaseFontFamily}"
@@ -57,8 +57,8 @@
             동작만 메뉴 줄에 둔다. 하위 메뉴로 접지 않고 한 줄에 펼친다 -
             다섯 개뿐이라 접으면 한 번 더 눌러야 닿는다.
         -->
-        <dxb:MainMenuControl DockPanel.Dock="Top"
-                             AllowCustomizationMenu="False"
+        <dxb:MainMenuControl AllowCustomizationMenu="False"
+                             DockPanel.Dock="Top"
                              TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                              TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
@@ -152,7 +152,7 @@
 
             <!--
                 몇 마리를 몇 ms 에 찾았는지. 실제 속도가 여기 그대로 뜬다.
-
+                
                 "왜 못 켜는지" 같은 긴 안내는 여기 두지 않는다. 값은 들어 있는데(로그로 확인)
                 이 메뉴 바의 정적 항목이 그 문구를 안 그렸다 - 짧은 "2마리 (…ms)" 는 그리면서.
                 타이밍(디스패처 지연)·캡처 중 여부·AutoSizeMode=Fill 까지 갈라 봤지만 이유를
@@ -167,9 +167,9 @@
             "미리보기" 체크는 반드시 이 줄에 둔다. 아래 줄은 통째로 ShowPreview 에
             걸려 있어서, 같은 줄에 두면 끄는 순간 자기 자신이 사라져 다시 켤 수 없다.
         -->
-        <dxb:ToolBarControl DockPanel.Dock="Top"
-                            AllowCustomizationMenu="False"
+        <dxb:ToolBarControl AllowCustomizationMenu="False"
                             AllowQuickCustomization="False"
+                            DockPanel.Dock="Top"
                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                             TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
@@ -208,10 +208,10 @@
                               IsChecked="{Binding IsColumnAutoWidth}"
                               ToolTip="통계 열 너비를 내용에 맞춘다. 끄면 직접 조절한 너비가 유지된다." />
         </dxb:ToolBarControl>
-        <!--  미리보기를 켰을 때만 쓰는 것들. 툴바째 숨겨 조건을 한 군데로 모은다.  -->
-        <dxb:ToolBarControl DockPanel.Dock="Top"
-                            AllowCustomizationMenu="False"
+        <!-- 미리보기를 켰을 때만 쓰는 것들. 툴바째 숨겨 조건을 한 군데로 모은다. -->
+        <dxb:ToolBarControl AllowCustomizationMenu="False"
                             AllowQuickCustomization="False"
+                            DockPanel.Dock="Top"
                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                             TextBlock.FontSize="{DynamicResource BaseFontSize}"
                             Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -280,9 +280,9 @@
                 높이를 고정하지 않는다. 통계 표를 마지막 한 줄만 두게 되면서 남는 자리를 미리보기가
                 다 쓴다. 예전에는 320 으로 두고 사용자가 경계를 끌게 했는데, 표가 한 줄이면 끌 이유가 없다.
             -->
-            <dxlc:LayoutGroup ItemSpace="0"
+            <dxlc:LayoutGroup VerticalAlignment="Stretch"
+                              ItemSpace="0"
                               Orientation="Vertical"
-                              VerticalAlignment="Stretch"
                               View="Group"
                               Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
 
@@ -355,9 +355,9 @@
 
             <!-- 통계는 마지막 1초 한 줄만(MaxRows = 1). 머리글 + 한 줄이 들어갈 높이로 고정한다. -->
             <dxlc:LayoutGroup Height="84"
+                              VerticalAlignment="Bottom"
                               ItemSpace="0"
                               Orientation="Vertical"
-                              VerticalAlignment="Bottom"
                               View="Group">
 
                 <!--
@@ -407,7 +407,7 @@
                             <!--
                                 AllowBestFit 은 BaseTableView 기본값(켜짐)을 그대로 쓴다.
                                 열 머리글 오른쪽 메뉴의 "최적 너비" 가 여기서 나온다.
-
+                                
                                 한동안 꺼 두었는데, 저장한 열 너비가 복원되지 않는 원인으로
                                 이걸 의심했기 때문이다. 실제 원인은 "열 자동 너비" 였다 —
                                 그게 켜지면 모든 열의 너비 단위가 Auto(내용에 맞춤)가 되어
@@ -417,7 +417,7 @@
                                                     AllowEditing="False"
                                                     IndicatorWidth="{Binding Path=(Border.ActualWidth), ElementName=GridRowNumberSizeProxy, Mode=OneWay}"
                                                     ShowGroupPanel="False"
-                                                    ShowSearchPanelMode="Never" />
+                                                    ShowSearchPanelMode="Default" />
                         </dxg:GridControl.View>
 
                         <!--
