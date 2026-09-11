@@ -126,9 +126,6 @@
                 </dxb:BarEditItem.EditSettings>
             </dxb:BarEditItem>
 
-            <!-- 긴 안내는 여기 안 그려질 때가 있다(메뉴 바의 정적 항목). 그런 것은 아래 상태 줄로 간다. -->
-            <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
-            <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
         </dxb:MainMenuControl>
 
         <!-- ── 설정 ────────────────────────────────────────────────── -->
@@ -185,6 +182,15 @@
                                               ItemsSource="{Binding InputBackends}" />
                 </dxb:BarEditItem.EditSettings>
             </dxb:BarEditItem>
+
+            <dxb:BarItemSeparator />
+
+            <!--
+                몇 마리를 몇 ms 에 찾았는지 · 글자 읽기 상태. 메뉴 줄(첫 줄)에 두었더니 항목이 많아 넘쳐서
+                아예 안 보였다(실측 - 편집 화면에서 "2마리" 가 어디에도 없었다). 자리가 남는 설정 줄에 둔다.
+            -->
+            <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
+            <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
         </dxb:ToolBarControl>
 
         <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
