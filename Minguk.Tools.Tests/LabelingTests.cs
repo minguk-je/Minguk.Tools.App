@@ -23,7 +23,6 @@ internal static partial class Program
     {
         TestBoxEditing();
         TestTracking();
-        TestImageCache();
 
         // ── 두 점 → 사각형 ──
 
@@ -387,64 +386,5 @@ internal static partial class Program
         tracker.Update([At(0.2, 0.2)]);
         tracker.Update([At(0.5, 0.2)]);
         Check("멀리 뛰면 다른 몹이다", tracker.Tracks.Count == 2, $"추적 {tracker.Tracks.Count}개");
-    }
-
-    /// <summary>
-    /// 학습 그림 캐시. 모델 크기로 줄여 두고, 원본이 안 바뀌면 다시 안 만들고, 바뀌면 다시 만든다.
-    /// </summary>
-    private static void TestImageCache()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "minguk-cache-" + Guid.NewGuid().ToString("N"));
-
-        try
-        {
-            var dataset = new LabelDataset(root);
-            dataset.EnsureCreated();
-
-            var source = Path.Combine(dataset.ImageDirectory, "big.png");
-            WritePng(source, 1920, 1080);
-
-            var map = TrainingImageCache.Ensure(dataset, [source], 640, 360);
-            var cached = map[source];
-
-            ImageSize.TryRead(cached, out var w, out var h);
-            Check("캐시는 모델 크기로 줄인 PNG 다", File.Exists(cached) && w == 640 && h == 360, $"{w}x{h} {Path.GetFileName(cached)}");
-            Check("캐시는 크기별 폴더에 든다", cached.Contains(Path.Combine("cache", "640x360")), cached);
-
-            var first = File.GetLastWriteTimeUtc(cached);
-            Thread.Sleep(30);
-            TrainingImageCache.Ensure(dataset, [source], 640, 360);
-            Check("원본이 그대로면 다시 안 만든다", File.GetLastWriteTimeUtc(cached) == first, string.Empty);
-
-            // 원본이 새로 담기면(시각이 뒤) 그 장만 다시 만든다.
-            Thread.Sleep(30);
-            File.SetLastWriteTimeUtc(source, DateTime.UtcNow.AddSeconds(5));
-            TrainingImageCache.Ensure(dataset, [source], 640, 360);
-            Check("원본이 바뀌면 다시 만든다", File.GetLastWriteTimeUtc(cached) > first, string.Empty);
-
-            var other = TrainingImageCache.Ensure(dataset, [source], 320, 180)[source];
-            ImageSize.TryRead(other, out var w2, out _);
-            Check("다른 크기는 다른 캐시", other != cached && w2 == 320, other);
-        }
-        catch (Exception ex)
-        {
-            Check("그림 캐시", false, $"{ex.GetType().Name}: {ex.Message}");
-        }
-        finally
-        {
-            try { Directory.Delete(root, recursive: true); } catch (Exception) { }
-        }
-    }
-
-    private static void WritePng(string path, int width, int height)
-    {
-        var bitmap = new System.Windows.Media.Imaging.WriteableBitmap(width, height, 96, 96, System.Windows.Media.PixelFormats.Bgr32, null);
-        bitmap.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), new byte[width * height * 4], width * 4, 0);
-
-        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
-
-        using var stream = File.Create(path);
-        encoder.Save(stream);
     }
 }

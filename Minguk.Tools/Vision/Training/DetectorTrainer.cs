@@ -159,8 +159,7 @@ public static class DetectorTrainer
                                                   int inputWidth = DefaultInputWidth,
                                                   int inputHeight = DefaultInputHeight,
                                                   double? learningRate = null,
-                                                  IProgress<TrainingStep>? steps = null,
-                                                  bool useImageCache = true)
+                                                  IProgress<TrainingStep>? steps = null)
         => Task.Run(() =>
         {
             if (!LibTorchRuntime.IsLoaded)
@@ -180,21 +179,6 @@ public static class DetectorTrainer
 
             if (samples.Count == 0)
                 throw new InvalidOperationException("사각형이 찍힌 그림이 없습니다. 라벨링 화면에서 먼저 찍으세요.");
-
-            // 학습 중 "지금 보는 그림" 은 원본 경로로 알린다. 아래서 캐시 경로로 바꾸기 전에 챙긴다.
-            var originals = samples.Select(s => s.ImagePath).ToArray();
-
-            // 그림을 모델 크기로 한 번만 줄여 두고 그것을 학습기에 넘긴다. 매 바퀴 1080p 를 읽고
-            // 줄이는 CPU 값이 학습 시간의 대부분이었다(97장 40바퀴에 2시간, GPU 는 13%).
-            // 끌 수 있게 둔 것은 캐시가 얼마나 빠른지 같은 조건으로 재기 위해서다(하네스 --no-cache).
-            if (useImageCache)
-            {
-                token.ThrowIfCancellationRequested();
-                var cached = TrainingImageCache.Ensure(dataset, originals, inputWidth, inputHeight, progress, token);
-
-                foreach (var sample in samples)
-                    if (cached.TryGetValue(sample.ImagePath, out var path)) sample.ImagePath = path;
-            }
 
             var boxes = samples.Sum(s => s.Labels.Length);
             var usedGpu = TorchSharp.torch.cuda.is_available();
@@ -255,8 +239,8 @@ public static class DetectorTrainer
                         // 안 섞으므로(실측: 1, 5, 9, 13 … 로 늘고 바퀴마다 1로 돌아온다) 우리가
                         // 넘긴 samples 의 n-1 번째가 그 그림이다. 섞기 시작하면 이름이 어긋나겠지만
                         // 그때는 로그의 Row 도 뒤죽박죽이라 금방 드러난다.
-                        var image = TryParseRow(e.Message, out var row) && row >= 1 && row <= originals.Length
-                            ? originals[row - 1]
+                        var image = TryParseRow(e.Message, out var row) && row >= 1 && row <= samples.Count
+                            ? samples[row - 1].ImagePath
                             : null;
 
                         steps.Report(new TrainingStep(epochsDone, maxEpoch, loss, image));
