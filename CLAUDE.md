@@ -335,6 +335,12 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   스크립트는 `조준(x, y)` 를 쓴다 - 창 가운데(조준점)에서 목표까지의 거리 × 조준 배율(%, `ScriptPlayer.AimScalePercent`)
   만큼 상대 이동. 배율은 게임 감도마다 달라 사람이 맞춘다. 한 번에 안 맞으면 반복문에서 다시 찾아 다시 조준한다.
   게임의 이동(걷기)은 W·A·S·D 를 누르고 있는 시간이다 - `걷기("W", 500)`. finally 로 반드시 뗀다.
+- **전역 단축키는 공용(`SharedHotkeysFactory.Default`)** - RegisterHotKey 는 한 조합을 한 창만 쥔다. 스크립트·플레이·
+  입력 자동화가 각자 F5 를 쥐면 같이 열린 화면은 등록에 실패해 게임에서 F5 가 안 먹었다(실측). 이제 화면은
+  `Claim` 으로 쥐고(`HotkeyClaim`), 탭이 활성화되면(`DocumentViewModelBase.OnActivated`) 제 차례를 당긴다 -
+  마지막에 본 화면이 받는다. 마지막 화면이 놓으면 시스템 등록도 푼다. `--vision` 이 가짜 어댑터로 본다.
+- **앞 창 판정은 같은 프로세스면 통과** (`ForegroundWindow.IsInFront`) - 게임은 잡은 창 말고 IME·오버레이를 앞에
+  두기도 해 핸들만 비교하면 게임이 앞에 있어도 막혔다. 막히면 앞 창이 무엇인지 메시지에 적는다.
 - **SendInput 키에는 스캔코드를 같이 싣는다** - wScan 이 0 이면 Raw Input 을 받는 게임에는 MakeCode 0 인 키가
   들어가 W·A·S·D 가 안 먹는다(`SendInputAdapter.NativeMethods.KeyInput`). 확장 키는 `VirtualKeys.IsExtendedKey`.
 - **엔진마다 두 길**: `RunAsync`(계획: 돌려서 계획을 받음) 와 `CheckLiveAsync`(실시간: 컴파일·문법만) ·

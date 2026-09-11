@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
@@ -24,6 +24,7 @@ public sealed class GlobalHotkeyAdapter : IGlobalHotkeyAdapter
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
     private readonly Dictionary<int, Action> _actions = [];
+    private readonly Dictionary<(Key, ModifierKeys), int> _ids = [];
     private readonly HwndSource _source;
 
     private int _nextId = 1;
@@ -58,12 +59,23 @@ public sealed class GlobalHotkeyAdapter : IGlobalHotkeyAdapter
         }
 
         _actions[id] = onPressed;
+        _ids[(key, modifiers)] = id;
         return true;
+    }
+
+    public bool Unregister(Key key, ModifierKeys modifiers)
+    {
+        if (!_ids.Remove((key, modifiers), out var id)) return false;
+
+        _actions.Remove(id);
+        return UnregisterHotKey(_source.Handle, id);
     }
 
     public void UnregisterAll()
     {
         foreach (var id in _actions.Keys) UnregisterHotKey(_source.Handle, id);
+
+        _ids.Clear();
 
         _actions.Clear();
     }

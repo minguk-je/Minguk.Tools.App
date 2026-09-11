@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
@@ -33,7 +34,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
     private IInputAdapter? _adapter;
     private InputService? _service;
     private CancellationTokenSource? _cts;
-    private IGlobalHotkeyAdapter? _hotkeys;
+    private readonly List<HotkeyClaim> _hotkeyClaims = [];
 
     /// <summary>편집기. 줄을 캐럿 자리에 끼우려면 필요하다.</summary>
     private TextEditor? _editor;
@@ -233,7 +234,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         _windows = null;
 
         // 놓아 주지 않으면 앱이 살아 있는 동안 그 조합이 잠긴 채로 남는다.
-        _hotkeys?.Dispose();
-        _hotkeys = null;
+        foreach (var claim in _hotkeyClaims) claim.Dispose();
+        _hotkeyClaims.Clear();
     });
 }

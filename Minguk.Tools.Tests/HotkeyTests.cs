@@ -1,0 +1,75 @@
+using System;
+using System.Collections.Generic;
+using System.Windows.Input;
+
+using Minguk.Tools.Input.Hotkeys;
+
+namespace Minguk.Tools.Tests;
+
+/// <summary>
+/// 공용 단축키. 여러 화면이 같은 키를 쥐어도 시스템 등록은 한 번이고, 마지막에 쥐거나 활성화한 화면이 받는지.
+/// 가짜 어댑터로 눌림을 흉내 낸다 - 실제 RegisterHotKey 는 부르지 않는다.
+/// </summary>
+internal static partial class Program
+{
+    private static void TestSharedHotkeys()
+    {
+        var adapter = new FakeHotkeyAdapter();
+        using var hotkeys = new SharedHotkeys(() => adapter);
+        var received = new List<string>();
+
+        var studio = hotkeys.Claim(Key.F5, ModifierKeys.None, "스크립트", () => received.Add("스크립트"), out var problem1);
+        var play = hotkeys.Claim(Key.F5, ModifierKeys.None, "플레이", () => received.Add("플레이"), out var problem2);
+
+        Check("공용 단축키: 둘이 쥐어도 시스템 등록은 한 번", studio is not null && play is not null && adapter.Registered.Count == 1,
+              $"등록 {adapter.Registered.Count}번, {problem1 ?? problem2 ?? "문제 없음"}");
+
+        adapter.Press(Key.F5);
+        Check("공용 단축키: 마지막에 쥔 화면이 받는다", received.Count == 1 && received[0] == "플레이", string.Join(", ", received));
+
+        studio!.Activate();
+        adapter.Press(Key.F5);
+        Check("공용 단축키: 활성화한 화면이 받는다", received.Count == 2 && received[1] == "스크립트", string.Join(", ", received));
+
+        studio.Dispose();
+        adapter.Press(Key.F5);
+        Check("공용 단축키: 하나가 놓으면 남은 쪽이 받고 등록은 그대로", received.Count == 3 && received[2] == "플레이" && adapter.Registered.Count == 1, string.Join(", ", received));
+
+        play!.Dispose();
+        adapter.Press(Key.F5);
+        Check("공용 단축키: 다 놓으면 시스템 등록을 푼다", received.Count == 3 && adapter.Registered.Count == 0, $"등록 {adapter.Registered.Count}개");
+
+        adapter.Refuse = true;
+        var refused = hotkeys.Claim(Key.F12, ModifierKeys.None, "F12", () => { }, out var problem3);
+        Check("공용 단축키: 시스템이 거부하면 null 과 이유", refused is null && problem3 is not null && problem3.Contains("F12"), problem3 ?? "이유 없음");
+    }
+
+    /// <summary>시스템 등록을 흉내 내는 어댑터. Press 로 눌림을 만든다.</summary>
+    private sealed class FakeHotkeyAdapter : IGlobalHotkeyAdapter
+    {
+        public Dictionary<Key, Action> Registered { get; } = [];
+
+        public bool Refuse { get; set; }
+
+        public string Name => "가짜";
+
+        public bool TryRegister(Key key, ModifierKeys modifiers, Action onPressed)
+        {
+            if (Refuse) return false;
+
+            Registered[key] = onPressed;
+            return true;
+        }
+
+        public bool Unregister(Key key, ModifierKeys modifiers) => Registered.Remove(key);
+
+        public void UnregisterAll() => Registered.Clear();
+
+        public void Press(Key key)
+        {
+            if (Registered.TryGetValue(key, out var action)) action();
+        }
+
+        public void Dispose() => Registered.Clear();
+    }
+}

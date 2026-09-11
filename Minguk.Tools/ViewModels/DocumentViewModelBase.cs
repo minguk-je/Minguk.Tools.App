@@ -99,6 +99,12 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
     /// <summary>연결·타이머·핸들처럼 직접 정리해야 하는 것을 닫는다.</summary>
     protected virtual void ReleaseResources() { }
 
+    /// <summary>이 문서 탭이 앞으로 왔을 때. 공용 단축키(F5 등)를 받을 차례를 당기는 데 쓴다.</summary>
+    protected virtual void OnActivated() { }
+
+    /// <summary>주 화면이 활성 탭이 바뀔 때 부른다.</summary>
+    public void NotifyActivated() => Guard(OnActivated);
+
     /// <summary>MessengerUtility 수신. override 하면 자동으로 등록/해제된다.</summary>
     protected virtual void OnMessenger(MessengerUtility message) { }
 

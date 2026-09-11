@@ -447,8 +447,8 @@ public sealed class LiveScriptApi
         ThrowIfStopping();
 
         if (_host.RequiresForeground && _host.Target() is { Kind: CaptureTargetKind.Window, Handle: var handle } && handle != IntPtr.Zero
-            && ForegroundWindow.Handle != handle)
-            throw Guard("대상 창이 앞에 없어 입력을 보내지 않았습니다. 창을 앞으로 가져오거나 시작 대기를 늘리세요.");
+            && !ForegroundWindow.IsInFront(handle))
+            throw Guard($"대상 창이 앞에 없어 입력을 보내지 않았습니다(앞 창: {ForegroundWindow.Describe()}). 게임에서 F5 로 시작하거나, 시작 대기 안에 게임으로 넘어가세요.");
 
         Throttle();
     }

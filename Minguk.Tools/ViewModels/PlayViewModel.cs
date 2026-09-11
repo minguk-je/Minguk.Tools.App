@@ -39,7 +39,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 {
     public static PlayViewModel Create() => ViewModelSource.Create(() => new PlayViewModel());
 
-    private IGlobalHotkeyAdapter? _playHotkeys;
+    private readonly List<HotkeyClaim> _hotkeyClaims = [];
 
     /// <summary>고른 스크립트 문서. 여기서는 읽기만 한다(파일 → 계획 → 틀린 줄).</summary>
     public ScriptWorkbench Script { get; }
@@ -192,13 +192,11 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
     // ── 단축키 ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 게임이 앞에 있을 때도 시작·중지할 수 있게. 입력 자동화 화면과 같은 키다 - 둘이 같이 열려 있으면
-    /// 나중에 연 쪽이 실패하고 그 사실이 상태에 적힌다.
+    /// 게임이 앞에 있을 때도 시작·중지할 수 있게. 입력 자동화 화면과 같은 키다 - 공용 단축키라 같이 열려 있어도
+    /// 되고, 마지막에 본 화면이 받는다.
     /// </summary>
     private void RegisterPlayHotkeys() => Guard(() =>
     {
-        _playHotkeys = GlobalHotkeyAdapterFactory.Create();
-
         (string Label, Key Key, Action Action)[] bindings =
         [
             ("F5 1회", Key.F5, () => { if (Player.IsIdle) Player.RunOnce(); }),
@@ -210,15 +208,26 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
         foreach (var (label, key, action) in bindings)
         {
-            if (_playHotkeys.TryRegister(key, ModifierKeys.None, action)) live.Add(label);
+            if (SharedHotkeysFactory.Default.Claim(key, ModifierKeys.None, label, action, out _) is { } claim)
+            {
+                _hotkeyClaims.Add(claim);
+                live.Add(label);
+            }
             else failed.Add(label);
         }
 
         // 도구 줄의 정적 항목은 넘치면 안 보인다. 상태 줄에 적는다.
         StatusText = failed.Count == 0
-            ? $"단축키: {string.Join(" · ", live)}"
-            : $"단축키: {string.Join(" · ", live)}  (등록 실패: {string.Join(", ", failed)} - 다른 화면이나 프로그램이 쥐고 있습니다)";
+            ? $"단축키: {string.Join(" · ", live)} · 마지막에 본 화면이 받습니다"
+            : $"단축키: {string.Join(" · ", live)}  (등록 실패: {string.Join(", ", failed)} - 다른 프로그램이 쥐고 있습니다)";
     });
+
+    /// <summary>탭이 앞으로 왔다. 이제 F5·F6 은 여기가 받는다.</summary>
+    protected override void OnActivated()
+    {
+        base.OnActivated();
+        foreach (var claim in _hotkeyClaims) claim.Activate();
+    }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
 
@@ -269,8 +278,8 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         Live.Dispose();
 
         // 놓아 주지 않으면 앱이 살아 있는 동안 그 키가 잠긴 채로 남는다.
-        _playHotkeys?.Dispose();
-        _playHotkeys = null;
+        foreach (var claim in _hotkeyClaims) claim.Dispose();
+        _hotkeyClaims.Clear();
 
         Script.Dispose();
 

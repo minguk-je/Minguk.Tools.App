@@ -161,6 +161,11 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout
             foreach (var root in AccordionControlMenuItemSource ?? new ObservableCollection<MenuItemModel>())
                 ResetActive(root);
 
+            // 공용 단축키는 마지막에 본 화면이 받는다. 내용이 뷰면 그 DataContext 가 뷰모델이다.
+            var content = e.NewDocument?.Content;
+            var activated = (content as FrameworkElement)?.DataContext as DocumentViewModelBase ?? content as DocumentViewModelBase;
+            activated?.NotifyActivated();
+
             if (e.NewDocument?.Id is not string documentId)
                 return;
 

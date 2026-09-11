@@ -362,8 +362,6 @@ public partial class InputAutomationViewModel
     /// </remarks>
     private void RegisterHotkeys() => Guard(() =>
     {
-        _hotkeys = GlobalHotkeyAdapterFactory.Create();
-
         // RegisterHotKey 는 시스템 전역이다. 맨 키로 잡으면 이 화면이 열려 있는 동안
         // 모든 앱에서 그 키를 빼앗는다 - F5 는 브라우저 새로고침과 Visual Studio 의 디버그 시작,
         // F3 은 흔한 "다음 찾기" 다. 화면을 닫으면 돌려준다(ReleaseResources 가 푼다).
@@ -384,7 +382,11 @@ public partial class InputAutomationViewModel
 
         foreach (var (label, key, modifiers, action) in bindings)
         {
-            if (_hotkeys.TryRegister(key, modifiers, action)) live.Add(label);
+            if (SharedHotkeysFactory.Default.Claim(key, modifiers, label, action, out _) is { } claim)
+            {
+                _hotkeyClaims.Add(claim);
+                live.Add(label);
+            }
             else failed.Add(label);
         }
 
@@ -397,6 +399,13 @@ public partial class InputAutomationViewModel
 
         Logger.Debug($"단축키 등록: 성공 {live.Count}, 실패 {failed.Count}");
     });
+
+    /// <summary>탭이 앞으로 왔다. 이제 F3~F6 은 여기가 받는다.</summary>
+    protected override void OnActivated()
+    {
+        base.OnActivated();
+        foreach (var claim in _hotkeyClaims) claim.Activate();
+    }
 
     /// <summary>F6 은 하나로 시작과 중지를 겸한다. 도는 중에 다시 누르면 멈춘다.</summary>
     private void ToggleLoop()

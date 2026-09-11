@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows.Input;
 
 namespace Minguk.Tools.Input.Hotkeys;
@@ -29,6 +29,9 @@ public interface IGlobalHotkeyAdapter : IDisposable
     /// </param>
     /// <returns>등록했으면 true. 다른 프로그램이 이미 쥐고 있으면 false.</returns>
     bool TryRegister(Key key, ModifierKeys modifiers, Action onPressed);
+
+    /// <summary>조합 하나를 되돌린다. 나눠 쓰던 화면이 다 떠났을 때.</summary>
+    bool Unregister(Key key, ModifierKeys modifiers);
 
     /// <summary>등록한 것을 모두 되돌린다. 놓아 주지 않으면 앱이 살아 있는 동안 조합이 잠긴다.</summary>
     void UnregisterAll();

@@ -46,7 +46,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>캐럿이 있는 줄의 중단점을 켜고 끈다. 편집기 여백을 눌러도 된다.</summary>
     public DelegateCommand ToggleBreakpointCommand { get; }
 
-    private IGlobalHotkeyAdapter? _studioHotkeys;
+    private readonly List<HotkeyClaim> _hotkeyClaims = [];
     private ScriptEditor? _editor;
 
     public ScriptStudioViewModel()
@@ -113,12 +113,10 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
     /// <summary>
     /// F5·F10 을 전역으로 쥔다. 게임이 앞에 있어야 입력이 들어가므로 앱 밖에서 누를 수단이 있어야 한다.
-    /// 플레이·입력 자동화 화면도 F5 를 쥔다 - 같이 열려 있으면 나중에 연 쪽이 실패하고 상태 줄에 적힌다.
+    /// 플레이·입력 자동화 화면도 F5 를 쥔다 - 공용 단축키라 같이 열려 있어도 되고, 마지막에 본 화면이 받는다.
     /// </summary>
     private void RegisterStudioHotkeys() => Guard(() =>
     {
-        _studioHotkeys = GlobalHotkeyAdapterFactory.Create();
-
         (string Label, Key Key, System.Action Action)[] bindings =
         [
             ("F5 실행/계속", Key.F5, RunOrContinue),
@@ -130,14 +128,25 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         foreach (var (label, key, action) in bindings)
         {
-            if (_studioHotkeys.TryRegister(key, ModifierKeys.None, action)) live.Add(label);
+            if (SharedHotkeysFactory.Default.Claim(key, ModifierKeys.None, label, action, out _) is { } claim)
+            {
+                _hotkeyClaims.Add(claim);
+                live.Add(label);
+            }
             else failed.Add(label);
         }
 
         StatusText = failed.Count == 0
-            ? $"단축키: {string.Join(" · ", live)} · 도는 동안 F9 비상 정지"
-            : $"단축키: {string.Join(" · ", live)}  (등록 실패: {string.Join(", ", failed)} - 다른 화면이나 프로그램이 쥐고 있습니다)";
+            ? $"단축키: {string.Join(" · ", live)} · 도는 동안 F9 비상 정지 · 마지막에 본 화면이 받습니다"
+            : $"단축키: {string.Join(" · ", live)}  (등록 실패: {string.Join(", ", failed)} - 다른 프로그램이 쥐고 있습니다)";
     });
+
+    /// <summary>탭이 앞으로 왔다. 이제 F5 는 여기가 받는다.</summary>
+    protected override void OnActivated()
+    {
+        base.OnActivated();
+        foreach (var claim in _hotkeyClaims) claim.Activate();
+    }
 
     /// <summary>UI 스레드에서 돌린다. 검증 하네스처럼 서비스가 없는 자리에서도 배선은 돌아야 한다.</summary>
     private static void RunOnUi(System.Action action)
@@ -194,8 +203,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         Player.Stop();
 
         // 놓아 주지 않으면 앱이 살아 있는 동안 그 키가 잠긴 채로 남는다.
-        _studioHotkeys?.Dispose();
-        _studioHotkeys = null;
+        foreach (var claim in _hotkeyClaims) claim.Dispose();
+        _hotkeyClaims.Clear();
         _editor = null;
 
         Live.Dispose();
