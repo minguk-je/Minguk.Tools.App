@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using Minguk.Base.Utilities;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Media;
 
@@ -227,6 +229,75 @@ public partial class LabelingViewModel
     }
 
     public bool HasTrainingNotice => !string.IsNullOrEmpty(TrainingNotice);
+
+    /// <summary>
+    /// 고를 수 있는 GPU. "자동" 다음에 카드마다 하나씩. 이름은 Windows 가 아는 대로 적는다.
+    /// </summary>
+    /// <remarks>
+    /// 순서는 CUDA 의 번호 순서(대개 nvidia-smi 와 같다)로 믿는다. 어긋나면 이름을 보고 고른다.
+    /// </remarks>
+    public System.Collections.Generic.IReadOnlyList<string> GpuOptions { get; } = BuildGpuOptions();
+
+    /// <summary>고른 GPU. 바꾸면 설정에 바로 저장하고, 적용은 다음 실행부터다.</summary>
+    public string? SelectedGpuOption
+    {
+        get => GetProperty(() => SelectedGpuOption);
+        set => SetProperty(() => SelectedGpuOption, value, OnGpuOptionChanged);
+    }
+
+    /// <summary>"바꾸면 다시 실행해야 적용됩니다" 같은 안내. 비어 있으면 안 보인다.</summary>
+    public string? GpuNotice
+    {
+        get => GetProperty(() => GpuNotice);
+        set => SetProperty(() => GpuNotice, value);
+    }
+
+    private static System.Collections.Generic.IReadOnlyList<string> BuildGpuOptions()
+    {
+        // NVML 이 카드 전부를 PCI 순서로 준다(nvidia-smi 와 같은 번호). 화면이 붙은 카드에는 (화면) 을 붙인다.
+        var gpus = Vision.Training.GpuProbe.List();
+        var auto = Vision.Training.GpuProbe.PickForTraining(gpus);
+
+        var options = new System.Collections.Generic.List<string>
+        {
+            auto is { } picked && gpus.Count >= 2
+                ? $"자동 - 지금은 GPU {picked.Index}{(picked.HasDisplay ? string.Empty : " (화면 없는 카드)")}"
+                : "자동"
+        };
+
+        if (gpus.Count == 0)
+        {
+            // 드라이버가 없거나 NVML 을 못 읽는다. 번호만 준다.
+            options.Add("GPU 0");
+            options.Add("GPU 1");
+            return options;
+        }
+
+        options.AddRange(gpus.Select(g => $"GPU {g.Index} - {g.Name.Replace("NVIDIA ", string.Empty)}{(g.HasDisplay ? " (화면)" : string.Empty)}"));
+
+        return options;
+    }
+
+    private void OnGpuOptionChanged()
+    {
+        var index = ParseGpuIndex(SelectedGpuOption);
+        var saved = AppSettingUtility.Get(Vision.Training.LibTorchRuntime.GpuSettingKey, -1);
+
+        if (index == saved) return;
+
+        AppSettingUtility.Set(Vision.Training.LibTorchRuntime.GpuSettingKey, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        GpuNotice = "GPU 선택은 앱을 다시 실행해야 적용됩니다. 한 앱은 카드 하나만 씁니다 - 두 장을 다 쓰려면 하네스(--gpu=)나 앱 하나를 더 띄웁니다.";
+    }
+
+    private static int ParseGpuIndex(string? option)
+    {
+        if (string.IsNullOrEmpty(option) || !option.StartsWith("GPU ", StringComparison.Ordinal)) return -1;
+
+        var rest = option[4..];
+        var end = rest.IndexOf(' ');
+
+        return int.TryParse(end < 0 ? rest : rest[..end], out var index) ? index : -1;
+    }
 
     /// <summary>지금 폴더의 모델이 어떤 것인지 한 줄. 쪽지(detector.json)에서 읽는다.</summary>
     public string? ModelSummary

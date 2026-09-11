@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Minguk.Base.Utilities;
+using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Disposables;
@@ -86,6 +87,13 @@ public partial class LabelingViewModel : DocumentViewModelBase
         TrainEpochs = GetSetting(nameof(TrainEpochs), 20);
         MinimumScore = GetSetting(nameof(MinimumScore), 0.5);
         FollowTraining = GetSetting(nameof(FollowTraining), false);
+
+        // GPU 선택은 앱 전체 설정이다(시작할 때 App 이 읽는다). 저장된 번호에 맞는 항목을 고른다.
+        var gpu = AppSettingUtility.Get(Vision.Training.LibTorchRuntime.GpuSettingKey, -1);
+        SelectedGpuOption = gpu >= 0
+            ? GpuOptions.FirstOrDefault(o => o.StartsWith($"GPU {gpu} ", StringComparison.Ordinal) || o == $"GPU {gpu}") ?? GpuOptions[0]
+            : GpuOptions[0];
+        GpuNotice = null;
 
         var size = GetSetting(nameof(SelectedInputSize), InputSizes[0]);
 

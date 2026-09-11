@@ -28,6 +28,12 @@ internal static partial class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
 
+        // 어느 카드를 쓸지. libtorch 를 올리기 전에 정해야 하므로 맨 앞에서 한 번.
+        // 두 학습을 동시에 돌리려면 창을 둘 열고 --gpu=0 · --gpu=1 로 나눠 준다.
+        // 안 주면 자동 - libtorch 를 올리는 순간 모니터가 안 붙었거나 한가한 카드로 간다(LibTorchRuntime.Load).
+        if (ArgValue(args, "--gpu=") is { } gpu)
+            Minguk.Tools.Vision.Training.LibTorchRuntime.SelectGpu(int.Parse(gpu, CultureInfo.InvariantCulture));
+
         if (args.Contains("--calibrate")) return Calibrate.Run();
         if (args.Contains("--fallback")) return FallbackProbe.Run();
         if (args.Contains("--views")) return ViewSmokeProbe.Run();

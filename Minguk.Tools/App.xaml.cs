@@ -81,6 +81,11 @@ public partial class App : Application
         {
             base.OnStartup(e);
 
+            // 손으로 고른 GPU 만 여기서 미리 정한다. 자동은 libtorch 를 처음 올리는 순간에 고른다 -
+            // 그때 게임이 떠 있으면 그 카드를 피할 수 있다.
+            var gpuIndex = AppSettingUtility.Get(Minguk.Tools.Vision.Training.LibTorchRuntime.GpuSettingKey, -1);
+            if (gpuIndex >= 0) Minguk.Tools.Vision.Training.LibTorchRuntime.SelectGpu(gpuIndex);
+
             // 폰트 리소스를 MainWindow 가 만들어지기 전에 끼운다.
             // (StartupUri 의 창은 OnStartup 이 끝난 뒤에 생성된다)
             UserPreferencesHelper.ApplyFonts();

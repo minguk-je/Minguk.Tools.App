@@ -215,7 +215,7 @@
                              EditValue="{Binding SelectedInputBackend}"
                              EditWidth="130"
                              IsEnabled="{Binding IsInputForwardingEnabled}"
-                             ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다. PostMessage: 포커스를 안 뺏지만 창 메시지를 보는 대상에만 통한다.">
+                             ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다(관리자 권한 대상이면 이 앱도 관리자로). PostMessage: 포커스를 안 뺏지만 창 메시지를 읽는 보통 프로그램에만 통한다 - DirectX 게임은 Raw Input 으로 마우스를 읽어 메시지가 나가도 반응이 없다(오버워치 실측). 게임은 SendInput 이나 Interception 드라이버.">
                 <dxb:BarEditItem.EditSettings>
                     <dxe:ComboBoxEditSettings IsTextEditable="False"
                                               ItemsSource="{Binding InputBackends}" />

@@ -323,6 +323,19 @@
                                        Content="따라가기"
                                        IsChecked="{Binding FollowTraining, Mode=TwoWay}"
                                        ToolTip="학습기가 보는 그림을 가운데에도 띄웁니다. 켜 두면 학습 중에는 라벨을 못 고칩니다. 목록의 loss 숫자가 혼자 높은 그림이 다시 찍을 그림입니다." />
+                        <!-- 한 앱은 카드 하나만 쓴다. 두 장을 다 쓰려면 앱과 하네스(gpu 인자)에 나눠 준다. -->
+                        <TextBlock Margin="14,0,4,0"
+                                   VerticalAlignment="Center"
+                                   Text="GPU" />
+                        <dxe:ComboBoxEdit Width="230"
+                                          IsTextEditable="False"
+                                          ItemsSource="{Binding GpuOptions}"
+                                          SelectedItem="{Binding SelectedGpuOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="이 앱이 쓸 그래픽카드. 바꾸면 다시 실행해야 적용됩니다. 두 장을 다 쓰려면 앱은 한 장, 하네스(--train-check --gpu=)는 다른 장으로 나눕니다." />
+                        <TextBlock Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="#BF6A02"
+                                   Text="{Binding GpuNotice}" />
                     </StackPanel>
                     <dxe:ProgressBarEdit Grid.Column="1"
                                          Height="18"
