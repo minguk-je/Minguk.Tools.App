@@ -8,6 +8,7 @@ using DevExpress.Mvvm;
 using Minguk.Tools.Capture;
 using Minguk.Tools.Markup;
 using Minguk.Tools.Vision.Inference;
+using Minguk.Tools.Vision.Perception;
 
 namespace Minguk.Tools.ViewModels;
 
@@ -64,6 +65,14 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// <summary>가장 자신 있는 몹을 누른다.</summary>
     public DelegateCommand ClickDetectionCommand { get; private set; }
 
+    /// <summary>인식 허브. 찾은 것과 프레임을 여기 올려 두면 스크립트가 읽어 간다.</summary>
+    protected IPerceptionHub Hub { get; } = PerceptionHubFactory.Default;
+
+    /// <summary>잡고 있는지·찾고 있는지·무엇을 잡는지를 허브에 알린다. 시작·중지·몹 찾기 토글 때.</summary>
+    protected void PublishPerceptionState() => Hub.PublishState(IsRunning, IsMobDetectionOn, SelectedTarget);
+
+    protected override void OnRunningStateChanged() => PublishPerceptionState();
+
     protected RecognizingCaptureViewModelBase()
     {
         ClickDetectionCommand = new DelegateCommand(DoClickDetection, () => Detections.Count > 0, false);
@@ -114,6 +123,9 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
 
     protected override void ReleaseResources()
     {
+        // 눈을 감는다. 스크립트가 옛 결과를 읽지 않게.
+        Hub.PublishState(false, false, null);
+
         ReleaseOcr();
 
         // 모델은 68MB 를 물고 있고 libtorch 는 GPU 메모리를 잡는다. 화면을 닫으면 놓는다.

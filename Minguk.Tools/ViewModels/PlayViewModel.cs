@@ -46,6 +46,9 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
     public ScriptPlayer Player { get; }
 
+    /// <summary>실시간 실행에 필요한 것들 - 출력 칸, 비상 정지, API 에 빌려 줄 것.</summary>
+    public LiveScriptSession Live { get; }
+
     /// <summary>스크립트 폴더의 파일들.</summary>
     public ObservableCollection<ScriptFileItem> Scripts { get; } = [];
 
@@ -71,8 +74,18 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         {
             GetSetting = (key, fallback) => GetSetting(key, fallback),
             SetSetting = (key, value) => SetSetting(key, value),
-            OnUi = RunOnUi
+            OnUi = RunOnUi,
+            IsLive = true
         });
+
+        Live = new LiveScriptSession(
+            () => _inputRouter is null ? null : new InputService(_inputRouter.InputAdapter),
+            () => _inputRouter?.InputAdapter.RequiresForegroundTarget ?? true,
+            () => SelectedTarget,
+            OcrEngineForScripts,
+            ActivateTargetAsync,
+            RunOnUi,
+            message => RunOnUi(() => StatusText = message));
 
         Player = new ScriptPlayer(ResolveRun);
 
@@ -108,9 +121,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
             return null;
         }
 
-        if (_inputRouter is null) return null;
-
-        return new ScriptRunContext(Script.Plan, new InputService(_inputRouter.InputAdapter), ActivateTargetAsync);
+        return Live.Resolve(Script, Player);
     }
 
     private async Task ActivateTargetAsync()
@@ -255,6 +266,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
     protected override void ReleaseResources()
     {
         Player.Stop();
+        Live.Dispose();
 
         // 놓아 주지 않으면 앱이 살아 있는 동안 그 키가 잠긴 채로 남는다.
         _playHotkeys?.Dispose();

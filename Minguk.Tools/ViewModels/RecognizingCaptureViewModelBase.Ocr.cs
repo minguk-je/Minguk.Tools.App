@@ -152,6 +152,9 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     private readonly object _ocrGate = new();
 
+    /// <summary>스크립트의 읽기()가 쓸 엔진. 없으면 null - 스크립트가 그 이유를 말한다.</summary>
+    protected IOcrEngine? OcrEngineForScripts() => EnsureOcrEngine(out _) ? _ocr : null;
+
     /// <summary>
     /// OCR 엔진을 한 번만 만든다. 영역 읽기와 이름표 읽기가 같이 쓴다.
     /// </summary>

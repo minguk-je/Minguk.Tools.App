@@ -541,7 +541,7 @@ internal static class ViewSmokeProbe
 
         try
         {
-            var names = Minguk.Tools.Input.Scripting.ScriptApiCatalog.AllNames;
+            var names = Minguk.Tools.Input.Scripting.ScriptApiCatalog.LiveNames;
             var unique = names.Distinct().Count() == names.Count;
             Console.WriteLine($"[{(unique ? "PASS" : "FAIL")}] API 표 이름이 겹치지 않는다 — {names.Count}개");
             if (!unique) failures++;
@@ -553,8 +553,9 @@ internal static class ViewSmokeProbe
             if (!ok) failures++;
 
             // 자바스크립트로 표의 이름을 전부 불러 본다. 인자가 필요한 것은 안전한 값을 넣는다.
+            // 계획 모드 엔진이므로 계획 모드에 있는 것만 - 실시간 전용은 --vision 의 실시간 검사가 본다.
             using var js = new Minguk.Tools.Input.Scripting.JavaScriptEngine();
-            var calls = string.Join("\n", Minguk.Tools.Input.Scripting.ScriptApiCatalog.Entries.SelectMany(e => new[] { e.Name, e.Korean }.Select(n =>
+            var calls = string.Join("\n", Minguk.Tools.Input.Scripting.ScriptApiCatalog.Entries.Where(e => e.Mode == Minguk.Tools.Input.Scripting.ScriptApiMode.Both).SelectMany(e => new[] { e.Name, e.Korean }.Select(n =>
                 e.Parameters switch
                 {
                     "" => $"{n}();",

@@ -11,19 +11,35 @@ using Minguk.Tools.Input.Sequencing;
 namespace Minguk.Tools.ViewModels;
 
 /// <summary>
-/// 한 번 돌릴 때 필요한 것. 계획, 보낼 경로, 그리고 보내기 직전에 할 일(대상 창을 앞으로).
+/// 한 번 돌릴 때 필요한 것. 한 바퀴를 어떻게 도는지, 그리고 보내기 직전에 할 일(대상 창을 앞으로).
 /// </summary>
-public sealed record ScriptRunContext(SequencePlan Plan, InputService Service, Func<Task>? BeforeRun = null);
+/// <param name="RunOnce">한 바퀴. 끝까지 돌았으면 true, 멈췄거나 틀렸으면 false. 진행은 progress 로.</param>
+/// <param name="BeforeRun">시작 전 대기가 끝난 뒤, 첫 바퀴 전에 한 번.</param>
+public sealed record ScriptRunContext(
+    Func<IProgress<string>, CancellationToken, Task<bool>> RunOnce,
+    Func<Task>? BeforeRun = null)
+{
+    /// <summary>계획 모드 - 계획을 단계로 굳혀 차례로 보낸다. 입력 자동화 화면이 하던 것.</summary>
+    public static ScriptRunContext ForPlan(SequencePlan plan, InputService service, int holdTimeMs, int intervalMs, Func<Task>? beforeRun = null)
+    {
+        // 시작할 때 한 번 굳혀 두므로, 도는 도중에 글을 고쳐도 그 바퀴에는 영향이 없다.
+        var steps = plan.Build(service, holdTimeMs).Steps;
+
+        return new ScriptRunContext(
+            (progress, token) => SequenceRunner.RunOnceAsync(steps, intervalMs, progress, service.Jitter, token),
+            beforeRun);
+    }
+}
 
 /// <summary>
-/// 계획을 실제 입력으로 돌리는 것 - 시작 전 대기, 한 바퀴/반복, 중지, 진행 표시.
+/// 스크립트를 실제로 돌리는 것 - 시작 전 대기, 한 바퀴/반복, 중지, 진행 표시, 실행 시간 상한.
 /// </summary>
 /// <remarks>
-/// 입력 자동화 화면의 실행부를 떼어 온 것이다. 편집 화면(한 번씩 돌려 보기)과 플레이 화면(반복)이
-/// 같은 것을 써야 "편집에서는 되는데 플레이에서는 안 되는" 일이 없다.
+/// 편집 화면(한 번씩 돌려 보기)과 플레이 화면(반복)이 같은 것을 써야 "편집에서는 되는데 플레이에서는
+/// 안 되는" 일이 없다. 한 바퀴를 어떻게 도는지는 <see cref="ScriptRunContext"/> 가 정한다 - 계획 모드는
+/// 단계를 차례로 보내고, 실시간 모드는 엔진이 스크립트를 끝까지 돌린다.
 ///
-/// 무엇을 돌릴지는 <see cref="ScriptRunContext"/> 를 돌려주는 함수가 정한다. 돌릴 수 없으면(틀린 줄,
-/// 빈 계획) 그 함수가 이유를 알리고 null 을 준다 - 여기서는 조용히 안 돈다.
+/// 돌릴 수 없으면(틀린 줄, 빈 계획) 문맥을 주는 함수가 이유를 알리고 null 을 준다 - 여기서는 조용히 안 돈다.
 ///
 /// 전송은 스레드풀로 넘긴다(Task.Run). UI 스레드에서 시작되므로 그냥 두면 await 들이 UI 컨텍스트를
 /// 잡아 전송 전체가 UI 에서 돈다. 대기와 횟수 세기는 UI 에 남긴다 - 화면에 바로 비치는 것들이다.
@@ -76,7 +92,7 @@ public sealed class ScriptPlayer : ViewModelBase
     /// <summary>키·버튼을 누르고 있는 시간.</summary>
     public int HoldTimeMs { get => GetProperty(() => HoldTimeMs); set => SetProperty(() => HoldTimeMs, value); }
 
-    /// <summary>단계 사이 대기.</summary>
+    /// <summary>단계 사이 대기(계획 모드).</summary>
     public int IntervalMs { get => GetProperty(() => IntervalMs); set => SetProperty(() => IntervalMs, value); }
 
     /// <summary>대기 시간에 얹을 무작위 편차(±ms). 0 이면 편차 없음.</summary>
@@ -88,6 +104,9 @@ public sealed class ScriptPlayer : ViewModelBase
     /// <summary>반복 최대 횟수. 0 이면 중지할 때까지.</summary>
     public int MaxLoops { get => GetProperty(() => MaxLoops); set => SetProperty(() => MaxLoops, value); }
 
+    /// <summary>한 번 실행이 이보다 오래 돌면 멈춘다(초). 0 이면 상한 없음. 끝나지 않는 반복문의 안전장치.</summary>
+    public int RunTimeLimitSeconds { get => GetProperty(() => RunTimeLimitSeconds); set => SetProperty(() => RunTimeLimitSeconds, value); }
+
     /// <summary>타이밍 설정을 되살린다. 화면의 RestoreSettings 에서 부른다.</summary>
     public void Restore(Func<string, int, int> get)
     {
@@ -97,6 +116,7 @@ public sealed class ScriptPlayer : ViewModelBase
         // 손으로 대상 창을 앞으로 가져오려면 3초는 빠듯하다.
         StartDelaySeconds = get(nameof(StartDelaySeconds), 5);
         MaxLoops = get(nameof(MaxLoops), 0);
+        RunTimeLimitSeconds = get(nameof(RunTimeLimitSeconds), 600);
     }
 
     public void Save(Action<string, int> set)
@@ -106,6 +126,7 @@ public sealed class ScriptPlayer : ViewModelBase
         set(nameof(JitterMs), JitterMs);
         set(nameof(StartDelaySeconds), StartDelaySeconds);
         set(nameof(MaxLoops), MaxLoops);
+        set(nameof(RunTimeLimitSeconds), RunTimeLimitSeconds);
     }
 
     // ── 실행 ─────────────────────────────────────────────────────────────
@@ -134,19 +155,10 @@ public sealed class ScriptPlayer : ViewModelBase
         var context = _resolve();
         if (context is null) return;
 
-        context.Service.JitterMs = JitterMs;
-
-        // 시작할 때 한 번 굳혀 두므로, 도는 도중에 글을 고쳐도 그 바퀴에는 영향이 없다.
-        var steps = context.Plan.Build(context.Service, HoldTimeMs).Steps;
-
-        if (steps.Count == 0)
-        {
-            MessengerUtility.SendMainMessage("보낼 것이 하나도 적혀 있지 않습니다.");
-            return;
-        }
-
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
+
+        if (RunTimeLimitSeconds > 0) _cts.CancelAfter(TimeSpan.FromSeconds(RunTimeLimitSeconds));
 
         IsRunning = true;
         LoopCount = 0;
@@ -154,16 +166,13 @@ public sealed class ScriptPlayer : ViewModelBase
         // Progress<T> 는 만든 스레드(여기서는 UI)로 보고를 넘겨 준다.
         var progress = new Progress<string>(symbol => CurrentStep = symbol);
 
-        _ = RunAsync(context, steps, loop, progress, _cts.Token);
+        _ = RunAsync(context, loop, progress, _cts.Token);
     }
 
-    private async Task RunAsync(
-        ScriptRunContext context,
-        System.Collections.Generic.IReadOnlyList<InputStep> steps,
-        bool loop,
-        IProgress<string> progress,
-        CancellationToken token)
+    private async Task RunAsync(ScriptRunContext context, bool loop, IProgress<string> progress, CancellationToken token)
     {
+        var failed = false;
+
         try
         {
             if (!await CountDownAsync(token)) return;
@@ -173,9 +182,8 @@ public sealed class ScriptPlayer : ViewModelBase
             do
             {
                 // 취소 토큰은 Task.Run 에 넘기지 않는다. 시작 전에 이미 취소돼 있으면 그 오버로드는
-                // 예외를 던지는데 여기서는 취소가 정상 경로다. 러너가 토큰을 직접 보고 조용히 멈춘다.
-                var finished = await Task.Run(
-                    () => SequenceRunner.RunOnceAsync(steps, IntervalMs, progress, context.Service.Jitter, token));
+                // 예외를 던지는데 여기서는 취소가 정상 경로다. 한 바퀴가 토큰을 직접 보고 조용히 멈춘다.
+                var finished = await Task.Run(() => context.RunOnce(progress, token));
 
                 if (!finished) break;
 
@@ -187,11 +195,15 @@ public sealed class ScriptPlayer : ViewModelBase
         {
             NLog.LogManager.GetCurrentClassLogger().Error(ex, "스크립트를 돌리다 멈췄다");
             CurrentStep = $"실패: {ex.Message}";
+            failed = true;
         }
         finally
         {
             IsRunning = false;
-            CurrentStep = token.IsCancellationRequested ? "중지함" : (CurrentStep?.StartsWith("실패") == true ? CurrentStep : "끝남");
+
+            if (!failed && CurrentStep?.StartsWith("실패") != true)
+                CurrentStep = token.IsCancellationRequested ? "중지함" : "끝남";
+
             MessengerUtility.SendMainMessage($"스크립트를 마쳤습니다. ({LoopCount}회)");
         }
     }

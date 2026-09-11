@@ -36,6 +36,9 @@ public sealed class ScriptWorkbenchHost
     public Func<IOpenFileDialogService?>? OpenDialog { get; init; }
 
     public Func<ISaveFileDialogService?>? SaveDialog { get; init; }
+
+    /// <summary>실시간 모드인가. 그러면 검사만 하고(돌리면 입력이 나간다) 계획은 만들지 않는다.</summary>
+    public bool IsLive { get; init; }
 }
 
 /// <summary>
@@ -127,6 +130,12 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
 
     /// <summary>이 언어의 본보기 글.</summary>
     public string SampleSource => EnsureEngine().SampleSource;
+
+    /// <summary>지금 언어의 엔진. 실시간 실행은 이것으로 돌린다.</summary>
+    public IScriptEngine Engine => EnsureEngine();
+
+    /// <summary>실시간 모드인가.</summary>
+    public bool IsLive => _host.IsLive;
 
     // ── 글과 파일 ────────────────────────────────────────────────────────
 
@@ -414,7 +423,19 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
 
         try
         {
-            var (plan, errors) = await engine.RunAsync(source, token);
+            SequencePlan plan;
+            IReadOnlyList<ScriptError> errors;
+
+            if (_host.IsLive)
+            {
+                // 실시간 모드는 검사만. 돌리면 입력이 나간다.
+                errors = await engine.CheckLiveAsync(source, token);
+                plan = new SequencePlan();
+            }
+            else
+            {
+                (plan, errors) = await engine.RunAsync(source, token);
+            }
 
             if (token.IsCancellationRequested) return;
 

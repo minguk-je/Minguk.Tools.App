@@ -1,10 +1,13 @@
-using System;
+﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Jint;
 using Jint.Runtime;
 using Minguk.Tools.Input.Sequencing;
+
+using Minguk.Tools.Input.Scripting.Live;
 
 namespace Minguk.Tools.Input.Scripting;
 
@@ -57,6 +60,84 @@ public sealed class JavaScriptEngine : IScriptEngine
             return Task.FromResult<(SequencePlan, IReadOnlyList<ScriptError>)>((new SequencePlan(), []));
 
         return Task.Run(() => Execute(text, token), token);
+    }
+
+    // ── 실시간 모드 ─────────────────────────────────────────────────────
+
+    public Task<IReadOnlyList<ScriptError>> CheckLiveAsync(string? source, CancellationToken token = default)
+    {
+        var text = source ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text)) return Task.FromResult<IReadOnlyList<ScriptError>>([]);
+
+        // 파싱만 한다. 문법 오류는 여기서 줄 번호와 함께 나온다.
+        return Task.Run(() =>
+        {
+            try
+            {
+                Engine.PrepareScript(text);
+                return (IReadOnlyList<ScriptError>)[];
+            }
+            catch (Exception ex)
+            {
+                return [new ScriptError(LineOf(ex), ex.Message)];
+            }
+        }, token);
+    }
+
+    public Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, CancellationToken token = default)
+    {
+        var text = source ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text)) return Task.FromResult<IReadOnlyList<ScriptError>>([]);
+
+        return Task.Run(() => ExecuteLive(text, api, token));
+    }
+
+    /// <summary>
+    /// 실시간으로 돌린다. 시간 상한이 없다 - 게임을 보며 도는 스크립트는 사용자가 멈출 때까지 돈다.
+    /// 멈추는 것은 토큰(중지·F9·시간 상한)이다.
+    /// </summary>
+    private static IReadOnlyList<ScriptError> ExecuteLive(string source, LiveScriptApi api, CancellationToken token)
+    {
+        var engine = new Engine(options => options
+            .LimitRecursion(64)
+            .CancellationToken(token));
+
+        try
+        {
+            engine.SetValue("api", api);
+            engine.SetValue("MouseButton", new
+            {
+                Left = (int)MouseButton.Left,
+                Right = (int)MouseButton.Right,
+                Middle = (int)MouseButton.Middle
+            });
+
+            // 표의 이름마다 api 를 감싸는 함수를 만든다. 대리자를 하나씩 적지 않아도 되고, 인자는 그대로 넘어간다.
+            engine.Execute(string.Join("\n",
+                ScriptApiCatalog.LiveNames.Select(n => $"function {n}() {{ return api.{n}.apply(api, arguments); }}")));
+
+            engine.Execute(source);
+
+            return [];
+        }
+        catch (Exception) when (api.Outcome == LiveScriptOutcome.Stopped || token.IsCancellationRequested)
+        {
+            return [];
+        }
+        catch (Exception) when (api.Outcome == LiveScriptOutcome.Guarded)
+        {
+            return [new ScriptError(0, api.GuardMessage ?? "안전장치가 막았습니다.")];
+        }
+        catch (JavaScriptException ex)
+        {
+            return [new ScriptError(ex.Location.Start.Line, ex.Message)];
+        }
+        catch (Exception ex)
+        {
+            return [new ScriptError(LineOf(ex), ex.Message)];
+        }
     }
 
     private static (SequencePlan, IReadOnlyList<ScriptError>) Execute(string source, CancellationToken token)
@@ -158,6 +239,11 @@ public sealed class JavaScriptEngine : IScriptEngine
     private static int LineOf(Exception ex)
     {
         var message = ex.Message ?? string.Empty;
+
+        // 파서는 "(<anonymous>:2:10)" 처럼 줄:칸 을 붙인다. 판마다 문구가 바뀌어 왔으므로 둘 다 본다.
+        var position = System.Text.RegularExpressions.Regex.Match(message, @":(\d+):\d+\)");
+        if (position.Success && int.TryParse(position.Groups[1].Value, out var parsed)) return parsed;
+
         var marker = message.IndexOf("line ", StringComparison.OrdinalIgnoreCase);
 
         if (marker < 0) return 0;

@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Minguk.Tools.Input.Sequencing;
 using Python.Runtime;
 
+using Minguk.Tools.Input.Scripting.Live;
+
 namespace Minguk.Tools.Input.Scripting;
 
 /// <summary>
@@ -123,6 +125,101 @@ public sealed class PythonScriptEngine : IScriptEngine
         return await Task.Run(() => Execute(text, api), token);
     }
 
+    // ── 실시간 모드 ─────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<ScriptError>> CheckLiveAsync(string? source, CancellationToken token = default)
+    {
+        var text = source ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text)) return [];
+
+        if (!_started)
+        {
+            await PrepareAsync(null, token);
+
+            if (!_started) return [new ScriptError(0, _startFailure ?? "파이썬이 준비되지 않았습니다.")];
+        }
+
+        // 컴파일만 한다. 문법 오류는 여기서 줄 번호와 함께 나온다. 이름이 없는 것(NameError)은 돌려야 알지만
+        // 실시간 모드는 돌리면 입력이 나가므로 거기까지는 안 본다.
+        return await Task.Run(() =>
+        {
+            try
+            {
+                using (Py.GIL())
+                {
+                    using var compiled = PythonEngine.Compile(text, "script.py", RunFlagType.File);
+                }
+
+                return (IReadOnlyList<ScriptError>)[];
+            }
+            catch (PythonException ex)
+            {
+                return [new ScriptError(LineOf(ex), Describe(ex))];
+            }
+        }, token);
+    }
+
+    public async Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, CancellationToken token = default)
+    {
+        var text = source ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text)) return [];
+
+        if (!_started)
+        {
+            await PrepareAsync(null, token);
+
+            if (!_started) return [new ScriptError(0, _startFailure ?? "파이썬이 준비되지 않았습니다.")];
+        }
+
+        return await Task.Run(() => ExecuteLive(text, api, token));
+    }
+
+    private static IReadOnlyList<ScriptError> ExecuteLive(string source, LiveScriptApi api, CancellationToken token)
+    {
+        try
+        {
+            using (Py.GIL())
+            {
+                using var scope = Py.CreateScope();
+
+                BindLive(scope, api);
+                scope.Exec(source);
+            }
+
+            return [];
+        }
+        catch (Exception) when (api.Outcome == LiveScriptOutcome.Stopped || token.IsCancellationRequested)
+        {
+            // .NET 쪽 취소 예외는 파이썬을 거쳐 PythonException 으로 온다. 결과로 가른다.
+            return [];
+        }
+        catch (Exception) when (api.Outcome == LiveScriptOutcome.Guarded)
+        {
+            return [new ScriptError(0, api.GuardMessage ?? "안전장치가 막았습니다.")];
+        }
+        catch (PythonException ex)
+        {
+            return [new ScriptError(LineOf(ex), Describe(ex))];
+        }
+        catch (Exception ex)
+        {
+            return [new ScriptError(0, $"스크립트가 도는 중에 멈췄습니다: {ex.Message}")];
+        }
+    }
+
+    /// <summary>실시간 API 를 심는다. 이름은 표(LiveNames)에서. 파이썬은 속성으로 메서드를 집으므로 대리자가 필요 없다.</summary>
+    private static void BindLive(PyModule scope, LiveScriptApi api)
+    {
+        scope.Set("api", api.ToPython());
+
+        foreach (var name in ScriptApiCatalog.LiveNames)
+            scope.Exec($"{name} = api.{name}");
+
+        BindMouseButton(scope);
+    }
+
     private static (SequencePlan, IReadOnlyList<ScriptError>) Execute(string source, SequenceScriptApi api)
     {
         try
@@ -162,9 +259,15 @@ public sealed class PythonScriptEngine : IScriptEngine
     {
         scope.Set("api", api.ToPython());
 
-        foreach (var name in ScriptApiCatalog.AllNames)
+        foreach (var name in ScriptApiCatalog.PlanNames)
             scope.Exec($"{name} = api.{name}");
 
+        BindMouseButton(scope);
+    }
+
+    /// <summary>MouseButton.Right 처럼 쓸 수 있게 한다. 계획·실시간 모드가 같이 쓴다.</summary>
+    private static void BindMouseButton(PyModule scope)
+    {
         // MouseButton.Right 처럼 쓸 수 있게 한다.
         //
         // typeof(MouseButton).ToPython() 은 안 된다 - 파이썬 쪽에서 RuntimeType 으로 보여

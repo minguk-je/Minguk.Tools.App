@@ -166,6 +166,7 @@
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding Player.RunOnceCommand}"
                                Content="1회 실행 (F5)"
+                               ToolTip="시작 대기 뒤 게임 창을 앞으로 가져와 스크립트를 실시간으로 돌린다. 도는 동안 F9 가 비상 정지다."
                                Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}" />
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding Player.StartLoopCommand}"
@@ -207,6 +208,18 @@
                       EditValue="{Binding StatusText, Mode=OneWay}"
                       IsReadOnly="True"
                       ShowBorder="False" />
+
+        <!-- 출력() 이 적는 줄. 게임을 보는 동안 무슨 일이 있었는지 돌아와서 본다. -->
+        <dxe:TextEdit MaxHeight="120"
+                      Margin="4,0,4,4"
+                      AcceptsReturn="True"
+                      DockPanel.Dock="Bottom"
+                      EditValue="{Binding Live.Console.Text, Mode=OneWay}"
+                      FontFamily="D2Coding, Consolas, Courier New"
+                      IsReadOnly="True"
+                      TextWrapping="Wrap"
+                      VerticalContentAlignment="Top"
+                      VerticalScrollBarVisibility="Auto" />
 
         <!-- 고른 스크립트에 틀린 줄이 있으면 여기 뜬다. 고치는 것은 편집 화면에서. -->
         <dxe:TextEdit MaxHeight="80"

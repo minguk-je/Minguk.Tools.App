@@ -308,6 +308,35 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
 - 투명 바탕의 Pbgra32 는 색이 알파로 곱해져 있다. 1.2px 선은 가장자리가 반투명이라 색을 그대로 견주면
   못 찾는다 - 알파로 되돌린 뒤 "붉은가" 만 본다.
 
+### 실시간 모드 (편집·플레이 화면)
+
+편집·플레이 화면의 스크립트는 **실시간 모드**로 돈다 - 부르면 곧바로 나가고, 화면을 읽을 수 있다.
+입력 자동화 화면은 계획 모드(적어 두었다 나중에 보냄) 그대로다. 두 모드는 같은 이름을 쓴다(`ScriptApiCatalog`).
+
+- **실체는 둘**: 계획 `SequenceScriptApi`, 실시간 `Input/Scripting/Live/LiveScriptApi`. 표(`ScriptApiCatalog`)의
+  `Mode` 가 어느 쪽에 있는지 말하고, `--vision` 이 리플렉션으로 두 클래스에 표의 이름이 다 있는지 센다.
+  실시간 전용: 몹들·가장가까운몹·몹기다리기·읽기·숫자읽기·키·누르기·떼기·중지되었나·출력·보기·끝.
+- **엔진마다 두 길**: `RunAsync`(계획: 돌려서 계획을 받음) 와 `CheckLiveAsync`(실시간: 컴파일·문법만) ·
+  `RunLiveAsync`(실시간: 끝까지 돌림). 실시간 검사는 돌리면 입력이 나가므로 부작용이 없어야 한다.
+  C# 은 전역 타입이 다르므로 캐시도 따로. 파이썬은 `name = api.name` 으로, 자바스크립트는
+  `function name(){ return api.name.apply(api, arguments); }` 로 표의 이름을 심는다 - 대리자를 하나씩 안 적는다.
+- **끝난 이유는 `LiveScriptApi.Outcome`** 으로 가른다. 중지·F9·끝() 은 오류가 아니라 빈 목록, 안전장치가 막은
+  것은 `GuardMessage`, 그 밖은 스크립트 오류. 예외 타입으로 가르면 안 된다 - 파이썬을 거치면 전부
+  PythonException 이 된다.
+- **안전장치는 전부 `LiveScriptApi` 안에**: 대상 창이 앞에 없으면 입력을 보내지 않고 멈춤(SendInput·Interception 만),
+  초당 입력 상한 30(넘으면 기다림), 모든 호출이 중지 토큰을 봄(`쉬기()` 도 토큰으로 기다린다), 눈이 없으면
+  `몹들()` 은 빈 목록이 아니라 멈추고 이유를 말함. 실행 시간 상한은 `ScriptPlayer.RunTimeLimitSeconds`(기본 600).
+- **비상 정지 F9** 는 `EmergencyStop` 이 스크립트가 도는 동안만 쥔다. 누르면 중지 + 누르고 있던 키 전부 뗌.
+  늘 쥐면 다른 화면·프로그램의 F9 를 빼앗는다.
+- **인식 허브 `Vision/Perception/IPerceptionHub`**: 인식 베이스가 상태(잡는 중·찾는 중·대상)·검출·이름표를
+  올리고, 스크립트가 읽는다. 프레임 픽셀은 `WantsFrames` 일 때만(읽기() 를 부른 뒤) 0.25초마다 복사해 올린다.
+  앱에 하나(`PerceptionHubFactory.Default`), 하네스는 가짜 허브를 꽂는다.
+- 몹 자리는 **화면 픽셀**로 준다(`ScriptMob`). 비율↔픽셀은 부르는 순간의 대상 창 자리로 API 가 바꾼다.
+- `LiveScriptSession`(ViewModels) 이 화면 둘이 같이 쓰는 묶음 - 출력 칸(`ScriptConsole`), F9, API 에 빌려 줄 것.
+  `ScriptPlayer` 는 한 바퀴를 `ScriptRunContext.RunOnce` 대리자로 받아 계획·실시간을 가리지 않는다.
+- 검증: `--vision` 의 실시간 검사는 **가짜 어댑터**(누른 것을 적기만)와 가짜 허브로 돈다. 입력은 절대 실제로 안 나간다.
+  MoveTo 는 부드럽게 여러 걸음이라 "마지막 걸음이 몹 자리" 로 본다.
+
 ## 몹 검출 (이미지 캡처 → 라벨링 → 학습 → 추론)
 
 화면에서 몹을 **찾는** 것이 목표다(사각형 + 이름). 무슨 몹인지만 맞히는 분류가 아니다 -

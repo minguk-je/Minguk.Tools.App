@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Minguk.Tools.Input.Korean;
 
@@ -42,6 +42,9 @@ public sealed class InputService
     public bool SupportsHangulToggle => SupportsTyping || _adapter is IImeControl;
 
     public string AdapterName => _adapter.Name;
+
+    /// <summary>보내는 경로 그 자체. 실시간 스크립트가 키를 누른 채로 두거나 뗄 때 직접 쓴다.</summary>
+    public IInputAdapter Adapter => _adapter;
 
     // ─────────────────────────── 대기 시간 ───────────────────────────
 

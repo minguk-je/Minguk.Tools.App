@@ -1,8 +1,7 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
 using DevExpress.Mvvm.POCO;
 
-using Minguk.Base.Utilities;
 using Minguk.Image;
 using Minguk.Tools.Input;
 
@@ -29,6 +28,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>돌리는 것. 한 번 · 반복 · 중지 · 진행.</summary>
     public ScriptPlayer Player { get; }
 
+    /// <summary>실시간 실행에 필요한 것들 - 출력 칸, 비상 정지, API 에 빌려 줄 것.</summary>
+    public LiveScriptSession Live { get; }
+
     public ScriptStudioViewModel()
     {
         Caption = "편집";
@@ -40,10 +42,20 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             SetSetting = (key, value) => SetSetting(key, value),
             OnUi = RunOnUi,
             OpenDialog = () => OpenFileDialogService,
-            SaveDialog = () => SaveFileDialogService
+            SaveDialog = () => SaveFileDialogService,
+            IsLive = true
         });
 
-        Player = new ScriptPlayer(ResolveRun);
+        Live = new LiveScriptSession(
+            () => _inputRouter is null ? null : new InputService(_inputRouter.InputAdapter),
+            () => _inputRouter?.InputAdapter.RequiresForegroundTarget ?? true,
+            () => SelectedTarget,
+            OcrEngineForScripts,
+            ActivateTargetAsync,
+            RunOnUi,
+            message => RunOnUi(() => StatusText = message));
+
+        Player = new ScriptPlayer(() => Live.Resolve(Script, Player));
 
         // 도는 동안 글을 잠근다. 도중에 바뀌면 무엇이 나갔는지 알 수 없다.
         Player.RunningChanged += (_, _) => Script.IsLocked = Player.IsRunning;
@@ -56,24 +68,6 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         if (dispatcher is null || dispatcher.CheckAccess()) action();
         else dispatcher.BeginInvoke(action);
-    }
-
-    /// <summary>
-    /// 돌릴 것을 모은다. 틀린 줄이 있으면 안 돌린다 - 반쪽짜리가 나가는 것보다 안 나가는 것이 낫다.
-    /// </summary>
-    private ScriptRunContext? ResolveRun()
-    {
-        if (Script.HasError)
-        {
-            MessengerUtility.SendMainMessage("스크립트에 고칠 줄이 있습니다.");
-            return null;
-        }
-
-        if (_inputRouter is null) return null;
-
-        var service = new InputService(_inputRouter.InputAdapter);
-
-        return new ScriptRunContext(Script.Plan, service, ActivateTargetAsync);
     }
 
     /// <summary>보내기 직전에 대상 창을 앞으로. 끌어올렸으면 포그라운드 전환이 반영될 때까지 잠깐 기다린다.</summary>
@@ -112,6 +106,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     protected override void ReleaseResources()
     {
         Player.Stop();
+        Live.Dispose();
         Script.Dispose();
 
         base.ReleaseResources();

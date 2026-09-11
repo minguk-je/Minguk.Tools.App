@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -47,6 +47,24 @@ public interface IScriptEngine : IDisposable
     /// </remarks>
     Task<(SequencePlan Plan, IReadOnlyList<ScriptError> Errors)> RunAsync(
         string? source, CancellationToken token = default);
+
+    /// <summary>
+    /// 실시간 모드로 돌릴 수 있는 글인지만 본다(컴파일·문법). 돌리지는 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 계획 모드는 "돌려서 계획을 받는 것" 이 곧 검사지만, 실시간 모드는 돌리면 입력이 나간다.
+    /// 타이핑이 멎을 때마다 부르는 것이라 부작용이 없어야 한다.
+    /// </remarks>
+    Task<IReadOnlyList<ScriptError>> CheckLiveAsync(string? source, CancellationToken token = default);
+
+    /// <summary>
+    /// 실시간 모드로 돌린다. 스크립트가 <paramref name="api"/> 를 부르면 <b>곧바로 나간다</b>. 끝날 때까지 돌아온다.
+    /// </summary>
+    /// <remarks>
+    /// 중지·F9·<c>끝()</c> 으로 멈춘 것은 오류가 아니라 빈 목록이다. 안전장치가 막은 것과 스크립트가
+    /// 터진 것은 오류로 온다. 어느 쪽인지는 <see cref="Live.LiveScriptApi.Outcome"/> 을 보고 가른다.
+    /// </remarks>
+    Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, Live.LiveScriptApi api, CancellationToken token = default);
 }
 
 /// <summary>스크립트 언어.</summary>

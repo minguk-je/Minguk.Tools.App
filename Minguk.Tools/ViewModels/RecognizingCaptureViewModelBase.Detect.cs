@@ -136,7 +136,13 @@ public abstract partial class RecognizingCaptureViewModelBase
             size = FrameSnapshot.SaveScaledPng(e, _detectScratchPath, longestSide);
 
             // 이름표는 원본 해상도에서 읽어야 한다(12px 글자). 이 검출 주기의 프레임을 한 벌 복사해 둔다.
-            if (IsNameplateOcrOn) CopyFrameForNameplates(e);
+            // 스크립트가 글자를 읽고 싶어 하면(허브 WantsFrames) 그 복사본을 허브에도 올린다.
+            if (IsNameplateOcrOn || Hub.WantsFrames)
+            {
+                CopyFrameForNameplates(e);
+
+                if (Hub.WantsFrames && _frameCopy is not null) Hub.PublishFrame(_frameCopy, _frameCopyWidth, _frameCopyHeight);
+            }
         }
         catch (Exception ex)
         {
@@ -167,6 +173,9 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             // 몹마다 머리 위 이름표. 한 장 10~20ms 라 검출(수백 ms) 뒤에 이어 붙여도 표가 안 난다.
             var names = IsNameplateOcrOn ? ReadNameplates(found) : new string[found.Count];
+
+            // 스크립트가 읽어 가는 자리. 화면(Detections)은 UI 스레드 것이라 스크립트가 못 읽는다.
+            Hub.PublishDetections(found, names, size.Width, size.Height);
 
             // 화면에 닿는 것은 UI 스레드에서. 컬렉션을 캡처 스레드에서 고치면 그리는 중에 터진다.
             DispatcherService?.BeginInvoke(() => Guard(() =>
@@ -214,6 +223,8 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </remarks>
     private void OnMobDetectionChanged() => Guard(() =>
     {
+        PublishPerceptionState();
+
         if (!IsMobDetectionOn)
         {
             Detections.Clear();

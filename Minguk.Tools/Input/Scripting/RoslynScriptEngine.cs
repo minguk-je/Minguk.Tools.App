@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -8,6 +8,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using Minguk.Tools.Input.Sequencing;
+
+using Minguk.Tools.Input.Scripting.Live;
 
 namespace Minguk.Tools.Input.Scripting;
 
@@ -138,6 +140,119 @@ public sealed class RoslynScriptEngine : IScriptEngine
         return (api.ToPlan(), []);
     }
 
+    // ── 실시간 모드 ─────────────────────────────────────────────────────
+    //    전역이 SequenceScriptApi 가 아니라 LiveScriptApi 다. 캐시도 따로 - 같은 글이라도 전역 타입이 다르면 다른 어셈블리다.
+
+    private string? _liveSource;
+    private ScriptRunner<object>? _liveRunner;
+
+    public Task<IReadOnlyList<ScriptError>> CheckLiveAsync(string? source, CancellationToken token = default) => Task.Run(() =>
+    {
+        var text = source ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text)) return (IReadOnlyList<ScriptError>)[];
+
+        try
+        {
+            // 컴파일만 한다. 틀린 줄이 없으면 그 결과를 캐시에 둔다 - 곧이어 실행을 누르면 다시 컴파일하지 않게.
+            lock (_gate)
+            {
+                if (_liveRunner is not null && _liveSource == text) return (IReadOnlyList<ScriptError>)[];
+
+                var script = CSharpScript.Create(text, LiveScriptOptions, typeof(LiveScriptApi));
+                var failures = ToErrors(script.Compile());
+
+                if (failures.Count > 0) return failures;
+
+                _liveSource = text;
+                _liveRunner = script.CreateDelegate();
+                _lastUsedUtc = DateTime.UtcNow;
+                ScheduleRelease();
+
+                return (IReadOnlyList<ScriptError>)[];
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "실시간 스크립트를 컴파일하지 못했다");
+            return [new ScriptError(0, $"스크립트를 컴파일하지 못했습니다: {ex.Message}")];
+        }
+    }, token);
+
+    public async Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, CancellationToken token = default)
+    {
+        var text = source ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text)) return [];
+
+        ScriptRunner<object> runner;
+
+        try
+        {
+            runner = GetOrCompileLive(text, out var errors);
+
+            if (errors.Count > 0) return errors;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "실시간 스크립트를 컴파일하지 못했다");
+            return [new ScriptError(0, $"스크립트를 컴파일하지 못했습니다: {ex.Message}")];
+        }
+
+        try
+        {
+            await runner(api, token);
+            return [];
+        }
+        catch (Exception) when (api.Outcome == LiveScriptOutcome.Stopped || token.IsCancellationRequested)
+        {
+            // 중지·F9·끝() - 정상 종료다.
+            return [];
+        }
+        catch (Exception) when (api.Outcome == LiveScriptOutcome.Guarded)
+        {
+            return [new ScriptError(0, api.GuardMessage ?? "안전장치가 막았습니다.")];
+        }
+        catch (Exception ex)
+        {
+            return [new ScriptError(0, $"스크립트가 도는 중에 멈췄습니다: {ex.Message}")];
+        }
+    }
+
+    private ScriptRunner<object> GetOrCompileLive(string source, out IReadOnlyList<ScriptError> errors)
+    {
+        lock (_gate)
+        {
+            _lastUsedUtc = DateTime.UtcNow;
+            ScheduleRelease();
+
+            if (_liveRunner is not null && _liveSource == source)
+            {
+                errors = [];
+                return _liveRunner;
+            }
+
+            var watch = Stopwatch.StartNew();
+
+            var script = CSharpScript.Create(source, LiveScriptOptions, typeof(LiveScriptApi));
+            var failures = ToErrors(script.Compile());
+
+            if (failures.Count > 0)
+            {
+                errors = failures;
+                return _liveRunner ?? throw new InvalidOperationException("컴파일 실패");
+            }
+
+            _liveSource = source;
+            _liveRunner = script.CreateDelegate();
+
+            Logger.Debug($"실시간 스크립트 컴파일 {watch.ElapsedMilliseconds}ms ({source.Length}자)");
+
+            errors = [];
+            return _liveRunner;
+        }
+    }
+
     private ScriptRunner<object> GetOrCompile(string source, out IReadOnlyList<ScriptError> errors)
     {
         lock (_gate)
@@ -195,6 +310,8 @@ public sealed class RoslynScriptEngine : IScriptEngine
             // 그것이 붙들고 있던 컴파일 결과다.
             _cachedRunner = null;
             _cachedSource = null;
+            _liveRunner = null;
+            _liveSource = null;
 
             Logger.Debug($"스크립트 캐시를 놓았다 ({KeepAlive.TotalMinutes:0}분 동안 안 씀)");
         }
@@ -235,6 +352,9 @@ public sealed class RoslynScriptEngine : IScriptEngine
     private static readonly ScriptOptions ScriptOptions = ScriptOptions.Default
         .WithReferences(typeof(SequenceScriptApi).Assembly)
         .WithImports("System", "Minguk.Tools.Input", "Minguk.Tools.Input.Scripting");
+
+    /// <summary>실시간 모드. 몹(ScriptMob) 같은 것을 이름만으로 쓸 수 있게 Live 네임스페이스를 더한다.</summary>
+    private static readonly ScriptOptions LiveScriptOptions = ScriptOptions.WithImports("Minguk.Tools.Input.Scripting.Live");
 
     private static IReadOnlyList<ScriptError> ToErrors(IEnumerable<Diagnostic> diagnostics)
         => [.. diagnostics

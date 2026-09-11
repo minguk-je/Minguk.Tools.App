@@ -292,6 +292,24 @@
                                   VerticalScrollBarVisibility="Auto" />
                 </dxlc:LayoutItem>
 
+                <!-- 출력() 이 적는 줄과 보기() 의 최신값. 디버그 창의 첫 조각이다. -->
+                <dxlc:LayoutItem Label="출력"
+                                 VerticalAlignment="Bottom">
+                    <dxe:TextEdit MaxHeight="120"
+                                  AcceptsReturn="True"
+                                  EditValue="{Binding Live.Console.Text, Mode=OneWay}"
+                                  FontFamily="D2Coding, Consolas, Courier New"
+                                  IsReadOnly="True"
+                                  TextWrapping="Wrap"
+                                  VerticalContentAlignment="Top"
+                                  VerticalScrollBarVisibility="Auto" />
+                </dxlc:LayoutItem>
+                <dxlc:LayoutItem Label="보기"
+                                 VerticalAlignment="Bottom">
+                    <dxe:TextEdit EditValue="{Binding Live.Console.Watches, Mode=OneWay}"
+                                  IsReadOnly="True" />
+                </dxlc:LayoutItem>
+
                 <dxlc:LayoutGroup VerticalAlignment="Bottom"
                                   Orientation="Horizontal">
                     <dx:SimpleButton Width="100"
@@ -301,7 +319,7 @@
                                      Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
                                      GlyphHeight="16"
                                      GlyphWidth="16"
-                                     ToolTip="시작 전 대기 뒤 대상 창을 앞으로 가져와 한 바퀴 보낸다. 미리보기의 입력 경로로 나간다." />
+                                     ToolTip="시작 전 대기 뒤 대상 창을 앞으로 가져와 스크립트를 실시간으로 돌린다. 부르는 것이 곧바로 나간다. 미리보기의 입력 경로로 나가고, 도는 동안 F9 가 비상 정지다." />
                     <dx:SimpleButton Width="80"
                                      Height="28"
                                      Command="{Binding Player.StopCommand}"
