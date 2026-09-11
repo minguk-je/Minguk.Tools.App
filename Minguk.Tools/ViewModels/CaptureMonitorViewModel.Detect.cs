@@ -134,6 +134,9 @@ public partial class CaptureMonitorViewModel
             var longestSide = Math.Max(DetectLongestSide, _detector?.Manifest.InputWidth ?? DetectLongestSide);
 
             size = FrameSnapshot.SaveScaledPng(e, _detectScratchPath, longestSide);
+
+            // 이름표는 원본 해상도에서 읽어야 한다(12px 글자). 이 검출 주기의 프레임을 한 벌 복사해 둔다.
+            if (IsNameplateOcrOn) CopyFrameForNameplates(e);
         }
         catch (Exception ex)
         {
@@ -162,13 +165,19 @@ public partial class CaptureMonitorViewModel
             _latestDetections = found;
             Interlocked.Exchange(ref _latestDetectionTicks, Environment.TickCount64);
 
+            // 몹마다 머리 위 이름표. 한 장 10~20ms 라 검출(수백 ms) 뒤에 이어 붙여도 표가 안 난다.
+            var names = IsNameplateOcrOn ? ReadNameplates(found) : new string[found.Count];
+
             // 화면에 닿는 것은 UI 스레드에서. 컬렉션을 캡처 스레드에서 고치면 그리는 중에 터진다.
             DispatcherService?.BeginInvoke(() => Guard(() =>
             {
                 Detections.Clear();
 
-                foreach (var detection in found)
-                    Detections.Add(new PredictedBox(detection.Box, detection.Describe));
+                for (var i = 0; i < found.Count; i++)
+                {
+                    var caption = string.IsNullOrEmpty(names[i]) ? found[i].Describe : $"{found[i].Describe} 「{names[i]}」";
+                    Detections.Add(new PredictedBox(found[i].Box, caption));
+                }
 
                 // 찾은 것이 바뀌었으니 누르기 버튼 상태도 다시 본다.
                 ClickDetectionCommand.RaiseCanExecuteChanged();
@@ -178,7 +187,7 @@ public partial class CaptureMonitorViewModel
                 DetectionStatus = found.Count == 0
                     ? $"못 찾음 ({how}{size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms)"
                     : $"{found.Count}마리 ({how}{size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms): " +
-                      string.Join(", ", found.Take(3).Select(d => d.Describe));
+                      string.Join(", ", found.Take(3).Select((d, i) => string.IsNullOrEmpty(names[i]) ? d.Describe : $"{d.Describe} 「{names[i]}」"));
             }));
         }
         catch (Exception ex)

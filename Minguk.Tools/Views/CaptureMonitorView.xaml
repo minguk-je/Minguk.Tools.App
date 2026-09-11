@@ -123,6 +123,20 @@
                               Content="글자 읽기"
                               IsChecked="{Binding IsOcrOn}"
                               ToolTip="정한 영역의 글자를 Windows 내장 OCR 로 0.5초에 한 번 읽습니다. 한글·영문·숫자. 읽은 글은 상태 줄과 미리보기에 뜹니다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="이름표 읽기"
+                              IsChecked="{Binding IsNameplateOcrOn}"
+                              ToolTip="몹 찾기가 찾은 몹마다 머리 위 글자(이름표)를 읽어 캡션에 붙입니다. 몹 찾기가 켜져 있어야 합니다." />
+            <!-- 한국어 팩은 숫자 0 을 "이" 로 읽기도 한다. 숫자·영문은 en-US, 한글은 ko. -->
+            <dxb:BarEditItem Content="언어"
+                             EditValue="{Binding SelectedOcrLanguage}"
+                             EditWidth="80"
+                             ToolTip="OCR 언어. 숫자·영문 칸은 en-US, 한글 이름표는 ko 가 정확합니다. 바꾸면 다음 읽기부터 적용됩니다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                              ItemsSource="{Binding OcrLanguages}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
             <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
 
             <!--
@@ -402,7 +416,8 @@
                             <controls:BaseTableView dependency:GridControlDependency.IsColumnAutoWidth="{Binding IsColumnAutoWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=False}"
                                                     AllowEditing="False"
                                                     IndicatorWidth="{Binding Path=(Border.ActualWidth), ElementName=GridRowNumberSizeProxy, Mode=OneWay}"
-                                                    ShowGroupPanel="False" />
+                                                    ShowGroupPanel="False"
+                                                    ShowSearchPanelMode="Never" />
                         </dxg:GridControl.View>
 
                         <!--

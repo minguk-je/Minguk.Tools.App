@@ -489,6 +489,10 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         DetectMinimumScore = GetSetting(nameof(DetectMinimumScore), 0.5);
         IsTrackingOn = GetSetting(nameof(IsTrackingOn), true);
         RestoreOcrRegion();
+        IsNameplateOcrOn = GetSetting(nameof(IsNameplateOcrOn), false);
+
+        var ocrLanguage = GetSetting(nameof(SelectedOcrLanguage), Vision.Ocr.OcrEngineFactory.PreferredLanguage);
+        SelectedOcrLanguage = OcrLanguages.Contains(ocrLanguage) ? ocrLanguage : OcrLanguages[0];
 
         // 한글을 그대로 넣으면 설정 파일에서 되읽을 때 깨진다(실측으로 "[紐⑤땲.." 로 나왔다).
         // Base64 로 감싸서 ASCII 로만 저장한다.
@@ -547,9 +551,16 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
 
         try
         {
+            // 저장된 배치에는 검색 창이 펼쳐져 있었는지(ActualShowSearchPanel)도 들어 있다. 그대로 복원하면 XAML 의
+            // ShowSearchPanelMode=Never 를 무시하고 펼친 채로 굳는다 - 모드를 다시 놓고 HideSearchPanel 을 불러도,
+            // DXSerializer.AllowProperty 로 막아도 안 됐다. 그래서 그 항목을 글에서 지우고 복원한다.
+            // 마지막 한 줄만 보는 통계 표에 검색 창은 필요 없다.
+            layout = System.Text.RegularExpressions.Regex.Replace(layout, "<property name=\"ActualShowSearchPanel\">[^<]*</property>", string.Empty);
+
             GridLayoutService.Deserialize(layout);
 
             var grid = FindControl<DevExpress.Xpf.Grid.GridControl>("GridObjectService");
+
             var widths = grid is null
                 ? "(그리드 못 잡음)"
                 : string.Join(", ", grid.Columns.Select(column =>
@@ -577,6 +588,8 @@ public partial class CaptureMonitorViewModel : DocumentViewModelBase, IDisposabl
         SetSetting(nameof(DetectMinimumScore), DetectMinimumScore);
         SetSetting(nameof(IsTrackingOn), IsTrackingOn);
         SaveOcrRegion();
+        SetSetting(nameof(IsNameplateOcrOn), IsNameplateOcrOn);
+        SetSetting(nameof(SelectedOcrLanguage), SelectedOcrLanguage ?? string.Empty);
 
         if (SelectedTarget is not null)
             SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));

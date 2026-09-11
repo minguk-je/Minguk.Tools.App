@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -12,6 +13,7 @@ using DevExpress.Mvvm;
 
 using Minguk.Tools.Capture;
 using Minguk.Tools.Capture.Input;
+using Minguk.Tools.Vision.Inference;
 using Minguk.Tools.Vision.Ocr;
 
 namespace Minguk.Tools.ViewModels;
@@ -103,17 +105,10 @@ public partial class CaptureMonitorViewModel
             return;
         }
 
-        if (_ocr is null)
+        if (!EnsureOcrEngine(out var problem))
         {
-            try
-            {
-                _ocr = OcrEngineFactory.Create();
-            }
-            catch (Exception ex)
-            {
-                TurnOffOcr(ex.Message);
-                return;
-            }
+            TurnOffOcr(problem!);
+            return;
         }
 
         // 픽셀이 CPU 로 안 내려오면 읽을 것이 없다. 검출과 같은 길.
@@ -129,6 +124,163 @@ public partial class CaptureMonitorViewModel
         IsOcrOn = false;
         OcrStatus = reason;
         StatusText = reason;
+    }
+
+    /// <summary>
+    /// 깔린 OCR 언어들. 없으면 팩터리의 기본 하나만 보여 준다.
+    /// </summary>
+    /// <remarks>
+    /// 한국어 팩은 숫자 0 을 "이" 로 읽기도 하고, 영어 팩은 한글을 못 읽는다. 읽을 것이 숫자면
+    /// en-US, 이름표면 ko 로 고른다. 한 번에 한 언어다 - 둘 다 돌려 고르는 것은 필요해지면.
+    /// </remarks>
+    public IReadOnlyList<string> OcrLanguages { get; } =
+        WindowsOcrEngine.AvailableLanguages.Count > 0 ? WindowsOcrEngine.AvailableLanguages : [OcrEngineFactory.PreferredLanguage];
+
+    /// <summary>읽을 언어. 바꾸면 엔진을 새로 만든다(다음 읽기부터).</summary>
+    public string? SelectedOcrLanguage
+    {
+        get => GetProperty(() => SelectedOcrLanguage);
+        set => SetProperty(() => SelectedOcrLanguage, value, () =>
+        {
+            // 엔진은 언어에 묶여 있다. 버리면 다음 읽기에서 새 언어로 다시 만든다.
+            lock (_ocrGate)
+            {
+                _ocr?.Dispose();
+                _ocr = null;
+            }
+
+            if (IsOcrOn || IsNameplateOcrOn) StatusText = $"OCR 언어를 {SelectedOcrLanguage} 로 바꿨습니다.";
+        });
+    }
+
+    private readonly object _ocrGate = new();
+
+    /// <summary>
+    /// OCR 엔진을 한 번만 만든다. 영역 읽기와 이름표 읽기가 같이 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// UI 스레드(토글)와 검출 스레드(이름표) 어디서든 부른다. 언어를 바꾸면 엔진을 버리므로,
+    /// 읽기 직전에 늘 여기로 확보해야 한다 - 안 그러면 설정을 되살리는 순서에 따라 이름표가
+    /// 조용히 빈 글로 나온다(실제로 그랬다).
+    /// </remarks>
+    private bool EnsureOcrEngine(out string? problem)
+    {
+        problem = null;
+
+        lock (_ocrGate)
+        {
+            if (_ocr is not null) return true;
+
+            try
+            {
+                _ocr = OcrEngineFactory.Create(SelectedOcrLanguage ?? OcrEngineFactory.PreferredLanguage);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                problem = ex.Message;
+                return false;
+            }
+        }
+    }
+
+    // ── 몹 머리 위 이름표 ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// 찾은 몹마다 머리 위 이름표를 읽어 캡션에 붙일지.
+    /// </summary>
+    /// <remarks>
+    /// 이름표 자리는 몹마다 다르니 고정 영역으로는 못 읽는다. 검출이 끝나면 사각형마다
+    /// <see cref="NameplateRegion.Above"/> 를 원본 프레임에서 잘라 읽는다. 검출은 줄인 그림으로
+    /// 하지만 글자는 12px 남짓이라 원본이 있어야 한다 - 그래서 검출 주기마다 프레임을 한 벌 복사해 둔다.
+    /// </remarks>
+    public bool IsNameplateOcrOn
+    {
+        get => GetProperty(() => IsNameplateOcrOn);
+        set => SetProperty(() => IsNameplateOcrOn, value, () =>
+        {
+            if (!IsNameplateOcrOn) return;
+
+            if (!EnsureOcrEngine(out var problem))
+            {
+                IsNameplateOcrOn = false;
+                StatusText = problem!;
+                return;
+            }
+
+            StatusText = IsMobDetectionOn
+                ? "이름표 읽기: 찾은 몹마다 머리 위 글자를 읽어 캡션에 붙입니다."
+                : "이름표 읽기는 몹 찾기가 켜져 있을 때 돕니다. 몹 찾기를 켜세요.";
+        });
+    }
+
+    /// <summary>검출 주기에 맞춰 복사해 둔 원본 프레임(Bgra32, 줄 간격 = 너비*4). 이름표를 여기서 자른다.</summary>
+    private byte[]? _frameCopy;
+    private int _frameCopyWidth;
+    private int _frameCopyHeight;
+
+    /// <summary>프레임 전체를 복사한다. 캡처 스레드. 8MB 를 0.65초에 한 번이라 부담이 없다.</summary>
+    private void CopyFrameForNameplates(CapturedFrameEventArgs e)
+    {
+        var stride = e.Width * 4;
+        var needed = stride * e.Height;
+
+        if (_frameCopy is null || _frameCopy.Length < needed) _frameCopy = new byte[needed];
+
+        for (var y = 0; y < e.Height; y++)
+            System.Runtime.InteropServices.Marshal.Copy(e.PixelData + (y * e.RowPitch), _frameCopy, y * stride, stride);
+
+        _frameCopyWidth = e.Width;
+        _frameCopyHeight = e.Height;
+    }
+
+    /// <summary>
+    /// 찾은 몹들의 이름표를 읽는다. 백그라운드(검출 스레드)에서 검출 직후에 부른다.
+    /// 못 읽은 자리는 빈 글이다. 순서는 <paramref name="found"/> 와 같다.
+    /// </summary>
+    private string[] ReadNameplates(IReadOnlyList<Detection> found)
+    {
+        var names = new string[found.Count];
+
+        if (found.Count == 0 || _frameCopy is null || _frameCopyWidth == 0) return names;
+        if (!EnsureOcrEngine(out _)) return names;
+
+        var width = _frameCopyWidth;
+        var height = _frameCopyHeight;
+        var stride = width * 4;
+
+        for (var i = 0; i < found.Count; i++)
+        {
+            try
+            {
+                var region = NameplateRegion.Above(found[i].Box);
+                if (region.IsEmpty) continue;
+
+                var left = Math.Clamp((int)Math.Floor(region.X * width), 0, width - 1);
+                var top = Math.Clamp((int)Math.Floor(region.Y * height), 0, height - 1);
+                var right = Math.Clamp((int)Math.Ceiling(region.Right * width), left + 1, width);
+                var bottom = Math.Clamp((int)Math.Ceiling(region.Bottom * height), top + 1, height);
+
+                var w = right - left;
+                var h = bottom - top;
+                var pixels = new byte[w * 4 * h];
+
+                for (var y = 0; y < h; y++)
+                    Buffer.BlockCopy(_frameCopy, ((top + y) * stride) + (left * 4), pixels, y * w * 4, w * 4);
+
+                var crop = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, w * 4);
+                crop.Freeze();
+
+                // 빨간 글자만 남겨 키운다. 그대로 넣으면 빈 글이 나온다 - NameplateInk 의 사연.
+                names[i] = _ocr.RecognizeAsync(NameplateInk.Prepare(crop)).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"이름표를 못 읽었다: {ex.Message}");
+            }
+        }
+
+        return names;
     }
 
     /// <summary>프레임마다 불린다. 캡처 스레드. 시간이 됐고 앞의 것이 끝났을 때만 하나 띄운다.</summary>

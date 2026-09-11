@@ -52,6 +52,13 @@ internal static partial class Program
             return root is null ? DetectCheck.Run(score) : DetectCheck.Run(new Minguk.Tools.Vision.Labeling.LabelDataset(root), score);
         }
 
+        // 라벨 위 이름표 자리를 잘라 OCR 이 무엇을 읽는지 본다. 언어 팩·데이터셋이 있어야 해 평소 검증 밖.
+        if (args.Contains("--nameplate-check"))
+        {
+            var count = int.Parse(ArgValue(args, "--count=") ?? "3", CultureInfo.InvariantCulture);
+            return NameplateCheck.Run(ArgValue(args, "--root="), count, ArgValue(args, "--out="));
+        }
+
         // 실시간 경로(WPF 로 줄인 PNG)와 파일 경로가 같은 답을 내는지. --scale-check[=<폴더>] [--side=640]
         if (args.Any(a => a.StartsWith("--scale-check", StringComparison.OrdinalIgnoreCase)))
         {
