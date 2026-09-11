@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="Minguk.Tools.Views.Parts.PreviewForwardBar"
+<UserControl x:Class="Minguk.Tools.Views.Parts.PreviewForwardBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
@@ -39,16 +39,6 @@
         <dxb:BarCheckItem Content="요소 검사"
                           IsChecked="{Binding IsElementInspectEnabled}"
                           ToolTip="미리보기를 누르면 그 자리의 UI 요소를 상태 줄에 보여 준다. 켜져 있는 동안은 입력을 전달하지 않는다." />
-
-        <dxb:BarEditItem Content="경로"
-                         EditValue="{Binding SelectedInputBackend}"
-                         EditWidth="130"
-                         ToolTip="SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다(관리자 권한 대상이면 이 앱도 관리자로). PostMessage: 포커스를 안 뺏지만 창 메시지를 읽는 보통 프로그램에만 통한다 - DirectX 게임은 Raw Input 으로 마우스를 읽어 메시지가 나가도 반응이 없다(오버워치 실측). 게임은 SendInput 이나 Interception 드라이버. 스크립트도 이 경로로 나간다.">
-            <dxb:BarEditItem.EditSettings>
-                <dxe:ComboBoxEditSettings IsTextEditable="False"
-                                          ItemsSource="{Binding InputBackends}" />
-            </dxb:BarEditItem.EditSettings>
-        </dxb:BarEditItem>
 
         <dxb:BarCheckItem Content="클릭 후 돌아오기"
                           IsChecked="{Binding IsReturnFocusAfterClickEnabled}"

@@ -128,9 +128,25 @@
             <dxb:BarCheckItem Content="미리보기"
                               IsChecked="{Binding ShowPreview}"
                               ToolTip="잡은 화면을 보여 준다. 끄면 캡처와 몹 찾기는 계속 돌고 그리기만 쉰다." />
+
+            <dxb:BarItemSeparator />
+
+            <!--
+                스크립트와 미리보기 입력 전달이 나가는 경로. 미리보기 도구 줄에 두면 미리보기를 끈 동안 안 보이고
+                "입력 전달" 을 켜야만 골라져서, 스크립트를 어떤 경로로 보내는지 알 수 없었다. 늘 보이는 자리에 둔다.
+            -->
+            <dxb:BarEditItem Content="입력 경로"
+                             EditValue="{Binding SelectedInputBackend}"
+                             EditWidth="130"
+                             ToolTip="스크립트와 미리보기 입력 전달이 이 경로로 나간다. SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다(관리자 권한 대상이면 이 앱도 관리자로). PostMessage: 포커스를 안 뺏지만 창 메시지를 읽는 보통 프로그램에만 통한다 - DirectX 게임은 Raw Input 으로 마우스를 읽어 반응이 없다(오버워치 실측). 게임은 SendInput 이나 Interception 드라이버(입력 자동화 화면에서 설치).">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                              ItemsSource="{Binding InputBackends}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
         </dxb:ToolBarControl>
 
-        <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 경로 · 클릭 후 돌아오기 -->
+        <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
         <parts:PreviewForwardBar DockPanel.Dock="Top" />
 
         <!-- ── 스크립트 ─────────────────────────────────────────────── -->
