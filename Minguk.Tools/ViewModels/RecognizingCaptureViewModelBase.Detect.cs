@@ -196,6 +196,9 @@ public abstract partial class RecognizingCaptureViewModelBase
 
                 var how = IsTrackingOn ? "추적, " : string.Empty;
 
+                // 걸린 시간은 화면 설정 줄에만 있었다. 다른 PC 것을 견주려면 사람이 화면을 찍어 보내야 했다 - 로그에도 남긴다.
+                Logger.Debug($"몹 찾기: {found.Count}마리 · {size.Width}x{size.Height} · {watch.ElapsedMilliseconds}ms");
+
                 DetectionStatus = found.Count == 0
                     ? $"못 찾음 ({how}{size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms)"
                     : $"{found.Count}마리 ({how}{size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms): " +
