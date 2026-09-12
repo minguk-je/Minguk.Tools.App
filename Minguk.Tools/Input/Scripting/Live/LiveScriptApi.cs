@@ -260,6 +260,12 @@ public sealed class LiveScriptApi
     /// <summary>걸음 수 상한. 멀리 겨눌 때 걸음마다 기다리다 조준 하나가 1초를 넘었다(실측: 1,160ms).</summary>
     private const int MaxAimSteps = 6;
 
+    /// <summary>
+    /// 한 번의 조준으로 보내는 양의 상한(카운트). 배율이 잘못 커지면 한 번에 2,000 이 넘게 나가 시야가 한 바퀴 돌았다(실측).
+    /// 넘치면 잘라서 보낸다 - 모자란 만큼은 다음 화면에서 다시 겨눈다.
+    /// </summary>
+    private const int MaxAimCounts = 1200;
+
     /// <summary>마지막으로 겨눈 시각(TickCount64). 이보다 앞선 프레임으로 찾은 자리로는 다시 겨누지 않는다.</summary>
     private long _lastAimTicks;
 
@@ -353,6 +359,9 @@ public sealed class LiveScriptApi
 
         if (deltaX == 0 && deltaY == 0) return onTarget;
 
+        deltaX = Math.Clamp(deltaX, -MaxAimCounts, MaxAimCounts);
+        deltaY = Math.Clamp(deltaY, -MaxAimCounts, MaxAimCounts);
+
         Logger.Debug($"조준: 거리({offsetX:0}, {offsetY:0}) × 배율 {AimScale:0.00} → 보냄({deltaX}, {deltaY}){(onTarget ? " · 맞음" : string.Empty)}");
 
         SendRelative(deltaX, deltaY);
@@ -384,14 +393,19 @@ public sealed class LiveScriptApi
         var moved = before - after;
         var fraction = moved / before;
 
-        if (fraction < 0.1 || fraction > 1.9)
+        // 가까워졌고 가운데를 지나치지 않았을 때만 믿는다. 지나쳤거나(1 초과) 거의 안 줄었으면(0.2 미만)
+        // 다른 몹으로 목표가 바뀌었을 때가 많다 - 실측(노트북)에서 그런 값이 배율을 0.97→2.69→5.78 로 튀게 했다.
+        if (fraction < 0.2 || fraction > 1.0 || Math.Abs(after) >= Math.Abs(before))
         {
             Logger.Debug($"배율 배우기 버림: {before:0} → {after:0} (보낸 {sent}, 줄어든 비율 {fraction:0.00})");
             return;
         }
 
         var measured = Math.Clamp(sent / moved, 0.1, 20);
-        var next = Math.Clamp((AimScale * 0.5) + (measured * 0.5), 0.1, 20);
+
+        // 한 번에 크게 바꾸지 않는다. 한 번 잘못 잰 값이 배율을 몇 배로 끌고 가면 다음 조준이 화면 밖까지 돈다.
+        var bounded = Math.Clamp(measured, AimScale / 1.5, AimScale * 1.5);
+        var next = Math.Clamp((AimScale * 0.5) + (bounded * 0.5), 0.1, 20);
 
         if (Math.Abs(next - AimScale) / AimScale < 0.02) return;
 

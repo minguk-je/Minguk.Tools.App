@@ -542,6 +542,16 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             MessengerUtility.SendMainMessage("캡처를 시작했습니다.");
             RefreshElevationNote();
         }
+        catch (ArgumentException ex)
+        {
+            // 게임이 전체 화면으로 넘어가는 순간처럼 대상이 잠깐 사라지면 WGC 가 이것으로 거절한다("Value does not fall
+            // within the expected range"). 실측: 오버워치를 켜는 동안 시작을 누르면 두 번 실패하고 세 번째에 됐다.
+            // 예외 창을 띄우면 사람은 앱이 고장 난 줄 안다 - 무엇을 하면 되는지만 적는다.
+            DisposeSession();
+            IsRunning = false;
+            StatusText = "지금은 그 화면을 잡을 수 없습니다 - 게임이 화면 모드를 바꾸는 중일 수 있습니다. 목록을 새로 고치고 몇 초 뒤 다시 시작하세요.";
+            Logger.Warn(ex, "캡처 시작 거절");
+        }
         catch (Exception ex)
         {
             DisposeSession();

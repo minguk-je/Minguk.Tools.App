@@ -123,13 +123,16 @@ internal static partial class Program
             Check("조준: 가운데 8px 안이면 맞았다(true)", errors.Count == 0 && printed.Select(p => p.ToLowerInvariant()).SequenceEqual(["true"]), string.Join(", ", printed));
         }
 
-        // ── 조준 배율 배우기: 겨눈 뒤 거리가 29% 만 줄면 배율을 올린다 ──
+        // ── 조준 배율 배우기: 한 번에 크게 안 바꾸고, 되풀이하면 참값으로 다가간다 ──
         {
+            const double trueScale = 3.45;   // 픽셀 하나를 옮기는 데 드는 카운트(게임 감도). 배율이 이것에 다가가야 한다.
+
             var learned = new List<double>();
             var hub = new FakeHub(monitor) { FrameTicks = 1 };
+            var adapter = new RecordingAdapter();
             var host = new LiveScriptHost
             {
-                Service = new InputService(new RecordingAdapter()),
+                Service = new InputService(adapter),
                 RequiresForeground = false,
                 Target = () => monitor,
                 Hub = hub,
@@ -145,12 +148,25 @@ internal static partial class Program
             var cx = (int)(bounds.Left + (bounds.Width / 2));
             var cy = (int)(bounds.Top + (bounds.Height / 2));
 
-            // 200px 겨눔 → 새 화면에서 142px 남음(29% 줄어듦) → 배율은 200/58 ≈ 3.45 쪽으로 반 따라가 약 2.2.
-            api.Aim(cx + 200, cy);
-            hub.FrameTicks = Environment.TickCount64 + 1000;
-            api.Aim(cx + 142, cy);
+            // 같은 상황을 여섯 번 되풀이한다: 200px 떨어진 몹을 겨누고, 보낸 카운트만큼 실제로 움직인 화면을 돌려준다.
+            for (var round = 0; round < 6; round++)
+            {
+                adapter.Calls.Clear();
+                hub.FrameTicks = Environment.TickCount64 + (round * 1000) + 1;
+                api.Aim(cx + 200, cy);
 
-            Check("조준 배율 배우기: 29% 만 줄면 배율을 올린다", learned.Count == 1 && learned[0] > 2.0 && learned[0] < 2.4, string.Join(", ", learned.Select(v => v.ToString("0.00"))));
+                var sent = adapter.Calls.Where(c => c.StartsWith("MoveBy")).Sum(c => int.Parse(c[7..].Split(',')[0]));
+                var remaining = 200 - (int)Math.Round(sent / trueScale);
+
+                hub.FrameTicks = Environment.TickCount64 + (round * 1000) + 500;
+                api.Aim(cx + remaining, cy);
+            }
+
+            var jumped = learned.Zip(learned.Skip(1)).Any(p => p.Second > p.First * 1.5 + 0.001 || p.Second < p.First / 1.5 - 0.001);
+
+            Check("조준 배율 배우기: 한 번에 1.5배 넘게 안 바꾸고 참값(3.45)으로 다가간다",
+                  learned.Count >= 4 && !jumped && learned[^1] > 2.5 && learned[^1] < 4.2,
+                  string.Join(" → ", learned.Select(v => v.ToString("0.00"))));
         }
 
         // ── 클릭(버튼, 누르는 시간) ──
