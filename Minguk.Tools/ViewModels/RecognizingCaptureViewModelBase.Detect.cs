@@ -311,7 +311,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         }
 
         var dataset = new LabelDataset(LabelDataset.ConfiguredRoot);
-        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+        var modelPath = DetectorFiles.CurrentFor(dataset);
 
         if (!File.Exists(modelPath))
         {
@@ -453,7 +453,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (_detector is null || Volatile.Read(ref _isDetectorLoading) != 0) return;
 
         var dataset = new LabelDataset(LabelDataset.ConfiguredRoot);
-        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+        var modelPath = DetectorFiles.CurrentFor(dataset);
 
         if (!File.Exists(modelPath)) return;
 

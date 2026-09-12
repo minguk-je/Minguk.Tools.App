@@ -39,7 +39,7 @@ public partial class LabelingViewModel
         }
 
         var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
-        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+        var modelPath = DetectorFiles.CurrentFor(dataset);
 
         if (!File.Exists(modelPath))
         {

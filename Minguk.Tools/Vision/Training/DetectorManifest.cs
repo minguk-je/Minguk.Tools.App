@@ -92,8 +92,22 @@ public sealed class DetectorManifest
     [JsonPropertyName("recallThreshold")]
     public double? RecallThreshold { get; set; }
 
+    /// <summary>
+    /// 그 모델의 쪽지 자리. <b>모델마다 따로</b> 둔다.
+    /// </summary>
+    /// <remarks>
+    /// 한 폴더에 우리 학습(detector.zip)과 밖에서 가져온 detector.onnx 가 같이 있을 수 있다. 쪽지를 하나만 두면
+    /// 가져오기가 입력 크기를 640x640 으로 덮어써, 640x360 으로 학습한 옛 모델이 되찾기 70%→0% 가 됐다(실측).
+    /// 옛 이름(detector.json)은 zip 쪽이 그대로 쓴다 - 이미 있는 데이터셋을 건드리지 않으려고.
+    /// </remarks>
     public static string PathFor(string modelPath)
-        => Path.Combine(Path.GetDirectoryName(modelPath) ?? string.Empty, FileName);
+    {
+        var folder = Path.GetDirectoryName(modelPath) ?? string.Empty;
+
+        return string.Equals(Path.GetExtension(modelPath), ".zip", StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(folder, FileName)
+            : modelPath + ".json";
+    }
 
     /// <summary>
     /// 모델 옆의 쪽지를 읽는다. 없거나 망가졌으면 <b>옛 값</b>으로 본다.

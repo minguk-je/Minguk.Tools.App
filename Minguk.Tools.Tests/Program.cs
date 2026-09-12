@@ -49,6 +49,11 @@ internal static partial class Program
 
         // 설계 3단계: 셰이더로 만든 텐서가 CPU 로 만든 것과 같은 답을 내는지.
         if (args.Contains("--onnx-texture")) return OnnxTextureCheck.Run(args);
+
+        // 설계 4단계: 밖에서 학습할 수 있게 내보내고, 학습해 온 .onnx 를 들인다.
+        if (args.Contains("--export-dataset")) return DatasetTools.Export();
+        if (args.Contains("--import-onnx")) return DatasetTools.Import(args);
+        if (args.Contains("--use-trained")) return DatasetTools.UseTrained();
         if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.

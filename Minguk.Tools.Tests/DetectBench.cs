@@ -50,7 +50,7 @@ internal static class DetectBench
         Console.WriteLine($"CUDA: {TorchSharp.torch.cuda.is_available()}");
         Console.WriteLine();
 
-        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+        var modelPath = DetectorFiles.CurrentFor(dataset);
 
         if (!File.Exists(modelPath))
         {

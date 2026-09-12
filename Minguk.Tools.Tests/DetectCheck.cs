@@ -49,7 +49,7 @@ internal static class DetectCheck
 
         LibTorchRuntime.Load(flavor);
 
-        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+        var modelPath = DetectorFiles.CurrentFor(dataset);
 
         if (!File.Exists(modelPath))
         {
