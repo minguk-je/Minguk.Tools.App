@@ -189,6 +189,26 @@
                 몇 마리를 몇 ms 에 찾았는지 · 글자 읽기 상태. 메뉴 줄(첫 줄)에 두었더니 항목이 많아 넘쳐서
                 아예 안 보였다(실측 - 스크립트 화면에서 "2마리" 가 어디에도 없었다). 자리가 남는 설정 줄에 둔다.
             -->
+            <!--
+                조준 배율은 편집 칸(480px) 도구 줄에 두었더니 넘쳐서 겹화살표 안으로 숨었다(실측 - 화면에 안 보였다).
+                실행 버튼이 아니라 설정이라 창 너비를 다 쓰는 이 줄로 올린다.
+            -->
+            <dxb:BarEditItem Content="조준 배율(%)"
+                             EditValue="{Binding Player.AimScalePercent}"
+                             EditWidth="56"
+                             ToolTip="조준(x, y) 이 화면 가운데에서 목표까지의 거리에 곱하는 값. 게임 감도마다 다르다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:SpinEditSettings MaxValue="2000"
+                                          MinValue="1" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+
+            <dxb:BarCheckItem Content="자동"
+                              IsChecked="{Binding Player.IsAimScaleAuto}"
+                              ToolTip="조준이 겨눈 결과를 보고 배율을 스스로 맞춘다. 가까워졌을 때만 배우고 한 번에 1.5배 넘게 안 바꾼다. 맞춘 값은 저장된다." />
+
+            <dxb:BarItemSeparator />
+
             <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
             <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
 
@@ -287,58 +307,48 @@
                                                   MinValue="0" />
                         </dxb:BarEditItem.EditSettings>
                     </dxb:BarEditItem>
+                </dxb:ToolBarControl>
 
-                    <dxb:BarEditItem Content="조준 배율(%)"
-                                     EditValue="{Binding Player.AimScalePercent}"
-                                     EditWidth="56"
-                                     ToolTip="조준(x, y) 이 화면 가운데에서 목표까지의 거리에 곱하는 값. 게임 감도마다 다르다.">
+                <!--
+                    파일 도구 줄. 언어·파일 칸과 버튼 넷이 각각 한 줄씩을 먹어 편집기가 그만큼 눌렸다.
+                    한 줄로 합치고, 좁아지면 넘치는 것만 접히게 둔다.
+                -->
+                <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                    AllowQuickCustomization="False"
+                                    VerticalAlignment="Top"
+                                    TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                                    TextBlock.FontSize="{DynamicResource BaseFontSize}">
+
+                    <dxb:BarEditItem Content="언어"
+                                     EditValue="{Binding Script.SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     EditWidth="96"
+                                     IsEnabled="{Binding Script.IsEditable}">
                         <dxb:BarEditItem.EditSettings>
-                            <dxe:SpinEditSettings MaxValue="2000"
-                                                  MinValue="1" />
+                            <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                                      ItemsSource="{Binding Script.Languages}" />
                         </dxb:BarEditItem.EditSettings>
                     </dxb:BarEditItem>
 
-                    <dxb:BarCheckItem Content="자동"
-                                      IsChecked="{Binding Player.IsAimScaleAuto}"
-                                      ToolTip="조준이 겨눈 결과를 보고 배율을 스스로 맞춘다. 맞춘 값은 저장돼 다음에도 쓴다." />
-                </dxb:ToolBarControl>
+                    <dxb:BarItemSeparator />
 
-                <dxlc:LayoutGroup VerticalAlignment="Top"
-                                  Orientation="Horizontal">
-                    <dxlc:LayoutItem Label="언어">
-                        <dxe:ComboBoxEdit Width="120"
-                                          IsEnabled="{Binding Script.IsEditable}"
-                                          IsTextEditable="False"
-                                          ItemsSource="{Binding Script.Languages}"
-                                          SelectedItem="{Binding Script.SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    </dxlc:LayoutItem>
+                    <dxb:BarButtonItem Command="{Binding Script.NewCommand}"
+                                       Content="새로"
+                                       ToolTip="본보기 글로 새로 시작한다. 파일과의 연결도 끊는다." />
+                    <dxb:BarButtonItem Command="{Binding Script.OpenCommand}"
+                                       Content="열기"
+                                       ToolTip="확장자를 보고 언어까지 맞춘다 (.csx · .py · .js)" />
+                    <dxb:BarButtonItem Command="{Binding Script.SaveCommand}"
+                                       Content="저장"
+                                       ToolTip="플레이 화면은 Scripts 폴더에 저장한 것을 고른다." />
+                    <dxb:BarButtonItem Command="{Binding Script.SaveAsCommand}"
+                                       Content="다른 이름으로" />
+
+                    <dxb:BarItemSeparator />
 
                     <!-- 파일과 지금 글이 다르면 * 가 붙는다. 저장하지 않아도 글은 설정에 남는다. -->
-                    <dxlc:LayoutItem Label="파일">
-                        <dxe:TextEdit EditValue="{Binding Script.FileLabel, Mode=OneWay}"
-                                      IsReadOnly="True" />
-                    </dxlc:LayoutItem>
-                </dxlc:LayoutGroup>
-
-                <dxlc:LayoutGroup HorizontalAlignment="Left"
-                                  VerticalAlignment="Top"
-                                  Orientation="Horizontal">
-                    <dx:SimpleButton Width="64"
-                                     Command="{Binding Script.NewCommand}"
-                                     Content="새로"
-                                     ToolTip="본보기 글로 새로 시작한다. 파일과의 연결도 끊는다." />
-                    <dx:SimpleButton Width="64"
-                                     Command="{Binding Script.OpenCommand}"
-                                     Content="열기"
-                                     ToolTip="확장자를 보고 언어까지 맞춘다 (.csx · .py · .js)" />
-                    <dx:SimpleButton Width="64"
-                                     Command="{Binding Script.SaveCommand}"
-                                     Content="저장"
-                                     ToolTip="플레이 화면은 Scripts 폴더에 저장한 것을 고른다." />
-                    <dx:SimpleButton Width="100"
-                                     Command="{Binding Script.SaveAsCommand}"
-                                     Content="다른 이름으로" />
-                </dxlc:LayoutGroup>
+                    <dxb:BarStaticItem Content="{Binding Script.FileLabel, Mode=OneWay}"
+                                       ToolTip="{Binding Script.FileLabel, Mode=OneWay}" />
+                </dxb:ToolBarControl>
 
                 <!-- 파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다. -->
                 <dxlc:LayoutItem Label="엔진"
