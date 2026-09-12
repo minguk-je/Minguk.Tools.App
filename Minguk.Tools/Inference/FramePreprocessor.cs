@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -197,6 +197,29 @@ public sealed class FramePreprocessor : IDisposable
     /// 파이프라인 모드에서는 한 프레임 전의 화면이다.
     /// </summary>
     public float[] Tensor => _tensor;
+
+    /// <summary>이것을 만든 D3D11 장치.</summary>
+    public ID3D11Device Device => _device;
+
+    /// <summary>
+    /// 이 전처리기를 그대로 더 써도 되는가. 아니면 버리고 새로 만들어야 한다.
+    /// </summary>
+    /// <remarks>
+    /// <b>장치가 셋 중 가장 놓치기 쉽다.</b> 캡처 대상을 모니터에서 게임 창으로 바꾸면 세션이 새 D3D 장치로
+    /// 다시 만들어지는데, 크기가 같다고 옛 전처리기를 그냥 쓰면 죽은 장치로 텍스처를 만들다
+    /// <see cref="NullReferenceException"/> 이 난다 - 그때부터 몹 찾기가 통째로 멈추고 화면에는 아무 말도 안 뜬다
+    /// (실측: 0.25초마다 같은 예외가 로그를 도배했다).
+    ///
+    /// 넣는 방식(레터박스냐)도 본다 - 같은 크기로 모델만 갈아 끼우면 셰이더가 옛 방식으로 남는다.
+    ///
+    /// 판단을 여기 모아 두는 이유는 부르는 쪽이 셋 중 하나를 빠뜨려도 모르기 때문이다.
+    /// </remarks>
+    public bool Matches(ID3D11Device device, TensorSpec spec)
+        => !_disposed
+           && Spec.Width == spec.Width
+           && Spec.Height == spec.Height
+           && Spec.Letterbox == spec.Letterbox
+           && _device.NativePointer == device.NativePointer;
 
     /// <summary>GPU 전처리(디스패치)에 든 시간.</summary>
     public double LastDispatchMs { get; private set; }

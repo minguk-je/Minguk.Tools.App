@@ -18,7 +18,7 @@ namespace Minguk.Tools.Tests;
 
 /// <summary>
 /// GPU 전처리 길이 CPU 길과 같은 답을 내는지(설계 3단계).
-/// <c>--onnx-texture --model=경로.onnx --image=경로.png [--size=640x640]</c>
+/// <c>--onnx-texture --model=경로.onnx --image=경로.png [--size=640x640] [--fit=늘리기|비율]</c>
 /// </summary>
 /// <remarks>
 /// <b>왜</b> - 화면에서는 캡처 텍스처를 셰이더로 바로 텐서에 넣는다(디스크·리드백 없음). 그 셰이더가 CPU 로
@@ -43,7 +43,10 @@ internal static class OnnxTextureCheck
         {
             Engine = DetectorEngine.Onnx,
             InputWidth = int.Parse(size[0], CultureInfo.InvariantCulture),
-            InputHeight = int.Parse(size.Length > 1 ? size[1] : size[0], CultureInfo.InvariantCulture)
+            InputHeight = int.Parse(size.Length > 1 ? size[1] : size[0], CultureInfo.InvariantCulture),
+
+            // 넣는 방식까지 실제와 같아야 뜻이 있다. 셰이더의 늘리기 갈래는 여기서만 지나간다.
+            Letterbox = (Program.ArgValue(args, "--fit=") ?? "늘리기") is "비율" or "letterbox" or "레터박스"
         };
 
         var classes = args.Contains("--coco") ? new LabelClasses(CocoNames) : new LabelDataset(LabelDataset.ConfiguredRoot).LoadClasses();

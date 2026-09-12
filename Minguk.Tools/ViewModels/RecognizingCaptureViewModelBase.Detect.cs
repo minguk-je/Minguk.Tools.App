@@ -192,10 +192,8 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             var spec = detector.InputSpec;
 
-            // 넣는 방식(레터박스냐)도 같이 본다 - 같은 크기로 다시 들이면서 방식만 바뀌면 셰이더가 옛 방식으로 남는다.
-            if (_preprocessor is not null && (_preprocessor.Spec.Width != spec.Width
-                                              || _preprocessor.Spec.Height != spec.Height
-                                              || _preprocessor.Spec.Letterbox != spec.Letterbox))
+            // 크기·넣는 방식·장치 중 하나라도 달라졌으면 버린다. 무엇을 봐야 하는지는 전처리기가 안다.
+            if (_preprocessor is not null && !_preprocessor.Matches(gpu.Device, spec))
             {
                 _preprocessor.Dispose();
                 _preprocessor = null;
@@ -221,8 +219,40 @@ public abstract partial class RecognizingCaptureViewModelBase
         catch (Exception ex)
         {
             Interlocked.Exchange(ref _isDetectRunning, 0);
-            Logger.Warn(ex, "GPU 전처리에 실패했다");
+            ReportPreprocessFailure(ex);
         }
+    }
+
+    private string? _lastPreprocessFailure;
+    private int _preprocessFailureCount;
+
+    /// <summary>
+    /// GPU 전처리가 터진 것을 알린다. <b>같은 것이 이어지면 한 번만 자세히 적는다.</b>
+    /// </summary>
+    /// <remarks>
+    /// 이 길은 0.25초에 한 번 도는데, 원인이 고쳐지기 전까지는 매번 같은 이유로 터진다. 그대로 적으면
+    /// 스택까지 붙은 줄이 분당 수백 개 쌓여 로그에서 다른 것을 못 찾는다(실측: 대상을 게임 창으로 바꾸자
+    /// 같은 NullReferenceException 이 끝까지 도배됐다). 처음 한 번만 자세히, 그 뒤는 세어서 적는다.
+    /// </remarks>
+    private void ReportPreprocessFailure(Exception ex)
+    {
+        var signature = ex.GetType().FullName + "|" + ex.Message;
+
+        if (signature == _lastPreprocessFailure)
+        {
+            _preprocessFailureCount++;
+
+            // 10 · 100 · 1000 ... 번째에만 한 줄. 고쳐지지 않고 있다는 것은 알려야 한다.
+            if (_preprocessFailureCount % 100 == 0)
+                Logger.Warn($"GPU 전처리가 {_preprocessFailureCount}번째 같은 이유로 실패하고 있다: {ex.Message}");
+
+            return;
+        }
+
+        _lastPreprocessFailure = signature;
+        _preprocessFailureCount = 1;
+
+        Logger.Warn(ex, "GPU 전처리에 실패했다");
     }
 
     private void RunDetect((int Width, int Height) size, long frameTicks)
