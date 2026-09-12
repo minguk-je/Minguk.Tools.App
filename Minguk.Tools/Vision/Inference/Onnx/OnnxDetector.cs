@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -22,7 +22,7 @@ namespace Minguk.Tools.Vision.Inference.Onnx;
 /// <b>전처리는 여기서 손으로 한다</b> - 비율을 지켜 줄이고(레터박스), 남는 자리를 회색으로 채우고, 0~1 로 만든다.
 /// 셰이더가 하는 것과 같은 계산이라 <see cref="LetterboxMap"/> 한 군데를 같이 본다.
 /// </remarks>
-public sealed class OnnxDetector : IDetector
+public sealed class OnnxDetector : IDetector, ITensorDetector
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -59,6 +59,9 @@ public sealed class OnnxDetector : IDetector
 
     public DetectorManifest Manifest { get; }
 
+    /// <summary>이 모델이 받고 싶어 하는 텐서 모양. 캡처 쪽이 이 명세로 셰이더를 돌린다.</summary>
+    public TensorSpec InputSpec => _spec;
+
     /// <summary>마지막 추론에 든 시간(ms). 전처리·해석은 안 든다.</summary>
     public double LastInferenceMs => _engine.LastInferenceMs;
 
@@ -71,14 +74,32 @@ public sealed class OnnxDetector : IDetector
 
         Fill(pixels, width, height, map);
 
-        using var outputs = _engine.Run(_tensor, _spec.Shape);
+        return RunAndDecode(_tensor, map, classes, minimumScore);
+    }
+
+    /// <summary>
+    /// 캡처가 셰이더로 만들어 둔 텐서로 바로 찾는다. 그림 파일도, CPU 리드백도 안 거친다.
+    /// </summary>
+    public IReadOnlyList<Detection> Detect(float[] tensor, LetterboxMap map, LabelClasses classes, float minimumScore = 0.5f)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (tensor.Length != _spec.ElementCount)
+            throw new ArgumentException($"텐서 크기가 다르다: {tensor.Length} ≠ {_spec.ElementCount} ({_spec.Width}x{_spec.Height})", nameof(tensor));
+
+        return RunAndDecode(tensor, map, classes, minimumScore);
+    }
+
+    private IReadOnlyList<Detection> RunAndDecode(float[] tensor, LetterboxMap map, LabelClasses classes, float minimumScore)
+    {
+        using var outputs = _engine.Run(tensor, _spec.Shape);
 
         var values = new Dictionary<string, (float[] Values, long[] Shape)>();
 
         for (var i = 0; i < _engine.OutputNames.Count; i++)
         {
-            var tensor = outputs[i];
-            values[_engine.OutputNames[i]] = (tensor.GetTensorDataAsSpan<float>().ToArray(), tensor.GetTensorTypeAndShape().Shape);
+            var output = outputs[i];
+            values[_engine.OutputNames[i]] = (output.GetTensorDataAsSpan<float>().ToArray(), output.GetTensorTypeAndShape().Shape);
         }
 
         return _decoder.Decode(values, map, classes, minimumScore);

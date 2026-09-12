@@ -624,6 +624,13 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// 실제로는 헛것이었다. 껐다 켜는 것이 유일한 길이고, 통계 몇 초가 사라지는 것 말고는
     /// 잃는 것이 없다.
     /// </remarks>
+    /// <summary>
+    /// 지금 세션이 쓰는 D3D 장치. 추론을 GPU 에서 하려면(<see cref="Minguk.Tools.Inference.FramePreprocessor"/>)
+    /// 캡처와 <b>같은 장치</b>여야 한다 - 다른 장치의 텍스처는 복사조차 안 된다.
+    /// </summary>
+    protected (Vortice.Direct3D11.ID3D11Device Device, Vortice.Direct3D11.ID3D11DeviceContext Context)? CaptureDevice
+        => _captureSession is { Device: { } device, Context: { } context } ? (device, context) : null;
+
     protected void EnsureCpuReadback(string why)
     {
         if (EnableCpuReadback) return;

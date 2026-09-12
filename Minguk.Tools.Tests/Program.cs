@@ -46,6 +46,9 @@ internal static partial class Program
 
         // 설계 2단계: ONNX 검출기가 무엇을 어디서 찾는지 본다(사각형을 그려 파일로 남긴다).
         if (args.Contains("--onnx-detect")) return OnnxDetect.Run(args);
+
+        // 설계 3단계: 셰이더로 만든 텐서가 CPU 로 만든 것과 같은 답을 내는지.
+        if (args.Contains("--onnx-texture")) return OnnxTextureCheck.Run(args);
         if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.

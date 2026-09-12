@@ -43,6 +43,9 @@ public abstract partial class RecognizingCaptureViewModelBase
     private const int DetectLongestSide = 320;
 
     private IDetector? _detector;
+
+    /// <summary>GPU 에서 전처리하는 길(텐서 검출기일 때만). 캡처 장치가 바뀌면 새로 만든다.</summary>
+    private Minguk.Tools.Inference.FramePreprocessor? _preprocessor;
     private LabelClasses _detectClasses = new();
 
     /// <summary>프레임 간 추적. <see cref="RunDetect"/> 한 곳에서만 만진다(한 번에 하나만 돈다).</summary>
@@ -96,12 +99,18 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </remarks>
     private void MaybeDetect(CapturedFrameEventArgs e)
     {
-        if (!IsMobDetectionOn || !e.HasPixels) return;
+        if (!IsMobDetectionOn) return;
 
         // 켜 둔 채 다시 학습했으면 새 모델을 읽는다. 읽는 동안 _detector 는 null 이라 아래서 걸러진다.
         MaybeReloadDetector();
 
         if (_detector is null) return;
+
+        // 텐서를 받을 수 있는 검출기(ONNX)면 GPU 에 있는 프레임을 그대로 쓴다. 아니면 옛 길(PNG)이라 픽셀이 있어야 한다.
+        var tensorDetector = _detector as ITensorDetector;
+        var device = tensorDetector is null ? null : CaptureDevice;
+
+        if (device is null && !e.HasPixels) return;
 
         var now = Environment.TickCount64;
 
@@ -115,6 +124,13 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         // 이 프레임이 들어온 시각. 검출 결과에 실어 스크립트의 조준이 "겨눈 뒤의 화면인가" 를 가린다.
         var frameTicks = now;
+
+        if (tensorDetector is not null && device is { } gpu)
+        {
+            DetectFromTexture(tensorDetector, gpu, e, frameTicks);
+
+            return;
+        }
 
         // 픽셀은 이 콜백이 돌아가면 사라진다. 여기서 바로 파일로 떨어뜨린다(줄여서).
         (int Width, int Height) size;
@@ -140,7 +156,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             // 이름표는 원본 해상도에서 읽어야 한다(12px 글자). 이 검출 주기의 프레임을 한 벌 복사해 둔다.
             // 스크립트가 글자를 읽고 싶어 하면(허브 WantsFrames) 그 복사본을 허브에도 올린다.
-            if (IsNameplateOcrOn || Hub.WantsFrames)
+            if (e.HasPixels && (IsNameplateOcrOn || Hub.WantsFrames))
             {
                 CopyFrameForNameplates(e);
 
@@ -158,12 +174,64 @@ public abstract partial class RecognizingCaptureViewModelBase
         _ = System.Threading.Tasks.Task.Run(() => RunDetect(size, frameTicks));
     }
 
+    /// <summary>
+    /// GPU 에 있는 프레임을 셰이더로 바로 텐서에 넣고 찾는다. 디스크도, CPU 리드백도 안 거친다.
+    /// </summary>
+    /// <remarks>
+    /// 옛 길은 프레임을 CPU 로 내리고(리드백) PNG 로 쓰고 다시 읽었다. 2560x1440 한 장에 그 값이 수 ms 고
+    /// 캡처 fps 를 깎는다. 여기서는 캡처가 쓰는 바로 그 D3D 장치에서 줄이기·여백·정규화를 한 번에 한다.
+    ///
+    /// 텐서는 <b>복사해서</b> 넘긴다 - 전처리기의 버퍼는 다음 프레임에 덮이는데 추론은 다른 스레드에서 도는 중이다.
+    /// </remarks>
+    private void DetectFromTexture(ITensorDetector detector,
+                                   (Vortice.Direct3D11.ID3D11Device Device, Vortice.Direct3D11.ID3D11DeviceContext Context) gpu,
+                                   CapturedFrameEventArgs e,
+                                   long frameTicks)
+    {
+        try
+        {
+            var spec = detector.InputSpec;
+
+            if (_preprocessor is not null && (_preprocessor.Spec.Width != spec.Width || _preprocessor.Spec.Height != spec.Height))
+            {
+                _preprocessor.Dispose();
+                _preprocessor = null;
+            }
+
+            // 파이프라인(한 프레임 늦게 읽기)은 끈다. 여기서는 0.25초에 한 번만 돌아 지난 프레임이 이미 사라졌다.
+            _preprocessor ??= new Minguk.Tools.Inference.FramePreprocessor(gpu.Device, gpu.Context, spec, pipelined: false);
+
+            if (!_preprocessor.Process(e.Texture, e.Width, e.Height))
+            {
+                Interlocked.Exchange(ref _isDetectRunning, 0);
+
+                return;
+            }
+
+            var tensor = _preprocessor.Tensor.ToArray();
+            var map = Minguk.Tools.Vision.Inference.Onnx.LetterboxMap.For(e.Width, e.Height, spec.Width, spec.Height, spec.Letterbox);
+            var size = (e.Width, e.Height);
+
+            _ = System.Threading.Tasks.Task.Run(() => RunDetectCore(
+                () => detector.Detect(tensor, map, _detectClasses, (float)DetectMinimumScore), size, frameTicks));
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Exchange(ref _isDetectRunning, 0);
+            Logger.Warn(ex, "GPU 전처리에 실패했다");
+        }
+    }
+
     private void RunDetect((int Width, int Height) size, long frameTicks)
+        => RunDetectCore(() => _detector!.Detect(_detectScratchPath!, _detectClasses, (float)DetectMinimumScore), size, frameTicks);
+
+    /// <summary>찾은 뒤의 일은 두 길이 같다 - 추적·이름표·허브·화면.</summary>
+    private void RunDetectCore(Func<IReadOnlyList<Detection>> detect, (int Width, int Height) size, long frameTicks)
     {
         try
         {
             var watch = Stopwatch.StartNew();
-            var raw = _detector!.Detect(_detectScratchPath!, _detectClasses, (float)DetectMinimumScore);
+            var raw = detect();
 
             watch.Stop();
 
@@ -175,6 +243,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             Interlocked.Exchange(ref _latestDetectionTicks, Environment.TickCount64);
 
             // 몹마다 머리 위 이름표. 한 장 10~20ms 라 검출(수백 ms) 뒤에 이어 붙여도 표가 안 난다.
+            // 이름표는 원본 픽셀이 있어야 읽는다. 텍스처 길에서 리드백을 꺼 두면 없다.
             var names = IsNameplateOcrOn ? ReadNameplates(found) : new string[found.Count];
 
             // 스크립트가 읽어 가는 자리. 화면(Detections)은 UI 스레드 것이라 스크립트가 못 읽는다.
@@ -251,16 +320,25 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
-        if (LibTorchRuntime.Installed is not { } flavor)
+        // ONNX 모델은 libtorch 도, CPU 리드백도 필요 없다 - GPU 에 있는 프레임을 셰이더로 바로 쓴다.
+        var engine = DetectorManifest.Load(modelPath).Engine;
+        LibTorchFlavor? flavor = null;
+
+        if (engine == DetectorEngine.Torch)
         {
-            TurnOffDetection("libtorch 가 없습니다. 라벨링 화면에서 학습을 한 번 돌리면 같이 준비됩니다.");
+            if (LibTorchRuntime.Installed is not { } installed)
+            {
+                TurnOffDetection("libtorch 가 없습니다. 라벨링 화면에서 학습을 한 번 돌리면 같이 준비됩니다.");
 
-            return;
+                return;
+            }
+
+            flavor = installed;
+
+            // 픽셀이 CPU 로 안 내려오면 추론에 넣을 것이 없다. 도는 중이면 다시 시작까지 해 준다 -
+            // 값만 바꾸는 것은 세션을 만들 때만 먹어서, 예전에는 켰다고 적어 놓고 헛것이었다.
+            EnsureCpuReadback("추론에는 픽셀이 필요합니다");
         }
-
-        // 픽셀이 CPU 로 안 내려오면 추론에 넣을 것이 없다. 도는 중이면 다시 시작까지 해 준다 -
-        // 값만 바꾸는 것은 세션을 만들 때만 먹어서, 예전에는 켰다고 적어 놓고 헛것이었다.
-        EnsureCpuReadback("추론에는 픽셀이 필요합니다");
 
         LoadDetector(modelPath, dataset, flavor);
     });
@@ -274,7 +352,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <remarks>
     /// 몹 찾기를 켤 때와, 켜 둔 채 파일이 바뀐 것을 알아챘을 때 둘 다 여기로 온다.
     /// </remarks>
-    private void LoadDetector(string modelPath, LabelDataset dataset, LibTorchFlavor flavor)
+    private void LoadDetector(string modelPath, LabelDataset dataset, LibTorchFlavor? flavor)
     {
         var stamp = File.GetLastWriteTimeUtc(modelPath);
 
@@ -312,7 +390,7 @@ public abstract partial class RecognizingCaptureViewModelBase
                     stale.Dispose();
                 }
 
-                LibTorchRuntime.Load(flavor);
+                if (flavor is { } torch) LibTorchRuntime.Load(torch);
 
                 var model = DetectorFactory.Create(modelPath);
 
@@ -391,7 +469,12 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (now - _reloadSeenTicks < 2000) return;
 
-        if (LibTorchRuntime.Installed is not { } flavor) return;
+        // 다시 학습한 모델이 ONNX 면 libtorch 가 없어도 읽는다.
+        LibTorchFlavor? flavor = DetectorManifest.Load(modelPath).Engine == DetectorEngine.Torch
+            ? LibTorchRuntime.Installed
+            : null;
+
+        if (DetectorManifest.Load(modelPath).Engine == DetectorEngine.Torch && flavor is null) return;
 
         DispatcherService?.BeginInvoke(() => Guard(() => LoadDetector(modelPath, dataset, flavor)));
     }
@@ -510,6 +593,9 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         _detector?.Dispose();
         _detector = null;
+
+        _preprocessor?.Dispose();
+        _preprocessor = null;
 
         if (_detectScratchPath is not null)
         {
