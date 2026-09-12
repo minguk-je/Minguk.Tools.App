@@ -334,13 +334,18 @@ public sealed class LiveScriptApi
     private readonly Random _random = new();
 
     /// <summary>아무리 짧아도 이만큼은 쓴다(ms). 한 걸음으로 끝나면 사람 손이 아니다.</summary>
-    private const double MoveBaseMs = 70;
+    /// <remarks>
+    /// 처음에는 70·6.5·280 이었는데 겨누는 맛이 굼떴다. 잘 하는 사람은 <b>멀어도 단호하게</b> 한 번에 꺾고
+    /// 끝에서만 살짝 다듬는다 - 부드러움은 총 시간이 아니라 걸음 수(8ms 간격)가 지키므로, 시간만 줄이면
+    /// 끊기지 않으면서 빨라진다. 거리 474 카운트가 212ms → 136ms, 그래도 17걸음이다.
+    /// </remarks>
+    private const double MoveBaseMs = 45;
 
     /// <summary>거리(카운트)의 제곱근에 곱하는 시간(ms). 멀수록 오래 걸리되 비례해서 늘지는 않는다 - 사람도 그렇다.</summary>
-    private const double MoveMsPerRoot = 6.5;
+    private const double MoveMsPerRoot = 4.2;
 
     /// <summary>한 번의 이동에 쓰는 시간 상한(ms). 조준은 새 화면을 기다렸다 또 겨누므로 오래 붙들 이유가 없다.</summary>
-    private const double MaxMoveMs = 280;
+    private const double MaxMoveMs = 180;
 
     /// <summary>걸음 사이 목표 간격(ms). 8ms 면 약 125Hz - 게이밍 마우스의 폴링과 비슷하다.</summary>
     private const double MoveStepMs = 8;
@@ -348,11 +353,11 @@ public sealed class LiveScriptApi
     /// <summary>걸음 수 상한. 눈금이 굵은 PC 에서 시간이 늘어지는 것을 막는다.</summary>
     private const int MaxMoveSteps = 40;
 
-    /// <summary>옆으로 벗어나는 양을 거리의 몇 배로 할지. 2% 면 눈에 안 띄고 직선도 아니다.</summary>
-    private const double ArcFraction = 0.02;
+    /// <summary>옆으로 벗어나는 양을 거리의 몇 배로 할지. 손목이 휘는 만큼만 - 크면 겨눈 것이 흔들려 보인다.</summary>
+    private const double ArcFraction = 0.012;
 
-    /// <summary>벗어나는 양의 상한(카운트). 멀리 겨눌 때 옆으로 크게 돌면 조준이 흔들린 것으로 보인다.</summary>
-    private const double MaxArcCounts = 12;
+    /// <summary>벗어나는 양의 상한(카운트). 멀리 꺾을 때 옆으로 크게 돌면 겨눈 자리를 지나친다.</summary>
+    private const double MaxArcCounts = 8;
 
     /// <summary>
     /// 한 번의 조준으로 보내는 양의 상한(카운트). 배율이 잘못 커지면 한 번에 2,000 이 넘게 나가 시야가 한 바퀴 돌았다(실측).

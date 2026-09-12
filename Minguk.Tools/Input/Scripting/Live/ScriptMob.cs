@@ -1,3 +1,5 @@
+﻿using System;
+
 namespace Minguk.Tools.Input.Scripting.Live;
 
 /// <summary>
@@ -21,6 +23,28 @@ public sealed record ScriptMob(string Name, double Score, int CenterX, int Cente
     public int 너비 => Width;
 
     public int 높이 => Height;
+
+    /// <summary>
+    /// 머리 자리(가로는 가운데, 세로는 사각형 위에서 <see cref="HeadFraction"/> 만큼 내려온 곳).
+    /// <c>조준(몹.머리x, 몹.머리y)</c> 로 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜 가운데가 아닌가</b> - 사각형 가운데는 사람으로 치면 배다. 머리를 노리는 편이 한 발의 값이 크고,
+    /// 몹이 좌우로 움직여도 머리는 덜 흔들린다(팔다리가 사각형을 넓혔다 좁혔다 하는 것은 아래쪽이다).
+    ///
+    /// 위 모서리에 딱 붙이지 않는다 - 검출 사각형은 늘 조금 넉넉해서, 꼭대기를 겨누면 머리 위 허공을 본다.
+    /// 위에서 18% 내려온 자리가 사람 몸에서 머리 한가운데쯤이다.
+    /// </remarks>
+    public int HeadX => CenterX;
+
+    public int HeadY => CenterY - (Height / 2) + (int)Math.Round(Height * HeadFraction);
+
+    /// <summary>사각형 위에서 머리까지, 높이의 몇 배로 내려갈지.</summary>
+    public const double HeadFraction = 0.18;
+
+    public int 머리x => HeadX;
+
+    public int 머리y => HeadY;
 
     /// <summary>이름표 읽기가 켜져 있으면 머리 위 글자. 아니면 빈 글.</summary>
     public string 이름표 => Caption;

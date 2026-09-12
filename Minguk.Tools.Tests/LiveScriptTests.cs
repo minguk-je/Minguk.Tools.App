@@ -123,6 +123,29 @@ internal static partial class Program
                   printed.Select(p => p.ToLowerInvariant()).SequenceEqual(["false", "false"]), string.Join(", ", printed));
         }
 
+        // ── 머리 자리: 사각형 가운데가 아니라 위쪽을 겨눈다 ──
+        {
+            var (errors, _, printed) = Run(new RoslynScriptEngine(),
+                "var m = 가장가까운몹(); 출력(m.중심x + \",\" + m.중심y + \",\" + m.머리x + \",\" + m.머리y + \",\" + m.높이);",
+                new FakeHub(monitor), monitor, CancellationToken.None);
+
+            var parts = printed.Count == 1 ? printed[0].Split(',').Select(int.Parse).ToArray() : [];
+            var ok = parts.Length == 5;
+
+            if (ok)
+            {
+                var (centerY, headX, headY, height) = (parts[1], parts[2], parts[3], parts[4]);
+                var top = centerY - (height / 2);
+
+                // 가로는 가운데 그대로, 세로는 위 모서리와 가운데 사이 - 꼭대기에 붙으면 머리 위 허공이다.
+                ok = headX == parts[0] && headY < centerY && headY > top
+                     && Math.Abs(headY - (top + (height * 0.18))) <= 1;
+            }
+
+            Check("머리 자리는 사각형 위에서 18% 내려온 곳 (가로는 가운데)", errors.Count == 0 && ok,
+                  printed.Count == 1 ? $"중심·머리·높이 = {printed[0]}" : "출력이 없다");
+        }
+
         // ── 상대이동: 작은 이동도 합이 정확하다(걸음마다 반올림해도 어긋나지 않게) ──
         {
             var (errors, adapter, _) = Run(new RoslynScriptEngine(), "상대이동(3, -4); 상대이동(-11, 0);", new FakeHub(monitor), monitor, CancellationToken.None);
