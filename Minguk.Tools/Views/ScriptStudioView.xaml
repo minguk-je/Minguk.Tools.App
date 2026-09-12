@@ -1,4 +1,4 @@
-<UserControl x:Class="Minguk.Tools.Views.ScriptStudioView"
+﻿<UserControl x:Class="Minguk.Tools.Views.ScriptStudioView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -128,7 +128,7 @@
 
         </dxb:MainMenuControl>
 
-        <!-- ── 설정 ────────────────────────────────────────────────── -->
+        <!-- ── 캡처 설정 ───────────────────────────────────────────── -->
         <dxb:ToolBarControl AllowCustomizationMenu="False"
                             AllowQuickCustomization="False"
                             DockPanel.Dock="Top"
@@ -167,7 +167,18 @@
                               IsChecked="{Binding ShowPreview}"
                               ToolTip="캡처 중인 화면을 그대로 보여 준다. 찾은 몹과 글자 영역이 그 위에 겹쳐진다." />
 
-            <dxb:BarItemSeparator />
+        </dxb:ToolBarControl>
+
+        <!-- ── 입력·조준·상태 ──────────────────────────────────────────
+            캡처 설정과 한 줄에 두었더니 넘쳤다 - 대상 콤보만 420px 이라 뒤쪽(찾은 몹 수·글자 읽기 상태)이
+            겹화살표 안으로 숨어 실제로 안 보였다. 성격도 다르다: 위는 "무엇을 잡을까", 여기는 "어디로 보내고
+            얼마나 겨눌까" 다. 줄을 나누면 창을 좁혀도 양쪽이 각자 접힌다.
+        -->
+        <dxb:ToolBarControl AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            DockPanel.Dock="Top"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
             <!--
                 스크립트와 미리보기 입력 전달이 나가는 경로. 미리보기 도구 줄에 두면 미리보기를 끈 동안 안 보이고
@@ -186,12 +197,8 @@
             <dxb:BarItemSeparator />
 
             <!--
-                몇 마리를 몇 ms 에 찾았는지 · 글자 읽기 상태. 메뉴 줄(첫 줄)에 두었더니 항목이 많아 넘쳐서
-                아예 안 보였다(실측 - 스크립트 화면에서 "2마리" 가 어디에도 없었다). 자리가 남는 설정 줄에 둔다.
-            -->
-            <!--
                 조준 배율은 편집 칸(480px) 도구 줄에 두었더니 넘쳐서 겹화살표 안으로 숨었다(실측 - 화면에 안 보였다).
-                실행 버튼이 아니라 설정이라 창 너비를 다 쓰는 이 줄로 올린다.
+                실행 버튼이 아니라 설정이라 창 너비를 다 쓰는 줄에 둔다.
             -->
             <dxb:BarEditItem Content="조준 배율(%)"
                              EditValue="{Binding Player.AimScalePercent}"
@@ -209,6 +216,11 @@
 
             <dxb:BarItemSeparator />
 
+            <!--
+                몇 마리를 몇 ms 에 찾았는지 · 글자 읽기 상태. 메뉴 줄(첫 줄)에 두었더니 항목이 많아 넘쳐서
+                아예 안 보였다(실측 - 스크립트 화면에서 "2마리" 가 어디에도 없었다). 줄 끝이라 가장 먼저 밀리는
+                자리이므로, 여기가 또 넘치면 줄을 나누지 말고 이것부터 상태 줄로 내린다.
+            -->
             <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
             <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
 
