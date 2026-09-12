@@ -95,6 +95,21 @@
                               Content="추적"
                               IsChecked="{Binding IsTrackingOn}"
                               ToolTip="프레임 간 추적. 두 번 연속 보인 것만 내놓고(0.5초), 잠깐 놓친 것은 0.5초까지 이어 줍니다. 한 프레임짜리 헛것이 사라집니다." />
+
+            <!--
+                이 점수 아래는 버린다. 설정에만 있고 화면에 없어서, 헛것을 쫓고 있다는 것을 알아도 바꿀 자리가
+                없었다(실측: 게임 HUD 자리를 50~63% 로 잡고 계속 그쪽으로 돌았다. 진짜 봇은 77% 이상이었다).
+                올리면 헛것이 줄고 진짜도 몇 개 놓친다 - 로그의 점수를 보고 그 사이에 놓는다.
+            -->
+            <dxb:BarEditItem Content="문턱(%)"
+                             EditValue="{Binding DetectMinimumScorePercent}"
+                             EditWidth="56"
+                             ToolTip="몹 찾기가 이 점수 아래는 버린다. 헛것을 쫓으면 올리고, 진짜를 놓치면 내린다. 호출 로그에 몹마다 점수가 찍히니 그것을 보고 정한다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:SpinEditSettings MaxValue="99"
+                                          MinValue="1" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding ClickDetectionCommand}"
                                Content="찾은 것 누르기"

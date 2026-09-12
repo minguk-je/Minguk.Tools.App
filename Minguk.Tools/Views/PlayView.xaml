@@ -87,6 +87,17 @@
                               Content="추적"
                               IsChecked="{Binding IsTrackingOn}"
                               ToolTip="프레임 간 추적. 한 프레임짜리 헛것이 사라진다." />
+
+            <!-- 스크립트 화면과 같은 칸. 화면마다 따로 저장된다. -->
+            <dxb:BarEditItem Content="문턱(%)"
+                             EditValue="{Binding DetectMinimumScorePercent}"
+                             EditWidth="56"
+                             ToolTip="몹 찾기가 이 점수 아래는 버린다. 헛것을 쫓으면 올리고, 진짜를 놓치면 내린다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:SpinEditSettings MaxValue="99"
+                                          MinValue="1" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
             <dxb:BarCheckItem BarItemDisplayMode="Content"
                               Content="이름표 읽기"
                               IsChecked="{Binding IsNameplateOcrOn}"

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
@@ -46,10 +47,23 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     }
 
     /// <summary>이보다 자신 없는 것은 안 보여 준다.</summary>
+    /// <summary>
+    /// 화면에서 만지는 문턱. 0~1 인 <see cref="DetectMinimumScore"/> 를 사람이 읽는 % 로 바꿔 준다.
+    /// </summary>
+    /// <remarks>
+    /// 0~1 을 그대로 칸에 묶으면 0.05 씩 오르내리는 스핀이 되어 만지기 나쁘다. 저장은 0~1 쪽 하나로만 한다 -
+    /// 둘 다 저장하면 어느 것이 맞는지 알 수 없게 된다.
+    /// </remarks>
+    public double DetectMinimumScorePercent
+    {
+        get => Math.Round(DetectMinimumScore * 100);
+        set => DetectMinimumScore = Math.Clamp(value / 100.0, 0.01, 0.99);
+    }
+
     public double DetectMinimumScore
     {
         get => GetProperty(() => DetectMinimumScore);
-        set => SetProperty(() => DetectMinimumScore, value);
+        set => SetProperty(() => DetectMinimumScore, value, () => RaisePropertyChanged(nameof(DetectMinimumScorePercent)));
     }
 
     /// <summary>몇 마리를 몇 ms 에 찾았는지. 실제 속도가 여기 그대로 뜬다.</summary>
