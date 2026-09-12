@@ -75,6 +75,8 @@ public static class ScriptApiCatalog
         new("DragBy", "상대끌기", "dx, dy, button", "버튼을 누른 채 이만큼 움직였다가 뗀다. RPG 의 우클릭 카메라 회전 - 상대끌기(200, 0, \"Right\").", ScriptApiMode.Live),
         new("Mobs", "몹들", "", "지금 화면에서 찾은 몹들. 없으면 빈 목록. 몹 찾기가 켜져 있어야 한다.", ScriptApiMode.Live),
         new("NearestMob", "가장가까운몹", "", "화면 가운데에서 가장 가까운 몹. 없으면 null.", ScriptApiMode.Live),
+        new("TargetMob", "목표", "", "잡을 때까지 같은 몹만 본다. 놓치면 잠깐 기다렸다 새로 고른다. 몹이 둘일 때 좌우로 왕복하는 것을 막는다.", ScriptApiMode.Live),
+        new("ReleaseTarget", "목표풀기", "", "고정한 목표를 놓는다. 잡은 뒤 다음 몹으로 넘어갈 때.", ScriptApiMode.Live),
         new("WaitMob", "몹기다리기", "milliseconds", "몹이 보일 때까지 최대 ms 기다린다. 못 보면 null.", ScriptApiMode.Live),
         new("ReadText", "읽기", "x, y, width, height", "그 자리(0~1 비율)의 글자를 읽는다.", ScriptApiMode.Live),
         new("ReadNumber", "숫자읽기", "x, y, width, height", "그 자리의 글자에서 숫자만 뽑는다. 없으면 null.", ScriptApiMode.Live),

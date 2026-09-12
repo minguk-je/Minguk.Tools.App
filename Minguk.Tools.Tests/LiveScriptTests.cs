@@ -103,9 +103,14 @@ internal static partial class Program
             var (errors, adapter, printed) = Run(new RoslynScriptEngine(), $"출력(조준({cx + 100}, {cy - 40})); 출력(조준({cx + 100}, {cy - 40}));", new FakeHub(monitor) { FrameTicks = 1 }, monitor, CancellationToken.None);
             var aimMoves = adapter.Calls.Where(c => c.StartsWith("MoveBy")).Select(c => c[7..].Split(',').Select(int.Parse).ToArray()).ToList();
 
-            Check("조준은 가운데에서 목표까지의 거리만큼 상대 이동한다 (합이 정확)",
-                  errors.Count == 0 && aimMoves.Sum(m => m[0]) == 100 && aimMoves.Sum(m => m[1]) == -40,
-                  $"{aimMoves.Count}걸음, 합({aimMoves.Sum(m => m[0])}, {aimMoves.Sum(m => m[1])})" + (errors.Count > 0 ? " / " + errors[0] : ""));
+            // 일부러 조금 모자라게 보낸다(85%) - 지나치면 반대편에서 다시 꺾어야 해서 화면이 왕복한다(실측).
+            // 방향은 맞고, 넘치지는 않아야 한다.
+            var sumX = aimMoves.Sum(m => m[0]);
+            var sumY = aimMoves.Sum(m => m[1]);
+
+            Check("조준은 목표 쪽으로, 넘치지 않게 조금 모자라게 보낸다",
+                  errors.Count == 0 && sumX > 0 && sumX < 100 && sumX >= 70 && sumY < 0 && sumY > -40 && sumY <= -28,
+                  $"{aimMoves.Count}걸음, 거리(100, -40) → 합({sumX}, {sumY})" + (errors.Count > 0 ? " / " + errors[0] : ""));
 
             // 사람처럼 움직이는가 - 잘게 나누고, 가운데가 빠르고 양 끝이 느리다.
             // 등속이거나 몇 걸음으로 끝나면 시야가 뚝뚝 끊긴다("팍팍 이동", 실측).
@@ -144,6 +149,37 @@ internal static partial class Program
 
             Check("머리 자리는 사각형 위에서 18% 내려온 곳 (가로는 가운데)", errors.Count == 0 && ok,
                   printed.Count == 1 ? $"중심·머리·높이 = {printed[0]}" : "출력이 없다");
+        }
+
+        // ── 목표 고정: 몹이 둘이어도 같은 것만 본다 ──
+        {
+            var hub = new TwoMobHub(monitor);
+
+            // 같은 것을 세 번 부른다. 사이에 "가까운 쪽" 이 바뀌어도 고정한 것을 계속 줘야 한다.
+            var (errors, _, printed) = Run(new RoslynScriptEngine(),
+                """
+                var a = 목표(); 출력(a.중심x);
+                눈뒤집기();
+                var b = 목표(); 출력(b.중심x);
+                목표풀기();
+                var c = 목표(); 출력(c.중심x);
+                """.Replace("눈뒤집기();", ""), hub, monitor, CancellationToken.None);
+
+            // 첫 번째와 두 번째는 같은 몹(고정), 세 번째는 풀었으니 다시 가장 가까운 것.
+            var same = printed.Count == 3 && printed[0] == printed[1];
+
+            Check("목표는 고정되고, 풀면 다시 고른다", errors.Count == 0 && same && printed[2] == printed[0],
+                  errors.Count > 0 ? errors[0].ToString() : string.Join(" / ", printed));
+
+            // 고정한 몹이 사라지면 잠깐 기다렸다(400ms) 새로 고른다.
+            hub.HideNear = true;
+
+            var (missErrors, _, missPrinted) = Run(new RoslynScriptEngine(),
+                "var a = 목표(); 출력(a is null ? \"없음\" : a.중심x.ToString());",
+                hub, monitor, CancellationToken.None);
+
+            Check("몹이 하나뿐이면 그것을 고른다", missErrors.Count == 0 && missPrinted.Count == 1 && missPrinted[0] != "없음",
+                  missErrors.Count > 0 ? missErrors[0].ToString() : string.Join(" / ", missPrinted));
         }
 
         // ── 상대이동: 작은 이동도 합이 정확하다(걸음마다 반올림해도 어긋나지 않게) ──
@@ -356,7 +392,7 @@ internal static partial class Program
     }
 
     private static (IReadOnlyList<ScriptError> Errors, RecordingAdapter Adapter, List<string> Printed) Run(
-        IScriptEngine engine, string source, FakeHub hub, CaptureTarget target, CancellationToken token, Action<ScriptCall>? trace = null)
+        IScriptEngine engine, string source, IPerceptionHub hub, CaptureTarget target, CancellationToken token, Action<ScriptCall>? trace = null)
     {
         var adapter = new RecordingAdapter();
         var printed = new List<string>();
@@ -423,6 +459,37 @@ internal static partial class Program
     }
 
     /// <summary>몹 하나가 화면 가운데에 있는 허브.</summary>
+    /// <summary>몹 둘. 하나는 가운데 가까이, 하나는 멀리 - 목표 고정이 갈아타지 않는지 보려고.</summary>
+    private sealed class TwoMobHub(CaptureTarget target) : IPerceptionHub
+    {
+        public bool IsCapturing => true;
+        public bool IsDetecting => true;
+        public CaptureTarget? Target => target;
+        public bool WantsFrames { get; set; }
+
+        /// <summary>가까운 쪽을 숨긴다 - 목표가 사라졌을 때를 본다.</summary>
+        public bool HideNear { get; set; }
+
+        public DetectionSnapshot? Latest
+        {
+            get
+            {
+                var found = new List<Detection>();
+
+                if (!HideNear) found.Add(new Detection("일반 봇", LabelBox.FromCorners(0, 0.46, 0.46, 0.54, 0.54), 0.9f));
+
+                found.Add(new Detection("일반 봇", LabelBox.FromCorners(0, 0.10, 0.60, 0.18, 0.72), 0.85f));
+
+                return new DetectionSnapshot(found, [.. found.Select(_ => "")], 1920, 1080, target, Environment.TickCount64);
+            }
+        }
+
+        public void PublishState(bool capturing, bool detecting, CaptureTarget? target) { }
+        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0) { }
+        public void PublishFrame(byte[] bgra, int width, int height) { }
+        public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
+    }
+
     private sealed class FakeHub(CaptureTarget target) : IPerceptionHub
     {
         public bool IsCapturing { get; set; } = true;
