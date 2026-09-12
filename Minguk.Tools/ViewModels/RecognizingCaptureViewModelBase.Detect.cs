@@ -192,7 +192,10 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             var spec = detector.InputSpec;
 
-            if (_preprocessor is not null && (_preprocessor.Spec.Width != spec.Width || _preprocessor.Spec.Height != spec.Height))
+            // 넣는 방식(레터박스냐)도 같이 본다 - 같은 크기로 다시 들이면서 방식만 바뀌면 셰이더가 옛 방식으로 남는다.
+            if (_preprocessor is not null && (_preprocessor.Spec.Width != spec.Width
+                                              || _preprocessor.Spec.Height != spec.Height
+                                              || _preprocessor.Spec.Letterbox != spec.Letterbox))
             {
                 _preprocessor.Dispose();
                 _preprocessor = null;
