@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 
 using Minguk.Tools.Vision.Training;
@@ -28,8 +28,7 @@ public static class DetectorFactory
 
         return manifest.Engine switch
         {
-            DetectorEngine.Onnx => throw new NotSupportedException(
-                "ONNX 검출기는 아직 없습니다(설계 2단계). 쪽지의 engine 을 torch 로 두거나 옛 모델을 쓰세요."),
+            DetectorEngine.Onnx => new Onnx.OnnxDetector(modelPath, manifest),
             _ => DetectorModel.Load(modelPath)
         };
     }
