@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -33,17 +33,24 @@ public sealed class OnnxDmlEngine : IDisposable
 
     private bool _disposed;
 
-    public OnnxDmlEngine(string modelPath, int deviceId = 0)
+    /// <param name="useGpu">
+    /// 거짓이면 CPU 로 돈다. 느리지만 <b>답을 맞춰 보는 잣대</b>가 된다 - GPU 쪽이 이상한 값을 내놓을 때
+    /// 모델이 잘못된 것인지 실행 공급자가 잘못된 것인지 이것으로 가른다.
+    /// </param>
+    public OnnxDmlEngine(string modelPath, int deviceId = 0, bool useGpu = true)
     {
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"모델 파일이 없다: {modelPath}", modelPath);
 
         _options = new SessionOptions();
 
-        // DirectML EP 의 요구 조건이다. 둘 다 끄지 않으면 세션 생성이나 실행에서 터진다.
-        _options.EnableMemoryPattern = false;
-        _options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-        _options.AppendExecutionProvider_DML(deviceId);
+        if (useGpu)
+        {
+            // DirectML EP 의 요구 조건이다. 둘 다 끄지 않으면 세션 생성이나 실행에서 터진다.
+            _options.EnableMemoryPattern = false;
+            _options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            _options.AppendExecutionProvider_DML(deviceId);
+        }
 
         _session = new InferenceSession(modelPath, _options);
         _runOptions = new RunOptions();
@@ -90,21 +97,29 @@ public sealed class OnnxDmlEngine : IDisposable
     }
 
     /// <summary>
-    /// 텐서 하나를 넣고 추론한다. 반환된 값들은 호출자가 Dispose 해야 한다.
-    /// 입력이 여러 개인 모델은 이 오버로드로는 안 되니 그때 가서 확장할 것.
+    /// 텐서를 넣고 추론한다. 반환된 값들은 호출자가 Dispose 해야 한다.
     /// </summary>
-    public IDisposableReadOnlyCollection<OrtValue> Run(float[] tensor, long[] shape)
+    /// <param name="sizes">
+    /// 입력이 둘인 모델(D-FINE·RT-DETR 내보내기)의 둘째 입력. 후처리를 그래프에 넣어 내보내면 "원본 크기" 를 같이 받아
+    /// 사각형을 그 크기의 픽셀로 돌려준다. 우리는 레터박스한 칸을 원본이라 일러 주고 되돌리기는 우리가 한다.
+    /// 순서는 <b>(너비, 높이)</b> - 후처리가 <c>repeat(1,2)</c> 로 [w,h,w,h] 를 만들어 [x1,y1,x2,y2] 에 곱한다.
+    /// </param>
+    public IDisposableReadOnlyCollection<OrtValue> Run(float[] tensor, long[] shape, long[]? sizes = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (_inputNames.Length != 1)
-            throw new NotSupportedException($"입력이 {_inputNames.Length} 개인 모델이다. 단일 입력만 지원한다.");
+        if (_inputNames.Length > 2)
+            throw new NotSupportedException($"입력이 {_inputNames.Length} 개인 모델이다. 하나나 둘만 지원한다.");
+
+        if (_inputNames.Length == 2 && sizes is null)
+            throw new NotSupportedException($"이 모델은 둘째 입력({_inputNames[1]})이 필요하다 - 크기를 같이 줘야 한다.");
 
         var t0 = Stopwatch.GetTimestamp();
 
         using var input = OrtValue.CreateTensorValueFromMemory(tensor, shape);
+        using var sizeInput = sizes is null ? null : OrtValue.CreateTensorValueFromMemory(sizes, [1, sizes.Length]);
 
-        var result = _session.Run(_runOptions, _inputNames, new[] { input }, _outputNames);
+        var result = _session.Run(_runOptions, _inputNames, sizeInput is null ? [input] : [input, sizeInput], _outputNames);
 
         LastInferenceMs = (Stopwatch.GetTimestamp() - t0) * 1000d / Stopwatch.Frequency;
 

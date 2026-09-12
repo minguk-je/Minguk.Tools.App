@@ -47,7 +47,7 @@ internal static class OnnxBench
         Console.WriteLine($"모델: {modelPath} ({new FileInfo(modelPath).Length / 1_048_576.0:N1} MB)");
 
         var opening = Stopwatch.StartNew();
-        using var engine = new OnnxDmlEngine(modelPath);
+        using var engine = new OnnxDmlEngine(modelPath, 0, useGpu: !args.Contains("--cpu"));
         opening.Stop();
 
         Console.WriteLine($"세션 만들기: {opening.ElapsedMilliseconds:N0} ms");
@@ -64,14 +64,17 @@ internal static class OnnxBench
 
         for (var i = 0; i < tensor.Length; i++) tensor[i] = 0.3f + ((float)random.NextDouble() * 0.4f);
 
+        // 입력이 둘인 내보내기(D-FINE)는 "원본 크기" 를 같이 받는다. 여기서는 입력 칸 크기를 그대로 준다.
+        long[]? sizes = engine.InputNames.Count == 2 ? [spec.Width, spec.Height] : null;
+
         // 첫 몇 장은 커널을 올리고 메모리를 잡느라 느리다. 버린다.
-        for (var i = 0; i < 3; i++) engine.Run(tensor, spec.Shape).Dispose();
+        for (var i = 0; i < 3; i++) engine.Run(tensor, spec.Shape, sizes).Dispose();
 
         var times = new double[runs];
 
         for (var i = 0; i < runs; i++)
         {
-            using var outputs = engine.Run(tensor, spec.Shape);
+            using var outputs = engine.Run(tensor, spec.Shape, sizes);
             times[i] = engine.LastInferenceMs;
 
             if (i == 0)

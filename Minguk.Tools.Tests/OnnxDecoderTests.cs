@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -62,12 +62,44 @@ internal static partial class Program
                   found.Count == 0 ? "하나도 안 나왔다" : $"{found.Count}개, {one.Describe}, 가운데({one.Box.CenterX:0.000}, {one.Box.CenterY:0.000}) 높이 {one.Box.Height:0.000}");
         }
 
+        // ── D-FINE: 후처리를 그래프에 넣어 내보낸 것. 사각형은 입력 칸 픽셀 xyxy 다 ──
+        {
+            var decoder = new DFineDecoder();
+            var classes = new LabelClasses(["일반 봇", "다른 몹"]);
+
+            // 늘려 넣었다고 일러 준다(D-FINE 공식 설정이 그렇다). 그러면 640 으로 나눈 값이 곧 원본 0~1 이다.
+            var map = LetterboxMap.For(1920, 1080, 640, 640, letterbox: false);
+
+            // 줄 셋: 0.9(가운데 언저리) · 0.8(왼쪽 위) · 0.1(문턱 아래라 여기서 끊긴다).
+            var labels = new[] { 0f, 1f, 0f };
+            var boxes = new[] { 288f, 288f, 352f, 352f, 64f, 32f, 128f, 96f, 10f, 10f, 20f, 20f };
+            var scores = new[] { 0.9f, 0.8f, 0.1f };
+
+            var found = decoder.Decode(
+                new Dictionary<string, (float[], long[])>
+                {
+                    ["labels"] = (labels, [1, 3]),
+                    ["boxes"] = (boxes, [1, 3, 4]),
+                    ["scores"] = (scores, [1, 3])
+                },
+                map, classes, minimumScore: 0.5f);
+
+            var first = found.Count > 0 ? found[0] : default;
+            var second = found.Count > 1 ? found[1] : default;
+
+            Check("D-FINE: 픽셀 xyxy 를 원본 0~1 로 · 문턱 아래는 끊는다",
+                  found.Count == 2
+                  && first.Label == "일반 봇" && Near(first.Box.CenterX, 0.5, 0.001) && Near(first.Box.CenterY, 0.5, 0.001)
+                  && Near(first.Box.Width, 0.1, 0.001) && Near(first.Box.Height, 0.1, 0.001)
+                  && second.Label == "다른 몹" && Near(second.Box.CenterX, 0.15, 0.001) && Near(second.Box.CenterY, 0.1, 0.001),
+                  found.Count == 0 ? "하나도 안 나왔다" : $"{found.Count}개, {first.Describe} 가운데({first.Box.CenterX:0.000}, {first.Box.CenterY:0.000}) 크기({first.Box.Width:0.000})");
+        }
+
         // ── 아는 출력인지 팩터리가 가린다 ──
         {
-            var decoder = new DetrDecoder();
-
-            Check("DETR 해석기는 제 출력만 맡는다",
-                  decoder.CanDecode(["logits", "pred_boxes"]) && !decoder.CanDecode(["output"]),
+            Check("해석기는 제 출력만 맡는다",
+                  new DetrDecoder().CanDecode(["logits", "pred_boxes"]) && !new DetrDecoder().CanDecode(["output"])
+                  && new DFineDecoder().CanDecode(["labels", "boxes", "scores"]) && !new DFineDecoder().CanDecode(["logits", "pred_boxes"]),
                   "");
         }
     }

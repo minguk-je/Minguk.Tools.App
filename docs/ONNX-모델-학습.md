@@ -52,13 +52,35 @@ python tools/deployment/export_onnx.py -c configs/dfine/dfine_hgnetv2_n_coco.yml
 - 입력 크기는 640x640 이 기본이다. 바꾸면 들일 때 `--size` 도 같이 바꾼다.
 - GPU 가 있어야 한다. 4070 노트북에서 97장·수십 바퀴면 몇십 분 수준이다(우리 ML.NET 학습은 46분이었다).
 
+## 2.5 DirectML 이 먹을 수 있게 고치기 (**빼먹으면 한 마리도 못 찾는다**)
+
+```bash
+python 도구/onnx-DirectML-고치기.py output/mob_n/best_stg2.onnx
+# → best_stg2-dml.onnx
+```
+
+DirectML 은 `MatMul` 의 오른쪽이 **1차원 벡터**일 때 그 벡터를 무시하고 행 합계를 돌려준다(실측).
+D-FINE 디코더에 이 모양이 세 군데 있어서, 잘 배운 모델이 **점수 0.9 → 0.06** 이 되고 되찾기가 0% 가 된다.
+터지지도 느려지지도 않고 **답만 조용히 틀린다** - 헛것도 0개라 "덜 배웠나" 로 보인다.
+스크립트는 그 벡터를 [N,1] 행렬로 바꿔 곱하고 축을 다시 없앤다(답은 CPU 와 소수점까지 같다).
+
+들일 때 앱이 GPU·CPU 를 견줘 보고 어긋나면 막는다. 혼자 확인하려면:
+
+```
+Minguk.Tools.Tests.exe --onnx-agree --model=... --image=...
+Minguk.Tools.Tests.exe --onnx-raw   --model=... --image=... [--cpu]   # 날것 출력
+```
+
 ## 3. 들이기 (앱 쪽)
 
 ```
-Minguk.Tools.Tests.exe --import-onnx --model=D:\...\best.onnx --size=640x640
+Minguk.Tools.Tests.exe --import-onnx --model=D:\...\best_stg2-dml.onnx --size=640x640
 ```
 
 - `detector.onnx` 로 복사하고 그 옆에 쪽지(`detector.onnx.json`)를 쓴다. **우리가 학습한 `detector.zip` 은 건드리지 않는다.**
+- `--fit=` 은 **그림을 어떻게 넣어 학습했는지**다. 기본은 `늘리기` - D-FINE·RT-DETR 공식 설정의 변환이
+  `Resize [640,640]` 하나뿐이라 비율을 안 지킨다. YOLO 계열로 학습했으면 `--fit=비율`.
+  여기가 학습과 다르면 역시 한 마리도 못 찾는다.
 - 쪽지가 이 모델을 가리키므로 앱은 다음 몹 찾기부터 새 모델로 돈다. libtorch 도, CPU 리드백도 필요 없다.
 
 ## 3.5 다른 PC(노트북)에서 학습하기
@@ -102,6 +124,16 @@ Minguk.Tools.Tests.exe --onnx-texture --model=... --image=...   # GPU 길과 CPU
 
 **받아들이는 문턱**: 되찾기 70% 이상(옛 모델과 같거나 낫게), 헛것은 한 자릿수, 한 장 30ms 이하.
 하나라도 못 넘으면 되돌린다.
+
+**2026-09-13 실측 (GTX 1060 3GB)** - D-FINE-N 97장 60바퀴(1시간 45분), 640x640 늘리기:
+
+| | 옛 모델(우리 학습, 640x360) | 새 모델(D-FINE-N) |
+|---|---|---|
+| 되찾기 | 70% | **99%** (192개 중 191개) |
+| 헛것 | 5개 | **0개** |
+| 추론 한 장 | 606 ms | **32 ms** |
+| 모델 크기 | 83 MB | 15 MB |
+| 필요한 것 | libtorch 4.3GB | 없음(ONNX Runtime 뿐) |
 
 ```
 Minguk.Tools.Tests.exe --use-trained           # 옛 모델(detector.zip)로 돌아간다. onnx 파일은 그대로 남는다

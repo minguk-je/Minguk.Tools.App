@@ -41,8 +41,12 @@ public static class DetectorFiles
     /// 밖에서 학습해 온 <c>.onnx</c> 를 데이터셋에 들인다. 파일을 복사하고 쪽지를 ONNX 로 바꾼다.
     /// </summary>
     /// <param name="inputWidth">모델이 받는 입력 크기. 모델이 크기를 안 박아 두었을 때(RT-DETR·D-FINE) 쓰인다.</param>
+    /// <param name="letterbox">
+    /// 학습할 때 비율을 지키고 여백을 넣었는가. D-FINE·RT-DETR 공식 설정은 <c>Resize [640,640]</c> 하나뿐이라
+    /// 거짓(늘리기)이다. 여기가 학습과 다르면 한 마리도 못 찾는다.
+    /// </param>
     /// <returns>들인 파일 자리.</returns>
-    public static string ImportOnnx(LabelDataset dataset, string sourcePath, int inputWidth = 640, int inputHeight = 640)
+    public static string ImportOnnx(LabelDataset dataset, string sourcePath, int inputWidth = 640, int inputHeight = 640, bool letterbox = false)
     {
         if (!File.Exists(sourcePath)) throw new FileNotFoundException($"가져올 모델이 없습니다: {sourcePath}", sourcePath);
 
@@ -60,6 +64,7 @@ public static class DetectorFiles
         manifest.Engine = DetectorEngine.Onnx;
         manifest.InputWidth = inputWidth;
         manifest.InputHeight = inputHeight;
+        manifest.Letterbox = letterbox;
         manifest.TrainedAt = File.GetLastWriteTime(target);
         manifest.Classes = [.. dataset.LoadClasses().Names];
 
@@ -73,7 +78,8 @@ public static class DetectorFiles
 
         manifest.Save(target);
 
-        Logger.Info($"ONNX 모델을 들였다: {target} ({new FileInfo(target).Length / 1_048_576.0:N1} MB, 입력 {inputWidth}x{inputHeight})");
+        Logger.Info($"ONNX 모델을 들였다: {target} ({new FileInfo(target).Length / 1_048_576.0:N1} MB, " +
+                    $"입력 {inputWidth}x{inputHeight} {(letterbox ? "레터박스" : "늘리기")})");
 
         return target;
     }

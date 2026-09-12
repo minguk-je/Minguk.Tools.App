@@ -43,6 +43,8 @@ internal static partial class Program
 
         // 설계 0단계: ONNX 검출기가 이 PC 에서 몇 ms 인지만 잰다. 모델 파일이 있어야 하므로 평소 검증 밖.
         if (args.Contains("--onnx-bench")) return OnnxBench.Run(args);
+        if (args.Contains("--onnx-raw")) return OnnxRaw.Run(args);
+        if (args.Contains("--onnx-agree")) return OnnxAgree.Run(args);
 
         // 설계 2단계: ONNX 검출기가 무엇을 어디서 찾는지 본다(사각형을 그려 파일로 남긴다).
         if (args.Contains("--onnx-detect")) return OnnxDetect.Run(args);

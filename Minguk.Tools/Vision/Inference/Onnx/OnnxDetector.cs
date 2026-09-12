@@ -26,12 +26,13 @@ public sealed class OnnxDetector : IDetector, ITensorDetector
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
-    private static readonly IDetectionDecoder[] Decoders = [new DetrDecoder()];
+    private static readonly IDetectionDecoder[] Decoders = [new DetrDecoder(), new DFineDecoder()];
 
     private readonly OnnxDmlEngine _engine;
     private readonly IDetectionDecoder _decoder;
     private readonly TensorSpec _spec;
     private readonly float[] _tensor;
+    private readonly long[]? _sizes;
 
     private bool _disposed;
 
@@ -42,15 +43,28 @@ public sealed class OnnxDetector : IDetector, ITensorDetector
         ModelPath = modelPath;
 
         // 모델이 크기를 박아 두었으면 그것이 답이다. 동적 차원(RT-DETR·D-FINE)이면 쪽지의 크기를 쓴다.
-        _spec = _engine.TryDeriveInputSpec()
-                ?? new TensorSpec { Width = manifest.InputWidth, Height = manifest.InputHeight };
+        // 넣는 방식(레터박스냐 늘리기냐)은 파일에 안 적혀 있어 쪽지만 안다 - 학습과 다르면 한 마리도 못 찾는다.
+        var derived = _engine.TryDeriveInputSpec();
+
+        _spec = new TensorSpec
+        {
+            Width = derived?.Width ?? manifest.InputWidth,
+            Height = derived?.Height ?? manifest.InputHeight,
+            Layout = derived?.Layout ?? TensorLayout.Nchw,
+            Letterbox = manifest.Letterbox
+        };
 
         _decoder = Decoders.FirstOrDefault(d => d.CanDecode(_engine.OutputNames))
                    ?? throw new NotSupportedException(
                        $"이 모델의 출력을 풀 줄 모른다: {string.Join(", ", _engine.OutputNames)}. " +
-                       "지금은 DETR 계열(logits · pred_boxes)만 안다.");
+                       "지금은 DETR 계열(logits · pred_boxes)과 후처리를 넣어 내보낸 것(labels · boxes · scores)만 안다.");
 
         _tensor = new float[_spec.ElementCount];
+
+        // 입력이 둘인 내보내기(D-FINE)는 "원본 크기" 를 같이 받아 사각형을 그 픽셀로 돌려준다. 여백을 아는 것은
+        // 우리뿐이라 원본 크기가 아니라 레터박스한 칸의 크기를 일러 주고, 되돌리기는 LetterboxMap 이 한다.
+        // 순서는 (너비, 높이) 다 - 후처리가 repeat(1,2) 로 [w,h,w,h] 를 만들어 [x1,y1,x2,y2] 에 곱한다.
+        _sizes = _engine.InputNames.Count == 2 ? [_spec.Width, _spec.Height] : null;
 
         Logger.Info($"ONNX 검출기: {Path.GetFileName(modelPath)} · 입력 {_spec.Width}x{_spec.Height} · 해석 {_decoder.Name}");
     }
@@ -92,17 +106,34 @@ public sealed class OnnxDetector : IDetector, ITensorDetector
 
     private IReadOnlyList<Detection> RunAndDecode(float[] tensor, LetterboxMap map, LabelClasses classes, float minimumScore)
     {
-        using var outputs = _engine.Run(tensor, _spec.Shape);
+        using var outputs = _engine.Run(tensor, _spec.Shape, _sizes);
 
         var values = new Dictionary<string, (float[] Values, long[] Shape)>();
 
         for (var i = 0; i < _engine.OutputNames.Count; i++)
         {
             var output = outputs[i];
-            values[_engine.OutputNames[i]] = (output.GetTensorDataAsSpan<float>().ToArray(), output.GetTensorTypeAndShape().Shape);
+            values[_engine.OutputNames[i]] = (ReadFloats(output), output.GetTensorTypeAndShape().Shape);
         }
 
         return _decoder.Decode(values, map, classes, minimumScore);
+    }
+
+    /// <summary>
+    /// 출력 하나를 float 배열로. 라벨은 int64 로 나오는데 클래스 번호는 작아서 float 로 옮겨도 상하지 않는다 -
+    /// 해석기마다 형을 따지게 하느니 여기서 한 모양으로 맞춘다.
+    /// </summary>
+    private static float[] ReadFloats(Microsoft.ML.OnnxRuntime.OrtValue output)
+    {
+        var type = output.GetTensorTypeAndShape().ElementDataType;
+
+        return type switch
+        {
+            Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Float => output.GetTensorDataAsSpan<float>().ToArray(),
+            Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Int64 => [.. output.GetTensorDataAsSpan<long>().ToArray().Select(v => (float)v)],
+            Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Int32 => [.. output.GetTensorDataAsSpan<int>().ToArray().Select(v => (float)v)],
+            _ => throw new NotSupportedException($"출력 형을 모른다: {type}")
+        };
     }
 
     /// <summary>그림을 BGRA 한 줄 배열로 읽는다. 화면 캡처와 같은 채널 순서라 뒤에서 헷갈릴 일이 없다.</summary>

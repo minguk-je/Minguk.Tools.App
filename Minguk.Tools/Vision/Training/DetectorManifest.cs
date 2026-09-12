@@ -45,6 +45,21 @@ public sealed class DetectorManifest
     [JsonPropertyName("inputHeight")]
     public int InputHeight { get; set; } = LegacyHeight;
 
+    /// <summary>
+    /// 그림을 입력 칸에 <b>어떻게 넣어</b> 학습했는지. 참이면 비율을 지키고 남는 자리를 회색으로 채웠다(레터박스),
+    /// 거짓이면 그냥 늘려 맞췄다.
+    /// </summary>
+    /// <remarks>
+    /// <b>크기만큼 중요하다.</b> 넣는 방식이 학습과 다르면 모델은 한 마리도 못 찾는다 - 사각형이 어긋나는 것이
+    /// 아니라 아예 못 본다(실측: 늘려 배운 D-FINE 에 레터박스로 넣었더니 192개 중 0개).
+    /// 게다가 헛것도 0개라 "모델이 덜 배웠나" 로 보여 엉뚱한 데를 파게 된다.
+    ///
+    /// D-FINE · RT-DETR 의 공식 설정은 <c>Resize [640,640]</c> 하나뿐이라 <b>늘리기</b>다.
+    /// YOLO 계열은 레터박스가 관습이다.
+    /// </remarks>
+    [JsonPropertyName("letterbox")]
+    public bool Letterbox { get; set; } = true;
+
     /// <summary>언제 학습했는지. 데이터셋을 고친 뒤 다시 학습했는지 가늠하는 데 쓴다.</summary>
     [JsonPropertyName("trainedAt")]
     public DateTime TrainedAt { get; set; }
