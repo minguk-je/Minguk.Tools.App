@@ -61,6 +61,38 @@ Minguk.Tools.Tests.exe --import-onnx --model=D:\...\best.onnx --size=640x640
 - `detector.onnx` 로 복사하고 그 옆에 쪽지(`detector.onnx.json`)를 쓴다. **우리가 학습한 `detector.zip` 은 건드리지 않는다.**
 - 쪽지가 이 모델을 가리키므로 앱은 다음 몹 찾기부터 새 모델로 돈다. libtorch 도, CPU 리드백도 필요 없다.
 
+## 3.5 다른 PC(노트북)에서 학습하기
+
+가상환경(.venv)은 **복사하지 않는다** - 안에 이 PC 경로가 박혀 있어 옮기면 깨진다. 다시 만드는 데 몇 분이면 된다.
+
+옮길 것은 셋뿐이다.
+
+| 옮길 것 | 크기 | 비고 |
+|---|---|---|
+| `D-FINE` 저장소(우리 설정 포함) | 수십 MB | `configs/dataset/mob_detection.yml` · `configs/dfine/custom/dfine_hgnetv2_n_mob.yml` |
+| `dfine_n_coco.pth` | 15 MB | 사전학습 가중치 |
+| 데이터셋 폴더 | 240 MB | 사진·라벨. 이미 옮겨 뒀으면 그것을 쓴다 |
+
+노트북에서 할 일:
+
+```bash
+uv venv --python 3.12 .venv
+uv pip install --python .venv/Scripts/python.exe torch torchvision --index-url https://download.pytorch.org/whl/cu124
+uv pip install --python .venv/Scripts/python.exe faster-coco-eval PyYAML tensorboard scipy calflops transformers loguru onnx onnxsim matplotlib pycocotools
+
+# 앱에서 데이터셋 폴더를 고른 뒤 다시 내보낸다(coco.json 의 자리가 그 PC 것이어야 한다)
+Minguk.Tools.Tests.exe --export-dataset
+
+# mob_detection.yml 의 img_folder · ann_file 을 그 PC 경로로 고친다
+# VRAM 이 8GB 면 배치를 올린다: total_batch_size: 16  (1060 3GB 에서는 4였다)
+
+set PYTHONUTF8=1
+.venv\Scripts\python.exe train.py -c configs/dfine/custom/dfine_hgnetv2_n_mob.yml --use-amp --seed=0 -t dfine_n_coco.pth
+```
+
+- **`PYTHONUTF8=1` 이 필요하다** - 한국어 윈도우의 기본 인코딩(cp949)으로 설정 파일을 읽다 터진다(실측).
+- 돌아올 때는 **내보낸 `.onnx` 하나만**(15MB) 가져오면 된다. `.pth`(60MB)는 다시 학습할 때만 쓴다.
+
 ## 4. 견주기
 
 ```

@@ -108,7 +108,9 @@ public static class DatasetExport
                 {
                     id = annotationId++,
                     image_id = imageId,
-                    category_id = classId + 1,   // COCO 는 1부터
+                    // 분류 번호는 우리 것(0부터) 그대로 둔다. COCO 관습은 1부터지만, 그렇게 적으면 학습한 모델의
+                    // 0번 자리가 비고 우리 라벨(0번)과 한 칸씩 어긋나 되찾기가 0% 가 된다. 학습기는 번호를 그대로 쓴다.
+                    category_id = classId,
                     bbox = new[] { Math.Round(left, 2), Math.Round(top, 2), Math.Round(boxWidth, 2), Math.Round(boxHeight, 2) },
                     area = Math.Round(boxWidth * boxHeight, 2),
                     iscrowd = 0
@@ -119,7 +121,7 @@ public static class DatasetExport
         }
 
         var categories = Enumerable.Range(0, classes.Count)
-            .Select(i => new { id = i + 1, name = classes.Names[i], supercategory = "mob" })
+            .Select(i => new { id = i, name = classes.Names[i], supercategory = "mob" })
             .ToArray();
 
         var json = JsonSerializer.Serialize(new { images, annotations, categories },
