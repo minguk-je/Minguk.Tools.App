@@ -175,7 +175,7 @@ public partial class LabelingViewModel
 
         await Task.Run(() =>
         {
-            using var model = DetectorModel.Load(modelPath);
+            using var model = DetectorFactory.Create(modelPath);
 
             for (var i = 0; i < rows.Count; i++)
             {

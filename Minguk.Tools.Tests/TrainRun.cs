@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -64,7 +64,7 @@ internal static class TrainRun
             return;
         }
 
-        using var model = Minguk.Tools.Vision.Inference.DetectorModel.Load(modelPath);
+        using var model = Minguk.Tools.Vision.Inference.DetectorFactory.Create(modelPath);
         var classes = dataset.LoadClasses();
 
         // 첫 장은 준비가 섞여 느리다. 버리고 다섯 번 잰다.

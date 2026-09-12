@@ -62,7 +62,7 @@ internal static class DetectBench
 
         var opening = Stopwatch.StartNew();
 
-        using var model = DetectorModel.Load(modelPath);
+        using var model = DetectorFactory.Create(modelPath);
 
         opening.Stop();
 
@@ -99,7 +99,7 @@ internal static class DetectBench
         return 0;
     }
 
-    private static void Measure(DetectorModel model, LabelClasses classes, string temp,
+    private static void Measure(IDetector model, LabelClasses classes, string temp,
                                 string name, int width, int height)
     {
         var path = Path.Combine(temp, $"{width}x{height}.png");

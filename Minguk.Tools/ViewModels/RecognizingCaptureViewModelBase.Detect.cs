@@ -42,7 +42,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </remarks>
     private const int DetectLongestSide = 320;
 
-    private DetectorModel? _detector;
+    private IDetector? _detector;
     private LabelClasses _detectClasses = new();
 
     /// <summary>프레임 간 추적. <see cref="RunDetect"/> 한 곳에서만 만진다(한 번에 하나만 돈다).</summary>
@@ -314,7 +314,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
                 LibTorchRuntime.Load(flavor);
 
-                var model = DetectorModel.Load(modelPath);
+                var model = DetectorFactory.Create(modelPath);
 
                 _detectClasses = dataset.LoadClasses();
                 _detectorStamp = stamp;

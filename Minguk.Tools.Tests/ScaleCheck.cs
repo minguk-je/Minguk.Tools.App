@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -43,7 +43,7 @@ internal static class ScaleCheck
             return 1;
         }
 
-        using var model = DetectorModel.Load(modelPath);
+        using var model = DetectorFactory.Create(modelPath);
         var classes = dataset.LoadClasses();
         var items = dataset.EnumerateItems().Where(i => i.HasLabel).ToList();
 

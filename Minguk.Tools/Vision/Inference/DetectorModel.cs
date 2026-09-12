@@ -60,8 +60,11 @@ internal sealed class DetectionPrediction
 ///
 /// <see cref="PredictionEngine{TSrc,TDst}"/> 는 스레드 안전하지 않다. 이 클래스도 마찬가지라
 /// 프레임마다 부르는 쪽에서 한 스레드로 몰아야 한다.
+///
+/// <b>이것은 둘 중 하나다</b> - <see cref="IDetector"/> 의 구현이고, 쪽지의 engine 이 torch(기본)일 때 쓰인다.
+/// 부르는 쪽은 <see cref="DetectorFactory"/> 로 받는다.
 /// </remarks>
-public sealed class DetectorModel : IDisposable
+public sealed class DetectorModel : IDetector
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 

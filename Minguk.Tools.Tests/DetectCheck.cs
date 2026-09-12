@@ -57,7 +57,7 @@ internal static class DetectCheck
             return 1;
         }
 
-        using var model = DetectorModel.Load(modelPath);
+        using var model = DetectorFactory.Create(modelPath);
 
         Console.WriteLine($"모델: {model.Manifest.Describe}");
         Console.WriteLine($"기준: 자신 있는 정도 {MinimumScore:P0} 이상 · 겹침(IoU) {DetectionMatch.MatchIou:0.0} 이상이면 찾은 것");

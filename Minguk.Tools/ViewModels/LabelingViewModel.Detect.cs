@@ -21,7 +21,7 @@ public partial class LabelingViewModel
     /// 69MB 를 읽는 데 몇 초 걸린다. 그림을 넘길 때마다 다시 읽으면 못 쓴다.
     /// 다시 학습하면 <see cref="_model"/> 을 버려야 새 것을 읽는다.
     /// </remarks>
-    private DetectorModel? _model;
+    private IDetector? _model;
 
     /// <summary>
     /// 지금 그림에서 몹을 찾아 본다.
@@ -88,7 +88,7 @@ public partial class LabelingViewModel
                 _model = null;
             }
 
-            _model ??= DetectorModel.Load(modelPath);
+            _model ??= DetectorFactory.Create(modelPath);
         });
 
         var classes = dataset.LoadClasses();

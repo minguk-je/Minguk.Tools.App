@@ -32,6 +32,13 @@ public sealed class DetectorManifest
 
     public const int LegacyHeight = 180;
 
+    /// <summary>
+    /// 이 모델을 무엇으로 돌리는지. 없으면 <see cref="DetectorEngine.Torch"/> - 여기 생기기 전에 학습한 것들이다.
+    /// </summary>
+    [JsonPropertyName("engine")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public DetectorEngine Engine { get; set; } = DetectorEngine.Torch;
+
     [JsonPropertyName("inputWidth")]
     public int InputWidth { get; set; } = LegacyWidth;
 
