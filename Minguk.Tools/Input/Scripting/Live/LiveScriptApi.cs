@@ -10,6 +10,7 @@ using System.Windows.Input;
 
 using Minguk.Tools.Capture;
 using Minguk.Tools.Capture.Input;
+using Minguk.Tools.Input.Interop;
 using Minguk.Tools.Input.Sequencing;
 
 namespace Minguk.Tools.Input.Scripting.Live;
@@ -228,37 +229,130 @@ public sealed class LiveScriptApi
         }
     }
 
-    /// <summary>상대 이동을 걸음으로 나눠 보낸다. 한 번에 크게 넣으면 커서가 창 밖으로 나간다 - 조준과 끌기가 같이 쓴다.</summary>
+    /// <summary>
+    /// 상대 이동을 <b>사람이 겨누듯</b> 나눠 보낸다 - 조준·상대이동·끌기가 같이 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜 이렇게까지</b> - 예전에는 한 걸음 30카운트씩 최대 6걸음이었다. 멀리 겨누면 한 걸음이 200카운트라
+    /// 시야가 뚝뚝 끊겨 돌았고("팍팍 이동"), 게임이 그 사이를 한 프레임도 못 봤다.
+    ///
+    /// 사람 손은 셋을 한다. 그대로 흉내 낸다.
+    /// <list type="number">
+    /// <item><b>천천히 떼고 천천히 멈춘다</b> - 가운데가 가장 빠른 S자(smoothstep). 등속으로 가면 시작과 끝이 튄다.</item>
+    /// <item><b>잘게 자주</b> - 8ms 마다(약 125Hz) 조금씩. 게임이 그 사이사이를 보므로 움직임이 이어져 보인다.
+    /// 윈도우 기본 눈금이 15.6ms 라 <see cref="PrecisionTimer"/> 로 1ms 로 당겨 두고 움직인다.</item>
+    /// <item><b>완전한 직선이 아니다</b> - 손목은 조금 휜다. 가는 동안만 옆으로 살짝 벗어났다가 끝에서 0으로 돌아온다.
+    /// 합은 정확히 delta 라 도착지는 그대로다.</item>
+    /// </list>
+    ///
+    /// 걸리는 시간은 거리에 따라 늘지만 상한이 있다(<see cref="MaxMoveMs"/>). 조준은 새 화면을 기다렸다 다시 겨누므로
+    /// 한 번에 다 맞힐 필요가 없다 - 오래 붙들고 있는 것이 더 나쁘다.
+    /// </remarks>
     private void SendRelative(int deltaX, int deltaY)
     {
         if (deltaX == 0 && deltaY == 0) return;
 
-        var steps = Math.Clamp((int)Math.Ceiling(Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) / (double)MaxAimStep), 1, MaxAimSteps);
+        var distance = Math.Sqrt(((double)deltaX * deltaX) + ((double)deltaY * deltaY));
+        var durationMs = Math.Clamp(MoveBaseMs + (MoveMsPerRoot * Math.Sqrt(distance)), MoveBaseMs, MaxMoveMs);
+        var steps = Math.Clamp((int)Math.Round(durationMs / MoveStepMs), 1, MaxMoveSteps);
+        var gapMs = durationMs / steps;
+
+        // 옆으로 벗어나는 양(카운트). 거리에 비례하되 아주 작게 - 크면 조준이 흔들린 것처럼 보인다.
+        var arc = Math.Min(distance * ArcFraction, MaxArcCounts) * ((_random.NextDouble() * 2) - 1);
+        var arcX = distance > 0 ? -deltaY / distance * arc : 0;
+        var arcY = distance > 0 ? deltaX / distance * arc : 0;
+
         var sentX = 0;
         var sentY = 0;
 
+        // 움직이는 동안만 눈금을 당긴다. 이것이 없으면 8ms 를 부탁해도 15ms 를 쉬어 걸음이 절반으로 준다.
+        using var precise = new PrecisionTimer();
+
         for (var i = 1; i <= steps; i++)
         {
+            var t = Ease(i / (double)steps);
+
+            // 부푼 만큼은 가는 길에만 있고 끝(t=1)에서는 0 이다.
+            var bulge = Math.Sin(t * Math.PI);
+
             // 나눗셈 나머지가 끝에 몰리지 않게 누적으로 나눈다 - 합은 정확히 delta 다.
-            var stepX = (int)Math.Round(deltaX * i / (double)steps) - sentX;
-            var stepY = (int)Math.Round(deltaY * i / (double)steps) - sentY;
+            var stepX = (int)Math.Round((deltaX * t) + (arcX * bulge)) - sentX;
+            var stepY = (int)Math.Round((deltaY * t) + (arcY * bulge)) - sentY;
 
-            _host.Service.Adapter.MoveMouseBy(stepX, stepY);
-            sentX += stepX;
-            sentY += stepY;
+            if (stepX != 0 || stepY != 0)
+            {
+                _host.Service.Adapter.MoveMouseBy(stepX, stepY);
+                sentX += stepX;
+                sentY += stepY;
+            }
 
-            if (i < steps) Wait(AimStepGapMs);
+            if (i < steps) WaitPrecise(gapMs);
+        }
+
+        // 휘어 간 것이 반올림으로 남았을 수 있다. 마지막에 딱 맞춘다.
+        if (sentX != deltaX || sentY != deltaY)
+            _host.Service.Adapter.MoveMouseBy(deltaX - sentX, deltaY - sentY);
+    }
+
+    /// <summary>천천히 떼고 천천히 멈춘다(smoothstep). 0~1 을 0~1 로 옮기되 양 끝의 기울기가 0 이다.</summary>
+    private static double Ease(double t) => t * t * (3 - (2 * t));
+
+    /// <summary>
+    /// 짧은 시간을 제대로 기다린다. 남은 시간이 넉넉하면 재우고, 1.5ms 아래로 남으면 시계를 보며 버틴다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Wait"/> 는 <c>WaitHandle</c> 이라 눈금(기본 15.6ms, <see cref="PrecisionTimer"/> 로 1ms)을 탄다.
+    /// 걸음 간격이 8ms 인데 15ms 를 쉬면 움직임이 절반 속도로 늘어지고 걸음도 굵어진다. 대신 <b>토큰은 계속 본다</b> -
+    /// 중지가 이 사이에 먹어야 한다.
+    /// </remarks>
+    private void WaitPrecise(double milliseconds)
+    {
+        ThrowIfStopping();
+
+        if (milliseconds <= 0) return;
+
+        var until = Stopwatch.GetTimestamp() + (long)(milliseconds * Stopwatch.Frequency / 1000.0);
+
+        while (true)
+        {
+            var remaining = (until - Stopwatch.GetTimestamp()) * 1000.0 / Stopwatch.Frequency;
+
+            if (remaining <= 0) return;
+
+            if (remaining > 1.5)
+            {
+                if (_token.WaitHandle.WaitOne(1)) ThrowIfStopping();
+            }
+            else
+            {
+                Thread.SpinWait(80);
+            }
         }
     }
 
-    /// <summary>한 번에 보내는 상대 이동의 최대 크기(카운트). 넘으면 잘게 나눈다.</summary>
-    private const int MaxAimStep = 30;
+    /// <summary>휘는 길에 쓰는 난수. 씨앗을 안 주면 부를 때마다 달라 사람 손처럼 같은 길을 두 번 안 간다.</summary>
+    private readonly Random _random = new();
 
-    /// <summary>나눈 걸음 사이 간격(ms). 게임이 커서를 가운데로 되돌릴 틈. 기다림 한 번이 실제로는 ~15ms 다.</summary>
-    private const int AimStepGapMs = 4;
+    /// <summary>아무리 짧아도 이만큼은 쓴다(ms). 한 걸음으로 끝나면 사람 손이 아니다.</summary>
+    private const double MoveBaseMs = 70;
 
-    /// <summary>걸음 수 상한. 멀리 겨눌 때 걸음마다 기다리다 조준 하나가 1초를 넘었다(실측: 1,160ms).</summary>
-    private const int MaxAimSteps = 6;
+    /// <summary>거리(카운트)의 제곱근에 곱하는 시간(ms). 멀수록 오래 걸리되 비례해서 늘지는 않는다 - 사람도 그렇다.</summary>
+    private const double MoveMsPerRoot = 6.5;
+
+    /// <summary>한 번의 이동에 쓰는 시간 상한(ms). 조준은 새 화면을 기다렸다 또 겨누므로 오래 붙들 이유가 없다.</summary>
+    private const double MaxMoveMs = 280;
+
+    /// <summary>걸음 사이 목표 간격(ms). 8ms 면 약 125Hz - 게이밍 마우스의 폴링과 비슷하다.</summary>
+    private const double MoveStepMs = 8;
+
+    /// <summary>걸음 수 상한. 눈금이 굵은 PC 에서 시간이 늘어지는 것을 막는다.</summary>
+    private const int MaxMoveSteps = 40;
+
+    /// <summary>옆으로 벗어나는 양을 거리의 몇 배로 할지. 2% 면 눈에 안 띄고 직선도 아니다.</summary>
+    private const double ArcFraction = 0.02;
+
+    /// <summary>벗어나는 양의 상한(카운트). 멀리 겨눌 때 옆으로 크게 돌면 조준이 흔들린 것으로 보인다.</summary>
+    private const double MaxArcCounts = 12;
 
     /// <summary>
     /// 한 번의 조준으로 보내는 양의 상한(카운트). 배율이 잘못 커지면 한 번에 2,000 이 넘게 나가 시야가 한 바퀴 돌았다(실측).

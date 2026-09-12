@@ -100,17 +100,37 @@ internal static partial class Program
             var cx = (int)(bounds.Left + (bounds.Width / 2));
             var cy = (int)(bounds.Top + (bounds.Height / 2));
 
-            var (errors, adapter, printed) = Run(new RoslynScriptEngine(), $"출력(조준({cx + 100}, {cy - 40})); 출력(조준({cx + 100}, {cy - 40})); 상대이동(3, -4);", new FakeHub(monitor) { FrameTicks = 1 }, monitor, CancellationToken.None);
+            var (errors, adapter, printed) = Run(new RoslynScriptEngine(), $"출력(조준({cx + 100}, {cy - 40})); 출력(조준({cx + 100}, {cy - 40}));", new FakeHub(monitor) { FrameTicks = 1 }, monitor, CancellationToken.None);
+            var aimMoves = adapter.Calls.Where(c => c.StartsWith("MoveBy")).Select(c => c[7..].Split(',').Select(int.Parse).ToArray()).ToList();
+
+            Check("조준은 가운데에서 목표까지의 거리만큼 상대 이동한다 (합이 정확)",
+                  errors.Count == 0 && aimMoves.Sum(m => m[0]) == 100 && aimMoves.Sum(m => m[1]) == -40,
+                  $"{aimMoves.Count}걸음, 합({aimMoves.Sum(m => m[0])}, {aimMoves.Sum(m => m[1])})" + (errors.Count > 0 ? " / " + errors[0] : ""));
+
+            // 사람처럼 움직이는가 - 잘게 나누고, 가운데가 빠르고 양 끝이 느리다.
+            // 등속이거나 몇 걸음으로 끝나면 시야가 뚝뚝 끊긴다("팍팍 이동", 실측).
+            {
+                var sizes = aimMoves.Select(m => Math.Sqrt(((double)m[0] * m[0]) + ((double)m[1] * m[1]))).ToList();
+                var edge = (sizes.First() + sizes.Last()) / 2;
+                var middle = sizes[sizes.Count / 2];
+
+                Check("조준은 잘게 나누고 천천히 떼어 천천히 멈춘다",
+                      sizes.Count >= 10 && middle > edge * 1.5 && sizes.Max() <= 30,
+                      $"{sizes.Count}걸음, 양끝 평균 {edge:0.0} · 가운데 {middle:0.0} · 가장 큰 걸음 {sizes.Max():0.0}");
+            }
+
+            Check("멀면 겨누고 false, 새 화면이 오기 전에는 기다렸다가 안 겨눈다(false)",
+                  printed.Select(p => p.ToLowerInvariant()).SequenceEqual(["false", "false"]), string.Join(", ", printed));
+        }
+
+        // ── 상대이동: 작은 이동도 합이 정확하다(걸음마다 반올림해도 어긋나지 않게) ──
+        {
+            var (errors, adapter, _) = Run(new RoslynScriptEngine(), "상대이동(3, -4); 상대이동(-11, 0);", new FakeHub(monitor), monitor, CancellationToken.None);
             var moves = adapter.Calls.Where(c => c.StartsWith("MoveBy")).Select(c => c[7..].Split(',').Select(int.Parse).ToArray()).ToList();
-            var aimMoves = moves.Take(moves.Count - 1).ToList();
 
-            Check("조준은 가운데에서 목표까지의 거리만큼, 30 넘으면 잘게 나눠 상대 이동",
-                  errors.Count == 0 && aimMoves.Sum(m => m[0]) == 100 && aimMoves.Sum(m => m[1]) == -40
-                  && aimMoves.All(m => Math.Abs(m[0]) <= 30 && Math.Abs(m[1]) <= 30) && aimMoves.Count == 4
-                  && moves[^1].SequenceEqual([3, -4]),
-                  string.Join(" ", moves.Select(m => $"({m[0]},{m[1]})")) + (errors.Count > 0 ? " / " + errors[0] : ""));
-
-            Check("멀면 겨누고 false, 새 화면이 오기 전에는 기다렸다가 안 겨눈다(false)", aimMoves.Count == 4 && printed.Select(p => p.ToLowerInvariant()).SequenceEqual(["false", "false"]), string.Join(", ", printed));
+            Check("상대이동은 걸음으로 나눠도 합이 정확하다",
+                  errors.Count == 0 && moves.Sum(m => m[0]) == -8 && moves.Sum(m => m[1]) == -4,
+                  $"{moves.Count}걸음, 합({moves.Sum(m => m[0])}, {moves.Sum(m => m[1])})" + (errors.Count > 0 ? " / " + errors[0] : ""));
         }
 
         // ── 조준: 가운데 가까우면 맞음(true) ──
@@ -192,9 +212,10 @@ internal static partial class Program
             var calls = adapter.Calls.Where(c => c.StartsWith("Press") || c.StartsWith("Release") || c.StartsWith("MoveBy")).ToList();
             var moves = calls.Where(c => c.StartsWith("MoveBy")).Select(c => int.Parse(c[7..].Split(',')[0])).ToList();
 
+            // 걸음 수는 못 박지 않는다 - 사람처럼 움직이느라 거리에 따라 달라진다. 지킬 것은 "누른 채 움직이고 반드시 뗀다" 와 합이다.
             Check("상대끌기: 우버튼을 누른 채 나눠 움직였다 뗀다", errors.Count == 0 && calls[0] == "Press Right" && calls[^3] == "Release Right"
-                  && moves.Sum() == 90 && moves.Count == 3 && calls[^2] == "Press Left" && calls[^1] == "Release Left",
-                  string.Join(", ", calls) + (errors.Count > 0 ? " / " + errors[0] : ""));
+                  && moves.Sum() == 90 && moves.Count >= 2 && calls[^2] == "Press Left" && calls[^1] == "Release Left",
+                  $"{moves.Count}걸음, 합 {moves.Sum()} · " + string.Join(", ", calls.Take(3)) + " … " + string.Join(", ", calls.TakeLast(3)) + (errors.Count > 0 ? " / " + errors[0] : ""));
 
             var (dragErrors, dragAdapter, _) = Run(new RoslynScriptEngine(), "끌기(300, 400);", new FakeHub(monitor), monitor, CancellationToken.None);
             var dragCalls = dragAdapter.Calls.Where(c => c.StartsWith("Press") || c.StartsWith("Release") || c.StartsWith("MoveTo")).ToList();
