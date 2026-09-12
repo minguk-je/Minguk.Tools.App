@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -95,6 +95,60 @@ internal static partial class Program
         _adapter.MoveMouseTo(origin.X, origin.Y);
         await Task.Delay(150);
     }
+
+    /// <summary>
+    /// 상대 이동(<see cref="IInputAdapter.MoveMouseBy"/>)이 진짜 커서를 움직이는지, 그리고 보낸 카운트와 움직인 픽셀의 비를 적는다.
+    /// </summary>
+    /// <remarks>
+    /// 게임은 Raw Input 으로 <b>보낸 카운트</b>를 보지만, OS 커서는 포인터 속도·정밀도 향상을 거쳐 다른 만큼 움직인다.
+    /// 그 비를 적어 두면 "조준 배율" 이야기를 할 때 커서 기준으로 잰 값과 게임 기준 값을 섞지 않는다.
+    /// </remarks>
+    private static async Task TestRelativeMoveAsync()
+    {
+        if (_adapter.GetCursorPosition() is not { } origin)
+        {
+            Skip("상대 이동", $"{_adapter.Name} 은 진짜 커서를 움직이지 않는다");
+            Skip("끌기 뒤 버튼이 안 눌린 채 남는가", $"{_adapter.Name} 은 진짜 커서를 움직이지 않는다");
+            return;
+        }
+
+        var screen = VirtualScreen.GetBounds();
+
+        // 화면 한가운데에서 잰다 - 모서리에서는 커서가 벽에 막혀 덜 움직인다.
+        _adapter.MoveMouseTo(screen.Left + (int)screen.Width / 2, screen.Top + (int)screen.Height / 2);
+        await Task.Delay(120);
+
+        var before = _adapter.GetCursorPosition() ?? (0, 0);
+        _adapter.MoveMouseBy(60, 40);
+        await Task.Delay(150);
+        var after = _adapter.GetCursorPosition() ?? (0, 0);
+
+        var movedX = after.Item1 - before.Item1;
+        var movedY = after.Item2 - before.Item2;
+
+        Check("상대 이동", movedX > 0 && movedY > 0,
+              $"보낸 (60, 40) → 커서 ({movedX}, {movedY}) · 커서/카운트 {(movedX / 60.0):0.00}배 "
+              + "(게임은 카운트를 그대로 본다)");
+
+        // 끌기: 누른 채 움직였다 떼고, 버튼이 남아 있지 않은지 본다. 남으면 다음 클릭이 드래그가 된다.
+        _adapter.PressMouseButton(MouseButton.Left);
+        await Task.Delay(30);
+        _adapter.MoveMouseBy(-30, -20);
+        await Task.Delay(30);
+        _adapter.ReleaseMouseButton(MouseButton.Left);
+        await Task.Delay(150);
+
+        Check("끌기 뒤 버튼이 안 눌린 채 남는가", (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0,
+              (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0 ? "떼어졌다" : "아직 눌려 있다");
+
+        _adapter.MoveMouseTo(origin.X, origin.Y);
+        await Task.Delay(150);
+    }
+
+    private const int VK_LBUTTON = 0x01;
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int key);
 
     /// <summary>버튼 위로 커서를 옮겨 좌클릭했을 때 Click 이벤트가 오르는지.</summary>
     private static async Task TestClickAsync(TestWindow ui)

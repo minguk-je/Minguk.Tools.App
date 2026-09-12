@@ -272,6 +272,7 @@ internal static partial class Program
         await TestPlanRunAsync(ui);
         await TestImeToggleAsync();
         await TestMouseMoveAsync();
+        await TestRelativeMoveAsync();
         await TestClickAsync(ui);
         await TestWheelAsync(ui);
 
