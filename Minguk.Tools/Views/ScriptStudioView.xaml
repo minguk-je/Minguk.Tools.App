@@ -418,6 +418,10 @@
                 <dxlc:LayoutGroup Height="170"
                                   VerticalAlignment="Bottom"
                                   View="Tabs">
+                    <!--
+                        새 줄이 붙으면 맨 아래로 따라간다. 단, 사람이 위로 올려 본 동안에는 멈춘다
+                        (markup:AutoScrollToEnd 참고) - 초당 수십 줄이 쌓이는 칸이라 무조건 끌어내리면 읽을 수가 없다.
+                    -->
                     <dxlc:LayoutGroup Header="출력">
                         <dxe:TextEdit AcceptsReturn="True"
                                       EditValue="{Binding Live.Console.Text, Mode=OneWay}"
@@ -425,7 +429,8 @@
                                       IsReadOnly="True"
                                       TextWrapping="Wrap"
                                       VerticalContentAlignment="Top"
-                                      VerticalScrollBarVisibility="Auto" />
+                                      VerticalScrollBarVisibility="Auto"
+                                      markup:AutoScrollToEnd.IsEnabled="True" />
                     </dxlc:LayoutGroup>
                     <dxlc:LayoutGroup Header="호출">
                         <dxe:TextEdit AcceptsReturn="True"
@@ -435,7 +440,8 @@
                                       IsReadOnly="True"
                                       TextWrapping="NoWrap"
                                       VerticalContentAlignment="Top"
-                                      VerticalScrollBarVisibility="Auto" />
+                                      VerticalScrollBarVisibility="Auto"
+                                      markup:AutoScrollToEnd.IsEnabled="True" />
                     </dxlc:LayoutGroup>
                     <dxlc:LayoutGroup Header="변수"
                                       Orientation="Vertical">

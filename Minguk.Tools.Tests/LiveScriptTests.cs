@@ -243,6 +243,31 @@ internal static partial class Program
 
             var jumped = learned.Zip(learned.Skip(1)).Any(p => p.Second > p.First * 1.5 + 0.001 || p.Second < p.First / 1.5 - 0.001);
 
+            // 너무 가깝거나 너무 먼 조준으로는 안 배운다. 실측에서 21px 이 1.83, 831px 이 1.33 으로 나와
+            // 배율을 2.4 ↔ 3.6 으로 흔들었다 - 가까운 것은 검출 떨림, 먼 것은 상한 잘림과 원근 탓이다.
+            var ignored = true;
+            var detail = new List<string>();
+
+            foreach (var offset in new[] { 21, 900 })
+            {
+                adapter.Calls.Clear();
+                hub.FrameTicks = Environment.TickCount64 + 90000 + offset;
+                api.Aim(cx + offset, cy);
+
+                // 첫 번째 조준은 <b>앞 바퀴</b>의 거리로 배운다(배우기는 늘 한 박자 늦다). 여기서부터 센다.
+                var before = learned.Count;
+                var sent = adapter.Calls.Where(c => c.StartsWith("MoveBy")).Sum(c => int.Parse(c[7..].Split(',')[0]));
+
+                hub.FrameTicks = Environment.TickCount64 + 91000 + offset;
+                api.Aim(cx + offset - (int)Math.Round(sent / trueScale), cy);
+
+                if (learned.Count != before) ignored = false;
+
+                detail.Add($"{offset}px: {before}→{learned.Count}");
+            }
+
+            Check("배율은 너무 가깝거나 너무 먼 조준으로는 안 배운다", ignored, string.Join(", ", detail));
+
             Check("조준 배율 배우기: 한 번에 1.5배 넘게 안 바꾸고 참값(3.45)으로 다가간다",
                   learned.Count >= 4 && !jumped && learned[^1] > 2.5 && learned[^1] < 4.2,
                   string.Join(" → ", learned.Select(v => v.ToString("0.00"))));

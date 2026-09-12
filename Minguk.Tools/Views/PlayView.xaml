@@ -1,4 +1,4 @@
-<UserControl x:Class="Minguk.Tools.Views.PlayView"
+﻿<UserControl x:Class="Minguk.Tools.Views.PlayView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -263,7 +263,8 @@
                       IsReadOnly="True"
                       TextWrapping="Wrap"
                       VerticalContentAlignment="Top"
-                      VerticalScrollBarVisibility="Auto" />
+                      VerticalScrollBarVisibility="Auto"
+                      markup:AutoScrollToEnd.IsEnabled="True" />
 
         <!-- 고른 스크립트에 틀린 줄이 있으면 여기 뜬다. 고치는 것은 스크립트 화면에서. -->
         <dxe:TextEdit MaxHeight="80"

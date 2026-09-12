@@ -385,6 +385,15 @@ public sealed class LiveScriptApi
     /// </summary>
     private const int MaxAimCounts = 1200;
 
+    /// <summary>이보다 가까우면 배율을 안 배운다(px). 검출 사각형의 떨림이 잰 값을 뒤집는다.</summary>
+    private const double MinLearnOffsetPx = 40;
+
+    /// <summary>
+    /// 이보다 멀면 배율을 안 배운다(px). 상한에 잘리고, 화면 가장자리는 px 이 각도보다 빨리 늘어
+    /// 가운데 근처에서 맞는 배율과 다른 값이 나온다.
+    /// </summary>
+    private const double MaxLearnOffsetPx = 400;
+
     /// <summary>
     /// 계산한 만큼의 몇 배를 실제로 보낼지. 1 보다 작게 두어 <b>일부러 조금 모자라게</b> 겨눈다.
     /// </summary>
@@ -526,7 +535,13 @@ public sealed class LiveScriptApi
             ? (last.OffsetX, offsetX, last.CountX)
             : (last.OffsetY, offsetY, last.CountY);
 
-        if (Math.Abs(sent) < 15 || Math.Abs(before) < 20) return;
+        // 너무 가깝거나 너무 먼 조준으로는 안 배운다 - 실측(오버워치 1920x1080)에서 잰 값이 이렇게 갈렸다.
+        //   40~400px : 3.10 · 3.24 · 4.00 · 4.17 · 4.20  ← 일관된다
+        //   21px     : 1.83   검출 사각형이 프레임마다 몇 px 씩 흔들려 잰 값이 통째로 뒤집힌다
+        //   831px    : 1.33   상한(1,200)에 잘리고, 화면 가장자리는 원근 때문에 px 이 각도보다 빨리 는다
+        // 저 둘이 섞이면 배율이 2.4 ↔ 3.6 으로 흔들리며 수렴하지 못한다(실측).
+        if (Math.Abs(sent) < 15) return;
+        if (Math.Abs(before) < MinLearnOffsetPx || Math.Abs(before) > MaxLearnOffsetPx) return;
 
         var moved = before - after;
         var fraction = moved / before;
