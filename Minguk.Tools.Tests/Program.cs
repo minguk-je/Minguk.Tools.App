@@ -40,6 +40,9 @@ internal static partial class Program
 
         // 크기를 바꿔 학습하고 추론 시간까지 잰다. 모델을 덮어쓰므로(.bak 로 남긴다) 평소 검증 밖.
         if (args.Contains("--train")) return TrainRun.Run(args);
+
+        // 설계 0단계: ONNX 검출기가 이 PC 에서 몇 ms 인지만 잰다. 모델 파일이 있어야 하므로 평소 검증 밖.
+        if (args.Contains("--onnx-bench")) return OnnxBench.Run(args);
         if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.
