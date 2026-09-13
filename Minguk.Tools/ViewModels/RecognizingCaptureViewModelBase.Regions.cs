@@ -36,7 +36,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     public NamedRegion? SelectedRegion
     {
         get => GetProperty(() => SelectedRegion);
-        set => SetProperty(() => SelectedRegion, value);
+        set => SetProperty(() => SelectedRegion, value, RaiseRegionFields);
     }
 
     /// <summary>켜면 미리보기에서 끈 사각형이 새 자리가 된다. 그동안 클릭은 게임으로 안 나간다.</summary>
@@ -82,6 +82,108 @@ public abstract partial class RecognizingCaptureViewModelBase
     {
         get => GetProperty(() => RegionName);
         set => SetProperty(() => RegionName, value);
+    }
+
+    /// <summary>
+    /// 고른 자리의 이름. 칸에서 고치면 바로 바뀐다.
+    /// </summary>
+    /// <remarks>
+    /// 처음에는 도구 줄의 "이름" 칸을 써서 바꾸게 했는데, 그 칸은 <b>새로 만드는 자리의 이름</b>이라
+    /// 고른 자리의 이름은 그 칸에 안 들어 있어 비어 있었고, 그대로 누르면 상태 줄에만 말이
+    /// 떠서 아무 일도 안 일어난 것처럼 보였다. 고르면 그 값이 들어 있는 칸이 있어야 한다.
+    /// </remarks>
+    public string SelectedRegionName
+    {
+        get => SelectedRegion?.Name ?? string.Empty;
+        set => RenameSelected(value);
+    }
+
+    /// <summary>고른 자리의 가로 자리(%). 수자로 고치면 그대로 옮겨간다.</summary>
+    /// <remarks>
+    /// 0~1 비율을 그대로 칸에 묶으면 0.001 씩 오르내리는 스핀이 되어 만지기 나쁘다. % 로 보이고
+    /// 소수점 한 자리까지 둔다 - 1920 화면에서 0.1% 가 2px 이라 그것이면 충분하다.
+    /// </remarks>
+    public double SelectedRegionX
+    {
+        get => Percent(SelectedRegion?.X);
+        set => MoveSelected(x: value / 100.0);
+    }
+
+    public double SelectedRegionY
+    {
+        get => Percent(SelectedRegion?.Y);
+        set => MoveSelected(y: value / 100.0);
+    }
+
+    public double SelectedRegionWidth
+    {
+        get => Percent(SelectedRegion?.Width);
+        set => MoveSelected(width: value / 100.0);
+    }
+
+    public double SelectedRegionHeight
+    {
+        get => Percent(SelectedRegion?.Height);
+        set => MoveSelected(height: value / 100.0);
+    }
+
+    private static double Percent(double? ratio) => Math.Round((ratio ?? 0) * 100, 1);
+
+    /// <summary>자리를 옮기거나 크기를 바꿔 저장한다. 안 준 것은 그대로 둔다.</summary>
+    private void MoveSelected(double? x = null, double? y = null, double? width = null, double? height = null) => Guard(() =>
+    {
+        if (SelectedRegion is not { } region) return;
+
+        // 화면 밖으로 나가면 읽을 것이 없다. 0~1 안에 가둔다.
+        var nx = Math.Clamp(x ?? region.X, 0, 0.999);
+        var ny = Math.Clamp(y ?? region.Y, 0, 0.999);
+        var nw = Math.Clamp(width ?? region.Width, 0.004, 1 - nx);
+        var nh = Math.Clamp(height ?? region.Height, 0.004, 1 - ny);
+
+        region.Rect = new Rect(nx, ny, nw, nh);
+
+        SaveRegions();
+        RaiseRegionFields();
+    });
+
+    private void RenameSelected(string wanted) => Guard(() =>
+    {
+        if (SelectedRegion is not { } region) return;
+
+        var name = (wanted ?? string.Empty).Trim();
+
+        if (name.Length == 0 || string.Equals(name, region.Name, StringComparison.Ordinal)) return;
+
+        // 이름으로 찾으므로 옮기기 전에 옛 이름으로 빼낸다 - 안 그러면 둘이 남는다.
+        RegionBook.Remove(region.Name);
+        region.Name = name;
+        RegionBook.Put(region);
+
+        SaveRegions();
+        LoadRegions();
+
+        SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+        StatusText = $"이름을 「{name}」 으로 바꿠습니다.";
+    });
+
+    /// <summary>고른 자리가 바뀌거나 그 값이 바뀌면 칸들과 겹그림을 다시 그리게 한다.</summary>
+    private void RaiseRegionFields()
+    {
+        RaisePropertyChanged(nameof(SelectedRegionName));
+        RaisePropertyChanged(nameof(SelectedRegionX));
+        RaisePropertyChanged(nameof(SelectedRegionY));
+        RaisePropertyChanged(nameof(SelectedRegionWidth));
+        RaisePropertyChanged(nameof(SelectedRegionHeight));
+
+        // 겹그림은 목록이 바뀔 때만 다시 그린다. 안의 값만 바뀌면 모르므로 여기서 알린다.
+        RegionsRevision++;
+    }
+
+    /// <summary>자리가 한 번 바뀔 때마다 오른다. 겹그림이 이것을 보고 다시 그린다.</summary>
+    public int RegionsRevision
+    {
+        get => GetProperty(() => RegionsRevision);
+        set => SetProperty(() => RegionsRevision, value);
     }
 
     public ICommand RemoveRegionCommand => new DelegateCommand(DoRemoveRegion, () => SelectedRegion is not null);

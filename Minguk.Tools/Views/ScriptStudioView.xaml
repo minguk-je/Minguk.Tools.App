@@ -309,6 +309,7 @@
                                                  OcrText="{Binding OcrText}"
                                                  RegionDraft="{Binding RegionDraft}"
                                                  Regions="{Binding Regions}"
+                                                 RegionsRevision="{Binding RegionsRevision}"
                                                  ShowRegions="{Binding IsRegionVisible}"
                                                  Source="{Binding PreviewImage}" />
                     </parts:CapturePreviewPanel.Overlay>
@@ -512,24 +513,61 @@
                     -->
                     <dxlc:LayoutGroup Header="영역"
                                       Orientation="Vertical">
+                        <!--
+                            위에 이름 한 줄, 아래에 손대는 것들 한 줄. 자리는 수자로 고친다 -
+                            끌어서 만든 것은 대개 몇 px 씩 어긋나는데, 다시 끌기보다 숫자를 올리내리는 편이 빠르고 정확하다.
+                            값을 고치면 겹그림의 사각형이 바로 따라 움직인다. %로 보인다 - 0~1 비율은 0.001 씩 움직여 만지기 나쁘다.
+                        -->
+                        <dxe:ButtonEdit EditValue="{Binding SelectedRegionName, UpdateSourceTrigger=LostFocus}"
+                                        IsEnabled="{Binding SelectedRegion, Converter={dxmvvm:ObjectToBooleanConverter}}"
+                                        NullText="미리보기에서 끌어 자리를 만들면 여기 이름이 뜨고, 고치면 바뀐다"
+                                        ToolTip="스크립트가 부를 이름. 고치고 칸 밖을 누르면 바뀐다.">
+                            <dxe:ButtonEdit.Buttons>
+                                <dxe:ButtonInfo Command="{Binding TestRegionCommand}"
+                                                Content="지금 읽기"
+                                                GlyphKind="Refresh"
+                                                ToolTip="고른 자리를 지금 한 번 읽어 상태 줄에 적는다." />
+                            </dxe:ButtonEdit.Buttons>
+                        </dxe:ButtonEdit>
+
                         <dxlc:LayoutGroup ItemSpace="4"
                                           Orientation="Horizontal">
-                            <dxe:ButtonEdit AllowDefaultButton="False"
-                                            EditValue="{Binding SelectedRegion.Describe, Mode=OneWay}"
-                                            IsReadOnly="True" />
-                            <Button Command="{Binding TestRegionCommand}"
-                                    Content="지금 읽기"
-                                    ToolTip="고른 자리를 지금 한 번 읽어 상태 줄에 적는다. 비면 자리를 넓히거나 전처리를 바꾼다." />
+                            <dxlc:LayoutItem Label="가로%">
+                                <dxe:SpinEdit EditValue="{Binding SelectedRegionX, UpdateSourceTrigger=PropertyChanged}"
+                                              Increment="0.1"
+                                              Mask="f1"
+                                              MaxValue="99.9"
+                                              MinValue="0" />
+                            </dxlc:LayoutItem>
+                            <dxlc:LayoutItem Label="세로%">
+                                <dxe:SpinEdit EditValue="{Binding SelectedRegionY, UpdateSourceTrigger=PropertyChanged}"
+                                              Increment="0.1"
+                                              Mask="f1"
+                                              MaxValue="99.9"
+                                              MinValue="0" />
+                            </dxlc:LayoutItem>
+                            <dxlc:LayoutItem Label="너비%">
+                                <dxe:SpinEdit EditValue="{Binding SelectedRegionWidth, UpdateSourceTrigger=PropertyChanged}"
+                                              Increment="0.1"
+                                              Mask="f1"
+                                              MaxValue="100"
+                                              MinValue="0.4" />
+                            </dxlc:LayoutItem>
+                            <dxlc:LayoutItem Label="높이%">
+                                <dxe:SpinEdit EditValue="{Binding SelectedRegionHeight, UpdateSourceTrigger=PropertyChanged}"
+                                              Increment="0.1"
+                                              Mask="f1"
+                                              MaxValue="100"
+                                              MinValue="0.4" />
+                            </dxlc:LayoutItem>
                             <Button Command="{Binding ToggleRegionInkCommand}"
                                     Content="전처리"
-                                    ToolTip="흰 글자만 남기기를 켜고 끈다. 배경이 밝아지는 자리는 켜야 읽히고, 늘 어두운 자리는 끄는 편이 낫다." />
-                            <Button Command="{Binding RenameRegionCommand}"
-                                    Content="이름 바꾸기"
-                                    ToolTip="위 도구 줄의 이름 칸에 적은 이름으로 바꾼다." />
+                                    ToolTip="흰 글자만 남기기를 켜고 끓다. 배경이 밝아지는 자리는 켜야 읽히고, 늘 어두운 자리는 끄는 편이 낫다." />
                             <Button Command="{Binding RemoveRegionCommand}"
                                     Content="지우기" />
                         </dxlc:LayoutGroup>
-                        <ListBox MaxHeight="90"
+
+                        <ListBox MaxHeight="70"
                                  DisplayMemberPath="Describe"
                                  ItemsSource="{Binding Regions}"
                                  SelectedItem="{Binding SelectedRegion}" />

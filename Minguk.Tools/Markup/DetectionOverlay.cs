@@ -147,6 +147,24 @@ public sealed class DetectionOverlay : FrameworkElement
         set => SetValue(RegionsProperty, value);
     }
 
+    /// <summary>
+    /// 자리가 바뀔 때마다 오르는 값. 이것이 바뀌면 다시 그린다.
+    /// </summary>
+    /// <remarks>
+    /// 목록(<see cref="Regions"/>)은 같은 객체를 그대로 들고 있고 안의 x·너비만 바뀌는 일이 있다. 컬렉션이
+    /// 안 바뀌니 알림이 안 오고, 화면은 옛 자리를 그대로 그린다 - 사람은 칸을 고쳤는데 사각형이 안 움직이는
+    /// 것을 본다. 고친 쪽이 이 값을 올려 알린다.
+    /// </remarks>
+    public static readonly DependencyProperty RegionsRevisionProperty = DependencyProperty.Register(
+        nameof(RegionsRevision), typeof(int), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public int RegionsRevision
+    {
+        get => (int)GetValue(RegionsRevisionProperty);
+        set => SetValue(RegionsRevisionProperty, value);
+    }
+
     public static readonly DependencyProperty ShowRegionsProperty = DependencyProperty.Register(
         nameof(ShowRegions), typeof(bool), typeof(DetectionOverlay),
         new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
