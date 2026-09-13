@@ -564,7 +564,8 @@
                         끌어서 만든 것은 대개 몇 px 씩 어긋나는데, 다시 끌기보다 숫자를 올리내리는 편이 빠르고 정확하다.
                         값을 고치면 겹그림의 사각형이 바로 따라 움직인다. %로 보인다 - 0~1 비율은 0.001 씩 움직여 만지기 나쁘다.
                     -->
-                    <dxe:ButtonEdit EditValue="{Binding SelectedRegionName, UpdateSourceTrigger=LostFocus}"
+                    <dxe:ButtonEdit VerticalAlignment="Top"
+                                    EditValue="{Binding SelectedRegionName, UpdateSourceTrigger=LostFocus}"
                                     IsEnabled="{Binding SelectedRegion, Converter={dxmvvm:ObjectToBooleanConverter}}"
                                     NullText="미리보기에서 끌어 자리를 만들면 여기 이름이 뜨고, 고치면 바뀐다"
                                     ToolTip="스크립트가 부를 이름. 고치고 칸 밖을 누르면 바뀐다.">
@@ -576,7 +577,8 @@
                         </dxe:ButtonEdit.Buttons>
                     </dxe:ButtonEdit>
 
-                    <dxlc:LayoutGroup ItemSpace="4"
+                    <dxlc:LayoutGroup VerticalAlignment="Top"
+                                      ItemSpace="4"
                                       Orientation="Horizontal">
                         <dxlc:LayoutItem Label="가로%">
                             <dxe:SpinEdit EditValue="{Binding SelectedRegionX, UpdateSourceTrigger=PropertyChanged}"
@@ -604,14 +606,15 @@
                         </dxlc:LayoutItem>
                         <Button Command="{Binding ToggleRegionInkCommand}"
                                 Content="전처리"
-                                ToolTip="흰 글자만 남기기를 켜고 끓다. 배경이 밝아지는 자리는 켜야 읽히고, 늘 어두운 자리는 끄는 편이 낫다." />
+                                ToolTip="흰 글자만 남기기를 켜고 끈다. 배경이 밝아지는 자리는 켜야 읽히고, 늘 어두운 자리는 끄는 편이 낫다." />
                         <Button Command="{Binding RemoveRegionCommand}"
                                 Content="지우기" />
                     </dxlc:LayoutGroup>
 
-                    <ListBox MaxHeight="70"
-                             DisplayMemberPath="Describe"
+                    <!-- 남는 자리를 다 쓴다. 자리가 여럿이면 굴려 본다. -->
+                    <ListBox DisplayMemberPath="Describe"
                              ItemsSource="{Binding Regions}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
                              SelectedItem="{Binding SelectedRegion}" />
                 </dxlc:LayoutGroup>
 
