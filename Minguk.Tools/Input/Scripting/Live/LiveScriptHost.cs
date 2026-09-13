@@ -55,6 +55,16 @@ public sealed class LiveScriptHost
     /// </remarks>
     public Action<double>? AimScaleLearned { get; init; }
 
+    /// <summary>
+    /// 지금 배율을 스스로 맞추는가. <b>부를 때마다 묻는다</b> - 돌리는 중에 켜고 끄는 것이 바로 먹어야 한다.
+    /// </summary>
+    /// <remarks>
+    /// 시작할 때 한 번만 읽었더니, 끄고 시작한 사람이 도중에 켜도 아무 일도 안 일어났다. 게다가 꺼져 있다는
+    /// 말을 어디서도 안 해 줘서 "왜 안 배우지" 로 1,003번 조준을 돌리게 됐다(실측).
+    /// 안 주면 배우는 것으로 본다 - 하네스가 이 칸을 모르기 때문이다.
+    /// </remarks>
+    public Func<bool>? IsAimScaleAuto { get; init; }
+
     /// <summary>화면 가운데에서 이 거리(px) 안이면 "맞았다" 로 본다.</summary>
     public int AimTolerancePx { get; init; } = 8;
 

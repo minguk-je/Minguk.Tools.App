@@ -100,6 +100,12 @@ public sealed class LiveScriptSession : IDisposable
             if (!_emergency.Arm(() => { player.Stop(); _api?.ReleaseAll(); }, out var problem) && problem is not null)
                 _notify(problem);
 
+            // 배율이 안 맞으면 조준이 목표를 지나치거나 못 미친다. 꺼 두고 돌리다 "왜 안 배우지" 로 1,003번을
+            // 돌린 적이 있어(실측), 어느 쪽이든 시작할 때 한 줄로 말해 준다.
+            Console.Print(player.IsAimScaleAuto
+                ? $"조준 배율 {player.AimScalePercent}% 로 시작합니다 - 겨눈 결과를 보고 스스로 맞춥니다."
+                : $"조준 배율 {player.AimScalePercent}% 고정입니다 - 스스로 맞추게 하려면 도구 줄의 \"자동\" 을 켜세요.");
+
             await _activateTarget();
         };
 
@@ -117,14 +123,15 @@ public sealed class LiveScriptSession : IDisposable
                 Trace = Console.Trace,
                 HoldTimeMs = player.HoldTimeMs,
                 AimScale = player.AimScale,
-                AimScaleLearned = player.IsAimScaleAuto
-                    ? learned =>
-                    {
-                        var percent = (int)Math.Round(learned * 100);
-                        Console.Print($"조준 배율을 {percent}% 로 맞췄습니다.");
-                        _onUi(() => player.AimScalePercent = percent);
-                    }
-                    : null
+                // 늘 물린다. 켜고 끄는 것은 IsAimScaleAuto 가 부를 때마다 본다 - 도중에 켜도 바로 먹게.
+                AimScaleLearned = learned =>
+                {
+                    var percent = (int)Math.Round(learned * 100);
+
+                    Console.Print($"조준 배율을 {percent}% 로 맞췄습니다.");
+                    _onUi(() => player.AimScalePercent = percent);
+                },
+                IsAimScaleAuto = () => player.IsAimScaleAuto
             };
 
             var api = new LiveScriptApi(host, token);

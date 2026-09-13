@@ -549,7 +549,7 @@ public sealed class LiveScriptApi
     /// </remarks>
     private void LearnAimScale(double offsetX, double offsetY)
     {
-        if (_host.AimScaleLearned is null || _lastAim is not { } last) return;
+        if (_host.AimScaleLearned is null || _host.IsAimScaleAuto?.Invoke() == false || _lastAim is not { } last) return;
 
         // 많이 움직인 축으로 본다. 위아래는 대개 몇 px 이라 잡음이 크다.
         var (before, after, sent) = Math.Abs(last.CountX) >= Math.Abs(last.CountY)
