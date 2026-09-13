@@ -1013,12 +1013,15 @@ public sealed class LiveScriptApi
 
     /// <summary>조각을 한 길로 읽어 숫자 덩어리들을 순서대로 준다. 읽은 글도 같이 준다.</summary>
     private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, bool ink, double scale, out string text)
+        => ReadNumbers(crop, ink, scale, NumberOcr(), out text);
+
+    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, bool ink, double scale, IOcrEngine engine, out string text)
     {
         var prepared = ink
             ? HudInk.Prepare(crop)
             : Enlarge(crop, scale);
 
-        var outcome = NumberOcr().RecognizeAsync(prepared, _token).GetAwaiter().GetResult();
+        var outcome = engine.RecognizeAsync(prepared, _token).GetAwaiter().GetResult();
 
         text = outcome.Text.Replace(Environment.NewLine, " ").Trim();
         var numbers = new List<int>();
@@ -1078,10 +1081,26 @@ public sealed class LiveScriptApi
 
         var spot = new HudSpot(region.Rect, region.Ink);
         var crop = CropFor(spot.Region);
-        var numbers = ReadNumbers(crop, spot.Ink, spot.Scale, out var text);
 
-        if (text.Length == 0)
-            numbers = ReadNumbers(crop, !spot.Ink, spot.Scale, out text);
+        // 이름 붙인 자리에는 숫자만 있는 것이 아니다. 사람이 무엇을 담아 뒀는지 모르므로 **두 엔진을 다 해 본다** -
+        // 한국어 팩은 글자를 읽고(「상제님」), 영문 팩은 숫자를 제대로 읽는다(한국어는 225 를 22512h5 로 낸다).
+        // 실측: 플레이어 이름 자리를 만들어 두고 영문으로만 읽어 빈 글이 나왔다.
+        var numbers = ReadNumbers(crop, spot.Ink, spot.Scale, NumberOcr(), out var digitsText);
+
+        // 전처리를 바꿔 한 번 더. 배경이 밝은지 어두운지에 따라 읽히는 쪽이 다르다.
+        if (digitsText.Length == 0)
+            numbers = ReadNumbers(crop, !spot.Ink, spot.Scale, NumberOcr(), out digitsText);
+
+        var text = digitsText;
+
+        // 숫자가 하나도 없으면 글자일 수 있다. 쓰던 엔진(대개 한국어)으로 본다.
+        if (numbers.Count == 0 && _host.Ocr?.Invoke() is { } wordy)
+        {
+            ReadNumbers(crop, spot.Ink, spot.Scale, wordy, out var wordText);
+
+            if (wordText.Length == 0) ReadNumbers(crop, !spot.Ink, spot.Scale, wordy, out wordText);
+            if (wordText.Length > 0) text = wordText;
+        }
 
         return (text, numbers.Count > 0 ? numbers[0] : null);
     }

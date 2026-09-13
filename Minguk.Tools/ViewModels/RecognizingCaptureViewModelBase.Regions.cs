@@ -262,14 +262,51 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
-        var prepared = region.Ink ? Vision.Ocr.HudInk.Prepare(crop) : crop;
-        var text = ocr.RecognizeAsync(prepared).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
-        var digits = new string([.. text.Where(char.IsDigit)]);
+        // 네 갈래를 다 해 본다 - 전처리 켜고/끄고 × 쓰던 엔진(대개 한국어)/영문. 사람이 그 자리에 무엇을 담아
+        // 뒀는지 모르기 때문이다. 실측: 플레이어 이름 자리를 만들었는데 영문으로만 읽어 빈 글이 나왔다
+        // (한국어로는 「상제님」 이 읽혔다). 반대로 숫자는 한국어가 225 를 22512h5 로 낸다.
+        var english = Vision.Ocr.OcrEngineFactory.TryCreate("en-US");
+        var best = string.Empty;
+        var how = string.Empty;
 
-        StatusText = text.Length == 0
+        foreach (var ink in new[] { region.Ink, !region.Ink })
+        {
+            var prepared = ink ? Vision.Ocr.HudInk.Prepare(crop) : Enlarge(crop);
+
+            foreach (var (engine, label) in new[] { (ocr, ocr.Language), (english, "en-US") })
+            {
+                if (engine is null) continue;
+
+                var read = engine.RecognizeAsync(prepared).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
+
+                if (read.Length <= best.Length) continue;
+
+                best = read;
+                how = $"{(ink ? "전처리" : "그대로")}·{label}";
+            }
+        }
+
+        english?.Dispose();
+
+        var digits = new string([.. best.Where(char.IsDigit)]);
+
+        StatusText = best.Length == 0
             ? $"「{region.Name}」 에서 아무것도 못 읽었습니다. 자리를 조금 넓히거나 전처리를 켜고 꺼 보세요."
-            : $"「{region.Name}」 → 「{text}」{(digits.Length > 0 ? $"  (숫자 {digits})" : string.Empty)}";
+            : $"「{region.Name}」 → 「{best}」{(digits.Length > 0 ? $"  (숫자 {digits})" : string.Empty)}  [{how}]";
+
+        // 상태 줄은 다음 갱신이 덮는다. 나중에 "왜 안 읽혔지" 를 되짚으려면 로그에 남아야 한다.
+        Logger.Debug($"영역 읽기: 「{region.Name}」 {region.Rect} → 「{best}」 [{how}]");
     });
+
+    /// <summary>작은 글자는 키워야 읽힌다. 전처리를 안 할 때 쓰는 길.</summary>
+    private static System.Windows.Media.Imaging.BitmapSource Enlarge(System.Windows.Media.Imaging.BitmapSource crop)
+    {
+        var scaled = new System.Windows.Media.Imaging.TransformedBitmap(crop, new System.Windows.Media.ScaleTransform(6, 6));
+
+        scaled.Freeze();
+
+        return scaled;
+    }
 
     private void DoToggleRegionInk() => Guard(() =>
     {

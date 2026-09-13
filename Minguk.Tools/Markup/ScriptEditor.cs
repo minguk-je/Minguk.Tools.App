@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Threading;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.CodeCompletion;
@@ -92,6 +93,75 @@ public sealed class ScriptEditor : TextEditor
         MouseHover += OnMouseHover;
         MouseHoverStopped += (_, _) => _errorTip.IsOpen = false;
         PreviewKeyDown += OnPreviewKeyDown;
+
+        // 붙여 넣은 것도 줄을 맞춘다. AvalonEdit 은 엔터만 맞추고 붙여 넣기는 그대로 둔다.
+        DataObject.AddPastingHandler(this, OnPasting);
+
+        // 언어가 한 번도 안 바뀌면 바뀜 알림이 안 오므로 여기서 한 번 건다.
+        ApplyIndentation();
+    }
+
+    /// <summary>
+    /// 줄 맞추기(들여쓰기) 규칙. 언어마다 다르다.
+    /// </summary>
+    /// <remarks>
+    /// <b>파이썬은 손대면 안 된다.</b> 다른 언어에서 들여쓰기는 보기 좋으라고 있는 것이지만 파이썬에서는
+    /// <b>문법</b>이다 - 중괄호 규칙으로 다시 맞추면 남의 코드를 붙여 넣는 순간 뜻이 바뀐다.
+    /// 그래서 파이썬은 앞 줄을 따라가는 기본 규칙만 쓰고 붙여 넣기도 손대지 않는다.
+    ///
+    /// C#·자바스크립트는 둘 다 중괄호라 같은 규칙을 쓴다.
+    /// </remarks>
+    public ScriptLanguage Language
+    {
+        get => (ScriptLanguage)GetValue(LanguageProperty);
+        set => SetValue(LanguageProperty, value);
+    }
+
+    public static readonly DependencyProperty LanguageProperty = DependencyProperty.Register(
+        nameof(Language), typeof(ScriptLanguage), typeof(ScriptEditor),
+        new PropertyMetadata(ScriptLanguage.CSharp, OnLanguageChanged));
+
+    private static void OnLanguageChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ScriptEditor editor) editor.ApplyIndentation();
+    }
+
+    private void ApplyIndentation()
+        => TextArea.IndentationStrategy = Language == ScriptLanguage.Python
+            ? new ICSharpCode.AvalonEdit.Indentation.DefaultIndentationStrategy()
+            : new ICSharpCode.AvalonEdit.Indentation.CSharp.CSharpIndentationStrategy(Options);
+
+    /// <summary>
+    /// 붙여 넣은 줄들을 그 자리에 맞게 다시 들여쓴다.
+    /// </summary>
+    /// <remarks>
+    /// 남의 코드를 붙여 넣으면 원래 있던 들여쓰기가 그대로 따라와 지금 자리와 안 맞는다. 엔터는 AvalonEdit 이
+    /// 알아서 맞춰 주는데 붙여 넣기는 안 해 준다 - 여기서 한다.
+    ///
+    /// <b>붙여 넣은 자리만</b> 다시 맞춘다. 글 전체를 맞추면 사람이 일부러 비뚜로 둔 곳까지 바뀌고,
+    /// 되돌리기(Ctrl+Z) 한 번에 안 돌아간다.
+    /// </remarks>
+    private void OnPasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (Language == ScriptLanguage.Python || IsReadOnly) return;
+        if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText, true)) return;
+        if (e.SourceDataObject.GetData(DataFormats.UnicodeText, true) is not string pasted) return;
+
+        // 한 줄짜리는 맞출 것이 없다. 여러 줄일 때만 손댄다.
+        if (!pasted.Contains('\n')) return;
+
+        var start = TextArea.Caret.Line;
+
+        // 붙여 넣기가 끝난 뒤에 맞춘다 - 지금은 아직 글이 안 들어가 있다.
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            var end = Math.Min(Document.LineCount, TextArea.Caret.Line);
+
+            if (end < start) return;
+
+            using (Document.RunUpdate())
+                TextArea.IndentationStrategy?.IndentLines(Document, start, end);
+        }));
     }
 
     /// <summary>틀린 줄들. 줄 번호는 1부터. 바뀌면 다시 그린다.</summary>

@@ -116,7 +116,17 @@
                                Glyph="{image:FreeImage ResourceName='Axialis/HardwareNetwork/16x16/mouse.png'}"
                                ToolTip="가장 자신 있는 몹의 가운데를 누른다. 입력 전달이 켜져 있어야 한다." />
 
-            <dxb:BarItemSeparator />
+        </dxb:MainMenuControl>
+
+        <!-- ── 글자·영역 ───────────────────────────────────────────────
+            화면에서 무엇을 읽을지 정하는 것들. 동작 줄에 같이 두었더니 항목이 열다섯을 넘어 넘쳤다 -
+            성격도 다르다: 위는 "무엇을 할까", 여기는 "무엇을 읽을까" 다.
+        -->
+        <dxb:ToolBarControl AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            DockPanel.Dock="Top"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
             <dxb:BarCheckItem BarItemDisplayMode="Content"
                               Content="글자 영역"
@@ -160,7 +170,7 @@
                 </dxb:BarEditItem.EditSettings>
             </dxb:BarEditItem>
 
-        </dxb:MainMenuControl>
+        </dxb:ToolBarControl>
 
         <!-- ── 캡처 설정 ───────────────────────────────────────────── -->
         <dxb:ToolBarControl AllowCustomizationMenu="False"
@@ -423,6 +433,7 @@
                                          CompletionSource="{Binding Script.CompletionSource, Mode=OneWay}"
                                          Errors="{Binding Script.Errors, Mode=OneWay}"
                                          IsReadOnly="{Binding Script.IsLocked}"
+                                         Language="{Binding Script.SelectedLanguage, Mode=OneWay}"
                                          LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
                                          ShowLineNumbers="True"
                                          SyntaxHighlighting="{Binding Script.Highlighting}"

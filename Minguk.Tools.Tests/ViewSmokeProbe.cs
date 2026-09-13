@@ -546,6 +546,37 @@ internal static class ViewSmokeProbe
             Console.WriteLine($"[{(unique ? "PASS" : "FAIL")}] API 표 이름이 겹치지 않는다 — {names.Count}개");
             if (!unique) failures++;
 
+            // ── 줄 맞추기: 언어마다 규칙이 다르다 ──
+            // 파이썬에서 들여쓰기는 문법이라 손대면 뜻이 바뀜다. 중괄호 규칙을 걸면 안 된다.
+            {
+                var editor = new Minguk.Tools.Markup.ScriptEditor();
+                var forCSharp = editor.TextArea.IndentationStrategy?.GetType().Name;
+
+                editor.Language = Minguk.Tools.Input.Scripting.ScriptLanguage.Python;
+                var forPython = editor.TextArea.IndentationStrategy?.GetType().Name;
+
+                editor.Language = Minguk.Tools.Input.Scripting.ScriptLanguage.JavaScript;
+                var forJs = editor.TextArea.IndentationStrategy?.GetType().Name;
+
+                var rules = forCSharp == "CSharpIndentationStrategy"
+                            && forJs == "CSharpIndentationStrategy"
+                            && forPython == "DefaultIndentationStrategy";
+
+                Console.WriteLine($"[{(rules ? "PASS" : "FAIL")}] 줄 맞추기는 언어마다 - 파이썬은 중괄호 규칙을 안 쓴다 — C#={forCSharp} JS={forJs} Python={forPython}");
+                if (!rules) failures++;
+
+                // 실제로 맞춰지는지. 비뚚로 붙여 넣은 꼴을 만들어 놓고 그 줄들을 맞춘다.
+                editor.Language = Minguk.Tools.Input.Scripting.ScriptLanguage.CSharp;
+                editor.Text = string.Join(Environment.NewLine, ["while (true)", "{", "var a = 1;", "if (a > 0)", "{", "출력(a);", "}", "}"]);
+                editor.TextArea.IndentationStrategy?.IndentLines(editor.Document, 1, editor.Document.LineCount);
+
+                var lines = editor.Text.Split(Environment.NewLine);
+                var indented = lines.Length == 8 && lines[2].StartsWith("\t") && lines[5].StartsWith("\t\t");
+
+                Console.WriteLine($"[{(indented ? "PASS" : "FAIL")}] 중괄호만큼 들여쓴다 — {string.Join(" / ", lines.Select(l => l.Replace("\t", "→")))}");
+                if (!indented) failures++;
+            }
+
             var korean = Minguk.Tools.Input.Scripting.ScriptApiCatalog.Match("글").Select(m => m.Name).ToList();
             var english = Minguk.Tools.Input.Scripting.ScriptApiCatalog.Match("cl").Select(m => m.Name).ToList();
             // 앞글자가 같은 것은 다 나와야 한다 - 목록에서 고르는 것이니 하나로 좁혀질 이유가 없다.
