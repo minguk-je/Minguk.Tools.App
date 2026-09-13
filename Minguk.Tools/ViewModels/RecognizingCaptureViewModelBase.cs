@@ -102,8 +102,15 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         MaybeOcr(e);
     }
 
-    /// <summary>글자 영역을 끄는 중이면 클릭이 아니라 영역의 시작점이다. 게임으로 보내지 않는다.</summary>
-    protected override bool TryInterceptPreviewMouseDown(Point pointInControl) => TryBeginOcrRegionPick(pointInControl);
+    /// <summary>
+    /// 영역을 끄는 중이면 클릭이 아니라 영역의 시작점이다. 게임으로 보내지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 이름 붙인 자리 쪽을 먼저 본다. 둘 다 켜지는 일은 없게 막아 두었지만(각각 켜질 때 다른 쪽을 끈다),
+    /// 순서를 정해 두지 않으면 나중에 셋째가 생길 때 어느 것이 먹는지 알 수 없게 된다.
+    /// </remarks>
+    protected override bool TryInterceptPreviewMouseDown(Point pointInControl)
+        => TryBeginRegionPick(pointInControl) || TryBeginOcrRegionPick(pointInControl);
 
     /// <summary>담을 때 방금 찾은 것을 라벨로 같이 준다. 라벨링 화면은 그리는 곳이 아니라 틀린 것만 고치는 곳이 된다.</summary>
     protected override IReadOnlyList<Detection> DetectionsForLabels => FreshDetections;
@@ -128,6 +135,9 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     protected override void RestoreSettings()
     {
         base.RestoreSettings();
+
+        // 이름 붙인 자리는 데이터셋 폴더에 있다(설정이 아니다) - 게임을 바꾸면 데이터셋과 같이 바뀐다.
+        LoadRegions();
 
         // 켜진 채로 복구하지 않는다 - 화면을 열자마자 모델 68MB 를 읽으면 뜨는 것이 느려진다.
         // 화면을 나누기 전 값(캡처 모니터 이름으로 저장된 것)을 처음 한 번 물려받는다.

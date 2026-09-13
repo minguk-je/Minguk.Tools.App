@@ -979,38 +979,48 @@ public sealed class LiveScriptApi
     /// </remarks>
     private int? HudNumber(HudSpot spot, int index)
     {
+        var crop = CropFor(spot.Region);
+        var numbers = ReadNumbers(crop, spot.Ink, spot.Scale, out var text);
+
+        if (text.Length == 0) numbers = ReadNumbers(crop, !spot.Ink, spot.Scale, out _);
+
+        return index < numbers.Count ? numbers[index] : null;
+    }
+
+    /// <summary>그 자리의 화면 조각을 얻는다. 아직 프레임이 안 왔으면 잠깐 기다린다.</summary>
+    private System.Windows.Media.Imaging.BitmapSource CropFor(Rect region)
+    {
         ThrowIfStopping();
 
         var hub = _host.Hub;
 
-        if (!hub.IsCapturing) throw Guard("눈이 없습니다 - 화면에서 시작(연결)을 눌러 창을 잡아야 HUD 를 읽을 수 있습니다.");
+        if (!hub.IsCapturing) throw Guard("눈이 없습니다 - 화면에서 시작(연결)을 눌러 창을 잡아야 화면을 읽을 수 있습니다.");
 
+        // 처음 부를 때 프레임 복사를 켜고, 한 장 들어올 때까지 잠깐 기다린다.
         hub.WantsFrames = true;
 
         var deadline = Environment.TickCount64 + 1500;
         System.Windows.Media.Imaging.BitmapSource? crop;
 
-        while (!hub.TryCropFrame(spot.Region, out crop) || crop is null)
+        while (!hub.TryCropFrame(region, out crop) || crop is null)
         {
             if (Environment.TickCount64 >= deadline) throw Guard("프레임이 들어오지 않습니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.");
             Wait(50);
         }
 
-        var numbers = ReadNumbers(crop, spot.Ink, spot.Scale);
-
-        if (numbers.Count == 0) numbers = ReadNumbers(crop, !spot.Ink, spot.Scale);
-
-        return index < numbers.Count ? numbers[index] : null;
+        return crop;
     }
 
-    /// <summary>조각을 한 길로 읽어 숫자 덩어리들을 순서대로 준다.</summary>
-    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, bool ink, double scale)
+    /// <summary>조각을 한 길로 읽어 숫자 덩어리들을 순서대로 준다. 읽은 글도 같이 준다.</summary>
+    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, bool ink, double scale, out string text)
     {
         var prepared = ink
             ? HudInk.Prepare(crop)
             : Enlarge(crop, scale);
 
         var outcome = NumberOcr().RecognizeAsync(prepared, _token).GetAwaiter().GetResult();
+
+        text = outcome.Text.Replace(Environment.NewLine, " ").Trim();
         var numbers = new List<int>();
         var digits = new StringBuilder();
 
@@ -1040,6 +1050,42 @@ public sealed class LiveScriptApi
         return scaled;
     }
 
+    // ── 이름 붙인 자리 ───────────────────────────────────────────────────
+
+    /// <summary>화면에서 만들어 둔 자리의 글자를 읽는다.</summary>
+    public string ReadAt(string name) => Traced("ReadAt", Quote(name), () => ReadAtCore(name).Text);
+
+    /// <summary>화면에서 만들어 둔 자리의 숫자를 읽는다. 없으면 null.</summary>
+    public int? ReadNumberAt(string name) => Traced("ReadNumberAt", Quote(name), () => ReadAtCore(name).First);
+
+    /// <summary>그 자리에 읽을 것이 있는가. 글자가 하나라도 나오면 참.</summary>
+    /// <remarks>
+    /// "재장전 중" 같은 표시가 떴는지 보는 데 쓴다. <b>글자가 없는 표시(아이콘·게이지)는 이걸로 못 본다</b> -
+    /// OCR 은 글자만 읽는다.
+    /// </remarks>
+    public bool HasTextAt(string name) => Traced("HasTextAt", Quote(name), () => ReadAtCore(name).Text.Length > 0);
+
+    private (string Text, int? First) ReadAtCore(string name)
+    {
+        var book = _host.Regions?.Invoke()
+                   ?? throw Guard("영역 목록이 없습니다 - 화면에서 데이터셋 폴더를 골라야 합니다.");
+
+        var region = book.Find(name)
+                     ?? throw Guard($"「{name}」 라는 자리가 없습니다. 스크립트 화면에서 \"영역 지정\" 으로 만들어 두세요. " +
+                                    (book.Regions.Count == 0
+                                        ? "지금 만들어 둔 자리가 하나도 없습니다."
+                                        : $"있는 것: {string.Join(" · ", book.Regions.Select(r => r.Name))}"));
+
+        var spot = new HudSpot(region.Rect, region.Ink);
+        var crop = CropFor(spot.Region);
+        var numbers = ReadNumbers(crop, spot.Ink, spot.Scale, out var text);
+
+        if (text.Length == 0)
+            numbers = ReadNumbers(crop, !spot.Ink, spot.Scale, out text);
+
+        return (text, numbers.Count > 0 ? numbers[0] : null);
+    }
+
     /// <summary>숫자를 읽을 엔진. 영문 팩이 없으면 쓰던 것으로.</summary>
     private IOcrEngine NumberOcr()
         => _numberOcr ??= OcrEngineFactory.TryCreate("en-US")
@@ -1061,6 +1107,9 @@ public sealed class LiveScriptApi
     public int? 체력최대() => HealthMax();
     public int? 궁극기() => Ultimate();
     public bool 궁극기준비() => UltimateReady();
+    public string 읽기(string 이름) => ReadAt(이름);
+    public int? 숫자읽기(string 이름) => ReadNumberAt(이름);
+    public bool 글자있나(string 이름) => HasTextAt(이름);
 
     // ── 키 ───────────────────────────────────────────────────────────────
 

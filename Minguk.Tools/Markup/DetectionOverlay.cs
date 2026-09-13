@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
@@ -127,7 +128,77 @@ public sealed class DetectionOverlay : FrameworkElement
 
         DrawOcrRegion(dc, area, OcrRegionDraft, dashed: true, text: null);
         if (ShowOcrRegion) DrawOcrRegion(dc, area, OcrRegion, dashed: false, text: OcrText);
+
+        DrawOcrRegion(dc, area, RegionDraft, dashed: true, text: null);
+
+        if (ShowRegions && Regions is { } named)
+            foreach (var region in named)
+                DrawNamed(dc, area, region);
     }
+
+    /// <summary>이름 붙인 자리들. 화면에서 만든 것을 그대로 보여 준다.</summary>
+    public static readonly DependencyProperty RegionsProperty = DependencyProperty.Register(
+        nameof(Regions), typeof(IEnumerable<Minguk.Tools.Vision.Regions.NamedRegion>), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public IEnumerable<Minguk.Tools.Vision.Regions.NamedRegion>? Regions
+    {
+        get => (IEnumerable<Minguk.Tools.Vision.Regions.NamedRegion>?)GetValue(RegionsProperty);
+        set => SetValue(RegionsProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowRegionsProperty = DependencyProperty.Register(
+        nameof(ShowRegions), typeof(bool), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public bool ShowRegions
+    {
+        get => (bool)GetValue(ShowRegionsProperty);
+        set => SetValue(ShowRegionsProperty, value);
+    }
+
+    public static readonly DependencyProperty RegionDraftProperty = DependencyProperty.Register(
+        nameof(RegionDraft), typeof(Rect), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(Rect.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public Rect RegionDraft
+    {
+        get => (Rect)GetValue(RegionDraftProperty);
+        set => SetValue(RegionDraftProperty, value);
+    }
+
+    /// <summary>이름 붙인 자리 하나. 글자 영역과 색을 달리해 헷갈리지 않게 한다.</summary>
+    private void DrawNamed(DrawingContext dc, Rect area, Minguk.Tools.Vision.Regions.NamedRegion region)
+    {
+        var box = region.Rect;
+
+        if (box.Width <= 0 || box.Height <= 0) return;
+
+        var rect = new Rect(
+            area.X + (box.X * area.Width),
+            area.Y + (box.Y * area.Height),
+            box.Width * area.Width,
+            box.Height * area.Height);
+
+        var pen = new Pen(new SolidColorBrush(NamedColour), 2d);
+
+        pen.Freeze();
+        dc.DrawRectangle(null, pen, rect);
+
+        var formatted = new FormattedText(region.Name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                                          new Typeface("Segoe UI"), 12d, Brushes.White,
+                                          VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+        // 이름표는 사각형 위에. 위가 좁으면 안쪽에 넣는다 - 화면 밖으로 나가면 안 보인다.
+        var top = rect.Y - formatted.Height - 2 >= area.Y ? rect.Y - formatted.Height - 2 : rect.Y + 2;
+
+        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(170, 0, 0, 0)), null,
+                         new Rect(rect.X, top, formatted.Width + 6, formatted.Height));
+        dc.DrawText(formatted, new Point(rect.X + 3, top));
+    }
+
+    /// <summary>이름 붙인 자리의 색. 글자 영역(노랑)·몹(초록)과 달라야 한다.</summary>
+    private static readonly Color NamedColour = Color.FromRgb(120, 200, 255);
 
     private void DrawOcrRegion(DrawingContext dc, Rect area, Rect region, bool dashed, string? text)
     {

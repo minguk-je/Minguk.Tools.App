@@ -28,6 +28,15 @@ public sealed class LiveScriptHost
     /// <summary>글자 읽기 엔진. 없으면 <c>읽기()</c> 가 그렇게 말한다.</summary>
     public Func<IOcrEngine?>? Ocr { get; init; }
 
+    /// <summary>
+    /// 사람이 화면에서 만들어 둔 이름 붙은 자리들. 스크립트가 <c>숫자읽기("탄약")</c> 처럼 부른다.
+    /// </summary>
+    /// <remarks>
+    /// 부를 때마다 묻는다 - 스크립트가 도는 중에 화면에서 자리를 고칠 수 있어야 한다. 자리를 맞추는 일은
+    /// 원래 "끌어 보고 읽어 보고" 를 되풀이하는 것이라, 고칠 때마다 스크립트를 멈추게 하면 못 쓴다.
+    /// </remarks>
+    public Func<Minguk.Tools.Vision.Regions.RegionBook?>? Regions { get; init; }
+
     public required Action<string> Print { get; init; }
 
     public required Action<string, string> Watch { get; init; }

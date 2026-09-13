@@ -61,6 +61,9 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             RaisePropertyChanged(nameof(IsOcrRegionVisible));
 
+            // 같은 손짓을 두 기능이 나눠 쓴다. 이름 붙인 자리 쪽은 끈다.
+            if (IsOcrRegionPicking) IsRegionPicking = false;
+
             if (IsOcrRegionPicking)
                 StatusText = OcrRegion.IsEmpty || OcrRegion.Width <= 0
                     ? "미리보기에서 글자가 있는 자리를 끌어 사각형을 그리세요."
@@ -401,6 +404,8 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     protected override void OnPreviewMouseMove(MouseEventArgs args)
     {
+        if (TryDragRegion(args)) return;
+
         if (_ocrPickStart is not { } start || _previewImage is null) return;
 
         var (control, source) = PreviewSizes;
@@ -411,6 +416,8 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     protected override void OnPreviewMouseUp(MouseButtonEventArgs args) => Guard(() =>
     {
+        if (TryFinishRegionPick(args)) return;
+
         if (_ocrPickStart is not { } start || _previewImage is null) return;
 
         var (control, source) = PreviewSizes;

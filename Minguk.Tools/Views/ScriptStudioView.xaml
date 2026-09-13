@@ -130,6 +130,25 @@
                               Content="이름표 읽기"
                               IsChecked="{Binding IsNameplateOcrOn}"
                               ToolTip="몹 찾기가 찾은 몹마다 머리 위 글자(이름표)를 읽어 캡션에 붙입니다. 한국어(ko)여야 한글이 읽힙니다." />
+
+            <dxb:BarItemSeparator />
+
+            <!--
+                이름 붙인 자리. 이름을 먼저 적고 "영역 지정" 을 켠 뒤 미리보기에서 끈다 - 끌고 나서 대화 상자로
+                물으면 그 창이 게임 화면을 가리고 그 사이 화면이 바뀐다. 비워 두면 "자리1" 처럼 붙는다.
+            -->
+            <dxb:BarEditItem Content="이름"
+                             EditValue="{Binding RegionName}"
+                             EditWidth="110"
+                             ToolTip="새로 만들 자리의 이름. 스크립트에서 숫자읽기(이름) 으로 부른다. 비워 두면 자리1 처럼 붙는다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="영역 지정"
+                              IsChecked="{Binding IsRegionPicking}"
+                              ToolTip="켜고 미리보기에서 끌면 그 자리가 위 이름으로 저장됩니다. 데이터셋 폴더의 regions.json 에 남아 게임을 바꾸면 같이 바뀝니다." />
+            <dxb:BarCheckItem BarItemDisplayMode="Content"
+                              Content="영역 보기"
+                              IsChecked="{Binding ShowRegions}"
+                              ToolTip="만들어 둔 자리를 미리보기 위에 이름과 함께 겹쳐 그립니다." />
             <!-- 한국어 팩은 숫자 0 을 "이" 로 읽기도 한다. 숫자·영문은 en-US, 한글은 ko. -->
             <dxb:BarEditItem Content="언어"
                              EditValue="{Binding SelectedOcrLanguage}"
@@ -278,6 +297,9 @@
                                                  ShowOcrRegion="{Binding IsOcrRegionVisible}"
                                                  OcrRegionDraft="{Binding OcrRegionDraft}"
                                                  OcrText="{Binding OcrText}"
+                                                 RegionDraft="{Binding RegionDraft}"
+                                                 Regions="{Binding Regions}"
+                                                 ShowRegions="{Binding IsRegionVisible}"
                                                  Source="{Binding PreviewImage}" />
                     </parts:CapturePreviewPanel.Overlay>
                 </parts:CapturePreviewPanel>
@@ -473,6 +495,35 @@
                                       VerticalContentAlignment="Top"
                                       VerticalScrollBarVisibility="Auto" />
                     </dxlc:LayoutGroup>
+                    <!--
+                        이름 붙인 자리. 만드는 것은 미리보기에서 끄는 것이고, 여기서는 무엇을 만들어 뒀는지 보고
+                        "지금 읽기" 로 자리가 맞는지 확인한다 - 그게 없으면 스크립트를 짜서 돌려야 알 수 있다.
+                    -->
+                    <dxlc:LayoutGroup Header="영역"
+                                      Orientation="Vertical">
+                        <dxlc:LayoutGroup ItemSpace="4"
+                                          Orientation="Horizontal">
+                            <dxe:ButtonEdit AllowDefaultButton="False"
+                                            EditValue="{Binding SelectedRegion.Describe, Mode=OneWay}"
+                                            IsReadOnly="True" />
+                            <Button Command="{Binding TestRegionCommand}"
+                                    Content="지금 읽기"
+                                    ToolTip="고른 자리를 지금 한 번 읽어 상태 줄에 적는다. 비면 자리를 넓히거나 전처리를 바꾼다." />
+                            <Button Command="{Binding ToggleRegionInkCommand}"
+                                    Content="전처리"
+                                    ToolTip="흰 글자만 남기기를 켜고 끈다. 배경이 밝아지는 자리는 켜야 읽히고, 늘 어두운 자리는 끄는 편이 낫다." />
+                            <Button Command="{Binding RenameRegionCommand}"
+                                    Content="이름 바꾸기"
+                                    ToolTip="위 도구 줄의 이름 칸에 적은 이름으로 바꾼다." />
+                            <Button Command="{Binding RemoveRegionCommand}"
+                                    Content="지우기" />
+                        </dxlc:LayoutGroup>
+                        <ListBox MaxHeight="90"
+                                 DisplayMemberPath="Describe"
+                                 ItemsSource="{Binding Regions}"
+                                 SelectedItem="{Binding SelectedRegion}" />
+                    </dxlc:LayoutGroup>
+
                     <dxlc:LayoutGroup Header="중단점"
                                       Orientation="Vertical">
                         <TextBlock Margin="4"

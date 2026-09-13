@@ -69,6 +69,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             () => _inputRouter?.InputAdapter.RequiresForegroundTarget ?? true,
             () => SelectedTarget,
             OcrEngineForScripts,
+            () => RegionBook,
             ActivateTargetAsync,
             RunOnUi,
             message => RunOnUi(() => StatusText = message));
