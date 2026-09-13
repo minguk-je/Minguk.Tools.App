@@ -1,13 +1,16 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
+using DevExpress.Xpf.Docking;
 
 using Minguk.Image;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
+using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Scripting.Live;
 using Minguk.Tools.Markup;
 
@@ -61,6 +64,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             OnUi = RunOnUi,
             OpenDialog = () => OpenFileDialogService,
             SaveDialog = () => SaveFileDialogService,
+            Ask = (message, button) => MessageBoxService?.ShowMessage(message, "스크립트", button, MessageIcon.Question) ?? MessageResult.Yes,
             IsLive = true
         });
 
@@ -81,7 +85,173 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         RunOrContinueCommand = new DelegateCommand(RunOrContinue, false);
         StepCommand = new DelegateCommand(Step, false);
-        ToggleBreakpointCommand = new DelegateCommand(() => _editor?.ToggleBreakpointAtCaret(), false);
+        ToggleBreakpointCommand = new DelegateCommand(ToggleBreakpoint, false);
+
+        SaveCommand = new DelegateCommand(() => Guard(() => { if (Script.IsProject) Script.Project.ActiveDocument?.Save(); else Script.SaveCommand.Execute(null); }), false);
+        SaveAsCommand = new DelegateCommand(() => Script.SaveAsCommand.Execute(null), () => !Script.IsProject, false);
+        SaveAllCommand = new DelegateCommand(() => Guard(() => { if (Script.IsProject) Script.Project.SaveAll(); else Script.SaveCommand.Execute(null); }), false);
+        CloseDocumentCommand = new DelegateCommand(() => Guard(() => Script.Project.CloseDocument(Script.Project.ActiveDocument)), () => Script.IsProject, false);
+        ShowToolWindowCommand = new DelegateCommand<string>(ShowToolWindow, false);
+        ResetLayoutCommand = new DelegateCommand(ResetLayout, false);
+        GoToErrorCommand = new DelegateCommand<object?>(GoToError, false);
+
+        Script.Project.ProjectChanged += (_, _) =>
+        {
+            SaveAsCommand.RaiseCanExecuteChanged();
+            CloseDocumentCommand.RaiseCanExecuteChanged();
+        };
+    }
+
+    // ── VS 메뉴 ──────────────────────────────────────────────────────────
+
+    /// <summary>Ctrl+S. 프로젝트면 지금 탭, 아니면 한 파일짜리.</summary>
+    public DelegateCommand SaveCommand { get; }
+
+    public DelegateCommand SaveAsCommand { get; }
+
+    /// <summary>Ctrl+Shift+S.</summary>
+    public DelegateCommand SaveAllCommand { get; }
+
+    /// <summary>Ctrl+F4.</summary>
+    public DelegateCommand CloseDocumentCommand { get; }
+
+    /// <summary>보기 메뉴 - 닫은 도구 창을 다시 열고 앞으로. 인자는 창 이름(XAML 의 x:Name).</summary>
+    public DelegateCommand<string> ShowToolWindowCommand { get; }
+
+    /// <summary>창 > 창 레이아웃 다시 설정.</summary>
+    public DelegateCommand ResetLayoutCommand { get; }
+
+    /// <summary>오류 목록 더블 클릭 - 그 파일을 열고 그 줄로.</summary>
+    public DelegateCommand<object?> GoToErrorCommand { get; }
+
+    /// <summary>한 파일짜리 편집기에 "이 줄로" 요청.</summary>
+    public EditorLineRequest? SingleLineRequest
+    {
+        get => GetProperty(() => SingleLineRequest);
+        set => SetProperty(() => SingleLineRequest, value);
+    }
+
+    /// <summary>한 파일짜리 편집기의 캐럿 줄·열. 상태 표시줄이 본다.</summary>
+    public int SingleCaretLine { get => GetProperty(() => SingleCaretLine); set => SetProperty(() => SingleCaretLine, value); }
+
+    public int SingleCaretColumn { get => GetProperty(() => SingleCaretColumn); set => SetProperty(() => SingleCaretColumn, value); }
+
+    /// <summary>
+    /// F9 - VS 처럼 캐럿 줄의 중단점을 켜고 끈다. 프로젝트면 지금 탭의 파일에, 아니면 한 파일짜리 편집기에.
+    /// </summary>
+    private void ToggleBreakpoint()
+    {
+        if (Script.IsProject)
+        {
+            if (Script.Project.ActiveDocument is not { } doc) return;
+
+            var line = Math.Max(1, doc.CaretLine);
+            if (!doc.Breakpoints.Remove(line)) doc.Breakpoints.Add(line);
+            return;
+        }
+
+        _editor?.ToggleBreakpointAtCaret();
+    }
+
+    private void GoToError(object? row) => Guard(() =>
+    {
+        if (row is not ScriptError error || error.Line <= 0) return;
+
+        if (Script.IsProject && error.File is { } file && System.IO.File.Exists(file))
+        {
+            Script.Project.OpenFile(file).GoToLine(error.Line);
+            return;
+        }
+
+        SingleLineRequest = new EditorLineRequest(error.Line);
+    });
+
+    // ── 도킹 배치 ────────────────────────────────────────────────────────
+
+    private DevExpress.Xpf.Docking.DockLayoutManager? _dock;
+    private string? _defaultLayout;
+
+    private const string DockLayoutKey = "DockLayout";
+
+    /// <summary>
+    /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.
+    /// </summary>
+    private const int DockLayoutVersion = 1;
+
+    private void ShowToolWindow(string? name) => Guard(() =>
+    {
+        if (_dock is null || string.IsNullOrEmpty(name)) return;
+
+        if (_dock.GetItem(name) is not { } item) return;
+
+        // 닫은 창이면 되살리고, 자동 숨김이면 펼치고, 그다음 앞으로.
+        if (item.IsClosed) _dock.DockController.Restore(item);
+        _dock.DockController.Activate(item);
+    });
+
+    private void ResetLayout() => Guard(() =>
+    {
+        if (_dock is null || _defaultLayout is null) return;
+
+        RestoreLayout(_defaultLayout);
+        SetSetting(DockLayoutKey, string.Empty);
+        StatusText = "창 레이아웃을 처음대로 되돌렸습니다.";
+    });
+
+    private static string SaveLayout(DevExpress.Xpf.Docking.DockLayoutManager dock)
+    {
+        using var stream = new System.IO.MemoryStream();
+        dock.SaveLayoutToStream(stream);
+        return Convert.ToBase64String(stream.ToArray());
+    }
+
+    private void RestoreLayout(string base64)
+    {
+        using var stream = new System.IO.MemoryStream(Convert.FromBase64String(base64));
+        _dock!.RestoreLayoutFromStream(stream);
+    }
+
+    /// <summary>
+    /// 지난번 배치를 되살린다. 처음 배치(XAML 그대로)는 먼저 떠 둔다 - "창 레이아웃 다시 설정" 이 그것으로 돌아간다.
+    /// </summary>
+    /// <remarks>
+    /// 문서 탭이 열리기 전(RestoreSettings 앞)에 한다. 탭은 컬렉션에서 만들어지는 것이라 배치에 적혀 있으면 되살릴 때 헷갈린다.
+    /// 되살리다 터지면 처음 배치로 간다 - 배치 하나 때문에 화면이 안 뜨면 안 된다.
+    /// </remarks>
+    private void RestoreDockLayout()
+    {
+        if (_dock is null) return;
+
+        try
+        {
+            _defaultLayout = SaveLayout(_dock);
+
+            var saved = GetSetting(DockLayoutKey, string.Empty);
+            if (GetSetting(DockLayoutKey + "Version", 0) == DockLayoutVersion && !string.IsNullOrEmpty(saved))
+                RestoreLayout(saved);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "창 배치를 되살리지 못했다 - 처음 배치로 시작한다");
+
+            try { if (_defaultLayout is not null) RestoreLayout(_defaultLayout); }
+            catch (Exception) { }
+        }
+    }
+
+    private void SaveDockLayout()
+    {
+        if (_dock is null) return;
+
+        try
+        {
+            SetSetting(DockLayoutKey, SaveLayout(_dock));
+            SetSetting(DockLayoutKey + "Version", DockLayoutVersion);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "창 배치를 저장하지 못했다");
+        }
     }
 
     /// <summary>F5 - 멈춰 있으면 계속, 쉬고 있으면 처음부터. 도는 중이면 아무것도 안 한다.</summary>
@@ -179,6 +349,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     {
         base.RestoreSettings();
 
+        // 문서 탭이 열리기 전에 창 배치부터.
+        RestoreDockLayout();
+
         Script.Restore();
         Player.Restore((key, fallback) => GetSetting(key, fallback));
     }
@@ -187,6 +360,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     {
         base.SaveSettings();
 
+        SaveDockLayout();
         Script.Save();
         Player.Save((key, value) => SetSetting(key, value));
     }
@@ -196,6 +370,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         base.InitializeControls();
 
         _editor = FindControl<ScriptEditor>("EditorObjectService");
+        _dock = FindControl<DevExpress.Xpf.Docking.DockLayoutManager>("DockObjectService");
     }
 
     protected override void OnLoaded()
@@ -217,6 +392,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         foreach (var claim in _hotkeyClaims) claim.Dispose();
         _hotkeyClaims.Clear();
         _editor = null;
+        _dock = null;
 
         Live.Dispose();
         Script.Dispose();

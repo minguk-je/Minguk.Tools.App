@@ -9,3 +9,6 @@ Releases/
 
 # 복사 스크립트가 남긴 진행 표식 (무해)
 .copied
+
+# WPF 빌드가 잠깐 만드는 임시 프로젝트 - 빌드 도중 git add 하면 섞여 들어간다
+*_wpftmp.csproj

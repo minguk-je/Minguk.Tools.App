@@ -53,6 +53,18 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
   정해지므로 없는 세션에 원하는 손잡이가 오면 세션을 새로 만들고 다른 손잡이에 알린다. fps 는 큰 값.
   콜백은 잠금 없이 손잡이 배열 스냅샷을 돈다 - 콜백에서 잠금을 잡으면 UI 의 Stop 과 맞물려 프레임이 밀린다.
   `--vision` 이 가짜 세션 공장으로 나눔·프레임 분배·리드백 갈아 끼움·놓기를 본다.
+- **스크립트 화면은 VS 2026 모양이다**(2026-09-13, `docs/스크립트-프로젝트-설계.md`). 메뉴·도구 모음(`BarContainerControl`)·상태 표시줄은
+  BarManager, 가운데는 **화면 안에 둔 DockLayoutManager**(MainView 의 문서 탭 안에 한 겹 더 - 중첩). 미리보기·솔루션 탐색기·오류 목록·출력·
+  호출·변수·영역·중단점이 도구 창이고, 프로젝트 파일은 `DocumentGroup.ItemsSource = Script.Project.Documents` 로 탭이 된다.
+  프로젝트가 없으면 한 파일짜리 편집기 탭이 대신 뜬다. 배치는 설정 `DockLayout`(+`DockLayoutVersion`, 형식이 바뀌면 올린다)에 저장.
+  - 탭 편집기의 데이터 문맥은 **문서**다. 공용 설정(색·완성·오류·잠금)은 문서가 들고 온 `Settings`(워크벤치)로 묶는다 -
+    조상(UserControl)으로 찾으면 떼어 낸 떠 있는 창에서 끊긴다.
+  - **탭 활성화는 한 방향으로만 기다린다**(`ScriptDocumentsBehavior._requested`). 도킹의 `DockItemActivated` 는 한 박자 늦게 와서,
+    코드가 새 탭을 앞으로 가져오는 동안 옛 탭의 알림이 활성 문서를 되돌리고 그것이 다시 탭을 가져오는 핑퐁이 났다(실측: 각 66,280번, 화면 멈춤).
+  - 솔루션 탐색기(`ProjectTreeBehavior`): 더블 클릭·Enter 열기, F2 이름(칸은 F2·새 항목일 때만 열린다), Delete 휴지통, 윈도우 탐색기에서 끌어다 놓기.
+  - 검증 `--script-screen [--out=png]`: 화면 밖 창에 띄워 임시 프로젝트를 열고 **바인딩 오류를 모아** PNG 로 찍는다. 앞 탭 편집기에 문서 글이
+    들어갔는지도 본다(화면 밖이라 PNG 에는 편집기 글이 안 그려진다). 하네스도 앱처럼 `DataControlBase.AllowInfiniteGridSize = true` 를 켜야 한다 -
+    안 켜면 크기 없는 칸의 그리드가 배치를 끝없이 다시 잰다(실측: CPU 600초). 멈추면 60초 뒤 UI 스레드에 쌓인 작업을 종류별로 찍고 끝난다.
 - 검증: `--views` 가 세 화면을 만들고 메뉴 아이콘을 본다. 실시간은 `screens.ps1`(세 화면 차례로)·`live-game.ps1`(스크립트 화면에서 몹 찾기).
 
 ## ViewModel 작성 규칙

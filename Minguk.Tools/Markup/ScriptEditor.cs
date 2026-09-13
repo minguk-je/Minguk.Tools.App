@@ -104,6 +104,7 @@ public sealed class ScriptEditor : TextEditor
         DocumentChanged += (_, _) => { _semantic.Clear(); ScheduleClassify(immediately: true); };
         Unloaded += (_, _) => { _classifyTimer.Stop(); _classifyCts?.Cancel(); };
 
+        TextArea.Caret.PositionChanged += OnCaretMoved;
         TextArea.TextEntered += OnTextEntered;
         TextArea.TextEntering += OnTextEntering;
         MouseHover += OnMouseHover;
@@ -146,6 +147,59 @@ public sealed class ScriptEditor : TextEditor
     }
 
     // ── 컴파일러 분류로 칠하기 ───────────────────────────────────────────
+
+    // ── 캐럿 줄·열, 줄로 가기 ────────────────────────────────────────────
+
+    public static readonly DependencyProperty CaretLineProperty = DependencyProperty.Register(
+        nameof(CaretLine), typeof(int), typeof(ScriptEditor), new FrameworkPropertyMetadata(1, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+    public static readonly DependencyProperty CaretColumnProperty = DependencyProperty.Register(
+        nameof(CaretColumn), typeof(int), typeof(ScriptEditor), new FrameworkPropertyMetadata(1, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+    /// <summary>캐럿 줄(1부터). 캐럿이 움직이면 편집기가 넣는다 - 상태 표시줄이 본다.</summary>
+    public int CaretLine
+    {
+        get => (int)GetValue(CaretLineProperty);
+        set => SetValue(CaretLineProperty, value);
+    }
+
+    public int CaretColumn
+    {
+        get => (int)GetValue(CaretColumnProperty);
+        set => SetValue(CaretColumnProperty, value);
+    }
+
+    public static readonly DependencyProperty LineRequestProperty = DependencyProperty.Register(
+        nameof(LineRequest), typeof(EditorLineRequest), typeof(ScriptEditor),
+        new PropertyMetadata(null, (d, e) => ((ScriptEditor)d).OnLineRequested(e.NewValue as EditorLineRequest)));
+
+    /// <summary>이 줄로 캐럿을 옮기고 보이게 굴린다(오류 목록·참조 창에서). 매번 새 객체가 온다.</summary>
+    public EditorLineRequest? LineRequest
+    {
+        get => (EditorLineRequest?)GetValue(LineRequestProperty);
+        set => SetValue(LineRequestProperty, value);
+    }
+
+    private void OnLineRequested(EditorLineRequest? request)
+    {
+        if (request is null || Document.LineCount == 0) return;
+
+        var line = Math.Clamp(request.Line, 1, Document.LineCount);
+
+        // 창에 붙기 전에 오면(탭을 막 연 참) 붙은 뒤에 한다 - 그 전에는 굴릴 자리가 없다.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            TextArea.Caret.Position = new TextViewPosition(line, 1);
+            ScrollToLine(line);
+            TextArea.Focus();
+        }));
+    }
+
+    private void OnCaretMoved(object? sender, EventArgs e)
+    {
+        CaretLine = TextArea.Caret.Line;
+        CaretColumn = TextArea.Caret.Column;
+    }
 
     public static readonly DependencyProperty FilePathProperty = DependencyProperty.Register(
         nameof(FilePath), typeof(string), typeof(ScriptEditor),

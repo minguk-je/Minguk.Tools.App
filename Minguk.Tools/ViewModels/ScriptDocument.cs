@@ -37,6 +37,12 @@ public sealed class ScriptDocument : ViewModelBase, IDisposable
         Watch();
     }
 
+    /// <summary>
+    /// 편집기가 묶을 공용 설정(색·완성·오류·잠금) - 워크벤치. 탭의 내용 틀은 문서를 데이터 문맥으로 받아서, 화면(조상)까지 거슬러
+    /// 올라가 찾으면 창을 떼어 냈을 때(떠 있는 창은 다른 시각 트리다) 끊긴다. 문서가 들고 다니면 어디에 붙어도 닿는다.
+    /// </summary>
+    public object? Settings { get; init; }
+
     /// <summary>글이 바뀌었다(사람이 쳤거나 다시 읽었다). 워크벤치가 다시 검사한다.</summary>
     public event EventHandler? TextChanged;
 
@@ -67,6 +73,28 @@ public sealed class ScriptDocument : ViewModelBase, IDisposable
 
     /// <summary>이 파일의 중단점(줄 번호). 파일마다 따로 든다.</summary>
     public ObservableCollection<int> Breakpoints { get; } = [];
+
+    /// <summary>캐럿 줄(1부터). 편집기가 넣는다 - 상태 표시줄의 "줄 12 열 5" 와 F9 중단점이 본다.</summary>
+    public int CaretLine
+    {
+        get => GetProperty(() => CaretLine);
+        set => SetProperty(() => CaretLine, value);
+    }
+
+    public int CaretColumn
+    {
+        get => GetProperty(() => CaretColumn);
+        set => SetProperty(() => CaretColumn, value);
+    }
+
+    /// <summary>편집기에 "이 줄로 가라" 는 요청. 같은 줄로 두 번 가도 알림이 오게 매번 새 객체다(오류 목록 더블 클릭).</summary>
+    public Markup.EditorLineRequest? LineRequest
+    {
+        get => GetProperty(() => LineRequest);
+        private set => SetProperty(() => LineRequest, value);
+    }
+
+    public void GoToLine(int line) => LineRequest = new Markup.EditorLineRequest(line);
 
     /// <summary>C# 파일인가. 편집기 언어·완성을 고른다.</summary>
     public bool IsSource => ScriptProject.KindOf(FilePath) == ScriptItemKind.Source;

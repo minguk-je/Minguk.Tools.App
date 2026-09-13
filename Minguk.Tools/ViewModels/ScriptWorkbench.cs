@@ -118,6 +118,8 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
             Notify = message => MessengerUtility.SendMainMessage(message)
         });
 
+        Project.EditorSettings = this;
+
         // 탭의 글·목록이 바뀌면 프로젝트 전체를 다시 검사한다. 완성·분류가 다른 스레드에서 읽을 글도 떠 둔다.
         Project.Changed += (_, _) =>
         {

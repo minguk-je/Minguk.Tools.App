@@ -118,6 +118,9 @@ public sealed class ScriptProject
         if (!File.Exists(project.EntryPath)) WriteText(project.EntryPath, entrySource);
 
         project.Items.Add(new ScriptProjectItem { Path = project.Entry, Kind = ScriptItemKind.Source });
+
+        // 목록에만 넣으면 탐색기에 "디스크에 없음" 으로 흐리게 뜬다(실측) - 폴더도 만든다.
+        System.IO.Directory.CreateDirectory(project.FullPath(ResourceFolder));
         project.AddFolder(ResourceFolder);
         project.Save();
 

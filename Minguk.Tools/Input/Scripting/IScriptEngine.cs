@@ -105,6 +105,9 @@ public enum ScriptLanguage
 /// </param>
 public readonly record struct ScriptError(int Line, string Message, string? File = null)
 {
+    /// <summary>오류 목록의 "파일" 칸.</summary>
+    public string FileName => File is null ? string.Empty : System.IO.Path.GetFileName(File);
+
     public override string ToString()
     {
         var where = File is null ? string.Empty : System.IO.Path.GetFileName(File) + " ";

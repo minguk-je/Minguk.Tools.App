@@ -59,6 +59,9 @@ internal static partial class Program
         if (args.Contains("--use-trained")) return DatasetTools.UseTrained();
         if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
+        // 스크립트 화면(VS 모양)을 화면 밖 창에 띄워 바인딩 오류를 모으고 PNG 로 찍는다. 커서는 안 가져간다.
+        if (args.Contains("--script-screen")) return ScriptScreenProbe.Run(args);
+
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.
         if (args.Contains("--canvas-drag")) return CanvasDragProbe.Run();
 

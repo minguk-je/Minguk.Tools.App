@@ -120,6 +120,9 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
     public ObservableCollection<ScriptDocument> Documents { get; } = [];
 
+    /// <summary>탭 편집기가 묶을 공용 설정(워크벤치). 새 문서에 넘긴다.</summary>
+    public object? EditorSettings { get; set; }
+
     public ScriptDocument? ActiveDocument
     {
         get => GetProperty(() => ActiveDocument);
@@ -847,7 +850,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
         if (existing is null)
         {
-            existing = new ScriptDocument(fullPath, _host.OnUi);
+            existing = new ScriptDocument(fullPath, _host.OnUi) { Settings = EditorSettings };
             existing.TextChanged += OnDocumentTextChanged;
             Documents.Add(existing);
         }

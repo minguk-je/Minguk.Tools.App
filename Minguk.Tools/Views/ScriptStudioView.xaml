@@ -1,11 +1,14 @@
-﻿<UserControl x:Class="Minguk.Tools.Views.ScriptStudioView"
+<UserControl x:Class="Minguk.Tools.Views.ScriptStudioView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
              xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
              xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
+             xmlns:dxdo="http://schemas.devexpress.com/winfx/2008/xaml/docking"
              xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+             xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
              xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
              xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
              xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
@@ -19,17 +22,51 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance {x:Type viewModels:ScriptStudioViewModel},
                                               IsDesignTimeCreatable=False}"
-             d:DesignHeight="600"
-             d:DesignWidth="1200">
+             d:DesignHeight="700"
+             d:DesignWidth="1400">
 
     <!--
-        스크립트 화면. 왼쪽은 잡은 화면(몹 찾기·글자 읽기를 겹쳐 보여 준다), 오른쪽은 스크립트.
-        보면서 쓰고, 한 번씩 돌려 본다. 반복해서 돌리는 것은 플레이 화면이다.
+        스크립트 화면 - Visual Studio 2026 모양(docs/스크립트-프로젝트-설계.md).
+
+        맨 위 메뉴·도구 모음(BarManager) · 가운데 도킹(DockLayoutManager) · 맨 아래 상태 표시줄.
+        도킹: 미리보기(도구 창) | 문서 탭 | 솔루션 탐색기(도구 창), 아래에 오류 목록·출력·호출·변수·영역·중단점(도구 창 탭).
+        도구 창은 VS 처럼 핀(자동 숨김)·닫기·끌어 붙이기·떼어 내기가 되고, 닫은 창은 보기 메뉴로 다시 연다.
+        배치는 저장·복원한다(창 > 창 레이아웃 다시 설정).
+
+        프로젝트를 열지 않았으면 문서 자리에 한 파일짜리 편집기가 뜬다(예전과 같다).
     -->
 
     <UserControl.Resources>
         <ResourceDictionary>
             <dxmvvm:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <dxmvvm:BooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"
+                                                 Inverse="True" />
+            <dxmvvm:BooleanNegationConverter x:Key="BooleanNegationConverter" />
+
+            <!-- 편집기 한 벌. 문서 탭(프로젝트)은 문서가 데이터 문맥이고, 공용 설정은 문서가 들고 온 Settings(워크벤치)다. -->
+            <DataTemplate x:Key="DocumentEditorTemplate">
+                <Border BorderBrush="{Binding Settings.EditorBorder}"
+                        BorderThickness="0">
+                    <markup:ScriptEditor Background="{Binding Settings.EditorBackground}"
+                                         Foreground="{Binding Settings.EditorForeground}"
+                                         FontFamily="D2Coding, Consolas, Courier New"
+                                         FontSize="13"
+                                         markup:AvalonEditText.Text="{Binding Text, Mode=TwoWay}"
+                                         Breakpoints="{Binding Breakpoints, Mode=OneWay}"
+                                         CaretColumn="{Binding CaretColumn, Mode=OneWayToSource}"
+                                         CaretLine="{Binding CaretLine, Mode=OneWayToSource}"
+                                         CompletionSource="{Binding Settings.CompletionSource, Mode=OneWay}"
+                                         Errors="{Binding Settings.Errors, Mode=OneWay}"
+                                         FilePath="{Binding FilePath, Mode=OneWay}"
+                                         IsReadOnly="{Binding Settings.IsLocked, Mode=OneWay}"
+                                         Language="{Binding Settings.SelectedLanguage, Mode=OneWay}"
+                                         LineNumbersForeground="{Binding Settings.EditorLineNumberForeground}"
+                                         LineRequest="{Binding LineRequest, Mode=OneWay}"
+                                         ShowLineNumbers="True"
+                                         SyntaxHighlighting="{Binding Settings.Highlighting}"
+                                         WordWrap="False" />
+                </Border>
+            </DataTemplate>
 
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
@@ -41,9 +78,10 @@
         <!-- 캡처 콜백은 스레드풀에서 돈다. 화면에 닿는 일은 이것으로 넘긴다. -->
         <dxmvvm:DispatcherService />
 
-        <!-- 스크립트를 파일로 열고 저장한다. -->
+        <!-- 파일·프로젝트 열기와 저장, 저장 안 한 탭 닫기 묻기. -->
         <dxmvvm:OpenFileDialogService />
         <dxmvvm:SaveFileDialogService />
+        <dx:DXMessageBoxService />
 
         <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
                                EventName="Loaded" />
@@ -53,585 +91,849 @@
 
     <DockPanel LastChildFill="True">
 
-        <!-- ── 동작 ─────────────────────────────────────────────────── -->
+        <!-- ══ 메뉴 ═══════════════════════════════════════════════════════════════ -->
         <dxb:MainMenuControl AllowCustomizationMenu="False"
                              DockPanel.Dock="Top"
                              TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                              TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
-            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                               Command="{Binding RefreshTargetsCommand}"
-                               Content="새로 고침"
-                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
-                               ToolTip="캡처할 수 있는 창·모니터 목록을 다시 훑는다." />
+            <!-- ── 파일 ── -->
+            <dxb:BarSubItem Content="파일(_F)">
+                <dxb:BarSubItem Content="새로 만들기(_N)">
+                    <dxb:BarButtonItem Command="{Binding Script.Project.NewProjectCommand}"
+                                       Content="프로젝트(_P)..."
+                                       Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project_csharp.png'}"
+                                       KeyGesture="Ctrl+Shift+N" />
+                    <dxb:BarButtonItem Command="{Binding Script.NewCommand}"
+                                       Content="스크립트 파일(_F)"
+                                       Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/file_csharp.png'}"
+                                       IsEnabled="{Binding Script.IsProject, Converter={StaticResource BooleanNegationConverter}}" />
+                </dxb:BarSubItem>
+                <dxb:BarSubItem Content="열기(_O)">
+                    <dxb:BarButtonItem Command="{Binding Script.Project.OpenProjectCommand}"
+                                       Content="프로젝트(_P)..."
+                                       Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder_open.png'}"
+                                       KeyGesture="Ctrl+Shift+O" />
+                    <dxb:BarButtonItem Command="{Binding Script.OpenCommand}"
+                                       Content="스크립트 파일(_F)..."
+                                       IsEnabled="{Binding Script.IsProject, Converter={StaticResource BooleanNegationConverter}}"
+                                       KeyGesture="Ctrl+O" />
+                </dxb:BarSubItem>
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding CloseDocumentCommand}"
+                                   Content="닫기(_C)"
+                                   KeyGesture="Ctrl+F4" />
+                <dxb:BarButtonItem Command="{Binding Script.Project.CloseProjectCommand}"
+                                   Content="프로젝트 닫기(_T)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding SaveCommand}"
+                                   Content="저장(_S)"
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/script-save.png'}"
+                                   KeyGesture="Ctrl+S" />
+                <dxb:BarButtonItem Command="{Binding SaveAsCommand}"
+                                   Content="다른 이름으로 저장(_A)..." />
+                <dxb:BarButtonItem Command="{Binding SaveAllCommand}"
+                                   Content="모두 저장(_L)"
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project-save.png'}"
+                                   KeyGesture="Ctrl+Shift+S" />
+            </dxb:BarSubItem>
 
-            <dxb:BarItemSeparator />
+            <!-- ── 편집 ── 편집기가 알아서 받는 명령이다(포커스 있는 곳으로 간다). -->
+            <dxb:BarSubItem Content="편집(_E)">
+                <dxb:BarButtonItem Command="ApplicationCommands.Undo"
+                                   Content="실행 취소(_U)" />
+                <dxb:BarButtonItem Command="ApplicationCommands.Redo"
+                                   Content="다시 실행(_R)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="ApplicationCommands.Cut"
+                                   Content="잘라내기(_T)" />
+                <dxb:BarButtonItem Command="ApplicationCommands.Copy"
+                                   Content="복사(_C)" />
+                <dxb:BarButtonItem Command="ApplicationCommands.Paste"
+                                   Content="붙여넣기(_P)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="ApplicationCommands.SelectAll"
+                                   Content="모두 선택(_A)" />
+            </dxb:BarSubItem>
 
-            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                               Command="{Binding DoStartCommand}"
-                               Content="시작"
-                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}" />
-            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                               Command="{Binding DoStopCommand}"
-                               Content="중지"
-                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}" />
+            <!-- ── 보기 ── 닫은 도구 창을 다시 연다. -->
+            <dxb:BarSubItem Content="보기(_V)">
+                <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                   CommandParameter="SolutionExplorerPanel"
+                                   Content="솔루션 탐색기(_P)"
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project_csharp.png'}"
+                                   KeyGesture="Ctrl+Alt+L" />
+                <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                   CommandParameter="PreviewPanel"
+                                   Content="미리보기(_W)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                   CommandParameter="ErrorListPanel"
+                                   Content="오류 목록(_I)" />
+                <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                   CommandParameter="OutputPanel"
+                                   Content="출력(_O)"
+                                   KeyGesture="Ctrl+Alt+O" />
+                <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                   CommandParameter="CallsPanel"
+                                   Content="호출(_A)" />
+                <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                   CommandParameter="VariablesPanel"
+                                   Content="변수(_V)" />
+                <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                   CommandParameter="RegionsPanel"
+                                   Content="영역(_R)" />
+                <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                   CommandParameter="BreakpointsPanel"
+                                   Content="중단점(_B)" />
+            </dxb:BarSubItem>
 
-            <dxb:BarItemSeparator />
+            <!-- ── 프로젝트 ── -->
+            <dxb:BarSubItem Content="프로젝트(_P)">
+                <dxb:BarButtonItem Command="{Binding Script.Project.AddNewFileCommand}"
+                                   Content="새 항목 추가(_W)..."
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/file_csharp.png'}"
+                                   KeyGesture="Ctrl+Shift+A" />
+                <dxb:BarButtonItem Command="{Binding Script.Project.AddExistingCommand}"
+                                   Content="기존 항목 추가(_G)..."
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/basic/16x16/folder-upload.png'}"
+                                   KeyGesture="Shift+Alt+A" />
+                <dxb:BarButtonItem Command="{Binding Script.Project.AddFolderCommand}"
+                                   Content="새 폴더(_D)"
+                                   Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder.png'}" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding Script.Project.SetEntryCommand}"
+                                   Content="시작 파일로 설정(_A)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding Script.Project.OpenFolderInExplorerCommand}"
+                                   Content="파일 탐색기에서 폴더 열기(_X)" />
+            </dxb:BarSubItem>
 
-            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                               Command="{Binding CollectFrameCommand}"
-                               Content="담기 (F8)"
-                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
-                               ToolTip="한 장을 데이터셋에 담는다. 몹 찾기가 켜져 있으면 찾은 것이 라벨로 같이 들어간다 - 라벨링은 틀린 것만 고치면 된다." />
+            <!-- ── 디버그 ── F5·F6·F10 은 게임 안에서도 먹게 전역으로도 쥔다. -->
+            <dxb:BarSubItem Content="디버그(_D)">
+                <dxb:BarButtonItem Command="{Binding RunOrContinueCommand}"
+                                   Content="시작/계속(_S)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
+                                   KeyGesture="F5" />
+                <dxb:BarButtonItem Command="{Binding Player.StopCommand}"
+                                   Content="디버깅 중지(_E)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
+                                   KeyGesture="Shift+F5" />
+                <dxb:BarButtonItem Command="{Binding StepCommand}"
+                                   Content="프로시저 단위 실행(_O)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_goto_next.png'}"
+                                   KeyGesture="F10" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding ToggleBreakpointCommand}"
+                                   Content="중단점 설정/해제(_B)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/flag_red.png'}"
+                                   KeyGesture="F9" />
+                <dxb:BarItemSeparator />
+                <dxb:BarStaticItem Content="비상 정지: Pause (도는 동안)" />
+            </dxb:BarSubItem>
 
-            <dxb:BarItemSeparator />
+            <!-- ── 캡처 ── 이 앱에만 있는 것. -->
+            <dxb:BarSubItem Content="캡처(_C)">
+                <dxb:BarButtonItem Command="{Binding RefreshTargetsCommand}"
+                                   Content="대상 새로 고침(_R)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}" />
+                <dxb:BarButtonItem Command="{Binding DoStartCommand}"
+                                   Content="캡처 시작(_S)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}" />
+                <dxb:BarButtonItem Command="{Binding DoStopCommand}"
+                                   Content="캡처 중지(_T)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding CollectFrameCommand}"
+                                   Content="데이터셋에 담기(_C)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}" />
+                <dxb:BarButtonItem Command="{Binding ClickDetectionCommand}"
+                                   Content="찾은 것 누르기(_K)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/HardwareNetwork/16x16/mouse.png'}" />
+            </dxb:BarSubItem>
 
-            <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
-                              Content="몹 찾기"
-                              Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
-                              IsChecked="{Binding IsMobDetectionOn}"
-                              ToolTip="학습한 모델로 0.25초에 한 번 찾아 점선으로 겹쳐 그린다. CPU 리드백이 필요하면 알아서 켠다." />
-            <dxb:BarCheckItem BarItemDisplayMode="Content"
-                              Content="추적"
-                              IsChecked="{Binding IsTrackingOn}"
-                              ToolTip="프레임 간 추적. 두 번 연속 보인 것만 내놓고(0.5초), 잠깐 놓친 것은 0.5초까지 이어 줍니다. 한 프레임짜리 헛것이 사라집니다." />
-
-            <!--
-                이 점수 아래는 버린다. 설정에만 있고 화면에 없어서, 헛것을 쫓고 있다는 것을 알아도 바꿀 자리가
-                없었다(실측: 게임 HUD 자리를 50~63% 로 잡고 계속 그쪽으로 돌았다. 진짜 봇은 77% 이상이었다).
-                올리면 헛것이 줄고 진짜도 몇 개 놓친다 - 로그의 점수를 보고 그 사이에 놓는다.
-            -->
-            <dxb:BarEditItem Content="문턱(%)"
-                             EditValue="{Binding DetectMinimumScorePercent}"
-                             EditWidth="56"
-                             ToolTip="몹 찾기가 이 점수 아래는 버린다. 헛것을 쫓으면 올리고, 진짜를 놓치면 내린다. 호출 로그에 몹마다 점수가 찍히니 그것을 보고 정한다.">
-                <dxb:BarEditItem.EditSettings>
-                    <dxe:SpinEditSettings MaxValue="99"
-                                          MinValue="1" />
-                </dxb:BarEditItem.EditSettings>
-            </dxb:BarEditItem>
-            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                               Command="{Binding ClickDetectionCommand}"
-                               Content="찾은 것 누르기"
-                               Glyph="{image:FreeImage ResourceName='Axialis/HardwareNetwork/16x16/mouse.png'}"
-                               ToolTip="가장 자신 있는 몹의 가운데를 누른다. 입력 전달이 켜져 있어야 한다." />
-
+            <!-- ── 창 ── -->
+            <dxb:BarSubItem Content="창(_W)">
+                <dxb:BarButtonItem Command="{Binding ResetLayoutCommand}"
+                                   Content="창 레이아웃 다시 설정(_R)" />
+            </dxb:BarSubItem>
         </dxb:MainMenuControl>
 
-        <!-- ── 글자·영역 ───────────────────────────────────────────────
-            화면에서 무엇을 읽을지 정하는 것들. 동작 줄에 같이 두었더니 항목이 열다섯을 넘어 넘쳤다 -
-            성격도 다르다: 위는 "무엇을 할까", 여기는 "무엇을 읽을까" 다.
+        <!-- ══ 도구 모음 ═════════════════════════════════════════════════════════
+             VS 처럼 여러 줄이 한 자리(BarContainer)에 들어가고 좁아지면 넘치는 것만 접힌다.
         -->
-        <dxb:ToolBarControl AllowCustomizationMenu="False"
-                            AllowQuickCustomization="False"
-                            DockPanel.Dock="Top"
-                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+        <dxb:BarContainerControl DockPanel.Dock="Top"
+                                 TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                                 TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
-            <dxb:BarCheckItem BarItemDisplayMode="Content"
-                              Content="글자 영역"
-                              IsChecked="{Binding IsOcrRegionPicking}"
-                              ToolTip="켜고 미리보기에서 글자가 있는 자리를 끌어 사각형을 그립니다. 그리고 나면 알아서 꺼집니다. 그동안은 클릭이 게임으로 안 나갑니다." />
-            <dxb:BarCheckItem BarItemDisplayMode="Content"
-                              Content="글자 읽기"
-                              IsChecked="{Binding IsOcrOn}"
-                              ToolTip="정한 영역의 글자를 Windows 내장 OCR 로 0.5초에 한 번 읽습니다." />
-            <dxb:BarCheckItem BarItemDisplayMode="Content"
-                              Content="이름표 읽기"
-                              IsChecked="{Binding IsNameplateOcrOn}"
-                              ToolTip="몹 찾기가 찾은 몹마다 머리 위 글자(이름표)를 읽어 캡션에 붙입니다. 한국어(ko)여야 한글이 읽힙니다." />
+            <!-- ── 표준 ── -->
+            <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                AllowQuickCustomization="False"
+                                Caption="표준">
+                <dxb:BarButtonItem Command="{Binding Script.Project.NewProjectCommand}"
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project_csharp.png'}"
+                                   Hint="새 프로젝트 (Ctrl+Shift+N)" />
+                <dxb:BarButtonItem Command="{Binding Script.Project.OpenProjectCommand}"
+                                   Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder_open.png'}"
+                                   Hint="프로젝트 열기 (Ctrl+Shift+O)" />
+                <dxb:BarButtonItem Command="{Binding SaveCommand}"
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/script-save.png'}"
+                                   Hint="저장 (Ctrl+S)" />
+                <dxb:BarButtonItem Command="{Binding SaveAllCommand}"
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project-save.png'}"
+                                   Hint="모두 저장 (Ctrl+Shift+S)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="ApplicationCommands.Undo"
+                                   Content="↶"
+                                   Hint="실행 취소 (Ctrl+Z)" />
+                <dxb:BarButtonItem Command="ApplicationCommands.Redo"
+                                   Content="↷"
+                                   Hint="다시 실행 (Ctrl+Y)" />
+                <dxb:BarItemSeparator />
+                <!-- 한 파일짜리일 때만. 프로젝트는 C# 이다. -->
+                <dxb:BarEditItem Content="언어"
+                                 EditValue="{Binding Script.SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 EditWidth="96"
+                                 IsVisible="{Binding Script.IsProject, Converter={StaticResource BooleanNegationConverter}}">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                                  ItemsSource="{Binding Script.Languages}" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+            </dxb:ToolBarControl>
 
-            <dxb:BarItemSeparator />
+            <!-- ── 디버그 ── VS 의 "▶ 시작" 자리. -->
+            <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                AllowQuickCustomization="False"
+                                Caption="디버그">
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding RunOrContinueCommand}"
+                                   Content="시작"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
+                                   Hint="시작/계속 (F5) - 시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다." />
+                <dxb:BarButtonItem Command="{Binding StepCommand}"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_goto_next.png'}"
+                                   Hint="프로시저 단위 실행 (F10) - JavaScript·Python 만" />
+                <dxb:BarButtonItem Command="{Binding Player.StopCommand}"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
+                                   Hint="디버깅 중지 (Shift+F5 · 게임 안에서는 F6)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding ToggleBreakpointCommand}"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/flag_red.png'}"
+                                   Hint="중단점 설정/해제 (F9)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarEditItem Content="시작 대기(초)"
+                                 EditValue="{Binding Player.StartDelaySeconds}"
+                                 EditWidth="48"
+                                 IsEnabled="{Binding Player.IsIdle}"
+                                 Hint="이 사이에 대상 창을 앞으로 가져와야 한다. 창을 골라 두었으면 알아서 앞으로 가져온다.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:SpinEditSettings MaxValue="60"
+                                              MinValue="0" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+            </dxb:ToolBarControl>
 
-            <!--
-                이름 붙인 자리. 이름을 먼저 적고 "영역 지정" 을 켠 뒤 미리보기에서 끈다 - 끌고 나서 대화 상자로
-                물으면 그 창이 게임 화면을 가리고 그 사이 화면이 바뀐다. 비워 두면 "자리1" 처럼 붙는다.
-            -->
-            <dxb:BarEditItem Content="이름"
-                             EditValue="{Binding RegionName}"
-                             EditWidth="110"
-                             ToolTip="새로 만들 자리의 이름. 스크립트에서 숫자읽기(이름) 으로 부른다. 비워 두면 자리1 처럼 붙는다." />
-            <dxb:BarCheckItem BarItemDisplayMode="Content"
-                              Content="영역 지정"
-                              IsChecked="{Binding IsRegionPicking}"
-                              ToolTip="켜고 미리보기에서 끌면 그 자리가 위 이름으로 저장됩니다. 데이터셋 폴더의 regions.json 에 남아 게임을 바꾸면 같이 바뀝니다." />
-            <dxb:BarCheckItem BarItemDisplayMode="Content"
-                              Content="영역 보기"
-                              IsChecked="{Binding ShowRegions}"
-                              ToolTip="만들어 둔 자리를 미리보기 위에 이름과 함께 겹쳐 그립니다." />
-            <!-- 한국어 팩은 숫자 0 을 "이" 로 읽기도 한다. 숫자·영문은 en-US, 한글은 ko. -->
-            <dxb:BarEditItem Content="언어"
-                             EditValue="{Binding SelectedOcrLanguage}"
-                             EditWidth="80"
-                             ToolTip="OCR 언어. 숫자·영문 칸은 en-US, 한글 이름표는 ko 가 정확합니다. 바꾸면 다음 읽기부터 적용됩니다.">
-                <dxb:BarEditItem.EditSettings>
-                    <dxe:ComboBoxEditSettings IsTextEditable="False"
-                                              ItemsSource="{Binding OcrLanguages}" />
-                </dxb:BarEditItem.EditSettings>
-            </dxb:BarEditItem>
+            <!-- ── 캡처 ── -->
+            <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                AllowQuickCustomization="False"
+                                Caption="캡처">
+                <dxb:BarButtonItem Command="{Binding RefreshTargetsCommand}"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                                   Hint="캡처할 수 있는 창·모니터 목록을 다시 훑는다." />
+                <dxb:BarEditItem Content="대상"
+                                 EditValue="{Binding SelectedTarget}"
+                                 EditWidth="300"
+                                 IsEnabled="{Binding IsNotRunning}">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:ComboBoxEditSettings DisplayMember="Display"
+                                                  IsTextEditable="False"
+                                                  ItemsSource="{Binding Targets}" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+                <dxb:BarButtonItem Command="{Binding DoStartCommand}"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}"
+                                   Hint="캡처 시작" />
+                <dxb:BarButtonItem Command="{Binding DoStopCommand}"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}"
+                                   Hint="캡처 중지" />
+                <dxb:BarEditItem Content="fps"
+                                 EditValue="{Binding CaptureTargetFps}"
+                                 EditWidth="60"
+                                 Hint="캡처 상한(fps). 넘는 프레임은 받지 않는다.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                                  ItemsSource="{Binding FpsOptions}" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+                <dxb:BarCheckItem Content="CPU 리드백"
+                                  IsChecked="{Binding EnableCpuReadback}"
+                                  IsEnabled="{Binding IsNotRunning}"
+                                  Hint="GPU 프레임을 CPU 메모리로 내린다. 몹 찾기·글자 읽기·담기가 필요하면 알아서 켠다." />
+                <dxb:BarCheckItem Content="미리보기"
+                                  IsChecked="{Binding ShowPreview}"
+                                  Hint="캡처 중인 화면을 미리보기 창에 그대로 보여 준다." />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding CollectFrameCommand}"
+                                   Content="담기 (F8)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
+                                   Hint="한 장을 데이터셋에 담는다. 몹 찾기가 켜져 있으면 찾은 것이 라벨로 같이 들어간다." />
+            </dxb:ToolBarControl>
 
-        </dxb:ToolBarControl>
+            <!-- ── 인식 ── 몹 찾기·글자·영역. -->
+            <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                AllowQuickCustomization="False"
+                                Caption="인식">
+                <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                                  Content="몹 찾기"
+                                  Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
+                                  IsChecked="{Binding IsMobDetectionOn}"
+                                  Hint="학습한 모델로 찾아 점선으로 겹쳐 그린다." />
+                <dxb:BarCheckItem Content="추적"
+                                  IsChecked="{Binding IsTrackingOn}"
+                                  Hint="프레임 간 추적. 한 프레임짜리 헛것이 사라진다." />
+                <dxb:BarEditItem Content="문턱(%)"
+                                 EditValue="{Binding DetectMinimumScorePercent}"
+                                 EditWidth="56"
+                                 Hint="몹 찾기가 이 점수 아래는 버린다. 헛것을 쫓으면 올리고, 진짜를 놓치면 내린다.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:SpinEditSettings MaxValue="99"
+                                              MinValue="1" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+                <dxb:BarItemSeparator />
+                <dxb:BarCheckItem Content="글자 영역"
+                                  IsChecked="{Binding IsOcrRegionPicking}"
+                                  Hint="켜고 미리보기에서 글자가 있는 자리를 끈다. 그동안 휠은 확대, 오른쪽 끌기는 화면 옮기기다." />
+                <dxb:BarCheckItem Content="글자 읽기"
+                                  IsChecked="{Binding IsOcrOn}"
+                                  Hint="정한 영역의 글자를 0.5초에 한 번 읽는다." />
+                <dxb:BarCheckItem Content="이름표 읽기"
+                                  IsChecked="{Binding IsNameplateOcrOn}"
+                                  Hint="찾은 몹마다 머리 위 이름표를 읽는다. 한국어(ko)여야 한글이 읽힌다." />
+                <dxb:BarEditItem Content="언어"
+                                 EditValue="{Binding SelectedOcrLanguage}"
+                                 EditWidth="70"
+                                 Hint="OCR 언어. 숫자·영문은 en-US, 한글 이름표는 ko.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                                  ItemsSource="{Binding OcrLanguages}" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+                <dxb:BarItemSeparator />
+                <dxb:BarEditItem Content="이름"
+                                 EditValue="{Binding RegionName}"
+                                 EditWidth="100"
+                                 Hint="새로 만들 자리의 이름. 비워 두면 자리1 처럼 붙는다." />
+                <dxb:BarCheckItem Content="영역 지정"
+                                  IsChecked="{Binding IsRegionPicking}"
+                                  Hint="켜 둔 동안 미리보기가 편집기다 - 빈 자리 끌기는 새 자리, 자리 안 끌기는 옮기기, 손잡이는 크기 조절. 휠 확대·오른쪽 끌기 이동." />
+                <dxb:BarCheckItem Content="영역 보기"
+                                  IsChecked="{Binding ShowRegions}"
+                                  Hint="만들어 둔 자리를 미리보기에 이름과 함께 겹쳐 그린다." />
+            </dxb:ToolBarControl>
 
-        <!-- ── 캡처 설정 ───────────────────────────────────────────── -->
-        <dxb:ToolBarControl AllowCustomizationMenu="False"
-                            AllowQuickCustomization="False"
-                            DockPanel.Dock="Top"
-                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+            <!-- ── 입력 ── -->
+            <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                AllowQuickCustomization="False"
+                                Caption="입력">
+                <dxb:BarEditItem Content="입력 경로"
+                                 EditValue="{Binding SelectedInputBackend}"
+                                 EditWidth="120"
+                                 Hint="스크립트와 미리보기 입력 전달이 이 경로로 나간다. 게임은 SendInput 이나 Interception.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                                  ItemsSource="{Binding InputBackends}" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+                <dxb:BarEditItem Content="조준 배율(%)"
+                                 EditValue="{Binding Player.AimScalePercent}"
+                                 EditWidth="56"
+                                 Hint="조준(x, y) 이 화면 가운데에서 목표까지의 거리에 곱하는 값. 게임 감도마다 다르다.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:SpinEditSettings MaxValue="2000"
+                                              MinValue="1" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+                <dxb:BarCheckItem Content="자동"
+                                  IsChecked="{Binding Player.IsAimScaleAuto}"
+                                  Hint="겨눈 결과를 보고 배율을 스스로 맞춘다." />
+                <!-- 대상이 관리자 권한인데 이 앱은 아닐 때만. 그 창에는 입력도 F5 도 못 닿는다(UIPI). -->
+                <dxb:BarButtonItem Command="{Binding RestartAsAdminCommand}"
+                                   Content="관리자로 다시 시작"
+                                   IsVisible="{Binding NeedsElevation, Mode=OneWay}"
+                                   Hint="{Binding ElevationNote, Mode=OneWay}" />
+            </dxb:ToolBarControl>
+        </dxb:BarContainerControl>
 
-            <dxb:BarEditItem Content="대상"
-                             EditValue="{Binding SelectedTarget}"
-                             EditWidth="420"
-                             IsEnabled="{Binding IsNotRunning}">
-                <dxb:BarEditItem.EditSettings>
-                    <dxe:ComboBoxEditSettings DisplayMember="Display"
-                                              IsTextEditable="False"
-                                              ItemsSource="{Binding Targets}" />
-                </dxb:BarEditItem.EditSettings>
-            </dxb:BarEditItem>
-
-            <dxb:BarEditItem Content="fps"
-                             EditValue="{Binding CaptureTargetFps}"
-                             EditWidth="70"
-                             ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다.">
-                <dxb:BarEditItem.EditSettings>
-                    <dxe:ComboBoxEditSettings IsTextEditable="False"
-                                              ItemsSource="{Binding FpsOptions}" />
-                </dxb:BarEditItem.EditSettings>
-            </dxb:BarEditItem>
-
-            <dxb:BarCheckItem Content="CPU 리드백"
-                              IsChecked="{Binding EnableCpuReadback}"
-                              IsEnabled="{Binding IsNotRunning}"
-                              ToolTip="GPU 프레임을 CPU 메모리로 내린다. 몹 찾기·글자 읽기·담기가 필요하면 알아서 켠다." />
-
-            <dxb:BarItemSeparator />
-
-            <dxb:BarCheckItem Content="미리보기"
-                              IsChecked="{Binding ShowPreview}"
-                              ToolTip="캡처 중인 화면을 그대로 보여 준다. 찾은 몹과 글자 영역이 그 위에 겹쳐진다." />
-
-            <!--
-                영역을 지정할 때 1920 화면을 절반으로 줄여 보면 탄약 숫자가 10px 도 안 돼 둘레를 못 두른다.
-                미리보기 위에서 Ctrl+휠로도 된다 - 그냥 휠은 게임으로 보내야 해서(무기 바꾸기) 비울 수 없다.
-            -->
-            <dxb:BarEditItem Content="확대"
-                             EditValue="{Binding PreviewZoom}"
-                             EditWidth="56"
-                             ToolTip="미리보기를 키운다. 1 이면 창에 맞춤. 미리보기 위에서 Ctrl+휠로도 된다.">
-                <dxb:BarEditItem.EditSettings>
-                    <dxe:SpinEditSettings Increment="0.25"
-                                          MaxValue="8"
-                                          MinValue="1" />
-                </dxb:BarEditItem.EditSettings>
-            </dxb:BarEditItem>
-            <dxb:BarButtonItem Command="{Binding ZoomResetCommand}"
-                               Content="맞춤"
-                               ToolTip="확대를 1 로 되돌린다." />
-
-        </dxb:ToolBarControl>
-
-        <!-- ── 입력·조준·상태 ──────────────────────────────────────────
-            캡처 설정과 한 줄에 두었더니 넘쳤다 - 대상 콤보만 420px 이라 뒤쪽(찾은 몹 수·글자 읽기 상태)이
-            겹화살표 안으로 숨어 실제로 안 보였다. 성격도 다르다: 위는 "무엇을 잡을까", 여기는 "어디로 보내고
-            얼마나 겨눌까" 다. 줄을 나누면 창을 좁혀도 양쪽이 각자 접힌다.
+        <!-- ══ 상태 표시줄 ═══════════════════════════════════════════════════════
+             VS 처럼 왼쪽에 상태 글, 오른쪽에 줄·열 · 오류 수 · 인식 상태 · 입력 경로.
         -->
-        <dxb:ToolBarControl AllowCustomizationMenu="False"
-                            AllowQuickCustomization="False"
-                            DockPanel.Dock="Top"
-                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+        <dxb:StatusBarControl AllowCustomizationMenu="False"
+                              DockPanel.Dock="Bottom"
+                              TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                              TextBlock.FontSize="{DynamicResource BaseFontSize}">
+            <dxb:BarStaticItem AutoSizeMode="Fill"
+                               Content="{Binding StatusText, Mode=OneWay}"
+                               ShowBorder="False" />
+            <dxb:BarStaticItem Alignment="Far"
+                               Content="{Binding DetectionStatus, Mode=OneWay}"
+                               ShowBorder="False" />
+            <dxb:BarStaticItem Alignment="Far"
+                               Content="{Binding OcrStatus, Mode=OneWay}"
+                               ShowBorder="False" />
+            <dxb:BarStaticItem Alignment="Far"
+                               Content="{Binding Script.Project.ActiveDocument.CaretLine, Mode=OneWay}"
+                               IsVisible="{Binding Script.IsProject, Mode=OneWay}"
+                               ShowBorder="False">
+                <dxb:BarStaticItem.ContentTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding StringFormat='줄: {0}'}" />
+                    </DataTemplate>
+                </dxb:BarStaticItem.ContentTemplate>
+            </dxb:BarStaticItem>
+            <dxb:BarStaticItem Alignment="Far"
+                               Content="{Binding Script.Project.ActiveDocument.CaretColumn, Mode=OneWay}"
+                               IsVisible="{Binding Script.IsProject, Mode=OneWay}"
+                               ShowBorder="False">
+                <dxb:BarStaticItem.ContentTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding StringFormat='열: {0}'}" />
+                    </DataTemplate>
+                </dxb:BarStaticItem.ContentTemplate>
+            </dxb:BarStaticItem>
+            <dxb:BarStaticItem Alignment="Far"
+                               BarItemDisplayMode="ContentAndGlyph"
+                               Content="{Binding Script.Errors.Count, Mode=OneWay}"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/flag_red.png'}"
+                               ShowBorder="False">
+                <dxb:BarStaticItem.ContentTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding StringFormat='오류 {0}'}" />
+                    </DataTemplate>
+                </dxb:BarStaticItem.ContentTemplate>
+            </dxb:BarStaticItem>
+            <dxb:BarStaticItem Alignment="Far"
+                               Content="{Binding SelectedInputBackend, Mode=OneWay}"
+                               ShowBorder="False" />
+        </dxb:StatusBarControl>
 
-            <!--
-                스크립트와 미리보기 입력 전달이 나가는 경로. 미리보기 도구 줄에 두면 미리보기를 끈 동안 안 보이고
-                "입력 전달" 을 켜야만 골라져서, 스크립트를 어떤 경로로 보내는지 알 수 없었다. 늘 보이는 자리에 둔다.
-            -->
-            <dxb:BarEditItem Content="입력 경로"
-                             EditValue="{Binding SelectedInputBackend}"
-                             EditWidth="130"
-                             ToolTip="스크립트와 미리보기 입력 전달이 이 경로로 나간다. SendInput: 거의 모든 대상에 통하지만 대상이 앞으로 나온다(관리자 권한 대상이면 이 앱도 관리자로). PostMessage: 포커스를 안 뺏지만 창 메시지를 읽는 보통 프로그램에만 통한다 - DirectX 게임은 Raw Input 으로 마우스를 읽어 반응이 없다(오버워치 실측). 게임은 SendInput 이나 Interception 드라이버(입력 자동화 화면에서 설치).">
-                <dxb:BarEditItem.EditSettings>
-                    <dxe:ComboBoxEditSettings IsTextEditable="False"
-                                              ItemsSource="{Binding InputBackends}" />
-                </dxb:BarEditItem.EditSettings>
-            </dxb:BarEditItem>
+        <!-- ══ 도킹 ══════════════════════════════════════════════════════════════ -->
+        <dxdo:DockLayoutManager ClosedPanelsBarVisibility="Never"
+                                ClosingBehavior="HideToClosedPanelsCollection"
+                                FloatingMode="Desktop">
+            <dxmvvm:Interaction.Behaviors>
+                <dxmvvm:UIObjectService x:Name="DockObjectService" />
+                <markup:ScriptDocumentsBehavior Workspace="{Binding Script.Project}" />
+            </dxmvvm:Interaction.Behaviors>
 
-            <dxb:BarItemSeparator />
+            <dxdo:LayoutGroup Orientation="Vertical">
 
-            <!--
-                조준 배율은 편집 칸(480px) 도구 줄에 두었더니 넘쳐서 겹화살표 안으로 숨었다(실측 - 화면에 안 보였다).
-                실행 버튼이 아니라 설정이라 창 너비를 다 쓰는 줄에 둔다.
-            -->
-            <dxb:BarEditItem Content="조준 배율(%)"
-                             EditValue="{Binding Player.AimScalePercent}"
-                             EditWidth="56"
-                             ToolTip="조준(x, y) 이 화면 가운데에서 목표까지의 거리에 곱하는 값. 게임 감도마다 다르다.">
-                <dxb:BarEditItem.EditSettings>
-                    <dxe:SpinEditSettings MaxValue="2000"
-                                          MinValue="1" />
-                </dxb:BarEditItem.EditSettings>
-            </dxb:BarEditItem>
+                <dxdo:LayoutGroup Orientation="Horizontal">
 
-            <dxb:BarCheckItem Content="자동"
-                              IsChecked="{Binding Player.IsAimScaleAuto}"
-                              ToolTip="조준이 겨눈 결과를 보고 배율을 스스로 맞춘다. 가까워졌을 때만 배우고 한 번에 1.5배 넘게 안 바꾼다. 맞춘 값은 저장된다." />
+                    <!-- ── 미리보기 ── 잡은 화면. 몹·글자 영역·이름 붙인 자리를 겹쳐 그린다. -->
+                    <dxdo:LayoutPanel x:Name="PreviewPanel"
+                                      Caption="미리보기"
+                                      ItemWidth="1.2*">
+                        <DockPanel>
+                            <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
+                            <parts:PreviewForwardBar DockPanel.Dock="Top" />
 
-            <dxb:BarItemSeparator />
+                            <parts:CapturePreviewPanel Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <parts:CapturePreviewPanel.Overlay>
+                                    <markup:DetectionOverlay Detections="{Binding Detections}"
+                                                             OcrRegion="{Binding OcrRegion}"
+                                                             OcrRegionDraft="{Binding OcrRegionDraft}"
+                                                             OcrText="{Binding OcrText}"
+                                                             RegionDraft="{Binding RegionDraft}"
+                                                             Regions="{Binding Regions}"
+                                                             RegionsRevision="{Binding RegionsRevision}"
+                                                             SelectedRegion="{Binding SelectedRegion}"
+                                                             ShowOcrRegion="{Binding IsOcrRegionVisible}"
+                                                             ShowRegionHandles="{Binding IsRegionPicking}"
+                                                             ShowRegions="{Binding IsRegionVisible}"
+                                                             Source="{Binding PreviewImage}" />
+                                </parts:CapturePreviewPanel.Overlay>
+                            </parts:CapturePreviewPanel>
+                        </DockPanel>
+                    </dxdo:LayoutPanel>
 
-            <!--
-                몇 마리를 몇 ms 에 찾았는지 · 글자 읽기 상태. 메뉴 줄(첫 줄)에 두었더니 항목이 많아 넘쳐서
-                아예 안 보였다(실측 - 스크립트 화면에서 "2마리" 가 어디에도 없었다). 줄 끝이라 가장 먼저 밀리는
-                자리이므로, 여기가 또 넘치면 줄을 나누지 말고 이것부터 상태 줄로 내린다.
-            -->
-            <dxb:BarStaticItem Content="{Binding DetectionStatus, Mode=OneWay}" />
-            <dxb:BarStaticItem Content="{Binding OcrStatus, Mode=OneWay}" />
+                    <!-- ── 문서 탭(프로젝트) ── 파일마다 탭. 저장 안 한 것은 제목 뒤 *. -->
+                    <dxdo:DocumentGroup x:Name="ProjectDocumentGroup"
+                                        DestroyOnClosingChildren="False"
+                                        ItemContentTemplate="{StaticResource DocumentEditorTemplate}"
+                                        ItemWidth="1.4*"
+                                        ItemsSource="{Binding Script.Project.Documents}"
+                                        ShowWhenEmpty="True"
+                                        Visibility="{Binding Script.IsProject, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <dxdo:DocumentGroup.ItemStyle>
+                            <Style TargetType="dxdo:DocumentPanel">
+                                <Setter Property="Caption" Value="{Binding Title}" />
+                                <Setter Property="ToolTip" Value="{Binding FilePath}" />
+                            </Style>
+                        </dxdo:DocumentGroup.ItemStyle>
+                    </dxdo:DocumentGroup>
 
-            <!-- 대상이 관리자 권한인데 이 앱은 아닐 때만. 그 창에는 입력도 F5 도 못 닿는다(UIPI). -->
-            <dxb:BarButtonItem Command="{Binding RestartAsAdminCommand}"
-                               Content="관리자로 다시 시작"
-                               IsVisible="{Binding NeedsElevation, Mode=OneWay}"
-                               ToolTip="{Binding ElevationNote, Mode=OneWay}" />
-        </dxb:ToolBarControl>
+                    <!-- ── 문서(한 파일짜리) ── 프로젝트를 안 열었을 때. -->
+                    <dxdo:DocumentGroup x:Name="SingleDocumentGroup"
+                                        DestroyOnClosingChildren="False"
+                                        ItemWidth="1.4*"
+                                        Visibility="{Binding Script.IsProject, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                        <dxdo:DocumentPanel x:Name="SingleDocumentPanel"
+                                            AllowClose="False"
+                                            Caption="{Binding Script.FileLabel, Mode=OneWay}">
+                            <DockPanel>
+                                <!-- 파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다. -->
+                                <dxe:TextEdit DockPanel.Dock="Top"
+                                              EditValue="{Binding Script.EngineStatus, Mode=OneWay}"
+                                              IsReadOnly="True"
+                                              Visibility="{Binding Script.HasEngineStatus, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-        <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
-        <parts:PreviewForwardBar DockPanel.Dock="Top" />
+                                <markup:ScriptEditor Background="{Binding Script.EditorBackground}"
+                                                     Foreground="{Binding Script.EditorForeground}"
+                                                     FontFamily="D2Coding, Consolas, Courier New"
+                                                     FontSize="13"
+                                                     markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
+                                                     Breakpoints="{Binding Live.Debug.Breakpoints, Mode=OneWay}"
+                                                     CaretColumn="{Binding SingleCaretColumn, Mode=OneWayToSource}"
+                                                     CaretLine="{Binding SingleCaretLine, Mode=OneWayToSource}"
+                                                     CompletionSource="{Binding Script.CompletionSource, Mode=OneWay}"
+                                                     CurrentLine="{Binding Live.Debug.PausedLine, Mode=OneWay}"
+                                                     Errors="{Binding Script.Errors, Mode=OneWay}"
+                                                     IsReadOnly="{Binding Script.IsLocked}"
+                                                     Language="{Binding Script.SelectedLanguage, Mode=OneWay}"
+                                                     LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
+                                                     LineRequest="{Binding SingleLineRequest, Mode=OneWay}"
+                                                     ShowLineNumbers="True"
+                                                     SyntaxHighlighting="{Binding Script.Highlighting}"
+                                                     WordWrap="False">
+                                    <dxmvvm:Interaction.Behaviors>
+                                        <!-- 캐럿 줄에 중단점을 찍으려면 편집기를 직접 잡아야 한다. -->
+                                        <dxmvvm:UIObjectService x:Name="EditorObjectService" />
+                                    </dxmvvm:Interaction.Behaviors>
+                                </markup:ScriptEditor>
+                            </DockPanel>
+                        </dxdo:DocumentPanel>
+                    </dxdo:DocumentGroup>
 
-        <!-- ── 상태 줄 ─────────────────────────────────────────────────── -->
-        <dxe:TextEdit Margin="4,0,4,4"
-                      DockPanel.Dock="Bottom"
-                      EditValue="{Binding StatusText, Mode=OneWay}"
-                      IsReadOnly="True"
-                      ShowBorder="False" />
+                    <!-- ── 솔루션 탐색기 ── -->
+                    <dxdo:TabbedGroup ItemWidth="280">
+                        <dxdo:LayoutPanel x:Name="SolutionExplorerPanel"
+                                          Caption="솔루션 탐색기">
+                            <DockPanel>
+                                <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                                    AllowQuickCustomization="False"
+                                                    DockPanel.Dock="Top"
+                                                    ShowBackground="False">
+                                    <dxb:BarButtonItem Command="{Binding Script.Project.AddNewFileCommand}"
+                                                       Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/file_csharp.png'}"
+                                                       Hint="새 항목 추가 (Ctrl+Shift+A)" />
+                                    <dxb:BarButtonItem Command="{Binding Script.Project.AddFolderCommand}"
+                                                       Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder.png'}"
+                                                       Hint="새 폴더" />
+                                    <dxb:BarButtonItem Command="{Binding Script.Project.AddExistingCommand}"
+                                                       Glyph="{image:FreeImage ResourceName='axialispureflat/basic/16x16/folder-upload.png'}"
+                                                       Hint="기존 항목 추가 (Shift+Alt+A) - 파일을 끌어다 놓아도 된다" />
+                                    <dxb:BarItemSeparator />
+                                    <dxb:BarButtonItem Command="{Binding Script.Project.SaveAllCommand}"
+                                                       Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project-save.png'}"
+                                                       Hint="모두 저장" />
+                                </dxb:ToolBarControl>
 
-        <!--
-            위: 미리보기(왼쪽) | 스크립트(오른쪽).  아래: 디버그 탭들.
-            경계는 세 군데 다 끌 수 있다 - 미리보기↔편집, 위↔아래.
-        -->
-        <dxlc:LayoutControl Margin="4,0,4,4"
-                            Padding="0"
-                            ItemSpace="4"
-                            Orientation="Vertical">
+                                <dxe:TextEdit DockPanel.Dock="Top"
+                                              EditValue="{Binding Script.Project.Title, Mode=OneWay}"
+                                              FontWeight="Bold"
+                                              IsReadOnly="True"
+                                              ShowBorder="False" />
 
-            <dxlc:LayoutGroup ItemSpace="4"
-                              Orientation="Horizontal">
+                                <!-- 프로젝트가 없을 때 할 일을 말한다 - 빈 칸만 보이면 무엇을 해야 할지 모른다. -->
+                                <dxlc:LayoutControl DockPanel.Dock="Top"
+                                                    Orientation="Vertical"
+                                                    Visibility="{Binding Script.IsProject, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                    <dx:SimpleButton Command="{Binding Script.Project.NewProjectCommand}"
+                                                     Content="새 프로젝트 만들기..." />
+                                    <dx:SimpleButton Command="{Binding Script.Project.OpenProjectCommand}"
+                                                     Content="프로젝트 열기..." />
+                                </dxlc:LayoutControl>
 
-            <dxlc:LayoutGroup ItemSpace="0"
-                              Orientation="Vertical"
-                              View="Group"
-                              Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <controls:BaseGridControl AutoGenerateColumns="None"
+                                                          ItemsSource="{Binding Script.Project.Nodes}"
+                                                          SelectedItem="{Binding Script.Project.SelectedNode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          SelectionMode="None">
+                                    <dxmvvm:Interaction.Behaviors>
+                                        <markup:ProjectTreeBehavior Workspace="{Binding Script.Project}" />
+                                    </dxmvvm:Interaction.Behaviors>
 
-                <parts:CapturePreviewPanel>
-                    <parts:CapturePreviewPanel.Overlay>
-                        <!--
-                            찾은 몹을 점선으로 겹쳐 그린다. Source 로 원본 크기만 받아 Uniform 레터박스를
-                            스스로 계산한다. 글자 영역과 읽은 글도 같이 그린다.
-                        -->
-                        <markup:DetectionOverlay Detections="{Binding Detections}"
-                                                 OcrRegion="{Binding OcrRegion}"
-                                                 ShowOcrRegion="{Binding IsOcrRegionVisible}"
-                                                 OcrRegionDraft="{Binding OcrRegionDraft}"
-                                                 OcrText="{Binding OcrText}"
-                                                 RegionDraft="{Binding RegionDraft}"
-                                                 Regions="{Binding Regions}"
-                                                 RegionsRevision="{Binding RegionsRevision}"
-                                                 SelectedRegion="{Binding SelectedRegion}"
-                                                 ShowRegionHandles="{Binding IsRegionPicking}"
-                                                 ShowRegions="{Binding IsRegionVisible}"
-                                                 Source="{Binding PreviewImage}" />
-                    </parts:CapturePreviewPanel.Overlay>
-                </parts:CapturePreviewPanel>
-            </dxlc:LayoutGroup>
+                                    <dxg:GridControl.Columns>
+                                        <dxg:GridColumn FieldName="Name"
+                                                        AllowEditing="True">
+                                            <dxg:GridColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <dxe:TextEdit x:Name="PART_Editor">
+                                                        <dxe:TextEdit.Style>
+                                                            <Style TargetType="dxe:TextEdit">
+                                                                <Style.Triggers>
+                                                                    <!-- VS 처럼 시작 파일·프로젝트 줄은 굵게, 디스크에 없는 것은 흐리게. -->
+                                                                    <DataTrigger Binding="{Binding RowData.Row.IsEntry}" Value="True">
+                                                                        <Setter Property="FontWeight" Value="Bold" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding RowData.Row.Kind}" Value="Project">
+                                                                        <Setter Property="FontWeight" Value="Bold" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding RowData.Row.IsMissing}" Value="True">
+                                                                        <Setter Property="Opacity" Value="0.5" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </dxe:TextEdit.Style>
+                                                    </dxe:TextEdit>
+                                                </DataTemplate>
+                                            </dxg:GridColumn.CellTemplate>
+                                        </dxg:GridColumn>
+                                    </dxg:GridControl.Columns>
 
-            <dxlc:LayoutGroup Width="480"
-                              dxlc:LayoutControl.AllowHorizontalSizing="True"
-                              Header="스크립트 편집"
-                              ItemSpace="4"
-                              Orientation="Vertical"
-                              View="GroupBox">
+                                    <dxg:GridControl.View>
+                                        <controls:BaseTreeListView AllowEditing="True"
+                                                                   AutoWidth="True"
+                                                                   AutoExpandAllNodes="True"
+                                                                   EditorShowMode="MouseUpFocused"
+                                                                   ImageFieldName="Glyph"
+                                                                   KeyFieldName="Id"
+                                                                   ParentFieldName="ParentId"
+                                                                   ShowColumnHeaders="False"
+                                                                   ShowNodeImages="True"
+                                                                   ShowSearchPanelMode="Never"
+                                                                   TreeDerivationMode="Selfreference"
+                                                                   UseEvenRowBackground="False">
+                                            <!-- VS 의 오른쪽 메뉴. 메뉴 항목의 데이터 문맥은 셀 정보라 View.DataContext 로 화면 VM 에 닿는다. -->
+                                            <dxg:TreeListView.RowCellMenuCustomizations>
+                                                <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.OpenNodeCommand}"
+                                                                   Content="열기(_O)" />
+                                                <dxb:BarItemSeparator />
+                                                <dxb:BarSubItem Content="추가(_D)">
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.AddNewFileCommand}"
+                                                                       Content="새 항목(_W)..."
+                                                                       KeyGesture="Ctrl+Shift+A" />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.AddExistingCommand}"
+                                                                       Content="기존 항목(_G)..."
+                                                                       KeyGesture="Shift+Alt+A" />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.AddFolderCommand}"
+                                                                       Content="새 폴더(_D)" />
+                                                </dxb:BarSubItem>
+                                                <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.SetEntryCommand}"
+                                                                   Content="시작 파일로 설정(_A)" />
+                                                <dxb:BarItemSeparator />
+                                                <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.ExcludeCommand}"
+                                                                   Content="프로젝트에서 제외(_J)" />
+                                                <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.DeleteCommand}"
+                                                                   Content="삭제(_D)"
+                                                                   KeyGesture="Delete" />
+                                                <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.RenameCommand}"
+                                                                   Content="이름 바꾸기(_M)"
+                                                                   KeyGesture="F2" />
+                                                <dxb:BarItemSeparator />
+                                                <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.OpenFolderInExplorerCommand}"
+                                                                   Content="파일 탐색기에서 폴더 열기(_X)" />
+                                            </dxg:TreeListView.RowCellMenuCustomizations>
+                                        </controls:BaseTreeListView>
+                                    </dxg:GridControl.View>
+                                </controls:BaseGridControl>
+                            </DockPanel>
+                        </dxdo:LayoutPanel>
+                    </dxdo:TabbedGroup>
+                </dxdo:LayoutGroup>
 
-                <!--
-                    실행 도구 줄. 아래쪽에 버튼 넷과 칸 넷을 두었더니 편집기와 디버그 탭이 그만큼 눌렸고,
-                    누르려면 눈이 위(코드)와 아래(버튼)를 왕복해야 했다. 도구 줄로 올리면 칸이 좁아도
-                    넘치는 것만 겹화살표로 접힌다. 글자에 단축키를 안 붙인 것은 480px 에서 넷이 다 들어가게
-                    하려는 것이다 - 단축키는 풍선 도움말에 적는다.
-                -->
-                <dxb:ToolBarControl AllowCustomizationMenu="False"
-                                    AllowQuickCustomization="False"
-                                    VerticalAlignment="Top"
-                                    TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                                    TextBlock.FontSize="{DynamicResource BaseFontSize}">
+                <!-- ── 아래 도구 창들 ── VS 의 오류 목록·출력 자리. -->
+                <dxdo:TabbedGroup ItemHeight="230">
 
-                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                       Command="{Binding RunOrContinueCommand}"
-                                       Content="실행"
-                                       Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
-                                       ToolTip="F5 - 시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 멈춰 있으면 계속. 위 도구 줄의 입력 경로로 나가고, 도는 동안 Pause 가 비상 정지다." />
-                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                       Command="{Binding StepCommand}"
-                                       Content="한 줄"
-                                       Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_goto_next.png'}"
-                                       ToolTip="F10 - 멈춰 있으면 다음 줄로, 아니면 첫 줄에서 멈추게 시작한다. JavaScript·Python 만." />
-                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                       Command="{Binding Player.StopCommand}"
-                                       Content="중지"
-                                       Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
-                                       ToolTip="F6 - 대기 중이든 도는 중이든 멈춘다." />
+                    <dxdo:LayoutPanel x:Name="ErrorListPanel"
+                                      Caption="오류 목록">
+                        <controls:BaseGridControl AutoGenerateColumns="None"
+                                                  ItemsSource="{Binding Script.Errors, Mode=OneWay}">
+                            <dxg:GridControl.Columns>
+                                <dxg:GridColumn Width="*"
+                                                FieldName="Message"
+                                                Header="설명" />
+                                <dxg:GridColumn Width="160"
+                                                FieldName="FileName"
+                                                Header="파일" />
+                                <dxg:GridColumn Width="60"
+                                                FieldName="Line"
+                                                Header="줄" />
+                            </dxg:GridControl.Columns>
+                            <dxg:GridControl.View>
+                                <controls:BaseTableView AllowEditing="False"
+                                                        AutoWidth="True"
+                                                        ShowGroupPanel="False"
+                                                        ShowSearchPanelMode="Never">
+                                    <dxmvvm:Interaction.Behaviors>
+                                        <!-- 더블 클릭하면 그 파일·줄로 간다. -->
+                                        <dxmvvm:EventToCommand Command="{Binding GoToErrorCommand}"
+                                                               EventName="RowDoubleClick"
+                                                               PassEventArgsToCommand="True">
+                                            <dxmvvm:EventToCommand.EventArgsConverter>
+                                                <dx:EventArgsToDataRowConverter />
+                                            </dxmvvm:EventToCommand.EventArgsConverter>
+                                        </dxmvvm:EventToCommand>
+                                    </dxmvvm:Interaction.Behaviors>
+                                </controls:BaseTableView>
+                            </dxg:GridControl.View>
+                        </controls:BaseGridControl>
+                    </dxdo:LayoutPanel>
 
-                    <dxb:BarItemSeparator />
+                    <!-- 새 줄이 붙으면 맨 아래로 따라간다. 단, 사람이 위로 올려 본 동안에는 멈춘다. -->
+                    <dxdo:LayoutPanel x:Name="OutputPanel"
+                                      Caption="출력">
+                        <dxe:TextEdit VerticalContentAlignment="Top"
+                                      AcceptsReturn="True"
+                                      EditValue="{Binding Live.Console.Text, Mode=OneWay}"
+                                      FontFamily="D2Coding, Consolas, Courier New"
+                                      IsReadOnly="True"
+                                      TextWrapping="Wrap"
+                                      VerticalScrollBarVisibility="Auto"
+                                      markup:AutoScrollToEnd.IsEnabled="True" />
+                    </dxdo:LayoutPanel>
 
-                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                       Command="{Binding ToggleBreakpointCommand}"
-                                       Content="중단점"
-                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/flag_red.png'}"
-                                       ToolTip="Ctrl+B - 캐럿이 있는 줄의 중단점을 켜고 끈다. 편집기 왼쪽 여백을 눌러도 된다." />
+                    <dxdo:LayoutPanel x:Name="CallsPanel"
+                                      Caption="호출">
+                        <dxe:TextEdit VerticalContentAlignment="Top"
+                                      AcceptsReturn="True"
+                                      EditValue="{Binding Live.Console.CallsText, Mode=OneWay}"
+                                      FontFamily="D2Coding, Consolas, Courier New"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      IsReadOnly="True"
+                                      TextWrapping="NoWrap"
+                                      VerticalScrollBarVisibility="Auto"
+                                      markup:AutoScrollToEnd.IsEnabled="True" />
+                    </dxdo:LayoutPanel>
 
-                    <dxb:BarItemSeparator />
+                    <dxdo:LayoutPanel x:Name="VariablesPanel"
+                                      Caption="변수">
+                        <dxlc:LayoutControl Orientation="Vertical">
+                            <dxlc:LayoutItem Label="보기">
+                                <dxe:TextEdit EditValue="{Binding Live.Console.Watches, Mode=OneWay}"
+                                              IsReadOnly="True" />
+                            </dxlc:LayoutItem>
+                            <!-- 멈춘 줄의 지역 변수. JavaScript·Python 만. C# 은 비어 있다. -->
+                            <dxe:TextEdit VerticalContentAlignment="Top"
+                                          AcceptsReturn="True"
+                                          EditValue="{Binding Live.Debug.Locals, Mode=OneWay}"
+                                          FontFamily="D2Coding, Consolas, Courier New"
+                                          IsReadOnly="True"
+                                          NullText="멈춘 줄의 변수가 여기 뜹니다 (JavaScript·Python)"
+                                          VerticalScrollBarVisibility="Auto" />
+                        </dxlc:LayoutControl>
+                    </dxdo:LayoutPanel>
 
-                    <dxb:BarEditItem Content="시작 대기(초)"
-                                     EditValue="{Binding Player.StartDelaySeconds}"
-                                     EditWidth="48"
-                                     IsEnabled="{Binding Player.IsIdle}"
-                                     ToolTip="이 사이에 대상 창을 앞으로 가져와야 한다. 창을 골라 두었으면 알아서 앞으로 가져온다.">
-                        <dxb:BarEditItem.EditSettings>
-                            <dxe:SpinEditSettings MaxValue="60"
-                                                  MinValue="0" />
-                        </dxb:BarEditItem.EditSettings>
-                    </dxb:BarEditItem>
-                </dxb:ToolBarControl>
-
-                <!--
-                    파일 도구 줄. 언어·파일 칸과 버튼 넷이 각각 한 줄씩을 먹어 편집기가 그만큼 눌렸다.
-                    한 줄로 합치고, 좁아지면 넘치는 것만 접히게 둔다.
-                -->
-                <dxb:ToolBarControl AllowCustomizationMenu="False"
-                                    AllowQuickCustomization="False"
-                                    VerticalAlignment="Top"
-                                    TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
-                                    TextBlock.FontSize="{DynamicResource BaseFontSize}">
-
-                    <dxb:BarEditItem Content="언어"
-                                     EditValue="{Binding Script.SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     EditWidth="96"
-                                     IsEnabled="{Binding Script.IsEditable}">
-                        <dxb:BarEditItem.EditSettings>
-                            <dxe:ComboBoxEditSettings IsTextEditable="False"
-                                                      ItemsSource="{Binding Script.Languages}" />
-                        </dxb:BarEditItem.EditSettings>
-                    </dxb:BarEditItem>
-
-                    <dxb:BarItemSeparator />
-
-                    <dxb:BarButtonItem Command="{Binding Script.NewCommand}"
-                                       Content="새로"
-                                       ToolTip="본보기 글로 새로 시작한다. 파일과의 연결도 끊는다." />
-                    <dxb:BarButtonItem Command="{Binding Script.OpenCommand}"
-                                       Content="열기"
-                                       ToolTip="확장자를 보고 언어까지 맞춘다 (.csx · .py · .js)" />
-                    <dxb:BarButtonItem Command="{Binding Script.SaveCommand}"
-                                       Content="저장"
-                                       ToolTip="플레이 화면은 Scripts 폴더에 저장한 것을 고른다." />
-                    <dxb:BarButtonItem Command="{Binding Script.SaveAsCommand}"
-                                       Content="다른 이름으로" />
-
-                    <dxb:BarItemSeparator />
-
-                    <!-- 파일과 지금 글이 다르면 * 가 붙는다. 저장하지 않아도 글은 설정에 남는다. -->
-                    <dxb:BarStaticItem Content="{Binding Script.FileLabel, Mode=OneWay}"
-                                       ToolTip="{Binding Script.FileLabel, Mode=OneWay}" />
-                </dxb:ToolBarControl>
-
-                <!-- 파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다. -->
-                <dxlc:LayoutItem Label="엔진"
-                                 Visibility="{Binding Script.HasEngineStatus, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <dxe:TextEdit EditValue="{Binding Script.EngineStatus, Mode=OneWay}"
-                                  IsReadOnly="True" />
-                </dxlc:LayoutItem>
-
-                <!--
-                    AvalonEdit. TextEditor 를 바로 쓰지 않고 markup:ScriptEditor 로 감싼 이유는 그쪽에 적어 두었다.
-                    Text 가 의존 속성이 아니어서 markup:AvalonEditText.Text 로 양방향을 잇는다.
-                    DevExpress 경량 테마는 표준 WPF 컨트롤을 손대지 않으므로 색을 직접 준다.
-                -->
-                <Border BorderBrush="{Binding Script.EditorBorder}"
-                        BorderThickness="1">
-                    <markup:ScriptEditor Background="{Binding Script.EditorBackground}"
-                                         Foreground="{Binding Script.EditorForeground}"
-                                         FontFamily="D2Coding, Consolas, Courier New"
-                                         FontSize="13"
-                                         markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
-                                         Breakpoints="{Binding Live.Debug.Breakpoints, Mode=OneWay}"
-                                         CurrentLine="{Binding Live.Debug.PausedLine, Mode=OneWay}"
-                                         CompletionSource="{Binding Script.CompletionSource, Mode=OneWay}"
-                                         Errors="{Binding Script.Errors, Mode=OneWay}"
-                                         IsReadOnly="{Binding Script.IsLocked}"
-                                         Language="{Binding Script.SelectedLanguage, Mode=OneWay}"
-                                         LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
-                                         ShowLineNumbers="True"
-                                         SyntaxHighlighting="{Binding Script.Highlighting}"
-                                         WordWrap="False">
-                        <dxmvvm:Interaction.Behaviors>
-                            <!--  캐럿 줄에 중단점을 찍으려면 편집기를 직접 잡아야 한다.  -->
-                            <dxmvvm:UIObjectService x:Name="EditorObjectService" />
-                        </dxmvvm:Interaction.Behaviors>
-                    </markup:ScriptEditor>
-                </Border>
-
-                <!-- 틀린 줄이 있을 때만 뜬다. 여러 줄이 될 수 있다. -->
-                <dxlc:LayoutItem VerticalAlignment="Bottom"
-                                 Label="고칠 줄"
-                                 Visibility="{Binding Script.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <dxe:TextEdit MaxHeight="90"
-                                  VerticalContentAlignment="Top"
-                                  Foreground="#D1242F"
-                                  AcceptsReturn="True"
-                                  EditValue="{Binding Script.ErrorText, Mode=OneWay}"
-                                  IsReadOnly="True"
-                                  TextWrapping="Wrap"
-                                  VerticalScrollBarVisibility="Auto" />
-                </dxlc:LayoutItem>
-
-                <!-- 진행·디버그는 보여 주기만 하는 것이라 아래에 남긴다. 누르는 것은 위 도구 줄로 올렸다. -->
-                <dxlc:LayoutGroup VerticalAlignment="Bottom"
-                                  Orientation="Horizontal">
-                    <dxlc:LayoutItem Label="진행">
-                        <dxe:TextEdit EditValue="{Binding Player.CurrentStep, Mode=OneWay}"
-                                      IsReadOnly="True" />
-                    </dxlc:LayoutItem>
-
-                    <dxlc:LayoutItem Label="디버그">
-                        <dxe:TextEdit EditValue="{Binding Live.Debug.Status, Mode=OneWay}"
-                                      IsReadOnly="True" />
-                    </dxlc:LayoutItem>
-                </dxlc:LayoutGroup>
-            </dxlc:LayoutGroup>
-            </dxlc:LayoutGroup>
-
-            <!--
-                디버그 창 - 출력() · 호출 로그 · 변수 · 영역 · 중단점.
-
-                오른쪽 편집 칸 아래에 두었더니 폭이 480px 으로 묶여 호출 로그와 영역 칸이 너무 좁았다.
-                화면 밑으로 내려 폭을 다 쓴다 - 위와의 경계도 끌 수 있다(AllowVerticalSizing).
-            -->
-            <dxlc:LayoutGroup Height="210"
-                              dxlc:LayoutControl.AllowVerticalSizing="True"
-                              View="Tabs">
-                <!--
-                    새 줄이 붙으면 맨 아래로 따라간다. 단, 사람이 위로 올려 본 동안에는 멈춘다
-                    (markup:AutoScrollToEnd 참고) - 초당 수십 줄이 쌓이는 칸이라 무조건 끌어내리면 읽을 수가 없다.
-                -->
-                <dxlc:LayoutGroup Header="출력">
-                    <dxe:TextEdit AcceptsReturn="True"
-                                  EditValue="{Binding Live.Console.Text, Mode=OneWay}"
-                                  FontFamily="D2Coding, Consolas, Courier New"
-                                  IsReadOnly="True"
-                                  TextWrapping="Wrap"
-                                  VerticalContentAlignment="Top"
-                                  VerticalScrollBarVisibility="Auto"
-                                  markup:AutoScrollToEnd.IsEnabled="True" />
-                </dxlc:LayoutGroup>
-                <dxlc:LayoutGroup Header="호출">
-                    <dxe:TextEdit AcceptsReturn="True"
-                                  EditValue="{Binding Live.Console.CallsText, Mode=OneWay}"
-                                  FontFamily="D2Coding, Consolas, Courier New"
-                                  HorizontalScrollBarVisibility="Auto"
-                                  IsReadOnly="True"
-                                  TextWrapping="NoWrap"
-                                  VerticalContentAlignment="Top"
-                                  VerticalScrollBarVisibility="Auto"
-                                  markup:AutoScrollToEnd.IsEnabled="True" />
-                </dxlc:LayoutGroup>
-                <dxlc:LayoutGroup Header="변수"
-                                  Orientation="Vertical">
-                    <dxlc:LayoutItem Label="보기">
-                        <dxe:TextEdit EditValue="{Binding Live.Console.Watches, Mode=OneWay}"
-                                      IsReadOnly="True" />
-                    </dxlc:LayoutItem>
-                    <!-- 멈춘 줄의 지역 변수. JavaScript·Python 만. C# 은 비어 있다. -->
-                    <dxe:TextEdit AcceptsReturn="True"
-                                  EditValue="{Binding Live.Debug.Locals, Mode=OneWay}"
-                                  FontFamily="D2Coding, Consolas, Courier New"
-                                  IsReadOnly="True"
-                                  NullText="멈춘 줄의 변수가 여기 뜹니다 (JavaScript·Python)"
-                                  VerticalContentAlignment="Top"
-                                  VerticalScrollBarVisibility="Auto" />
-                </dxlc:LayoutGroup>
-                <!--
-                    이름 붙인 자리. 만드는 것은 미리보기에서 끄는 것이고, 여기서는 무엇을 만들어 뒀는지 보고
-                    "지금 읽기" 로 자리가 맞는지 확인한다 - 그게 없으면 스크립트를 짜서 돌려야 알 수 있다.
-                -->
-                <dxlc:LayoutGroup Header="영역"
-                                  Orientation="Vertical">
                     <!--
-                        위에 이름 한 줄, 아래에 손대는 것들 한 줄. 자리는 수자로 고친다 -
-                        끌어서 만든 것은 대개 몇 px 씩 어긋나는데, 다시 끌기보다 숫자를 올리내리는 편이 빠르고 정확하다.
-                        값을 고치면 겹그림의 사각형이 바로 따라 움직인다. %로 보인다 - 0~1 비율은 0.001 씩 움직여 만지기 나쁘다.
+                        이름 붙인 자리. 만드는 것은 미리보기에서 끄는 것이고, 여기서는 무엇을 만들어 뒀는지 보고
+                        "지금 읽기" 로 자리가 맞는지 확인한다. 자리는 수자로도 고친다(%).
                     -->
-                    <dxe:ButtonEdit VerticalAlignment="Top"
-                                    EditValue="{Binding SelectedRegionName, UpdateSourceTrigger=LostFocus}"
-                                    IsEnabled="{Binding SelectedRegion, Converter={dxmvvm:ObjectToBooleanConverter}}"
-                                    NullText="미리보기에서 끌어 자리를 만들면 여기 이름이 뜨고, 고치면 바뀐다"
-                                    ToolTip="스크립트가 부를 이름. 고치고 칸 밖을 누르면 바뀐다.">
-                        <dxe:ButtonEdit.Buttons>
-                            <dxe:ButtonInfo Command="{Binding TestRegionCommand}"
-                                            Content="지금 읽기"
-                                            GlyphKind="Refresh"
-                                            ToolTip="고른 자리를 지금 한 번 읽어 상태 줄에 적는다." />
-                        </dxe:ButtonEdit.Buttons>
-                    </dxe:ButtonEdit>
+                    <dxdo:LayoutPanel x:Name="RegionsPanel"
+                                      Caption="영역">
+                        <dxlc:LayoutControl Orientation="Vertical">
+                            <dxe:ButtonEdit VerticalAlignment="Top"
+                                            EditValue="{Binding SelectedRegionName, UpdateSourceTrigger=LostFocus}"
+                                            IsEnabled="{Binding SelectedRegion, Converter={dxmvvm:ObjectToBooleanConverter}}"
+                                            NullText="미리보기에서 끌어 자리를 만들면 여기 이름이 뜨고, 고치면 바뀐다">
+                                <dxe:ButtonEdit.Buttons>
+                                    <dxe:ButtonInfo Command="{Binding TestRegionCommand}"
+                                                    Content="지금 읽기"
+                                                    GlyphKind="Refresh"
+                                                    ToolTip="고른 자리를 지금 한 번 읽어 상태 줄에 적는다." />
+                                </dxe:ButtonEdit.Buttons>
+                            </dxe:ButtonEdit>
 
-                    <dxlc:LayoutGroup VerticalAlignment="Top"
-                                      ItemSpace="4"
-                                      Orientation="Horizontal">
-                        <dxlc:LayoutItem Label="가로%">
-                            <dxe:SpinEdit EditValue="{Binding SelectedRegionX, UpdateSourceTrigger=PropertyChanged}"
-                                          Increment="0.1"
-                                          MaxValue="99.9"
-                                          MinValue="0" />
-                        </dxlc:LayoutItem>
-                        <dxlc:LayoutItem Label="세로%">
-                            <dxe:SpinEdit EditValue="{Binding SelectedRegionY, UpdateSourceTrigger=PropertyChanged}"
-                                          Increment="0.1"
-                                          MaxValue="99.9"
-                                          MinValue="0" />
-                        </dxlc:LayoutItem>
-                        <dxlc:LayoutItem Label="너비%">
-                            <dxe:SpinEdit EditValue="{Binding SelectedRegionWidth, UpdateSourceTrigger=PropertyChanged}"
-                                          Increment="0.1"
-                                          MaxValue="100"
-                                          MinValue="0.4" />
-                        </dxlc:LayoutItem>
-                        <dxlc:LayoutItem Label="높이%">
-                            <dxe:SpinEdit EditValue="{Binding SelectedRegionHeight, UpdateSourceTrigger=PropertyChanged}"
-                                          Increment="0.1"
-                                          MaxValue="100"
-                                          MinValue="0.4" />
-                        </dxlc:LayoutItem>
-                        <Button Command="{Binding ToggleRegionInkCommand}"
-                                Content="전처리"
-                                ToolTip="흰 글자만 남기기를 켜고 끈다. 배경이 밝아지는 자리는 켜야 읽히고, 늘 어두운 자리는 끄는 편이 낫다." />
-                        <Button Command="{Binding RemoveRegionCommand}"
-                                Content="지우기" />
-                    </dxlc:LayoutGroup>
+                            <dxlc:LayoutGroup VerticalAlignment="Top"
+                                              Orientation="Horizontal">
+                                <dxlc:LayoutItem Label="가로%">
+                                    <dxe:SpinEdit EditValue="{Binding SelectedRegionX, UpdateSourceTrigger=PropertyChanged}"
+                                                  Increment="0.1"
+                                                  MaxValue="99.9"
+                                                  MinValue="0" />
+                                </dxlc:LayoutItem>
+                                <dxlc:LayoutItem Label="세로%">
+                                    <dxe:SpinEdit EditValue="{Binding SelectedRegionY, UpdateSourceTrigger=PropertyChanged}"
+                                                  Increment="0.1"
+                                                  MaxValue="99.9"
+                                                  MinValue="0" />
+                                </dxlc:LayoutItem>
+                                <dxlc:LayoutItem Label="너비%">
+                                    <dxe:SpinEdit EditValue="{Binding SelectedRegionWidth, UpdateSourceTrigger=PropertyChanged}"
+                                                  Increment="0.1"
+                                                  MaxValue="100"
+                                                  MinValue="0.4" />
+                                </dxlc:LayoutItem>
+                                <dxlc:LayoutItem Label="높이%">
+                                    <dxe:SpinEdit EditValue="{Binding SelectedRegionHeight, UpdateSourceTrigger=PropertyChanged}"
+                                                  Increment="0.1"
+                                                  MaxValue="100"
+                                                  MinValue="0.4" />
+                                </dxlc:LayoutItem>
+                                <dx:SimpleButton Command="{Binding ToggleRegionInkCommand}"
+                                                 Content="전처리"
+                                                 ToolTip="흰 글자만 남기기를 켜고 끈다." />
+                                <dx:SimpleButton Command="{Binding RemoveRegionCommand}"
+                                                 Content="지우기" />
+                            </dxlc:LayoutGroup>
 
-                    <!-- 남는 자리를 다 쓴다. 자리가 여럿이면 굴려 본다. -->
-                    <ListBox DisplayMemberPath="Describe"
-                             ItemsSource="{Binding Regions}"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             SelectedItem="{Binding SelectedRegion}" />
-                </dxlc:LayoutGroup>
+                            <controls:BaseGridControl AutoGenerateColumns="None"
+                                                      ItemsSource="{Binding Regions}"
+                                                      SelectedItem="{Binding SelectedRegion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                <dxg:GridControl.Columns>
+                                    <dxg:GridColumn Width="*"
+                                                    FieldName="Name"
+                                                    Header="이름" />
+                                    <dxg:GridColumn FieldName="X"
+                                                    Header="가로">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="P1" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="Y"
+                                                    Header="세로">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="P1" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="Width"
+                                                    Header="너비">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="P1" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="Height"
+                                                    Header="높이">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="P1" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="Ink"
+                                                    Header="전처리" />
+                                </dxg:GridControl.Columns>
+                                <dxg:GridControl.View>
+                                    <controls:BaseTableView AllowEditing="False"
+                                                            AutoWidth="True"
+                                                            ShowGroupPanel="False"
+                                                            ShowSearchPanelMode="Never" />
+                                </dxg:GridControl.View>
+                            </controls:BaseGridControl>
+                        </dxlc:LayoutControl>
+                    </dxdo:LayoutPanel>
 
-                <dxlc:LayoutGroup Header="중단점"
-                                  Orientation="Vertical">
-                    <TextBlock Margin="4"
-                               Opacity="0.7"
-                               Text="편집기 왼쪽 여백을 누르거나 Ctrl+B 로 켜고 끕니다. 한 줄씩(F10)은 JavaScript·Python 만 됩니다."
-                               TextWrapping="Wrap" />
-                    <ListBox MaxHeight="90"
-                             ItemsSource="{Binding Live.Debug.Breakpoints}" />
-                </dxlc:LayoutGroup>
-            </dxlc:LayoutGroup>
-
-        </dxlc:LayoutControl>
-
+                    <dxdo:LayoutPanel x:Name="BreakpointsPanel"
+                                      Caption="중단점">
+                        <dxlc:LayoutControl Orientation="Vertical">
+                            <dxe:TextEdit IsReadOnly="True"
+                                          Opacity="0.7"
+                                          ShowBorder="False"
+                                          Text="편집기 왼쪽 여백을 누르거나 F9 로 켜고 끕니다. 한 줄씩(F10)은 JavaScript·Python 만 됩니다." />
+                            <dxe:ListBoxEdit ItemsSource="{Binding Live.Debug.Breakpoints}" />
+                        </dxlc:LayoutControl>
+                    </dxdo:LayoutPanel>
+                </dxdo:TabbedGroup>
+            </dxdo:LayoutGroup>
+        </dxdo:DockLayoutManager>
     </DockPanel>
 </UserControl>
