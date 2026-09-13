@@ -227,8 +227,9 @@ internal static partial class Program
             var cx = (int)(bounds.Left + (bounds.Width / 2));
             var cy = (int)(bounds.Top + (bounds.Height / 2));
 
-            // 같은 상황을 여섯 번 되풀이한다: 200px 떨어진 몹을 겨누고, 보낸 카운트만큼 실제로 움직인 화면을 돌려준다.
-            for (var round = 0; round < 6; round++)
+            // 같은 상황을 되풀이한다: 200px 떨어진 몹을 겨누고, 보낸 카운트만큼 실제로 움직인 화면을 돌려준다.
+            // 가운뎃값을 쓰므로 표본이 찰 만큼(AimSamples=9) 돌아야 배율이 움직이기 시작한다.
+            for (var round = 0; round < 20; round++)
             {
                 adapter.Calls.Clear();
                 hub.FrameTicks = Environment.TickCount64 + (round * 1000) + 1;
@@ -267,6 +268,30 @@ internal static partial class Program
             }
 
             Check("배율은 너무 가깝거나 너무 먼 조준으로는 안 배운다", ignored, string.Join(", ", detail));
+
+            // 잡음 하나에 안 흔들리는가. 몹이 스스로 움직이거나 화면이 덜 돌면 "덜 움직였다" 가 되어 잰 값이
+            // 크게 나오는데, 그 잡음은 늘 한쪽(위)으로만 튄다 - 한 값씩 반영하면 위로만 떠밀려 상한까지 간다
+            // (실측: 3.6 에서 시작해 734번 배우는 동안 20 에 붙었고, 그러자 모든 조준이 잘려 화면이 안 돌았다).
+            {
+                var settled = learned[^1];
+
+                for (var bad = 0; bad < 2; bad++)
+                {
+                    adapter.Calls.Clear();
+                    hub.FrameTicks = Environment.TickCount64 + 50000 + (bad * 1000);
+                    api.Aim(cx + 200, cy);
+
+                    // 화면이 거의 안 돌았다고 답한다 - 잰 값이 터무니없이 커지는 상황.
+                    hub.FrameTicks = Environment.TickCount64 + 50500 + (bad * 1000);
+                    api.Aim(cx + 190, cy);
+                }
+
+                var after = learned[^1];
+
+                Check("배율은 잘못 잰 값 몇 개에 흔들리지 않는다 (가운뎃값)",
+                      Math.Abs(after - settled) / settled < 0.15,
+                      $"{settled:0.00} → {after:0.00} (잡음 2번 뒤)");
+            }
 
             Check("조준 배율 배우기: 한 번에 1.5배 넘게 안 바꾸고 참값(3.45)으로 다가간다",
                   learned.Count >= 4 && !jumped && learned[^1] > 2.5 && learned[^1] < 4.2,

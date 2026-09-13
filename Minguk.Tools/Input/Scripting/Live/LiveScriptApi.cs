@@ -385,6 +385,27 @@ public sealed class LiveScriptApi
     /// </summary>
     private const int MaxAimCounts = 1200;
 
+    /// <summary>
+    /// 배율을 고치기 전에 모으는 표본 수. <b>가운뎃값</b>을 쓴다 - 평균이나 섞기가 아니다.
+    /// </summary>
+    /// <remarks>
+    /// <b>잡음이 한쪽으로만 튄다.</b> 몹이 스스로 움직이거나 화면이 덜 돌면 "보낸 것보다 덜 움직였다" 가 되어
+    /// 잰 값이 커진다. 반대쪽("더 움직였다")은 거부 규칙(줄어든 비율 2.0 초과·멀어짐)에 걸러진다.
+    /// 그래서 한 값씩 반영하면 <b>위로만 떠밀린다</b> - 실측에서 3.6 으로 시작해 734번 배우는 동안
+    /// 상한 20 까지 올라가 붙었고(잰 값에 16.50 · 6.79 같은 것이 섞였다), 그러자 모든 조준이 상한에 잘려
+    /// 화면이 제대로 돌지 못했다.
+    ///
+    /// 가운뎃값은 그런 값 몇 개에 흔들리지 않는다. 홀수로 둔다 - 가운데가 하나여야 한다.
+    /// </remarks>
+    private const int AimSamples = 9;
+
+    /// <summary>배율이 가질 수 있는 값의 범위(카운트/px).</summary>
+    private const double MinAimScale = 0.1;
+
+    private const double MaxAimScale = 20;
+
+    private readonly List<double> _aimSamples = [];
+
     /// <summary>이보다 가까우면 배율을 안 배운다(px). 검출 사각형의 떨림이 잰 값을 뒤집는다.</summary>
     private const double MinLearnOffsetPx = 40;
 
@@ -543,6 +564,10 @@ public sealed class LiveScriptApi
         if (Math.Abs(sent) < 15) return;
         if (Math.Abs(before) < MinLearnOffsetPx || Math.Abs(before) > MaxLearnOffsetPx) return;
 
+        // 상한에 잘린 조준은 못 믿는다 - 보내려던 것을 다 못 보낸 것이라, 덜 움직인 이유가 배율 탓인지
+        // 잘린 탓인지 가릴 수 없다. 배율이 한 번 커지면 모든 조준이 여기 걸려 서로를 키운다.
+        if (Math.Abs(sent) >= MaxAimCounts) return;
+
         var moved = before - after;
         var fraction = moved / before;
 
@@ -559,15 +584,24 @@ public sealed class LiveScriptApi
             return;
         }
 
-        var measured = Math.Clamp(sent / moved, 0.1, 20);
+        var measured = Math.Clamp(sent / moved, MinAimScale, MaxAimScale);
 
-        // 한 번에 크게 바꾸지 않는다. 한 번 잘못 잰 값이 배율을 몇 배로 끌고 가면 다음 조준이 화면 밖까지 돈다.
-        var bounded = Math.Clamp(measured, AimScale / 1.5, AimScale * 1.5);
-        var next = Math.Clamp((AimScale * 0.5) + (bounded * 0.5), 0.1, 20);
+        // 잰 값 하나로 바꾸지 않는다. 여러 번 잰 것의 가운뎃값을 쓴다 - 이유는 AimSamples 에 적었다.
+        _aimSamples.Add(measured);
+
+        if (_aimSamples.Count > AimSamples) _aimSamples.RemoveAt(0);
+        if (_aimSamples.Count < AimSamples) return;
+
+        var sorted = _aimSamples.OrderBy(v => v).ToArray();
+        var median = sorted[sorted.Length / 2];
+
+        // 그래도 한 번에 크게 바꾸지 않는다. 게임 안에서 감도가 바뀌는 일은 없으니 서둘 이유가 없다.
+        var next = Math.Clamp(Math.Clamp(median, AimScale / 1.5, AimScale * 1.5), MinAimScale, MaxAimScale);
 
         if (Math.Abs(next - AimScale) / AimScale < 0.02) return;
 
-        Logger.Info($"배율 {AimScale:0.00} → {next:0.00} ({before:0} → {after:0}, 보낸 {sent}, 잰 값 {measured:0.00})");
+        Logger.Info($"배율 {AimScale:0.00} → {next:0.00} ({before:0} → {after:0}, 보낸 {sent}, 잰 값 {measured:0.00}, " +
+                    $"가운뎃값 {median:0.00} of [{string.Join(" ", sorted.Select(v => v.ToString("0.0")))}])");
 
         _aimScale = next;
         _host.AimScaleLearned(next);
