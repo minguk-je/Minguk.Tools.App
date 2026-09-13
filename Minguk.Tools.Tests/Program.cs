@@ -45,6 +45,7 @@ internal static partial class Program
         if (args.Contains("--onnx-bench")) return OnnxBench.Run(args);
         if (args.Contains("--onnx-raw")) return OnnxRaw.Run(args);
         if (args.Contains("--onnx-agree")) return OnnxAgree.Run(args);
+        if (args.Contains("--ocr-crop")) return OcrCropCheck.Run(args);
 
         // 설계 2단계: ONNX 검출기가 무엇을 어디서 찾는지 본다(사각형을 그려 파일로 남긴다).
         if (args.Contains("--onnx-detect")) return OnnxDetect.Run(args);

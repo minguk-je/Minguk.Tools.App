@@ -12,6 +12,7 @@ using Minguk.Tools.Capture;
 using Minguk.Tools.Capture.Input;
 using Minguk.Tools.Input.Interop;
 using Minguk.Tools.Input.Sequencing;
+using Minguk.Tools.Vision.Ocr;
 
 namespace Minguk.Tools.Input.Scripting.Live;
 
@@ -884,6 +885,93 @@ public sealed class LiveScriptApi
         return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
     }
 
+    // ── HUD 숫자 ─────────────────────────────────────────────────────────
+
+    /// <summary>지금 탄약. 못 읽으면 null.</summary>
+    public int? Ammo() => Traced("Ammo", "", () => HudNumber(HudRegions.Ammo, 0));
+
+    /// <summary>탄약 최대치(재장전하면 이만큼 찬다). 못 읽으면 null.</summary>
+    public int? AmmoMax() => Traced("AmmoMax", "", () => HudNumber(HudRegions.Ammo, 1));
+
+    /// <summary>지금 체력. 못 읽으면 null.</summary>
+    public int? Health() => Traced("Health", "", () => HudNumber(HudRegions.Health, 0));
+
+    /// <summary>체력 최대치. 못 읽으면 null.</summary>
+    public int? HealthMax() => Traced("HealthMax", "", () => HudNumber(HudRegions.Health, 1));
+
+    /// <summary>궁극기 충전(%). <b>다 찼으면 숫자가 없어 null</b> - <see cref="UltimateReady"/> 쪽이 쓰기 낫다.</summary>
+    public int? Ultimate() => Traced("Ultimate", "", () => HudNumber(HudRegions.Ultimate, 0));
+
+    /// <summary>궁극기가 다 찼는가. 고리 안에 숫자가 없으면 찬 것으로 본다.</summary>
+    /// <remarks>
+    /// <b>못 읽은 것과 다 찬 것을 못 가른다.</b> 차는 동안만 % 를 적고 다 차면 아이콘만 보이기 때문이다.
+    /// 자리가 어긋나 못 읽어도 "찼다" 가 나오므로, 쓰기 전에 차는 중에 <c>출력(궁극기())</c> 로 숫자가
+    /// 나오는지 한 번 봐 둘 것.
+    /// </remarks>
+    public bool UltimateReady() => Ultimate() is null;
+
+    /// <summary>
+    /// HUD 의 한 자리를 읽어 <paramref name="index"/> 번째 숫자를 준다. 「17 24」 면 0 이 17, 1 이 24.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ReadNumber"/> 와 두 가지가 다르다.
+    /// <list type="number">
+    /// <item><b>흰 글자만 남긴다</b>(<see cref="HudInk"/>) - 같은 숫자가 어두운 벽 위에서는 읽히고 밝은 주황 바닥
+    /// 위에서는 안 읽혔다(실측: 여섯 장 중 셋이 빈 결과).</item>
+    /// <item><b>영문 엔진으로 읽는다</b> - 한국어 팩은 225 를 <c>22512h5</c>, 193 을 <c>1亐3</c> 으로 냈다(실측).
+    /// 이름표는 한글이라 ko 가 맞지만 숫자는 아니다.</item>
+    /// </list>
+    /// 「현재 | 최대」 처럼 둘이 붙어 나오므로 순서로 고른다. 구분자는 엔진이 1 이나 역슬래시로도 읽어 못 믿는다 -
+    /// 숫자가 아닌 것은 다 버리고 남은 덩어리의 순서만 본다.
+    /// </remarks>
+    private int? HudNumber(Rect region, int index)
+    {
+        ThrowIfStopping();
+
+        var hub = _host.Hub;
+
+        if (!hub.IsCapturing) throw Guard("눈이 없습니다 - 화면에서 시작(연결)을 눌러 창을 잡아야 HUD 를 읽을 수 있습니다.");
+
+        hub.WantsFrames = true;
+
+        var deadline = Environment.TickCount64 + 1500;
+        System.Windows.Media.Imaging.BitmapSource? crop;
+
+        while (!hub.TryCropFrame(region, out crop) || crop is null)
+        {
+            if (Environment.TickCount64 >= deadline) throw Guard("프레임이 들어오지 않습니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.");
+            Wait(50);
+        }
+
+        var outcome = NumberOcr().RecognizeAsync(HudInk.Prepare(crop), _token).GetAwaiter().GetResult();
+        var numbers = new List<int>();
+        var digits = new StringBuilder();
+
+        foreach (var letter in outcome.Text + " ")
+        {
+            if (char.IsDigit(letter))
+            {
+                digits.Append(letter);
+                continue;
+            }
+
+            if (digits.Length > 0 && int.TryParse(digits.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+                numbers.Add(value);
+
+            digits.Clear();
+        }
+
+        return index < numbers.Count ? numbers[index] : null;
+    }
+
+    /// <summary>숫자를 읽을 엔진. 영문 팩이 없으면 쓰던 것으로.</summary>
+    private IOcrEngine NumberOcr()
+        => _numberOcr ??= OcrEngineFactory.TryCreate("en-US")
+                          ?? _host.Ocr?.Invoke()
+                          ?? throw Guard("글자 읽기 엔진이 없습니다 - Windows OCR 언어 팩을 확인하세요.");
+
+    private IOcrEngine? _numberOcr;
+
     public IReadOnlyList<ScriptMob> 몹들() => Mobs();
     public ScriptMob? 가장가까운몹() => NearestMob();
     public ScriptMob? 목표() => TargetMob();
@@ -891,6 +979,12 @@ public sealed class LiveScriptApi
     public ScriptMob? 몹기다리기(int milliseconds) => WaitMob(milliseconds);
     public string 읽기(double x, double y, double width, double height) => ReadText(x, y, width, height);
     public int? 숫자읽기(double x, double y, double width, double height) => ReadNumber(x, y, width, height);
+    public int? 탄약() => Ammo();
+    public int? 탄약최대() => AmmoMax();
+    public int? 체력() => Health();
+    public int? 체력최대() => HealthMax();
+    public int? 궁극기() => Ultimate();
+    public bool 궁극기준비() => UltimateReady();
 
     // ── 키 ───────────────────────────────────────────────────────────────
 

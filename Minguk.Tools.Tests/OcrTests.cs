@@ -22,6 +22,7 @@ internal static partial class Program
     {
         TestNameplateRegion();
         TestNameplateInk();
+        TestHudInk();
 
         var engine = OcrEngineFactory.TryCreate();
 
@@ -76,6 +77,34 @@ internal static partial class Program
     }
 
     /// <summary>이름표 전처리. 회색 바탕의 빨간 글자만 검정으로 남고, 3배로 커지고, 그 결과를 OCR 이 읽는다.</summary>
+    /// <summary>
+    /// HUD 숫자 전처리(<see cref="HudInk"/>). 흰 글자만 남기는 것과, 그래야 읽힌다는 것.
+    /// </summary>
+    /// <remarks>
+    /// 같은 자리·같은 크기의 「17 | 24」 가 어두운 벽 위에서는 읽히고 밝은 주황 바닥 위에서는 빈 글이 됐다
+    /// (실측: 여섯 장 중 셋). 여기서는 그 상황을 주황 바탕에 흰 숫자로 만들어 본다.
+    /// </remarks>
+    private static void TestHudInk()
+    {
+        Check("밝고 색기 없는 것이 글자", HudInk.IsInk(255, 255, 255) && HudInk.IsInk(210, 220, 215), "255,255,255 / 210,220,215");
+        Check("주황·어두운 것은 배경", !HudInk.IsInk(240, 170, 60) && !HudInk.IsInk(90, 90, 95) && !HudInk.IsInk(255, 120, 120), "");
+
+        // 게임처럼: 밝은 주황 바탕에 흰 숫자. 그냥 넣으면 대비가 거의 없다.
+        var hud = DrawText("17 24", 22, 160, 48, new SolidColorBrush(Color.FromRgb(240, 170, 60)), Brushes.White, "Arial", 90);
+        var prepared = HudInk.Prepare(hud);
+
+        Check("4배로 커진다", prepared.PixelWidth == 640 && prepared.PixelHeight == 192, $"{prepared.PixelWidth}x{prepared.PixelHeight}");
+
+        var english = OcrEngineFactory.TryCreate("en-US");
+
+        if (english is null) { Check("HUD 숫자 OCR (en-US 팩 없음, 건너뜀)", true, ""); return; }
+
+        var read = english.RecognizeAsync(prepared).GetAwaiter().GetResult().Text;
+        var digits = new string([.. read.Where(char.IsDigit)]);
+
+        Check("전처리하면 주황 바탕의 흰 숫자를 읽는다", digits.Contains("17") && digits.Contains("24"), $"읽음=[{read}]");
+    }
+
     private static void TestNameplateInk()
     {
         Check("빨강은 글자", NameplateInk.IsInk(220, 40, 50) && NameplateInk.IsInk(255, 120, 120), "220,40,50 / 255,120,120");
