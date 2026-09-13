@@ -775,12 +775,62 @@ public sealed class LiveScriptApi
             ReleaseTargetCore();
         }
 
-        _locked = NearestOf(mobs);
+        var picked = NearestOf(mobs);
+
+        // 멀리 있는 새 목표는 한 번 더 보고 움직인다 - 아래 Confirm 참고.
+        if (picked is not null && !Confirmed(picked)) return null;
+
+        _locked = picked;
         _lockShiftX = 0;
         _lockShiftY = 0;
 
         return _locked;
     }
+
+    /// <summary>
+    /// 새로 고른 목표를 믿어도 되는가. <b>멀리 있는 것은 두 번 연속 같은 자리에 보여야</b> 참이다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜</b> - 한 프레임만 반짝한 헛것을 보고 화면이 확 돌아 버린다(실측: 0마리가 이어지다 한 프레임에
+    /// 「일반 봇 78%」 가 창 오른쪽 위 구석에 떴고, 그 한 장으로 1200,-1200 을 보내 시야가 오른쪽 위로 튀었다.
+    /// 다음 프레임은 다시 0마리였다). 추적(<c>DetectionTracker</c>)이 한 프레임짜리를 거르지만, 놓친 것을
+    /// 두 프레임까지 이어 주기도 해서 이렇게 새는 것이 있다.
+    ///
+    /// <b>가까운 것은 그냥 믿는다.</b> 확인하느라 한 프레임(0.08초)을 버리는데, 코앞의 몹은 틀려도 조금 움직일
+    /// 뿐이라 그 값이 아깝다. 크게 돌아야 하는 것만 - 헛것이 비싼 이유가 "크게 돈다" 는 것이므로 문턱도 거기 둔다.
+    /// </remarks>
+    private bool Confirmed(ScriptMob mob)
+    {
+        var target = _host.Target();
+
+        if (target is null || !CaptureTargetBounds.TryGet(target, out var bounds)) return true;
+
+        var offsetX = mob.CenterX - (bounds.Left + (bounds.Width / 2));
+        var offsetY = mob.CenterY - (bounds.Top + (bounds.Height / 2));
+
+        if (Math.Sqrt(Sq(offsetX) + Sq(offsetY)) <= ConfirmDistancePx)
+        {
+            _candidate = null;
+            return true;
+        }
+
+        // 지난번에도 거의 같은 자리에서 봤는가. 화면은 그사이 안 돌았다(움직이지 않고 돌아갔으므로).
+        var near = _candidate is { } last
+                   && Math.Sqrt(Sq(mob.CenterX - last.CenterX) + Sq(mob.CenterY - last.CenterY))
+                      <= Math.Max(mob.Width, mob.Height) * LockRadiusFactor;
+
+        _candidate = mob;
+
+        if (!near) Logger.Debug($"먼 목표({offsetX:0}, {offsetY:0})를 처음 봤다 - 한 번 더 보고 움직인다.");
+
+        return near;
+    }
+
+    /// <summary>두 번 연속 봐야 믿는 거리(px). 이 안쪽이면 바로 겨눈다.</summary>
+    private const double ConfirmDistancePx = 300;
+
+    /// <summary>지난번에 새로 고르려던 목표. 두 번 연속 같은 자리에 보이는지 견주는 데만 쓴다.</summary>
+    private ScriptMob? _candidate;
 
     /// <summary>고정한 목표를 놓는다. 잡은 뒤 다음 몹으로 넘어갈 때 부른다.</summary>
     private void ReleaseTargetCore()
@@ -923,8 +973,11 @@ public sealed class LiveScriptApi
     /// </list>
     /// 「현재 | 최대」 처럼 둘이 붙어 나오므로 순서로 고른다. 구분자는 엔진이 1 이나 역슬래시로도 읽어 못 믿는다 -
     /// 숫자가 아닌 것은 다 버리고 남은 덩어리의 순서만 본다.
+    ///
+    /// <b>두 길을 다 해 본다</b> - 자리마다 정해 둔 쪽을 먼저 보고, 아무 숫자도 안 나오면 다른 쪽으로 한 번 더.
+    /// 같은 자리라도 배경이 밝아졌다 어두워졌다 하므로 한 길만 고집하면 그때그때 빈 답이 나온다.
     /// </remarks>
-    private int? HudNumber(Rect region, int index)
+    private int? HudNumber(HudSpot spot, int index)
     {
         ThrowIfStopping();
 
@@ -937,13 +990,27 @@ public sealed class LiveScriptApi
         var deadline = Environment.TickCount64 + 1500;
         System.Windows.Media.Imaging.BitmapSource? crop;
 
-        while (!hub.TryCropFrame(region, out crop) || crop is null)
+        while (!hub.TryCropFrame(spot.Region, out crop) || crop is null)
         {
             if (Environment.TickCount64 >= deadline) throw Guard("프레임이 들어오지 않습니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.");
             Wait(50);
         }
 
-        var outcome = NumberOcr().RecognizeAsync(HudInk.Prepare(crop), _token).GetAwaiter().GetResult();
+        var numbers = ReadNumbers(crop, spot.Ink, spot.Scale);
+
+        if (numbers.Count == 0) numbers = ReadNumbers(crop, !spot.Ink, spot.Scale);
+
+        return index < numbers.Count ? numbers[index] : null;
+    }
+
+    /// <summary>조각을 한 길로 읽어 숫자 덩어리들을 순서대로 준다.</summary>
+    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, bool ink, double scale)
+    {
+        var prepared = ink
+            ? HudInk.Prepare(crop)
+            : Enlarge(crop, scale);
+
+        var outcome = NumberOcr().RecognizeAsync(prepared, _token).GetAwaiter().GetResult();
         var numbers = new List<int>();
         var digits = new StringBuilder();
 
@@ -961,7 +1028,16 @@ public sealed class LiveScriptApi
             digits.Clear();
         }
 
-        return index < numbers.Count ? numbers[index] : null;
+        return numbers;
+    }
+
+    private static System.Windows.Media.Imaging.BitmapSource Enlarge(System.Windows.Media.Imaging.BitmapSource crop, double scale)
+    {
+        var scaled = new System.Windows.Media.Imaging.TransformedBitmap(crop, new System.Windows.Media.ScaleTransform(scale, scale));
+
+        scaled.Freeze();
+
+        return scaled;
     }
 
     /// <summary>숫자를 읽을 엔진. 영문 팩이 없으면 쓰던 것으로.</summary>

@@ -171,15 +171,20 @@ internal static partial class Program
             Check("목표는 고정되고, 풀면 다시 고른다", errors.Count == 0 && same && printed[2] == printed[0],
                   errors.Count > 0 ? errors[0].ToString() : string.Join(" / ", printed));
 
-            // 고정한 몹이 사라지면 잠깐 기다렸다(400ms) 새로 고른다.
+            // 가까운 몹을 숨기면 남는 것은 멀리 있는 하나뿐이다. 먼 목표는 **두 번 연속 같은 자리에 보여야** 고른다 -
+            // 한 프레임 반짝한 헛것으로 화면이 확 돌아 버리기 때문이다(실측: 78% 짜리 한 장에 1200,-1200 을 보냈다).
             hub.HideNear = true;
 
             var (missErrors, _, missPrinted) = Run(new RoslynScriptEngine(),
-                "var a = 목표(); 출력(a is null ? \"없음\" : a.중심x.ToString());",
+                """
+                var a = 목표(); 출력(a is null ? "없음" : a.중심x.ToString());
+                var b = 목표(); 출력(b is null ? "없음" : b.중심x.ToString());
+                """,
                 hub, monitor, CancellationToken.None);
 
-            Check("몹이 하나뿐이면 그것을 고른다", missErrors.Count == 0 && missPrinted.Count == 1 && missPrinted[0] != "없음",
-                  missErrors.Count > 0 ? missErrors[0].ToString() : string.Join(" / ", missPrinted));
+            Check("먼 목표는 한 번 더 보고 고른다 (한 프레임짜리 헛것을 안 쫓게)",
+                  missErrors.Count == 0 && missPrinted.Count == 2 && missPrinted[0] == "없음" && missPrinted[1] != "없음",
+                  missErrors.Count > 0 ? missErrors[0].ToString() : string.Join(" → ", missPrinted));
         }
 
         // ── 상대이동: 작은 이동도 합이 정확하다(걸음마다 반올림해도 어긋나지 않게) ──
