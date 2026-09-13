@@ -187,8 +187,7 @@
             </dxlc:LayoutGroup>
 
             <!-- 통계는 마지막 1초 한 줄만(MaxRows = 1). 머리글 + 한 줄이 들어갈 높이로 고정한다. -->
-            <dxlc:LayoutGroup Height="84"
-                              VerticalAlignment="Bottom"
+            <dxlc:LayoutGroup VerticalAlignment="Bottom"
                               ItemSpace="0"
                               Orientation="Vertical"
                               View="Group">
@@ -217,7 +216,8 @@
                                               Grid.ColumnSpan="2"
                                               dependency:GridControlDependency.IsRowNumber="True"
                                               AutoGenerateColumns="None"
-                                              ItemsSource="{Binding Rows}">
+                                              ItemsSource="{Binding Rows}"
+                                              ShowBorder="False">
 
                         <dxmvvm:Interaction.Behaviors>
                             <!--
@@ -281,7 +281,7 @@
                         </dxg:GridColumn>
                         <dxg:GridColumn Width="110" FieldName="Resolution" Header="해상도" />
                         <dxg:GridColumn Width="100" FieldName="FrameId" Header="누적 프레임" />
-                        <dxg:GridColumn FieldName="Note" Header="비고" />
+                        <dxg:GridColumn Width="300" FieldName="Note" Header="비고" />
                     </controls:BaseGridControl>
                 </Grid>
             </dxlc:LayoutGroup>

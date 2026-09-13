@@ -93,6 +93,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         CloseDocumentCommand = new DelegateCommand(() => Guard(() => Script.Project.CloseDocument(Script.Project.ActiveDocument)), () => Script.IsProject, false);
         ShowToolWindowCommand = new DelegateCommand<string>(ShowToolWindow, false);
         ResetLayoutCommand = new DelegateCommand(ResetLayout, false);
+        SplitVerticalCommand = new DelegateCommand(() => SetSplit(System.Windows.Controls.Orientation.Vertical), false);
+        SplitHorizontalCommand = new DelegateCommand(() => SetSplit(System.Windows.Controls.Orientation.Horizontal), false);
+        SwapPanesCommand = new DelegateCommand(SwapPanes, false);
         GoToErrorCommand = new DelegateCommand<object?>(GoToError, false);
 
         Script.Project.ProjectChanged += (_, _) =>
@@ -120,6 +123,15 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
     /// <summary>창 > 창 레이아웃 다시 설정.</summary>
     public DelegateCommand ResetLayoutCommand { get; }
+
+    /// <summary>미리보기 위 · 스크립트 아래(기본). VS XAML 디자이너의 "가로 분할" 자리.</summary>
+    public DelegateCommand SplitVerticalCommand { get; }
+
+    /// <summary>미리보기와 스크립트를 나란히.</summary>
+    public DelegateCommand SplitHorizontalCommand { get; }
+
+    /// <summary>미리보기와 스크립트의 자리를 맞바꾼다.</summary>
+    public DelegateCommand SwapPanesCommand { get; }
 
     /// <summary>오류 목록 더블 클릭 - 그 파일을 열고 그 줄로.</summary>
     public DelegateCommand<object?> GoToErrorCommand { get; }
@@ -164,14 +176,94 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     // ── 도킹 배치 ────────────────────────────────────────────────────────
 
     private DevExpress.Xpf.Docking.DockLayoutManager? _dock;
+    private DevExpress.Xpf.Bars.BarManager? _bars;
     private string? _defaultLayout;
 
     private const string DockLayoutKey = "DockLayout";
+    private const string BarLayoutKey = "BarLayout";
 
     /// <summary>
     /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.
+    /// 2: 미리보기|문서를 위아래로(2026-09-13). 옛 배치를 그대로 살리면 새 기본이 안 보인다.
     /// </summary>
-    private const int DockLayoutVersion = 1;
+    private const int DockLayoutVersion = 2;
+
+    // ── 미리보기 | 문서 나누기 ──────────────────────────────────────────
+
+    /// <summary>
+    /// 미리보기와 문서 탭을 담은 그룹. 방향과 순서를 여기서 바꾼다.
+    /// </summary>
+    /// <remarks>도킹 참조는 서비스에서 바로 찾는다 - 부모 주입 없이 띄운 하네스(<c>--script-screen</c>)에서도 이 명령이 돌게.</remarks>
+    private LayoutGroup? DesignSplitGroup => (_dock ??= FindControl<DockLayoutManager>("DockObjectService"))?.GetItem("DesignSplitGroup") as LayoutGroup;
+
+    private void SetSplit(System.Windows.Controls.Orientation orientation) => Guard(() =>
+    {
+        if (DesignSplitGroup is not { } group) return;
+
+        group.Orientation = orientation;
+        StatusText = orientation == System.Windows.Controls.Orientation.Vertical ? "미리보기를 위, 스크립트를 아래에 두었습니다." : "미리보기와 스크립트를 나란히 두었습니다.";
+    });
+
+    /// <summary>
+    /// 미리보기를 그룹의 반대쪽 끝으로 옮긴다. 문서 그룹은 둘(프로젝트·한 파일짜리)이라 "앞이면 맨 뒤로, 아니면 맨 앞으로" 다.
+    /// </summary>
+    private void SwapPanes() => Guard(() =>
+    {
+        if (DesignSplitGroup is not { } group || _dock?.GetItem("PreviewPanel") is not { } preview) return;
+
+        // 미리보기가 떠 있거나 닫혀 있으면 그룹 안에 없다 - 먼저 되돌린다.
+        if (!group.Items.Contains(preview)) _dock.DockController.Restore(preview);
+
+        var index = group.Items.IndexOf(preview);
+        if (index < 0) return;
+
+        group.Remove(preview);
+        group.Insert(index == 0 ? group.Items.Count : 0, preview);
+        StatusText = index == 0 ? "미리보기를 뒤(아래·오른쪽)로 옮겼습니다." : "미리보기를 앞(위·왼쪽)으로 옮겼습니다.";
+    });
+
+    // ── 도구 모음 배치 ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 도구 모음을 끌어 옮긴 자리. 이름(x:Name)으로 되찾으므로 도구 모음마다 이름이 있어야 한다.
+    /// </summary>
+    /// <remarks>
+    /// 도구 모음은 <c>BarManager.Bars</c> 에 있어야 한다. 독립 <c>ToolBarControl</c> 을 컨테이너에 넣어 두면 관리자의 Bars 가
+    /// 비어 배치 XML 이 빈 껍데기다(실측, <c>--script-screen</c> 이 이름 다섯 개가 들어 있는지 본다).
+    /// </remarks>
+    private void RestoreBarLayout()
+    {
+        if (_bars is not { } manager) return;
+
+        var saved = GetSetting(BarLayoutKey, string.Empty);
+        if (string.IsNullOrEmpty(saved)) return;
+
+        try
+        {
+            using var stream = new System.IO.MemoryStream(Convert.FromBase64String(saved));
+            manager.RestoreLayoutFromStream(stream);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "도구 모음 배치를 되살리지 못했다 - 처음 배치로 시작한다");
+        }
+    }
+
+    private void SaveBarLayout()
+    {
+        if (_bars is not { } manager) return;
+
+        try
+        {
+            using var stream = new System.IO.MemoryStream();
+            manager.SaveLayoutToStream(stream);
+            SetSetting(BarLayoutKey, Convert.ToBase64String(stream.ToArray()));
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "도구 모음 배치를 저장하지 못했다");
+        }
+    }
 
     private void ShowToolWindow(string? name) => Guard(() =>
     {
@@ -190,7 +282,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         RestoreLayout(_defaultLayout);
         SetSetting(DockLayoutKey, string.Empty);
-        StatusText = "창 레이아웃을 처음대로 되돌렸습니다.";
+        SetSetting(BarLayoutKey, string.Empty);
+        StatusText = "창 레이아웃을 처음대로 되돌렸습니다. 도구 모음 자리는 다시 열 때 처음대로 갑니다.";
     });
 
     private static string SaveLayout(DevExpress.Xpf.Docking.DockLayoutManager dock)
@@ -346,6 +439,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         // 문서 탭이 열리기 전에 창 배치부터.
         RestoreDockLayout();
+        RestoreBarLayout();
 
         Script.Restore();
         Player.Restore((key, fallback) => GetSetting(key, fallback));
@@ -356,6 +450,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         base.SaveSettings();
 
         SaveDockLayout();
+        SaveBarLayout();
         Script.Save();
         Player.Save((key, value) => SetSetting(key, value));
     }
@@ -366,6 +461,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         _editor = FindControl<ScriptEditor>("EditorObjectService");
         _dock = FindControl<DevExpress.Xpf.Docking.DockLayoutManager>("DockObjectService");
+        _bars = FindControl<DevExpress.Xpf.Bars.BarManager>("BarManagerObjectService");
     }
 
     protected override void OnLoaded()

@@ -1,0 +1,108 @@
+using System;
+using System.Globalization;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Media;
+
+namespace Minguk.Tools.Markup.Regions;
+
+/// <summary>
+/// 고른 자리에 붙는 테두리와 손잡이 여덟 개. 참조한 <c>ResizeRotateAdorner</c> 를 옮겼다(회전은 뺐다 - 읽을 자리는 안 돌린다).
+/// </summary>
+/// <remarks>
+/// 어도너 층은 ScrollViewer 안(<c>ScrollContentPresenter</c>)에 있어 미리보기의 <c>LayoutTransform</c> 밖이지만, <see cref="Adorner"/>
+/// 가 붙은 요소의 변환을 스스로 따라가므로 확대해도 자리에 맞는다. 선·손잡이도 같이 커진다 - 참조 프로젝트와 같다.
+/// </remarks>
+public sealed class RegionResizeAdorner : Adorner
+{
+    private readonly VisualCollection _visuals;
+    private readonly RegionResizeChrome _chrome;
+
+    public RegionResizeAdorner(RegionItem item) : base(item)
+    {
+        SnapsToDevicePixels = true;
+        _chrome = new RegionResizeChrome { DataContext = item };
+        _visuals = new VisualCollection(this) { _chrome };
+    }
+
+    protected override int VisualChildrenCount => _visuals.Count;
+
+    protected override Visual GetVisualChild(int index) => _visuals[index];
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        _chrome.Arrange(new Rect(finalSize));
+        return finalSize;
+    }
+}
+
+/// <summary>
+/// 크기를 바꾸는 동안만 붙는 치수 표시 - 아래에 너비, 오른쪽에 높이(원본 픽셀). 참조한 <c>SizeAdorner</c>.
+/// </summary>
+/// <remarks>
+/// 픽셀로 보이는 이유 - 글자 읽기는 원본 픽셀 크기가 좌우한다(높이 160 아래면 키워 넣는다). 비율(%)은 그것을 못 말해 준다.
+/// </remarks>
+public sealed class RegionSizeAdorner : Adorner
+{
+    private readonly VisualCollection _visuals;
+    private readonly RegionSizeChrome _chrome;
+
+    public RegionSizeAdorner(RegionItem item) : base(item)
+    {
+        SnapsToDevicePixels = true;
+        _chrome = new RegionSizeChrome { DataContext = item };
+        _visuals = new VisualCollection(this) { _chrome };
+    }
+
+    protected override int VisualChildrenCount => _visuals.Count;
+
+    protected override Visual GetVisualChild(int index) => _visuals[index];
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        _chrome.Arrange(new Rect(new Point(0, 0), finalSize));
+        return finalSize;
+    }
+}
+
+/// <summary>테두리·손잡이 모양. 템플릿은 <c>RegionChrome.xaml</c> 에 있다.</summary>
+public sealed class RegionResizeChrome : Control
+{
+    public RegionResizeChrome() => Style = RegionChromeResources.StyleFor(typeof(RegionResizeChrome));
+}
+
+/// <summary>치수 표시 모양. 템플릿은 <c>RegionChrome.xaml</c> 에 있다.</summary>
+public sealed class RegionSizeChrome : Control
+{
+    public RegionSizeChrome() => Style = RegionChromeResources.StyleFor(typeof(RegionSizeChrome));
+}
+
+/// <summary>치수 글자는 정수로. 참조한 <c>DoubleFormatConverter</c>.</summary>
+public sealed class RegionRoundConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is double d ? Math.Round(d).ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+    public object? ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => null;
+}
+
+/// <summary>
+/// 어도너·항목의 스타일을 든 사전.
+/// </summary>
+/// <remarks>
+/// 이 프로젝트에는 <c>Themes/Generic.xaml</c> 이 없다. 앱 리소스에 병합하면 하네스(<c>--script-screen</c>)는 따로 또 병합해야
+/// 하고, 빠뜨리면 항목이 템플릿 없이 보이지 않는다. 컨트롤이 제 스타일을 여기서 직접 가져가면 어디에 놓여도 같다.
+/// </remarks>
+internal static class RegionChromeResources
+{
+    private static ResourceDictionary? _dictionary;
+
+    private static ResourceDictionary Dictionary => _dictionary ??= new ResourceDictionary
+    {
+        Source = new Uri("pack://application:,,,/Minguk.Tools;component/Markup/Regions/RegionChrome.xaml")
+    };
+
+    public static Style StyleFor(Type type) => (Style)Dictionary[type];
+}

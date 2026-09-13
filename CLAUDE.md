@@ -61,6 +61,13 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
     조상(UserControl)으로 찾으면 떼어 낸 떠 있는 창에서 끊긴다.
   - **탭 활성화는 한 방향으로만 기다린다**(`ScriptDocumentsBehavior._requested`). 도킹의 `DockItemActivated` 는 한 박자 늦게 와서,
     코드가 새 탭을 앞으로 가져오는 동안 옛 탭의 알림이 활성 문서를 되돌리고 그것이 다시 탭을 가져오는 핑퐁이 났다(실측: 각 66,280번, 화면 멈춤).
+  - **미리보기 | 문서는 VS XAML 디자이너처럼 나눈다**(2026-09-13). 기본은 **위아래**(미리보기 위, 스크립트 아래, `DesignSplitGroup`),
+    미리보기 판 아래 띠의 `위아래`·`좌우`·`바꾸기` 와 보기 > 미리보기 나누기 로 바꾼다(`SetSplit`·`SwapPanes` - 그룹의 `Orientation` 과
+    `Items` 순서). 방향·순서는 도킹 배치에 같이 저장된다. 기본을 바꿨으므로 `DockLayoutVersion` 을 2 로 올렸다 - 옛 배치가 살아나면 새 기본이 안 보인다.
+  - **도구 모음은 `BarManager.Bars` 에 있다**(`dxb:Bar` + `BarDockInfo ContainerType=Top`), 화면은 `dxb:BarManager` 로 감싼다. 끌어 옮긴 자리는
+    `BarLayout` 설정에 저장·복원한다(`SaveLayoutToStream`/`RestoreLayoutFromStream`, 도구 모음마다 `x:Name` 필요). 독립 `ToolBarControl` 을
+    `BarContainerControl` 에 넣어 두면 관리자의 `Bars` 가 비어 배치 XML 이 빈 껍데기다(실측) - 그래서 옮겼다. 메뉴·상태 표시줄은 독립 컨트롤 그대로.
+    "창 레이아웃 다시 설정" 은 도구 모음 배치도 지운다(다시 열 때 처음대로).
   - 솔루션 탐색기(`ProjectTreeBehavior`): 더블 클릭·Enter 열기, F2 이름(칸은 F2·새 항목일 때만 열린다), Delete 휴지통, 윈도우 탐색기에서 끌어다 놓기.
   - 검증 `--script-screen [--out=png]`: 화면 밖 창에 띄워 임시 프로젝트를 열고 **바인딩 오류를 모아** PNG 로 찍는다. 앞 탭 편집기에 문서 글이
     들어갔는지도 본다(화면 밖이라 PNG 에는 편집기 글이 안 그려진다). 하네스도 앱처럼 `DataControlBase.AllowInfiniteGridSize = true` 를 켜야 한다 -
@@ -1008,11 +1015,20 @@ D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 �
     끌고 나서 대화 상자로 물으면 그 창이 게임 화면을 가리고 그 사이 화면이 바뀐다. 비우면 `자리1` 처럼 붙는다.
   - **`지금 읽기` 버튼이 없으면 자리를 못 맞춘다.** 끌어 놓고 맞는지 보려면 스크립트를 짜서 돌려야 하는데 한 번에
     몇십 초다. 누르는 즉시 읽은 글이 상태 줄에 뜬다 - 비면 자리를 넓히거나 `전처리` 를 켜고 끈다.
-  - **`영역 지정` 을 켜 둔 동안 미리보기가 편집기다**(라벨링 캔버스와 같은 규칙, 계산은 `LabelBoxEdit`). 빈 자리 끌기 = 새 자리,
-    자리 안 끌기 = 옮기기, 고른 자리의 모서리·변 가운데 손잡이 = 크기 조절. 휠 = 마우스 아래를 두고 확대, 오른쪽 끌기 = 화면 옮기기
-    (`CaptureViewModelBase.IsPreviewEditing`). 새 자리를 만들어도 모드를 끄지 않는다 - 바로 손잡이로 다듬게.
-    **Adorner·Thumb 컨트롤을 얹지 않는다** - 겹그림은 클릭을 게임으로 흘려야 해서 히트 테스트를 끈다. 손잡이는 겹그림이 그리고
-    마우스는 모드가 켜져 있을 때만 VM 이 먹는다. 선·손잡이 굵기는 확대 배율로 나눠 화면에서 같게 보인다.
+  - **`영역 지정` 을 켜 둔 동안 미리보기가 편집기다.** 빈 자리 끌기 = 새 자리(VM, `RegionDraft`), 자리 안 끌기 = 옮기기,
+    고른 자리의 모서리·변 가운데 손잡이 = 크기 조절(끄는 동안 너비·높이가 **원본 픽셀**로 뜬다). 휠 = 마우스 아래를 두고 확대,
+    오른쪽 끌기 = 화면 옮기기(`CaptureViewModelBase.IsPreviewEditing`). 새 자리를 만들어도 모드를 끄지 않는다 - 바로 손잡이로 다듬게.
+    옮기기·크기 조절은 **`Markup/Regions`(2026-09-13, `wpf_test_app.ResizeAdorner` 를 옮긴 것)** 가 한다 - `RegionCanvas` 가 자리마다
+    `RegionItem`(안쪽 전체가 `RegionMoveThumb`)을 놓고, 고른 것에 `RegionResizeAdorner`(마젠타 테두리 + `RegionResizeThumb` 8개)를 어도너 층에
+    얹으며, 크기를 바꾸는 동안만 `RegionSizeAdorner`(치수)가 붙는다. 계산은 `RegionGeometry`(순수, `--vision`). 결과는 `RegionEdit` 로
+    VM 의 `RegionEditCommand` 에 오고 놓을 때 저장한다. 미리보기 판의 `Editor` 자리에 얹는다(`Overlay` 는 히트 테스트가 꺼져 있다).
+    **클릭이 게임으로 새지 않는 것은 `IsEditing`** 이 지킨다 - 꺼지면 캔버스가 히트 테스트에서 빠지고 어도너도 진다. 그래서 어도너를
+    써도 된다(예전에 "Adorner·Thumb 을 얹지 않는다" 고 한 이유는 늘 얹어 두면 모드를 꺼도 그 자리의 클릭이 게임으로 안 가서였다).
+    어도너 층은 ScrollViewer 안이라 확대(`LayoutTransform`) 밖이지만 `Adorner` 가 붙은 요소의 변환을 따라가 자리는 맞는다 - 선·손잡이도
+    같이 커진다. 편집 중에는 `DetectionOverlay` 가 이름 붙인 자리를 안 그린다(`IsRegionEditing`) - 항목이 제 테두리·이름표를 그린다.
+    **자리·크기 수자 칸(가로·세로·너비·높이 %)은 뺐다** - 같은 일을 두 곳에서 하면 하나는 안 쓰인다. 목록은 열릴 때 첫 줄을 고른다.
+    **휠은 `PreviewMouseWheel` 로 받는다** - 그림 위의 ScrollViewer 가 버블 `MouseWheel` 을 늘 먹어(Handled) Border 까지 안 올라왔고,
+    그래서 휠 확대도 게임으로 보내는 휠도 다 죽어 있었다(실측, `--script-screen` 이 터널→버블 순서를 흉내 내 잡는다).
   - 같은 끌기 손짓을 `글자 영역` 과 나눠 쓴다. 한쪽을 켜면 다른 쪽을 끈다 - 둘 다 켜져 있으면 끈 사각형이
     어디로 갈지 알 수 없다.
   - 이름은 대소문자를 안 가린다. 스크립트에서 글자 하나가 달라 못 찾으면 사람은 자리가 틀린 줄 안다.

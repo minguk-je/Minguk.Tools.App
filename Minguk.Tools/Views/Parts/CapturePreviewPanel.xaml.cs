@@ -30,4 +30,20 @@ public partial class CapturePreviewPanel : UserControl
         get => (UIElement?)GetValue(OverlayProperty);
         set => SetValue(OverlayProperty, value);
     }
+
+    public static readonly DependencyProperty EditorProperty = DependencyProperty.Register(
+        nameof(Editor), typeof(UIElement), typeof(CapturePreviewPanel), new PropertyMetadata(null));
+
+    /// <summary>
+    /// 그림 위에서 마우스를 받는 것(영역 손잡이). 겹그림과 달리 히트 테스트를 켠 채 얹는다.
+    /// </summary>
+    /// <remarks>
+    /// 겹그림과 한 자리에 두지 않는 이유 - 겹그림은 클릭을 게임으로 흘려야 해서 판이 히트 테스트를 끈다. 편집기는
+    /// 편집 중에만 마우스를 먹어야 하므로, 켜고 끄는 것을 제 안에서 한다(<see cref="Markup.Regions.RegionCanvas.IsEditing"/>).
+    /// </remarks>
+    public UIElement? Editor
+    {
+        get => (UIElement?)GetValue(EditorProperty);
+        set => SetValue(EditorProperty, value);
+    }
 }

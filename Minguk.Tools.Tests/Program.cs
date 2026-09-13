@@ -166,6 +166,7 @@ internal static partial class Program
         TestPreprocessorReuse();
         TestPrecisionTimer();
         TestRegionBook();
+        TestRegionGeometry();
         TestScriptProject();
         TestScriptWorkspace();
     }

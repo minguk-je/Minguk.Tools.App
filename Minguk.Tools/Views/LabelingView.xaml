@@ -90,11 +90,11 @@
         <Grid Grid.Row="1"
               Margin="0,4">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="4" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="4" />
-                <ColumnDefinition Width="230" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- 그림 목록 -->
@@ -106,7 +106,7 @@
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
                                 <!-- 찍은 것에만 표시를 둔다. 어디까지 했는지 목록에서 바로 보이게. -->
-                                
+
                                 <TextBlock Width="14"
                                            Foreground="#2E9E4F"
                                            Text="●"
@@ -119,7 +119,8 @@
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Foreground" Value="#2E9E4F" />
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding RecognitionIsPoor}" Value="True">
+                                                <DataTrigger Binding="{Binding RecognitionIsPoor}"
+                                                             Value="True">
                                                     <Setter Property="Foreground" Value="#BF6A02" />
                                                 </DataTrigger>
                                             </Style.Triggers>
@@ -161,10 +162,10 @@
                     <Border Grid.Row="0"
                             Background="#20808080">
                         <markup:LabelCanvas Boxes="{Binding Boxes}"
-                                            Predictions="{Binding Predictions}"
                                             ClassNames="{Binding ClassNameSnapshot}"
                                             CurrentClassId="{Binding SelectedClassIndex}"
                                             ImageSource="{Binding CurrentImage}"
+                                            Predictions="{Binding Predictions}"
                                             SelectedIndex="{Binding SelectedBoxIndex, Mode=TwoWay}" />
                     </Border>
 
@@ -231,22 +232,13 @@
                                       NullText="몹 이름" />
 
                         <dxlc:LayoutGroup Margin="0,4,0,0"
-                                          Orientation="Horizontal">
+                                          Orientation="Vertical">
                             <dx:SimpleButton Command="{Binding DoAddClassCommand}"
                                              Content="더하기" />
                             <dx:SimpleButton Command="{Binding DoRenameClassCommand}"
                                              Content="이름 바꾸기"
                                              ToolTip="번호는 그대로라 찍어 둔 라벨은 안 흔들립니다." />
                         </dxlc:LayoutGroup>
-
-                        <!--
-                            지우기는 두지 않는다. 라벨 파일에는 이름이 아니라 번호가 들어 있어,
-                            중간을 지우면 뒤가 당겨져 이미 찍어 둔 것이 다른 몹을 가리킨다.
-                        -->
-                        <TextBlock Margin="0,6,0,0"
-                                   Opacity="0.65"
-                                   Text="몹은 지울 수 없습니다. 번호가 당겨져 찍어 둔 라벨이 어긋납니다."
-                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </GroupBox>
@@ -275,81 +267,6 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-
-                <!-- 지금 폴더의 모델이 어떤 것인지. 몇 번째 학습, 언제, 무엇으로, 얼마나 되찾았나. -->
-                <StackPanel Grid.Row="3"
-                            Grid.Column="0"
-                            Grid.ColumnSpan="6"
-                            Margin="0,2,0,0"
-                            Orientation="Horizontal">
-                    <TextBlock Margin="0,0,6,0"
-                               VerticalAlignment="Center"
-                               Text="모델" />
-                    <TextBlock VerticalAlignment="Center"
-                               Foreground="#666666"
-                               Text="{Binding ModelSummary}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-
-                <!--
-                    진행 막대와 loss 꺾은선. 글 한 줄로는 "돌고 있나" 밖에 안 보인다.
-                    loss 가 내려가는지 제자리인지가 보여야 15분짜리 학습을 헛돌리지 않는다 -
-                    실제로 학습률이 높아 제자리인 것을 모른 채 100바퀴를 돌렸다.
-                -->
-                <Grid Grid.Row="2"
-                      Grid.Column="0"
-                      Grid.ColumnSpan="6"
-                      Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="220" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0"
-                               Width="80"
-                               VerticalAlignment="Center"
-                               Text="{Binding TrainProgressLabel}" />
-                    <!-- 지금 보는 그림. 목록의 "◀" 와 같은 것이다. -->
-                    <StackPanel Grid.Column="2"
-                                Margin="0,0,8,0"
-                                VerticalAlignment="Center"
-                                Orientation="Horizontal">
-                        <TextBlock Width="170"
-                                   VerticalAlignment="Center"
-                                   Foreground="#BF6A02"
-                                   Text="{Binding TrainingImageName}" />
-                        <dxe:CheckEdit Margin="6,0,0,0"
-                                       Content="따라가기"
-                                       IsChecked="{Binding FollowTraining, Mode=TwoWay}"
-                                       ToolTip="학습기가 보는 그림을 가운데에도 띄웁니다. 켜 두면 학습 중에는 라벨을 못 고칩니다. 목록의 loss 숫자가 혼자 높은 그림이 다시 찍을 그림입니다." />
-                        <!-- 한 앱은 카드 하나만 쓴다. 두 장을 다 쓰려면 앱과 하네스(gpu 인자)에 나눠 준다. -->
-                        <TextBlock Margin="14,0,4,0"
-                                   VerticalAlignment="Center"
-                                   Text="GPU" />
-                        <dxe:ComboBoxEdit Width="230"
-                                          IsTextEditable="False"
-                                          ItemsSource="{Binding GpuOptions}"
-                                          SelectedItem="{Binding SelectedGpuOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          ToolTip="이 앱이 쓸 그래픽카드. 바꾸면 다시 실행해야 적용됩니다. 두 장을 다 쓰려면 앱은 한 장, 하네스(--train-check --gpu=)는 다른 장으로 나눕니다." />
-                        <TextBlock Margin="8,0,0,0"
-                                   VerticalAlignment="Center"
-                                   Foreground="#BF6A02"
-                                   Text="{Binding GpuNotice}" />
-                    </StackPanel>
-                    <dxe:ProgressBarEdit Grid.Column="1"
-                                         Height="18"
-                                         Margin="0,0,6,0"
-                                         VerticalAlignment="Center"
-                                         EditValue="{Binding TrainPercent, Mode=OneWay}"
-                                         Maximum="100"
-                                         Minimum="0"
-                                         ToolTip="끝난 바퀴 수. 한 바퀴 안에서는 안 움직입니다." />
-                    <markup:LossSparkline Grid.Column="3"
-                                          Height="44"
-                                          ToolTip="학습 loss. 내려가면 배우는 중, 제자리면 학습률이나 데이터를 봐야 합니다. 로그 눈금입니다."
-                                          Values="{Binding LossHistory}" />
-                </Grid>
 
                 <!-- 학습 -->
                 <TextBlock Grid.Row="0"
@@ -386,12 +303,14 @@
                                  Grid.Column="3"
                                  Width="110"
                                  Margin="0,0,6,4"
+                                 HorizontalAlignment="Left"
                                  Command="{Binding DoTrainCommand}"
                                  Content="학습 시작" />
                 <dx:SimpleButton Grid.Row="0"
                                  Grid.Column="4"
                                  Width="80"
                                  Margin="0,0,6,4"
+                                 HorizontalAlignment="Left"
                                  Command="{Binding DoCancelTrainCommand}"
                                  Content="멈추기" />
                 <dxe:TextEdit Grid.Row="0"
@@ -447,6 +366,81 @@
                               EditValue="{Binding DetectStatus, Mode=OneWay}"
                               IsReadOnly="True"
                               NullText="아직 안 찾아봤습니다." />
+
+                <!--
+                    진행 막대와 loss 꺾은선. 글 한 줄로는 "돌고 있나" 밖에 안 보인다.
+                    loss 가 내려가는지 제자리인지가 보여야 15분짜리 학습을 헛돌리지 않는다 -
+                    실제로 학습률이 높아 제자리인 것을 모른 채 100바퀴를 돌렸다.
+                -->
+                <Grid Grid.Row="2"
+                      Grid.Column="0"
+                      Grid.ColumnSpan="6"
+                      Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Width="80"
+                               VerticalAlignment="Center"
+                               Text="{Binding TrainProgressLabel}" />
+                    <dxe:ProgressBarEdit Grid.Column="1"
+                                         Height="18"
+                                         Margin="0,0,6,0"
+                                         VerticalAlignment="Center"
+                                         EditValue="{Binding TrainPercent, Mode=OneWay}"
+                                         Maximum="100"
+                                         Minimum="0"
+                                         ToolTip="끝난 바퀴 수. 한 바퀴 안에서는 안 움직입니다." />
+                    <!-- 지금 보는 그림. 목록의 "◀" 와 같은 것이다. -->
+                    <StackPanel Grid.Column="2"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal">
+                        <TextBlock Width="170"
+                                   VerticalAlignment="Center"
+                                   Foreground="#BF6A02"
+                                   Text="{Binding TrainingImageName}" />
+                        <dxe:CheckEdit Margin="6,0,0,0"
+                                       Content="따라가기"
+                                       IsChecked="{Binding FollowTraining, Mode=TwoWay}"
+                                       ToolTip="학습기가 보는 그림을 가운데에도 띄웁니다. 켜 두면 학습 중에는 라벨을 못 고칩니다. 목록의 loss 숫자가 혼자 높은 그림이 다시 찍을 그림입니다." />
+                        <!-- 한 앱은 카드 하나만 쓴다. 두 장을 다 쓰려면 앱과 하네스(gpu 인자)에 나눠 준다. -->
+                        <TextBlock Margin="14,0,4,0"
+                                   VerticalAlignment="Center"
+                                   Text="GPU" />
+                        <dxe:ComboBoxEdit Width="230"
+                                          IsTextEditable="False"
+                                          ItemsSource="{Binding GpuOptions}"
+                                          SelectedItem="{Binding SelectedGpuOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="이 앱이 쓸 그래픽카드. 바꾸면 다시 실행해야 적용됩니다. 두 장을 다 쓰려면 앱은 한 장, 하네스(--train-check --gpu=)는 다른 장으로 나눕니다." />
+                        <TextBlock Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="#BF6A02"
+                                   Text="{Binding GpuNotice}" />
+                    </StackPanel>
+                    <markup:LossSparkline Grid.Column="3"
+                                          Height="44"
+                                          ToolTip="학습 loss. 내려가면 배우는 중, 제자리면 학습률이나 데이터를 봐야 합니다. 로그 눈금입니다."
+                                          Values="{Binding LossHistory}" />
+                </Grid>
+
+                <!-- 지금 폴더의 모델이 어떤 것인지. 몇 번째 학습, 언제, 무엇으로, 얼마나 되찾았나. -->
+                <StackPanel Grid.Row="3"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="6"
+                            Margin="0,2,0,0"
+                            Orientation="Horizontal">
+                    <TextBlock Margin="0,0,6,0"
+                               VerticalAlignment="Center"
+                               Text="모델" />
+                    <TextBlock VerticalAlignment="Center"
+                               Foreground="#666666"
+                               Text="{Binding ModelSummary}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
 
                 <!--
                     libtorch 를 아직 안 받았거나 GPU 가 없을 때만 뜬다.

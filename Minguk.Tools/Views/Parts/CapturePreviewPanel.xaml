@@ -31,8 +31,12 @@
             <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseUpCommand}"
                                    EventName="MouseUp"
                                    PassEventArgsToCommand="True" />
+            <!--
+                휠은 터널(Preview) 로 받는다. 안의 ScrollViewer 가 버블 MouseWheel 을 늘 먹어(Handled) 여기까지 안 올라온다 -
+                확대도, 게임으로 보내는 휠도 다 죽었다(실측, 스크립트 화면 하네스가 잡는다). 핸들러가 Handled 로 두면 스크롤도 안 한다.
+            -->
             <dxmvvm:EventToCommand Command="{Binding OnPreviewMouseWheelCommand}"
-                                   EventName="MouseWheel"
+                                   EventName="PreviewMouseWheel"
                                    PassEventArgsToCommand="True" />
             <dxmvvm:EventToCommand Command="{Binding OnPreviewKeyDownCommand}"
                                    EventName="KeyDown"
@@ -74,6 +78,9 @@
             <!-- 화면이 얹는 겹그림(찾은 몹 점선 등). 없으면 비어 있다. 마우스는 통과시킨다. -->
             <ContentPresenter Content="{Binding Overlay, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}"
                               IsHitTestVisible="False" />
+
+            <!-- 화면이 얹는 편집기(영역 손잡이). 마우스를 받을지는 그 안이 정한다 - 편집 중이 아니면 스스로 빠진다. -->
+            <ContentPresenter Content="{Binding Editor, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}" />
             </Grid>
         </ScrollViewer>
     </Border>

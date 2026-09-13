@@ -9,6 +9,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 using DevExpress.Xpf.Core;
+using DevExpress.Xpf.Docking;
 
 using Minguk.Tools.Helper;
 using Minguk.Tools.ViewModels;
@@ -115,6 +116,10 @@ internal static class ScriptScreenProbe
                 if (!vm.Script.IsProject) { Console.WriteLine("[FAIL] 프로젝트가 열린 것으로 안 보인다"); failures++; }
                 if (vm.Script.Project.Documents.Count != 2) { Console.WriteLine("[FAIL] 탭이 둘이 아니다"); failures++; }
 
+                failures += await CheckPreviewZoom(window, vm);
+                failures += await CheckRegionCanvas(window, vm);
+                failures += await CheckSplitAndBars(window, vm);
+
                 Render(window, output);
                 Console.WriteLine($"[INFO] 화면을 찍었다: {output}");
             }
@@ -146,6 +151,192 @@ internal static class ScriptScreenProbe
 
         Console.WriteLine(failures == 0 ? "== 스크립트 화면 통과 ==" : $"== 스크립트 화면 실패 {failures}건 ==");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// 미리보기 확대 - 칸으로 배율을 올리면 스크롤 범위가 그만큼 커지는지, 영역을 손보는 중에 휠이 배율을 바꾸는지.
+    /// </summary>
+    /// <remarks>
+    /// 휠은 실제 입력처럼 <b>Preview(터널) → 안 먹혔으면 Bubble</b> 순으로 올린다. 그림 위의 ScrollViewer 가 버블 MouseWheel 을
+    /// 늘 먹어 버려(Handled) 바깥 Border 의 MouseWheel 핸들러가 영영 안 불리던 것을 잡으려는 검사다 - 순서를 흉내 내지 않으면 못 잡는다.
+    /// </remarks>
+    private static async System.Threading.Tasks.Task<int> CheckPreviewZoom(Window window, ScriptStudioViewModel vm)
+    {
+        var failures = 0;
+
+        vm.ShowPreview = true;
+        await Pump(300);
+
+        var panel = Descendants<Minguk.Tools.Views.Parts.CapturePreviewPanel>(window).FirstOrDefault();
+        var scroller = panel is null ? null : Descendants<System.Windows.Controls.ScrollViewer>(panel).FirstOrDefault();
+        var image = panel is null ? null : Descendants<System.Windows.Controls.Image>(panel).FirstOrDefault();
+
+        if (panel is null || scroller is null || image is null)
+        {
+            Console.WriteLine("[FAIL] 미리보기 판·스크롤·그림을 못 찾았다");
+            return 1;
+        }
+
+        vm.PreviewZoom = 2;
+        await Pump(300);
+
+        var viewport = scroller.ViewportWidth;
+        var extent = scroller.ExtentWidth;
+
+        if (viewport > 0 && extent >= viewport * 1.8)
+            Console.WriteLine($"[PASS] 확대 2 - 스크롤 범위 {extent:0} / 뷰포트 {viewport:0}");
+        else { Console.WriteLine($"[FAIL] 확대 2 인데 스크롤 범위가 안 커졌다 - 범위 {extent:0} / 뷰포트 {viewport:0}"); failures++; }
+
+        vm.PreviewZoom = 1;
+        vm.IsRegionPicking = true;
+        await Pump(200);
+
+        // InputManager 가 하는 순서 그대로: 터널이 먼저, 안 먹혔으면 버블.
+        var tunnel = new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, 120) { RoutedEvent = System.Windows.Input.Mouse.PreviewMouseWheelEvent, Source = image };
+        image.RaiseEvent(tunnel);
+
+        if (!tunnel.Handled)
+        {
+            var bubble = new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, 120) { RoutedEvent = System.Windows.Input.Mouse.MouseWheelEvent, Source = image };
+            image.RaiseEvent(bubble);
+        }
+
+        await Pump(200);
+
+        if (Math.Abs(vm.PreviewZoom - 1.25) < 0.001)
+            Console.WriteLine("[PASS] 영역 지정 중 휠 한 칸 - 배율 1 → 1.25");
+        else { Console.WriteLine($"[FAIL] 영역 지정 중 휠을 굴렸는데 배율이 {vm.PreviewZoom} 이다(1.25 여야 한다) - 그림 위 ScrollViewer 가 휠을 먹는다"); failures++; }
+
+        vm.IsRegionPicking = false;
+        vm.PreviewZoom = 1;
+
+        return failures;
+    }
+
+    /// <summary>
+    /// 영역 편집 캔버스 - 영역 지정을 켜면 자리마다 항목이 놓이고 고른 것에 어도너가 붙는지, 끌기 계산이 VM 까지 오는지,
+    /// 끄면 마우스에서 빠지는지(클릭이 게임으로 가야 한다).
+    /// </summary>
+    /// <remarks>
+    /// 실제 Thumb 끌기는 커서를 가져가야 해서 여기서 안 한다. 손잡이가 부르는 것과 같은 <c>MoveBy</c>·<c>ResizeBy</c> 를 부른다.
+    /// 목록은 파일(regions.json)을 안 거치고 VM 의 컬렉션에 바로 넣는다 - 사용자 데이터셋 폴더를 건드리면 안 된다.
+    /// </remarks>
+    private static async System.Threading.Tasks.Task<int> CheckRegionCanvas(Window window, ScriptStudioViewModel vm)
+    {
+        var failures = 0;
+
+        // 캔버스가 자리를 놓으려면 그림 크기를 알아야 한다 - 잡은 화면 대신 1920x1080 짜리 빈 그림.
+        vm.PreviewImage = BitmapSource.Create(1920, 1080, 96, 96, PixelFormats.Bgr32, null, new byte[1920 * 1080 * 4], 1920 * 4);
+
+        var region = new Minguk.Tools.Vision.Regions.NamedRegion { Name = "탄약", Rect = new Rect(0.5, 0.2, 0.1, 0.1) };
+        vm.Regions.Add(region);
+        vm.SelectedRegion = region;
+        vm.IsRegionPicking = true;
+        await Pump(400);
+
+        var canvas = Descendants<Minguk.Tools.Markup.Regions.RegionCanvas>(window).FirstOrDefault();
+
+        if (canvas is null) { Console.WriteLine("[FAIL] 영역 캔버스를 못 찾았다"); return 1; }
+
+        var item = canvas.Items.FirstOrDefault();
+
+        if (item is null || !canvas.IsHitTestVisible || canvas.Visibility != Visibility.Visible)
+        {
+            Console.WriteLine($"[FAIL] 영역 지정을 켰는데 항목 {canvas.Items.Count}개 · 히트 {canvas.IsHitTestVisible} · {canvas.Visibility}");
+            return 1;
+        }
+
+        Console.WriteLine($"[PASS] 영역 지정 - 항목 {canvas.Items.Count}개, 그림 자리 {canvas.ImageArea}");
+        Console.WriteLine($"[INFO] 캔버스 {canvas.RenderSize} · 항목 자리 {System.Windows.Controls.Canvas.GetLeft(item)},{System.Windows.Controls.Canvas.GetTop(item)} {item.Width}x{item.Height} · {item.Visibility} · 실제 {item.ActualWidth}x{item.ActualHeight}");
+
+        if (item.IsSelected && item.HasAdorner) Console.WriteLine("[PASS] 고른 자리에 테두리·손잡이 어도너가 붙었다");
+        else { Console.WriteLine($"[FAIL] 고른 자리인데 어도너가 없다 - 고름 {item.IsSelected} · 어도너 {item.HasAdorner}"); failures++; }
+
+        var before = System.Windows.Controls.Canvas.GetLeft(item);
+
+        // 손잡이가 부르는 것과 같은 길. 40px 오른쪽으로 옮기고, 오른쪽 변을 20px 늘린다.
+        canvas.MoveBy(item, 40, 0);
+        canvas.ResizeBy(item, HorizontalAlignment.Right, VerticalAlignment.Stretch, 20, 0);
+        await Pump(100);
+
+        var area = canvas.ImageArea;
+        var expectedX = 0.5 + (40 / area.Width);
+        var expectedWidth = 0.1 + (20 / area.Width);
+
+        if (Math.Abs(region.Rect.X - expectedX) < 0.001 && Math.Abs(region.Rect.Width - expectedWidth) < 0.001 && System.Windows.Controls.Canvas.GetLeft(item) > before)
+            Console.WriteLine($"[PASS] 옮기고 늘린 것이 VM 의 자리로 왔다 - {region.Describe}");
+        else { Console.WriteLine($"[FAIL] 끌기가 VM 에 안 왔다 - {region.Describe} (기대 x {expectedX:0.0000}, 너비 {expectedWidth:0.0000})"); failures++; }
+
+        if (Math.Abs(item.SourceWidthPx - (expectedWidth * 1920)) < 1)
+            Console.WriteLine($"[PASS] 치수 표시가 원본 픽셀이다 - {item.SourceWidthPx:0} x {item.SourceHeightPx:0}");
+        else { Console.WriteLine($"[FAIL] 치수가 원본 픽셀이 아니다 - {item.SourceWidthPx:0}"); failures++; }
+
+        vm.IsRegionPicking = false;
+        await Pump(100);
+
+        if (!canvas.IsHitTestVisible && canvas.Visibility == Visibility.Collapsed && !item.HasAdorner)
+            Console.WriteLine("[PASS] 영역 지정을 끄면 캔버스가 마우스에서 빠지고 어도너도 진다");
+        else { Console.WriteLine($"[FAIL] 껐는데 캔버스가 남아 있다 - 히트 {canvas.IsHitTestVisible} · {canvas.Visibility} · 어도너 {item.HasAdorner}"); failures++; }
+
+        vm.Regions.Remove(region);
+        vm.PreviewImage = null;
+
+        return failures;
+    }
+
+    /// <summary>
+    /// 미리보기|문서 나누기(위아래 기본 · 좌우 · 자리 바꾸기)와 도구 모음 배치 저장·복원이 도는지.
+    /// </summary>
+    private static async System.Threading.Tasks.Task<int> CheckSplitAndBars(Window window, ScriptStudioViewModel vm)
+    {
+        var failures = 0;
+        var dock = Descendants<DevExpress.Xpf.Docking.DockLayoutManager>(window).FirstOrDefault();
+        var group = dock?.GetItem("DesignSplitGroup") as DevExpress.Xpf.Docking.LayoutGroup;
+        var preview = dock?.GetItem("PreviewPanel");
+
+        if (group is null || preview is null) { Console.WriteLine("[FAIL] 나누기 그룹이나 미리보기 판을 못 찾았다"); return 1; }
+
+        if (group.Orientation == System.Windows.Controls.Orientation.Vertical && group.Items.IndexOf(preview) == 0)
+            Console.WriteLine("[PASS] 기본은 미리보기 위 · 스크립트 아래");
+        else { Console.WriteLine($"[FAIL] 기본 나누기가 다르다 - {group.Orientation}, 미리보기 자리 {group.Items.IndexOf(preview)}"); failures++; }
+
+        vm.SplitHorizontalCommand.Execute(null);
+        vm.SwapPanesCommand.Execute(null);
+        await Pump(300);
+
+        if (group.Orientation == System.Windows.Controls.Orientation.Horizontal && group.Items.IndexOf(preview) == group.Items.Count - 1 && preview.IsClosed == false)
+            Console.WriteLine($"[PASS] 좌우로 바꾸고 자리를 맞바꿨다 - 미리보기가 {group.Items.Count}개 중 마지막");
+        else { Console.WriteLine($"[FAIL] 좌우·바꾸기 - {group.Orientation}, 미리보기 자리 {group.Items.IndexOf(preview)}/{group.Items.Count}, 닫힘 {preview.IsClosed}"); failures++; }
+
+        vm.SwapPanesCommand.Execute(null);
+        vm.SplitVerticalCommand.Execute(null);
+        await Pump(200);
+
+        if (group.Orientation == System.Windows.Controls.Orientation.Vertical && group.Items.IndexOf(preview) == 0)
+            Console.WriteLine("[PASS] 되돌리면 처음 자리");
+        else { Console.WriteLine($"[FAIL] 되돌리기 - {group.Orientation}, 미리보기 자리 {group.Items.IndexOf(preview)}"); failures++; }
+
+        // 도구 모음 배치 - 저장한 것을 되살릴 수 있고, 도구 모음 이름이 들어 있어야 자리를 되찾는다.
+        var manager = Descendants<DevExpress.Xpf.Bars.BarManager>(window).FirstOrDefault();
+
+        if (manager is null) { Console.WriteLine("[FAIL] BarManager 가 없다"); return failures + 1; }
+
+        using var stream = new MemoryStream();
+        manager.SaveLayoutToStream(stream);
+        var xml = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+
+        stream.Position = 0;
+        manager.RestoreLayoutFromStream(stream);
+        await Pump(200);
+
+        var named = new[] { "StandardBar", "DebugBar", "CaptureBar", "RecognitionBar", "InputBar" }.Where(xml.Contains).ToList();
+
+        Console.WriteLine($"[INFO] 관리자 Bars {manager.Bars.Count} · 배치 XML {xml.Length}자");
+
+        if (named.Count == 5) Console.WriteLine($"[PASS] 도구 모음 배치 저장·복원 - {stream.Length:N0}바이트, 이름 5개");
+        else { Console.WriteLine($"[FAIL] 도구 모음 배치에 이름이 다 안 들어 있다 - {string.Join(",", named)} ({stream.Length}바이트)"); failures++; }
+
+        return failures;
     }
 
     private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject

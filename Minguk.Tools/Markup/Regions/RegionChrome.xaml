@@ -1,0 +1,197 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:regions="clr-namespace:Minguk.Tools.Markup.Regions">
+
+    <!--
+        참조 프로젝트(wpf_test_app.ResizeAdorner)의 DesignerItem · ResizeRotateChrome · SizeChrome 을 옮긴 것.
+        회전 손잡이는 뺐다 - 읽을 자리는 돌리지 않는다.
+    -->
+
+    <regions:RegionRoundConverter x:Key="RegionRoundConverter" />
+
+    <!-- 모서리 표시(보이기만 한다 - 잡는 것은 투명 Thumb). -->
+    <Style x:Key="RegionThumbCorner"
+           TargetType="{x:Type Shape}">
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Stroke" Value="#FFC8C8C8" />
+        <Setter Property="StrokeThickness" Value=".5" />
+        <Setter Property="Width" Value="7" />
+        <Setter Property="Height" Value="7" />
+        <Setter Property="Margin" Value="-2" />
+        <Setter Property="Fill">
+            <Setter.Value>
+                <RadialGradientBrush Center="0.2, 0.2"
+                                     GradientOrigin="0.2, 0.2"
+                                     RadiusX="0.8"
+                                     RadiusY="0.8">
+                    <GradientStop Offset="0.0" Color="White" />
+                    <GradientStop Offset="0.8" Color="Magenta" />
+                </RadialGradientBrush>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <ControlTemplate x:Key="RegionMoveThumbTemplate"
+                     TargetType="{x:Type regions:RegionMoveThumb}">
+        <Rectangle Fill="Transparent" />
+    </ControlTemplate>
+
+    <!--
+        자리 하나. 안쪽 전체가 옮기기 손잡이고, 얇은 테두리와 이름표를 그린다.
+        고르면 RegionItem 이 어도너 층에 RegionResizeAdorner(테두리·손잡이)를 얹는다.
+    -->
+    <Style TargetType="{x:Type regions:RegionItem}">
+        <Setter Property="MinWidth" Value="4" />
+        <Setter Property="MinHeight" Value="4" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type regions:RegionItem}">
+                    <Grid DataContext="{Binding RelativeSource={RelativeSource TemplatedParent}}">
+                        <regions:RegionMoveThumb Cursor="SizeAll"
+                                                 Template="{StaticResource RegionMoveThumbTemplate}" />
+                        <Rectangle IsHitTestVisible="False"
+                                   Stroke="#FF78C8FF"
+                                   StrokeThickness="2" />
+                        <!-- 이름표는 사각형 위에. 겹그림(DetectionOverlay)이 그리던 것과 같은 모양. -->
+                        <Border Margin="0,-17,0,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                Background="#AA000000"
+                                IsHitTestVisible="False">
+                            <TextBlock Padding="3,0,3,0"
+                                       FontFamily="Segoe UI"
+                                       FontSize="12"
+                                       Foreground="White"
+                                       Text="{Binding Region.Name}" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 고른 자리의 테두리와 손잡이 여덟 개. 손잡이는 투명(잡히기만 한다), 보이는 것은 아래 그리드다. -->
+    <Style TargetType="{x:Type regions:RegionResizeChrome}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type regions:RegionResizeChrome}">
+                    <Grid>
+                        <Grid Margin="-3"
+                              Opacity="0">
+                            <regions:RegionResizeThumb Height="7"
+                                                       HorizontalAlignment="Stretch"
+                                                       VerticalAlignment="Top"
+                                                       Cursor="SizeNS" />
+                            <regions:RegionResizeThumb Width="7"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Stretch"
+                                                       Cursor="SizeWE" />
+                            <regions:RegionResizeThumb Width="7"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Stretch"
+                                                       Cursor="SizeWE" />
+                            <regions:RegionResizeThumb Height="7"
+                                                       HorizontalAlignment="Stretch"
+                                                       VerticalAlignment="Bottom"
+                                                       Cursor="SizeNS" />
+
+                            <regions:RegionResizeThumb Width="7"
+                                                       Height="7"
+                                                       Margin="-2"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Top"
+                                                       Cursor="SizeNWSE" />
+                            <regions:RegionResizeThumb Width="7"
+                                                       Height="7"
+                                                       Margin="-2"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Top"
+                                                       Cursor="SizeNESW" />
+                            <regions:RegionResizeThumb Width="7"
+                                                       Height="7"
+                                                       Margin="-2"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Bottom"
+                                                       Cursor="SizeNESW" />
+                            <regions:RegionResizeThumb Width="7"
+                                                       Height="7"
+                                                       Margin="-2"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Bottom"
+                                                       Cursor="SizeNWSE" />
+                        </Grid>
+                        <Grid Margin="-3"
+                              IsHitTestVisible="False"
+                              Opacity="1">
+                            <Rectangle Margin="1"
+                                       SnapsToDevicePixels="True"
+                                       Stroke="Magenta"
+                                       StrokeThickness="3" />
+                            <Ellipse HorizontalAlignment="Left"
+                                     VerticalAlignment="Top"
+                                     Style="{StaticResource RegionThumbCorner}" />
+                            <Ellipse HorizontalAlignment="Right"
+                                     VerticalAlignment="Top"
+                                     Style="{StaticResource RegionThumbCorner}" />
+                            <Ellipse HorizontalAlignment="Left"
+                                     VerticalAlignment="Bottom"
+                                     Style="{StaticResource RegionThumbCorner}" />
+                            <Ellipse HorizontalAlignment="Right"
+                                     VerticalAlignment="Bottom"
+                                     Style="{StaticResource RegionThumbCorner}" />
+                        </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 크기를 바꾸는 동안의 치수 - 아래에 너비, 오른쪽에 높이(원본 픽셀). -->
+    <Style TargetType="{x:Type regions:RegionSizeChrome}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type regions:RegionSizeChrome}">
+                    <Grid SnapsToDevicePixels="True">
+                        <Path Height="10"
+                              Margin="-2,0,-2,-15"
+                              VerticalAlignment="Bottom"
+                              Data="M0,0 0,10 M 0,5 100,5 M 100,0 100,10"
+                              Stretch="Fill"
+                              Stroke="Red"
+                              StrokeThickness="1" />
+                        <TextBlock Margin="0,0,0,-18"
+                                   Padding="3,0,3,0"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Bottom"
+                                   Background="White"
+                                   Foreground="Red"
+                                   Text="{Binding Path=SourceWidthPx, Converter={StaticResource RegionRoundConverter}}" />
+                        <Path Width="10"
+                              Margin="0,-2,-15,-2"
+                              HorizontalAlignment="Right"
+                              Data="M5,0 5,100 M 0,0 10,0 M 0,100 10,100"
+                              Stretch="Fill"
+                              Stroke="Red"
+                              StrokeThickness="1" />
+                        <TextBlock Margin="0,0,-18,0"
+                                   Padding="3,0,3,0"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   Background="White"
+                                   Foreground="Red"
+                                   Text="{Binding Path=SourceHeightPx, Converter={StaticResource RegionRoundConverter}}">
+                            <TextBlock.LayoutTransform>
+                                <RotateTransform Angle="90"
+                                                 CenterX="1"
+                                                 CenterY="0.5" />
+                            </TextBlock.LayoutTransform>
+                        </TextBlock>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
