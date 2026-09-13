@@ -93,6 +93,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         CloseDocumentCommand = new DelegateCommand(() => Guard(() => Script.Project.CloseDocument(Script.Project.ActiveDocument)), () => Script.IsProject, false);
         ShowToolWindowCommand = new DelegateCommand<string>(ShowToolWindow, false);
         ResetLayoutCommand = new DelegateCommand(ResetLayout, false);
+        BuildCommand = new DelegateCommand(DoBuild, () => Script.IsProject && !Script.IsLocked, false);
         SplitVerticalCommand = new DelegateCommand(() => SetSplit(System.Windows.Controls.Orientation.Vertical), false);
         SplitHorizontalCommand = new DelegateCommand(() => SetSplit(System.Windows.Controls.Orientation.Horizontal), false);
         SwapPanesCommand = new DelegateCommand(SwapPanes, false);
@@ -102,7 +103,10 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         {
             SaveAsCommand.RaiseCanExecuteChanged();
             CloseDocumentCommand.RaiseCanExecuteChanged();
+            BuildCommand.RaiseCanExecuteChanged();
         };
+
+        Player.RunningChanged += (_, _) => BuildCommand.RaiseCanExecuteChanged();
     }
 
     // ── VS 메뉴 ──────────────────────────────────────────────────────────
@@ -124,10 +128,10 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>창 > 창 레이아웃 다시 설정.</summary>
     public DelegateCommand ResetLayoutCommand { get; }
 
-    /// <summary>미리보기 위 · 스크립트 아래(기본). VS XAML 디자이너의 "가로 분할" 자리.</summary>
+    /// <summary>미리보기 위 · 스크립트 아래. VS XAML 디자이너의 "가로 분할" 자리.</summary>
     public DelegateCommand SplitVerticalCommand { get; }
 
-    /// <summary>미리보기와 스크립트를 나란히.</summary>
+    /// <summary>미리보기와 스크립트를 나란히(기본).</summary>
     public DelegateCommand SplitHorizontalCommand { get; }
 
     /// <summary>미리보기와 스크립트의 자리를 맞바꾼다.</summary>
@@ -135,6 +139,90 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
     /// <summary>오류 목록 더블 클릭 - 그 파일을 열고 그 줄로.</summary>
     public DelegateCommand<object?> GoToErrorCommand { get; }
+
+    /// <summary>Ctrl+Shift+B. 프로젝트를 .NET DLL(.mtsx)로 빌드한다 - 플레이어가 소스 없이 실행한다.</summary>
+    public DelegateCommand BuildCommand { get; }
+
+    /// <summary>
+    /// 프로젝트를 IL 로 빌드해 프로젝트 폴더의 <c>bin\&lt;이름&gt;.mtsx</c> 로 쓴다. 리소스가 있으면 옆에 같이 복사한다.
+    /// </summary>
+    /// <remarks>
+    /// 소스가 아니라 IL 이라 텍스트로는 못 본다(작정하면 디컴파일러로는 봄). 일반 사용자는 이 파일을 플레이어에서 실행만 한다.
+    /// 진입점 이름이 우리 것(<see cref="CompiledScriptBuilder.EntryTypeName"/>)이라 Roslyn 을 올려도 예전 파일이 그대로 돈다.
+    /// </remarks>
+    private async void DoBuild()
+    {
+        try
+        {
+            if (Script.Project.ToUnit() is not { } unit || string.IsNullOrEmpty(unit.EntryPath))
+            {
+                StatusText = "빌드하려면 프로젝트를 열고 시작 파일을 정하세요 (솔루션 탐색기에서 .csx 오른쪽 → 시작 파일로 설정).";
+                return;
+            }
+
+            if (Script.Engine is not ICompiledScriptEngine builder)
+            {
+                StatusText = "프로젝트는 C# 만 빌드합니다.";
+                return;
+            }
+
+            var project = Script.Project.Project!;
+            var name = project.Name;
+
+            StatusText = $"'{name}' 을(를) 빌드하는 중...";
+            Live.Console.Print($"빌드 시작: {name}");
+
+            var (bytes, errors) = await builder.BuildAsync(unit, name);
+
+            if (bytes is null || errors.Count > 0)
+            {
+                StatusText = $"빌드 실패: {(errors.Count > 0 ? errors[0].ToString() : "알 수 없는 오류")}";
+                foreach (var error in System.Linq.Enumerable.Take(errors, 20)) Live.Console.Print($"빌드 오류: {error}");
+                return;
+            }
+
+            var outputDirectory = System.IO.Path.Combine(project.Directory, "bin");
+            System.IO.Directory.CreateDirectory(outputDirectory);
+
+            var outputPath = System.IO.Path.Combine(outputDirectory, name + ScriptFiles.CompiledExtension);
+            await System.IO.File.WriteAllBytesAsync(outputPath, bytes);
+
+            var resourceNote = CopyResources(project.Directory, outputDirectory);
+
+            StatusText = $"빌드 완료: {outputPath} ({bytes.Length / 1024.0:0.#} KB){resourceNote}";
+            Live.Console.Print($"빌드 완료: {outputPath} ({bytes.Length:N0}바이트){resourceNote}");
+            Minguk.Base.Utilities.MessengerUtility.SendMainMessage($"'{name}' 빌드 완료 - 플레이 화면에서 '{name} (빌드됨)' 을 골라 돌립니다.");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "빌드에 실패했다");
+            StatusText = $"빌드 중 오류: {ex.Message}";
+        }
+    }
+
+    /// <summary>프로젝트의 <c>Resources</c> 폴더를 빌드 결과물 옆으로 복사한다. 리소스는 소스가 아니라 파일이라 IL 에 못 넣는다.</summary>
+    private static string CopyResources(string? projectDirectory, string outputDirectory)
+    {
+        if (string.IsNullOrEmpty(projectDirectory)) return string.Empty;
+
+        var source = System.IO.Path.Combine(projectDirectory, "Resources");
+        if (!System.IO.Directory.Exists(source)) return string.Empty;
+
+        var target = System.IO.Path.Combine(outputDirectory, "Resources");
+        var count = 0;
+
+        foreach (var file in System.IO.Directory.EnumerateFiles(source, "*", System.IO.SearchOption.AllDirectories))
+        {
+            var relative = System.IO.Path.GetRelativePath(source, file);
+            var destination = System.IO.Path.Combine(target, relative);
+
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(destination)!);
+            System.IO.File.Copy(file, destination, overwrite: true);
+            count++;
+        }
+
+        return count > 0 ? $" · 리소스 {count}개 함께 복사(같이 옮기세요)" : string.Empty;
+    }
 
 
 
@@ -184,9 +272,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
     /// <summary>
     /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.
-    /// 2: 미리보기|문서를 위아래로(2026-09-13). 옛 배치를 그대로 살리면 새 기본이 안 보인다.
+    /// 3: 솔루션 탐색기 왼쪽 · 미리보기|문서 좌우 · 도구 모음 세 줄(2026-09-13). 옛 배치를 그대로 살리면 새 기본이 안 보인다.
     /// </summary>
-    private const int DockLayoutVersion = 2;
+    private const int DockLayoutVersion = 3;
 
     // ── 미리보기 | 문서 나누기 ──────────────────────────────────────────
 

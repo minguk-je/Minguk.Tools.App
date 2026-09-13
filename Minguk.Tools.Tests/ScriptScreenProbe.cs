@@ -296,23 +296,24 @@ internal static class ScriptScreenProbe
 
         if (group is null || preview is null) { Console.WriteLine("[FAIL] 나누기 그룹이나 미리보기 판을 못 찾았다"); return 1; }
 
-        if (group.Orientation == System.Windows.Controls.Orientation.Vertical && group.Items.IndexOf(preview) == 0)
-            Console.WriteLine("[PASS] 기본은 미리보기 위 · 스크립트 아래");
-        else { Console.WriteLine($"[FAIL] 기본 나누기가 다르다 - {group.Orientation}, 미리보기 자리 {group.Items.IndexOf(preview)}"); failures++; }
+        // 그룹에는 미리보기 + 문서 그룹 둘(프로젝트·한 파일짜리)만 있어야 한다 - 솔루션 탐색기가 끼면 바꾸기에 딸려 간다.
+        if (group.Orientation == System.Windows.Controls.Orientation.Horizontal && group.Items.IndexOf(preview) == 0 && group.Items.Count == 3)
+            Console.WriteLine("[PASS] 기본은 미리보기 왼쪽 · 스크립트 오른쪽, 그룹 안은 셋");
+        else { Console.WriteLine($"[FAIL] 기본 나누기가 다르다 - {group.Orientation}, 미리보기 자리 {group.Items.IndexOf(preview)}/{group.Items.Count}"); failures++; }
 
-        vm.SplitHorizontalCommand.Execute(null);
+        vm.SplitVerticalCommand.Execute(null);
         vm.SwapPanesCommand.Execute(null);
         await Pump(300);
 
-        if (group.Orientation == System.Windows.Controls.Orientation.Horizontal && group.Items.IndexOf(preview) == group.Items.Count - 1 && preview.IsClosed == false)
-            Console.WriteLine($"[PASS] 좌우로 바꾸고 자리를 맞바꿨다 - 미리보기가 {group.Items.Count}개 중 마지막");
-        else { Console.WriteLine($"[FAIL] 좌우·바꾸기 - {group.Orientation}, 미리보기 자리 {group.Items.IndexOf(preview)}/{group.Items.Count}, 닫힘 {preview.IsClosed}"); failures++; }
+        if (group.Orientation == System.Windows.Controls.Orientation.Vertical && group.Items.IndexOf(preview) == group.Items.Count - 1 && preview.IsClosed == false)
+            Console.WriteLine($"[PASS] 위아래로 바꾸고 자리를 맞바꿨다 - 미리보기가 {group.Items.Count}개 중 마지막");
+        else { Console.WriteLine($"[FAIL] 위아래·바꾸기 - {group.Orientation}, 미리보기 자리 {group.Items.IndexOf(preview)}/{group.Items.Count}, 닫힘 {preview.IsClosed}"); failures++; }
 
         vm.SwapPanesCommand.Execute(null);
-        vm.SplitVerticalCommand.Execute(null);
+        vm.SplitHorizontalCommand.Execute(null);
         await Pump(200);
 
-        if (group.Orientation == System.Windows.Controls.Orientation.Vertical && group.Items.IndexOf(preview) == 0)
+        if (group.Orientation == System.Windows.Controls.Orientation.Horizontal && group.Items.IndexOf(preview) == 0)
             Console.WriteLine("[PASS] 되돌리면 처음 자리");
         else { Console.WriteLine($"[FAIL] 되돌리기 - {group.Orientation}, 미리보기 자리 {group.Items.IndexOf(preview)}"); failures++; }
 

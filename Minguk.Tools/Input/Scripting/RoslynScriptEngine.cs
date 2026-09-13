@@ -37,7 +37,7 @@ namespace Minguk.Tools.Input.Scripting;
 /// 여기서 필요한 것은 <b>참조를 들고 있는 것</b>이고, 안 쓰이면 놓아 주는 것이다
 /// (<see cref="KeepAlive"/>).
 /// </remarks>
-public sealed class RoslynScriptEngine : IScriptEngine, IProjectScriptEngine
+public sealed class RoslynScriptEngine : IScriptEngine, IProjectScriptEngine, ICompiledScriptEngine
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -291,6 +291,17 @@ public sealed class RoslynScriptEngine : IScriptEngine, IProjectScriptEngine
 
         return await RunCompiledLiveAsync(runner, api, token);
     }
+
+    // ── 빌드(IL) ────────────────────────────────────────────────────────
+
+    public Task<(byte[]? Assembly, IReadOnlyList<ScriptError> Errors)> BuildAsync(
+        ScriptUnit unit, string assemblyName, CancellationToken token = default)
+        => Task.Run(() => CompiledScriptBuilder.Build(unit, assemblyName), token);
+
+    /// <summary>빌드된 IL 을 로드해 돌린다. 실체는 <see cref="CompiledScriptRunner"/> - 엔진·언어와 무관하다.</summary>
+    public Task<IReadOnlyList<ScriptError>> RunCompiledAsync(
+        byte[] assembly, LiveScriptHost host, Action<LiveScriptApi> onCreated, CancellationToken token = default)
+        => CompiledScriptRunner.RunAsync(assembly, host, onCreated, token);
 
     private static async Task<IReadOnlyList<ScriptError>> RunCompiledLiveAsync(ScriptRunner<object> runner, LiveScriptApi api, CancellationToken token)
     {

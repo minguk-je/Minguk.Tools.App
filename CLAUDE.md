@@ -61,10 +61,14 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
     조상(UserControl)으로 찾으면 떼어 낸 떠 있는 창에서 끊긴다.
   - **탭 활성화는 한 방향으로만 기다린다**(`ScriptDocumentsBehavior._requested`). 도킹의 `DockItemActivated` 는 한 박자 늦게 와서,
     코드가 새 탭을 앞으로 가져오는 동안 옛 탭의 알림이 활성 문서를 되돌리고 그것이 다시 탭을 가져오는 핑퐁이 났다(실측: 각 66,280번, 화면 멈춤).
-  - **미리보기 | 문서는 VS XAML 디자이너처럼 나눈다**(2026-09-13). 기본은 **위아래**(미리보기 위, 스크립트 아래, `DesignSplitGroup`),
-    미리보기 판 아래 띠의 `위아래`·`좌우`·`바꾸기` 와 보기 > 미리보기 나누기 로 바꾼다(`SetSplit`·`SwapPanes` - 그룹의 `Orientation` 과
-    `Items` 순서). 방향·순서는 도킹 배치에 같이 저장된다. 기본을 바꿨으므로 `DockLayoutVersion` 을 2 로 올렸다 - 옛 배치가 살아나면 새 기본이 안 보인다.
-  - **도구 모음은 `BarManager.Bars` 에 있다**(`dxb:Bar` + `BarDockInfo ContainerType=Top`), 화면은 `dxb:BarManager` 로 감싼다. 끌어 옮긴 자리는
+  - **기본 배치(사용자가 잡은 것, 2026-09-13)**: 솔루션 탐색기 왼쪽 | 미리보기 | 스크립트, 아래에 오류 목록 탭, 도구 모음은 세 줄
+    (표준·디버그·입력 / 캡처 / 인식, `BarDockInfo.Row`). `DockLayoutVersion` 3.
+  - **미리보기 | 문서는 VS XAML 디자이너처럼 나눈다**. 기본은 **좌우**(`DesignSplitGroup`, 안에는 미리보기와 문서 그룹 둘뿐 - 솔루션 탐색기는
+    밖이다, 안에 두면 바꾸기에 딸려 간다). 미리보기 판 아래 띠의 `위아래`·`좌우`·`바꾸기` 와 보기 > 미리보기 나누기 로 바꾼다
+    (`SetSplit`·`SwapPanes` - 그룹의 `Orientation` 과 `Items` 순서). 방향·순서는 도킹 배치에 같이 저장된다. 기본을 바꾸면 `DockLayoutVersion` 을
+    올린다 - 옛 배치가 살아나면 새 기본이 안 보인다.
+  - **도구 모음은 `BarManager.Bars` 에 있다**(`dxb:Bar` + `BarDockInfo ContainerName=ToolbarContainer` - `ContainerType=Top` 만 주면 BarManager
+    제 위쪽 자리, 즉 메뉴 위에 붙는다(실측)), 화면은 `dxb:BarManager` 로 감싼다. 끌어 옮긴 자리는
     `BarLayout` 설정에 저장·복원한다(`SaveLayoutToStream`/`RestoreLayoutFromStream`, 도구 모음마다 `x:Name` 필요). 독립 `ToolBarControl` 을
     `BarContainerControl` 에 넣어 두면 관리자의 `Bars` 가 비어 배치 XML 이 빈 껍데기다(실측) - 그래서 옮겼다. 메뉴·상태 표시줄은 독립 컨트롤 그대로.
     "창 레이아웃 다시 설정" 은 도구 모음 배치도 지운다(다시 열 때 처음대로).
@@ -239,6 +243,37 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   화면을 닫아도, 언어를 바꿔도 켜 둔 채로 둔다. 파이썬 객체를 만지는 곳은 전부 `Py.GIL()` 안이다.
 - pythonnet 에 열거형을 열 때 `typeof(T).ToPython()` 은 안 된다. 파이썬 쪽에서 `RuntimeType` 으로
   보여 멤버가 안 잡힌다. 값을 하나씩 심고 묶는 껍데기를 파이썬에서 만든다.
+
+### 빌드해서 IL 로 (스크립트 화면 → .mtsx → 플레이)
+
+프로젝트를 **.NET DLL(IL)** 로 빌드해 소스를 감춘다(2026-09-13). 남에게 넘겨도 텍스트 편집기로는 못 보고, 플레이어에서 **실행만**
+한다. 작정하면 디컴파일러로는 본다 - 사용자가 그걸로 족하다고 했다("보고자 하면 보는거고 일반 사람들은 실행만").
+
+- **왜 스크립팅 emit 이 아닌가** - `CSharpScript` 를 emit 해 돌리려면 Roslyn 내부 제출 factory(`<Factory>`)를 리플렉션으로
+  불러야 하는데 그건 공개 API 가 아니라, Roslyn 을 올리면 **예전에 빌드해 둔 파일이 안 돌 수 있다.** 그래서 안 쓴다.
+- **진입점을 우리가 쥔다**(`Input/Scripting/CompiledScriptBuilder`). 프로젝트 글을 `public class __Compiled : LiveScriptApi` 의
+  `__Run()` 메서드 몸으로 감싸 **일반 C# 컴파일**(스크립팅 아님)로 emit 한다. `목표()`·`출력()` 같은 public 이름이 상속으로
+  그대로 스코프에 들어와 스크립팅 전역과 똑같다. 타입·메서드·생성자 이름이 다 우리 것이라 **Roslyn 을 올려도 안 깨진다.**
+  그래서 `LiveScriptApi` 는 `sealed` 가 아니다.
+- **조립**(`Assemble`): 각 소스를 스크립트로 파싱해 `using` 은 파일 위로 모으고(중복 제거), 최상위 문장·지역 함수는 `__Run` 몸으로,
+  타입·대리자 선언은 `__Compiled` 의 중첩 멤버로 옮긴다. `#load`·`#r`·주석은 노드의 `ToString()` 이 앞뒤 트리비아를 떼어 자연히
+  빠진다 - 프로젝트 소스는 `ScriptUnit.Sources` 로 다 들어오니 **손으로 적은 `#load` 는 쓰지 않는다**. 손으로 적은 `#r "x.dll"` 은
+  정규식으로 긁어 참조에 더한다. 참조는 **지금 프로세스에 올라온 어셈블리를 다 준다**(일반 컴파일은 참조를 손으로 다 줘야 한다).
+  `async` 인데 `await` 없는 스크립트는 흔해 `CS1998` 은 끈다.
+- **실행**(`CompiledScriptRunner.RunAsync`): `Assembly.Load(bytes)` → `__Compiled`(=`LiveScriptApi` 파생) 인스턴스 →
+  `__Run()` 호출. 그 인스턴스가 곧 api 라 `Outcome`·`ReleaseAll` 이 그대로 있고, `onCreated` 로 화면이 잡아 비상 정지에 넘긴다.
+  엔진·언어와 무관하다(컴파일은 끝났으니). `Assembly.Load(byte[])` 한 것은 언로드 안 되지만 플레이는 드무니 감수한다.
+- **빌드**(스크립트 화면, 프로젝트 > 빌드 · 디버그 도구 줄 · **Ctrl+Shift+B**, `ScriptStudioViewModel.DoBuild`): `Project.ToUnit()` 를
+  빌드해 `<프로젝트폴더>\bin\<이름>.mtsx` 로 쓴다. **리소스(`Resources\`)는 소스가 아니라 파일이라 IL 에 못 넣는다** - 옆에 같이
+  복사하고 "같이 옮기세요" 라 적는다. 리소스가 없으면 `.mtsx` 한 파일이면 된다.
+- **플레이**(`PlayViewModel`): 목록에 `.mtsx` 가 맨 앞에 뜬다(`ScriptFileItem.IsCompiled`, "이름 (빌드됨)"). 고르면
+  `Script.LoadCompiled(path)` 가 바이트를 읽어 `ScriptWorkbench.Compiled`(`CompiledPlayable`)에 든다. `LiveScriptSession.Resolve` 가
+  `script.Compiled` 를 맨 먼저 보고 `ResolveCompiled` 로 IL 을 돌린다 - host·비상 정지·끝맺음(`BuildHost`·`MakeBeforeRun`·`Finish`·
+  `Cleanup`)은 소스 경로와 **똑같이 나눠 쓴다**. 리소스 폴더는 `.mtsx` 가 든 폴더다.
+- **`.mtsx` 는 편집 못 한다** - 스크립트 화면에서 열려 하면(`LoadFile`) 막고 "원본 프로젝트를 여세요" 라 한다. 소스를 열거나 프로젝트를
+  열면 `Compiled` 를 잊는다.
+- 검증(`--vision` `TestCompiledScript`): 두 파일짜리(조각 함수·타입 섞음)를 IL 로 빌드→PE 확인→로드해 돌려 조각 함수·타입·입력이 다
+  사는지, `.mtsx` 로 써서 파일로 알아보고 다시 로드해도 그대로 도는지. 입력은 가짜 어댑터라 실제로 안 나간다.
 
 ### 스크립트 파일
 

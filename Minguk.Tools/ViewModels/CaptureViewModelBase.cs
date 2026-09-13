@@ -280,6 +280,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     // 프레임에서 무엇을 했는지 따라가기 쉽다. 캡처 상한과 미리보기 갱신 상한이 이 목록을 같이 쓴다.
     public virtual ObservableCollection<int> FpsOptions { get; set; } = new(new[] { 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 });
 
+    /// <summary>미리보기 확대 콤보의 프리셋. 0.5 = 절반, 1 = 창에 맞춤, 8 = 여덟 배. 직접 입력·휠도 되므로 사이 값도 된다.</summary>
+    public virtual ObservableCollection<double> ZoomOptions { get; set; } = new(new[] { 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 });
+
     /// <summary>
     /// 미리보기에서 누른 것을 대상 창으로 넘길지.
     ///
@@ -732,6 +735,15 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// </remarks>
     protected virtual bool IsPreviewEditing => false;
 
+    /// <summary>
+    /// 미리보기에서 휠 확대·오른쪽 끌기 이동을 열어 둘지. 기본은 편집 중일 때만(<see cref="IsPreviewEditing"/>).
+    /// </summary>
+    /// <remarks>
+    /// 게임 화면(스크립트·플레이)은 평소 휠·오른쪽 버튼이 게임으로 가야 해서 편집 중에만 연다. 캡처 화면은 게임에
+    /// 아무것도 안 보내므로 늘 열어 둔다 - 거기서 재정의해 <c>true</c> 를 준다.
+    /// </remarks>
+    protected virtual bool AllowPreviewPanZoom => IsPreviewEditing;
+
     // ── 편집 중 화면 옮기기 ──────────────────────────────────────────────
 
     private Point? _panStart;
@@ -742,7 +754,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     private bool TryBeginPanPreview(MouseButtonEventArgs args)
     {
-        if (!IsPreviewEditing || args.ChangedButton != System.Windows.Input.MouseButton.Right || PreviewScroller is not { } scroller) return false;
+        if (!AllowPreviewPanZoom || args.ChangedButton != System.Windows.Input.MouseButton.Right || PreviewScroller is not { } scroller) return false;
 
         _panStart = args.GetPosition(scroller);
         _panStartOffset = new Point(scroller.HorizontalOffset, scroller.VerticalOffset);
@@ -1160,8 +1172,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         set => SetProperty(() => PreviewZoom, Math.Clamp(Math.Round(value, 2), MinimumZoom, MaximumZoom));
     }
 
-    /// <summary>창에 맞춘 크기. 이보다 작게 줄일 이유는 없다 - 이미 줄여 보여 주고 있다.</summary>
-    public const double MinimumZoom = 1;
+    /// <summary>가장 작게. 1 이 창에 맞춘 크기고, 0.5 는 그 절반으로 더 축소해 본다(넓게 훑을 때).</summary>
+    public const double MinimumZoom = 0.5;
 
     /// <summary>여덟 배까지. 그 위는 한 화면에 들어오는 것이 너무 적어 자리를 잊는다.</summary>
     public const double MaximumZoom = 8;
@@ -1315,7 +1327,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         // Ctrl 을 누른 채로 돌리면 확대다. 그냥 돌리는 것은 전처럼 게임으로 보낸다 -
         // 휴을 쓰는 게임(무기 바꾸기)이 많아 그쪽을 뺀질 수 없다.
         // 영역을 손보는 중이면 휠만으로 확대한다 - 그동안은 게임으로 아무것도 안 보낸다.
-        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0 || IsPreviewEditing)
+        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0 || AllowPreviewPanZoom)
         {
             ZoomPreviewAt(args);
             args.Handled = true;

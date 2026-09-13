@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -69,6 +70,9 @@ public sealed class LiveScriptSession : IDisposable
     /// </summary>
     public ScriptRunContext? Resolve(ScriptWorkbench script, ScriptPlayer player)
     {
+        // 빌드된 것(.mtsx)은 소스가 없다 - IL 을 로드해 돌린다. 검사할 글이 없으니 HasError 는 안 본다.
+        if (script.Compiled is { } compiled) return ResolveCompiled(compiled, player);
+
         if (script.HasError)
         {
             MessengerUtility.SendMainMessage("스크립트에 고칠 줄이 있습니다.");
@@ -109,52 +113,11 @@ public sealed class LiveScriptSession : IDisposable
         Debug.SupportsStepping = engine.SupportsStepping;
         Console.ClearCalls();
 
-        // 전역 단축키는 STA(UI) 스레드에서 걸어야 한다 - 스크립트 스레드에서 걸었더니 "STA 여야 합니다" 로 실패했다.
-        // BeforeRun 은 대기가 끝난 뒤 UI 스레드에서 돈다. 누르면 플레이어를 멈추고(토큰이 API 까지 이어진다) 누른 키를 뗀다.
-        var beforeRun = async () =>
-        {
-            // 드라이버 경로는 사람이 쓰는 바로 그 마우스로 보내야 게임이 본다. 아직 못 봤으면 지금 말해 준다.
-            if (service.Adapter is Minguk.Tools.Input.Adapters.InterceptionInputAdapter { SawHumanMouse: false })
-                _notify("마우스를 한 번 움직여 주세요 - Interception 이 어느 마우스로 보낼지 아직 모릅니다(붙은 첫 자리로 보냅니다).");
-
-            if (!_emergency.Arm(() => { player.Stop(); _api?.ReleaseAll(); }, out var problem) && problem is not null)
-                _notify(problem);
-
-            // 배율이 안 맞으면 조준이 목표를 지나치거나 못 미친다. 꺼 두고 돌리다 "왜 안 배우지" 로 1,003번을
-            // 돌린 적이 있어(실측), 어느 쪽이든 시작할 때 한 줄로 말해 준다.
-            Console.Print(player.IsAimScaleAuto
-                ? $"조준 배율 {player.AimScalePercent}% 로 시작합니다 - 겨눈 결과를 보고 스스로 맞춥니다."
-                : $"조준 배율 {player.AimScalePercent}% 고정입니다 - 스스로 맞추게 하려면 도구 줄의 \"자동\" 을 켜세요.");
-
-            await _activateTarget();
-        };
+        var beforeRun = MakeBeforeRun(player, service);
 
         return new ScriptRunContext(async (progress, token) =>
         {
-            var host = new LiveScriptHost
-            {
-                Service = service,
-                RequiresForeground = _requiresForeground(),
-                Target = _target,
-                Hub = Hub,
-                Ocr = _ocr,
-                Regions = _regions,
-                ResourceRoot = unit?.ResourceRoot,
-                Print = Console.Print,
-                Watch = Console.Watch,
-                Trace = Console.Trace,
-                HoldTimeMs = player.HoldTimeMs,
-                AimScale = player.AimScale,
-                // 늘 물린다. 켜고 끄는 것은 IsAimScaleAuto 가 부를 때마다 본다 - 도중에 켜도 바로 먹게.
-                AimScaleLearned = learned =>
-                {
-                    var percent = (int)Math.Round(learned * 100);
-
-                    Console.Print($"조준 배율을 {percent}% 로 맞췄습니다.");
-                    _onUi(() => player.AimScalePercent = percent);
-                },
-                IsAimScaleAuto = () => player.IsAimScaleAuto
-            };
+            var host = BuildHost(player, service, unit?.ResourceRoot, token);
 
             var api = new LiveScriptApi(host, token);
             _api = api;
@@ -169,29 +132,123 @@ public sealed class LiveScriptSession : IDisposable
                     ? await projectEngine.RunLiveAsync(unit, api, debug, token)
                     : await engine.RunLiveAsync(source, api, debug, token);
 
-                if (errors.Count > 0)
-                {
-                    progress.Report($"실패: {errors[0]}");
-                    Console.Print($"멈춤: {errors[0]}");
-                    return false;
-                }
-
-                if (api.Outcome == LiveScriptOutcome.Stopped || token.IsCancellationRequested)
-                    return false;
-
-                return true;
+                return Finish(progress, errors, api, token);
             }
             finally
             {
-                api.ReleaseAll();
-                // 단축키는 건 스레드(UI)에서 풀어야 한다.
-                _onUi(_emergency.Disarm);
-                Hub.WantsFrames = false;
-                Debug.Reset();
-                _api = null;
+                Cleanup(api);
             }
         }, beforeRun);
     }
+
+    /// <summary>
+    /// 빌드된 것(.mtsx)을 돌릴 문맥. 소스 경로와 host·비상 정지·끝맺음을 그대로 나눠 쓰고, 실행만 IL 로 한다.
+    /// </summary>
+    private ScriptRunContext? ResolveCompiled(CompiledPlayable compiled, ScriptPlayer player)
+    {
+        var service = _service();
+        if (service is null) return null;
+
+        service.JitterMs = player.JitterMs;
+
+        Debug.SupportsStepping = false;
+        Console.ClearCalls();
+
+        var beforeRun = MakeBeforeRun(player, service);
+
+        return new ScriptRunContext(async (progress, token) =>
+        {
+            var host = BuildHost(player, service, compiled.ResourceRoot, token);
+
+            progress.Report($"실시간 실행 중(빌드됨: {compiled.Name}) - 비상 정지 {EmergencyStop.Label}");
+
+            LiveScriptApi? api = null;
+
+            try
+            {
+                var errors = await CompiledScriptRunner.RunAsync(compiled.Assembly, host, created => { _api = created; api = created; }, token);
+
+                return Finish(progress, errors, api, token);
+            }
+            finally
+            {
+                Cleanup(api);
+            }
+        }, beforeRun);
+    }
+
+    /// <summary>실행 결과를 화면에 알리고, 계속 돌릴지(true) 멈출지(false)를 정한다.</summary>
+    private bool Finish(IProgress<string> progress, IReadOnlyList<ScriptError> errors, LiveScriptApi? api, CancellationToken token)
+    {
+        if (errors.Count > 0)
+        {
+            progress.Report($"실패: {errors[0]}");
+            Console.Print($"멈춤: {errors[0]}");
+            return false;
+        }
+
+        if (api?.Outcome == LiveScriptOutcome.Stopped || token.IsCancellationRequested)
+            return false;
+
+        return true;
+    }
+
+    /// <summary>한 바퀴가 끝날 때마다 - 누른 키를 떼고, 단축키를 풀고(UI 스레드), 프레임 복사를 끈다.</summary>
+    private void Cleanup(LiveScriptApi? api)
+    {
+        api?.ReleaseAll();
+        _onUi(_emergency.Disarm);
+        Hub.WantsFrames = false;
+        Debug.Reset();
+        _api = null;
+    }
+
+    /// <summary>
+    /// 대기가 끝난 뒤 UI 스레드에서 한 번 도는 준비. 비상 정지 단축키를 걸고(STA 여야 한다), 배율을 알리고, 대상 창을 앞으로.
+    /// </summary>
+    private Func<Task> MakeBeforeRun(ScriptPlayer player, InputService service) => async () =>
+    {
+        // 드라이버 경로는 사람이 쓰는 바로 그 마우스로 보내야 게임이 본다. 아직 못 봤으면 지금 말해 준다.
+        if (service.Adapter is Minguk.Tools.Input.Adapters.InterceptionInputAdapter { SawHumanMouse: false })
+            _notify("마우스를 한 번 움직여 주세요 - Interception 이 어느 마우스로 보낼지 아직 모릅니다(붙은 첫 자리로 보냅니다).");
+
+        if (!_emergency.Arm(() => { player.Stop(); _api?.ReleaseAll(); }, out var problem) && problem is not null)
+            _notify(problem);
+
+        // 배율이 안 맞으면 조준이 목표를 지나치거나 못 미친다. 꺼 두고 돌리다 "왜 안 배우지" 로 1,003번을
+        // 돌린 적이 있어(실측), 어느 쪽이든 시작할 때 한 줄로 말해 준다.
+        Console.Print(player.IsAimScaleAuto
+            ? $"조준 배율 {player.AimScalePercent}% 로 시작합니다 - 겨눈 결과를 보고 스스로 맞춥니다."
+            : $"조준 배율 {player.AimScalePercent}% 고정입니다 - 스스로 맞추게 하려면 도구 줄의 \"자동\" 을 켜세요.");
+
+        await _activateTarget();
+    };
+
+    /// <summary>API 에 빌려 줄 것들을 한데 묶는다. 소스·빌드된 것 두 경로가 똑같이 쓴다 - 한쪽만 고쳐 어긋나지 않게.</summary>
+    private LiveScriptHost BuildHost(ScriptPlayer player, InputService service, string? resourceRoot, CancellationToken token) => new()
+    {
+        Service = service,
+        RequiresForeground = _requiresForeground(),
+        Target = _target,
+        Hub = Hub,
+        Ocr = _ocr,
+        Regions = _regions,
+        ResourceRoot = resourceRoot,
+        Print = Console.Print,
+        Watch = Console.Watch,
+        Trace = Console.Trace,
+        HoldTimeMs = player.HoldTimeMs,
+        AimScale = player.AimScale,
+        // 늘 물린다. 켜고 끄는 것은 IsAimScaleAuto 가 부를 때마다 본다 - 도중에 켜도 바로 먹게.
+        AimScaleLearned = learned =>
+        {
+            var percent = (int)Math.Round(learned * 100);
+
+            Console.Print($"조준 배율을 {percent}% 로 맞췄습니다.");
+            _onUi(() => player.AimScalePercent = percent);
+        },
+        IsAimScaleAuto = () => player.IsAimScaleAuto
+    };
 
     public void Dispose()
     {

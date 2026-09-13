@@ -129,6 +129,9 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
 
         Project.ProjectChanged += (_, _) =>
         {
+            // 프로젝트를 열면 빌드된 것은 잊는다 - 편집·검사는 소스로 한다.
+            if (Project.IsOpen) Compiled = null;
+
             RaisePropertyChanged(nameof(IsProject));
 
             // 프로젝트는 C# 부터다. 언어가 다르면 맞춘다 - 파이썬 엔진으로 .csx 를 검사하면 오류만 가득 뜬다.
@@ -214,6 +217,31 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     public ScriptProjectWorkspace Project { get; }
 
     public bool IsProject => Project?.IsOpen == true;
+
+    // ── 빌드된 것(플레이 전용) ────────────────────────────────────────────
+
+    /// <summary>
+    /// 로드해 둔 빌드 결과물(<c>.mtsx</c>, IL). 소스가 없어 편집·검사를 안 하고 실행만 한다. 플레이 화면에서만 채운다.
+    /// </summary>
+    public CompiledPlayable? Compiled
+    {
+        get => GetProperty(() => Compiled);
+        private set => SetProperty(() => Compiled, value, () => RaisePropertyChanged(nameof(IsCompiled)));
+    }
+
+    /// <summary>빌드된 것을 로드해 둔 상태인가. 그러면 실행은 IL 을 돌린다(<see cref="LiveScriptSession"/>).</summary>
+    public bool IsCompiled => Compiled is not null;
+
+    /// <summary>빌드 결과물을 읽어 든다. 소스로 열지 않는다 - 편집기에 든 것은 IL 이라 글이 아니다.</summary>
+    public void LoadCompiled(string path)
+    {
+        var bytes = System.IO.File.ReadAllBytes(path);
+        var root = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path));
+
+        Compiled = new CompiledPlayable(bytes, root, System.IO.Path.GetFileNameWithoutExtension(path));
+
+        Logger.Info($"빌드된 스크립트를 로드했다: {path} ({bytes.Length:N0}바이트)");
+    }
 
     /// <summary>한 파일짜리 편집기에 "이 줄로" 요청(오류 목록·참조 창).</summary>
     public Markup.EditorLineRequest? LineRequest
@@ -650,6 +678,15 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     /// </remarks>
     public void LoadFile(string path)
     {
+        if (ScriptFiles.IsCompiledPath(path))
+        {
+            MessengerUtility.SendMainMessage("빌드 결과물(.mtsx)은 편집할 수 없습니다 - 플레이 화면에서 실행만 합니다. 고치려면 원본 프로젝트를 여세요.");
+            return;
+        }
+
+        // 소스를 열면 빌드된 것은 잊는다.
+        Compiled = null;
+
         var text = System.IO.File.ReadAllText(path);
 
         if (ScriptFiles.FromPath(path) is { } language && language != SelectedLanguage)

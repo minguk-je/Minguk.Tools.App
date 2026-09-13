@@ -19,10 +19,18 @@ namespace Minguk.Tools.ViewModels;
 /// </remarks>
 public partial class CaptureMonitorViewModel : CaptureViewModelBase
 {
+    /// <summary>
+    /// 캡처 화면은 게임에 아무것도 안 보낸다 - 미리보기 휠 확대·오른쪽 끌기 이동을 늘 열어 둔다.
+    /// </summary>
+    /// <remarks>
+    /// 게임 화면(스크립트·플레이)은 평소 휠·오른쪽 버튼이 게임으로 가야 해서 편집 중에만 여는데, 여기는 잡아서 보기만 한다.
+    /// </remarks>
+    protected override bool AllowPreviewPanZoom => true;
+
     /// <summary>그리드에 남겨 둘 줄 수. 오래 켜 두면 메모리를 먹으니 잘라 낸다.</summary>
-    // 마지막 한 줄만 둔다. 600줄을 쌓아 봐야 보는 것은 맨 위 한 줄이었고("마지막 것만 봐도 될 것 같아"),
-    // 그 자리를 미리보기에 주는 편이 낫다. 비고에 적히던 알림은 상태 줄과 아래 바로 간다.
-    private const int MaxRows = 1;
+    // 1초 요약을 쌓아 지나간 것을 본다(600줄 = 10분). 새 줄은 맨 위에 끼운다(OnStatisticsRow).
+    // 넘으면 오래된 아래쪽부터 버린다.
+    private const int MaxRows = 600;
 
     /// <summary>통계 그리드의 뷰. 새 줄이 들어올 때 맨 위를 유지하려고 들고 있는다.</summary>
     private DevExpress.Xpf.Grid.TableView? _gridView;
@@ -86,7 +94,8 @@ public partial class CaptureMonitorViewModel : CaptureViewModelBase
             System.Windows.Threading.DispatcherPriority.ContextIdle,
             new Action(() =>
             {
-                IsColumnAutoWidth = GetSetting(nameof(IsColumnAutoWidth), false);
+                // 토글은 숨겼다 - 늘 켠다(열 너비를 내용에 맞춘다). 저장값은 안 본다.
+                IsColumnAutoWidth = true;
                 RestoreGridLayout();
             }));
     }

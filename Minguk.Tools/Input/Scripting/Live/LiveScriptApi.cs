@@ -44,8 +44,13 @@ public enum LiveScriptOutcome
 ///   - 눈이 없으면(캡처 안 돎, 몹 찾기 꺼짐) <c>몹들()</c> 은 빈 목록이 아니라 멈추고 이유를 말한다.
 ///
 /// 스크립트 스레드에서 돈다. UI 스레드가 아니라서 입력을 기다려도(await) 화면이 멈추지 않는다.
+///
+/// <b>sealed 가 아닌 이유</b> - 프로젝트를 DLL 로 빌드하면(<see cref="CompiledScriptBuilder"/>) 스크립트 글이
+/// <c>__Compiled : LiveScriptApi</c> 의 메서드 몸이 된다. 그래야 <c>목표()</c>·<c>출력()</c> 같은 public 이름이
+/// 상속으로 그대로 스코프에 들어와, 스크립팅 전역과 똑같이 이름만으로 불린다. 진입점 이름을 우리가 쥐므로
+/// Roslyn 을 올려도 안 깨진다 - 스크립팅 내부(제출 factory)에 기대지 않는다.
 /// </remarks>
-public sealed class LiveScriptApi
+public class LiveScriptApi
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 

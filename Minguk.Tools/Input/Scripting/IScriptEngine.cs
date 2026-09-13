@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+
 using Minguk.Tools.Input.Sequencing;
 
 namespace Minguk.Tools.Input.Scripting;
@@ -84,6 +85,28 @@ public interface IProjectScriptEngine
 
     Task<IReadOnlyList<ScriptError>> RunLiveAsync(
         ScriptUnit unit, Live.LiveScriptApi api, Live.ScriptDebugSession? debug = null, CancellationToken token = default);
+}
+
+/// <summary>
+/// 프로젝트를 <b>.NET DLL(IL)</b> 로 빌드하고, 그 IL 을 로드해 실행하는 엔진. 능력별 인터페이스 - 지금은 C# 만.
+/// </summary>
+/// <remarks>
+/// 빌드 결과는 소스가 아니라 IL 이라 텍스트 편집기로는 못 본다(작정하면 디컴파일러로는 봄). 일반 사용자는 이 파일을
+/// 플레이어에서 <b>실행만</b> 한다. 진입점 이름을 우리가 쥐어(<see cref="CompiledScriptBuilder.EntryTypeName"/>)
+/// Roslyn 을 올려도 예전에 빌드해 둔 파일이 그대로 돈다.
+/// </remarks>
+public interface ICompiledScriptEngine
+{
+    /// <summary>프로젝트를 IL 로 빌드한다. 틀린 곳이 있으면 바이트는 null 이고 오류가 온다.</summary>
+    Task<(byte[]? Assembly, IReadOnlyList<ScriptError> Errors)> BuildAsync(
+        ScriptUnit unit, string assemblyName, CancellationToken token = default);
+
+    /// <summary>
+    /// 빌드된 IL 을 로드해 실시간으로 돌린다. 만들어진 인스턴스(<see cref="Live.LiveScriptApi"/> 파생)를
+    /// <paramref name="onCreated"/> 로 넘겨 - 화면이 비상 정지에서 <c>ReleaseAll</c> 을 부를 수 있게.
+    /// </summary>
+    Task<IReadOnlyList<ScriptError>> RunCompiledAsync(
+        byte[] assembly, Live.LiveScriptHost host, Action<Live.LiveScriptApi> onCreated, CancellationToken token = default);
 }
 
 /// <summary>스크립트 언어.</summary>

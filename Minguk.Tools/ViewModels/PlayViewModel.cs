@@ -17,15 +17,18 @@ using Minguk.Tools.Input.Scripting;
 
 namespace Minguk.Tools.ViewModels;
 
-/// <summary>스크립트 폴더의 파일 하나(또는 프로젝트). 콤보에 이름만 보이고 실제로는 경로를 든다.</summary>
+/// <summary>스크립트 폴더의 파일 하나(또는 프로젝트·빌드 결과물). 콤보에 이름만 보이고 실제로는 경로를 든다.</summary>
 /// <param name="IsProject">스크립트 프로젝트(<c>.mtsproj</c>)인가. 그러면 여러 파일·리소스를 한 벌로 돌린다.</param>
-public sealed record ScriptFileItem(string Name, string Path, bool IsProject = false)
+/// <param name="IsCompiled">빌드된 것(<c>.mtsx</c>, IL)인가. 소스가 아니라 로드해서 실행만 한다.</param>
+public sealed record ScriptFileItem(string Name, string Path, bool IsProject = false, bool IsCompiled = false)
 {
     public override string ToString() => Name;
 
     public static ScriptFileItem From(string path) => IsProjectPath(path)
         ? new ScriptFileItem($"{System.IO.Path.GetFileNameWithoutExtension(path)} (프로젝트)", path, IsProject: true)
-        : new ScriptFileItem(System.IO.Path.GetFileName(path), path);
+        : ScriptFiles.IsCompiledPath(path)
+            ? new ScriptFileItem($"{System.IO.Path.GetFileNameWithoutExtension(path)} (빌드됨)", path, IsCompiled: true)
+            : new ScriptFileItem(System.IO.Path.GetFileName(path), path);
 
     public static bool IsProjectPath(string path)
         => string.Equals(System.IO.Path.GetExtension(path), Input.Scripting.Projects.ScriptProject.Extension, StringComparison.OrdinalIgnoreCase);
@@ -179,12 +182,18 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .Select(ScriptFileItem.From);
 
+        // 빌드된 것(.mtsx)이 먼저다 - 다른 PC 로 넘겨 돌리는, 대개 "진짜로 돌리는 것" 이다.
+        var compiled = Directory.EnumerateFiles(folder, "*" + ScriptFiles.CompiledExtension)
+            .Concat(Directory.EnumerateDirectories(folder).SelectMany(d => Directory.EnumerateFiles(d, "*" + ScriptFiles.CompiledExtension)))
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .Select(ScriptFileItem.From);
+
         var files = Directory.EnumerateFiles(folder)
             .Where(p => ScriptFiles.FromPath(p) is not null)
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .Select(ScriptFileItem.From);
 
-        return [.. projects, .. files];
+        return [.. compiled, .. projects, .. files];
     }
 
     /// <summary>
@@ -193,6 +202,15 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
     private void OnSelectedScriptChanged() => Guard(() =>
     {
         if (SelectedScript is null) return;
+
+        if (SelectedScript.IsCompiled)
+        {
+            // 빌드된 것: 소스 없이 IL 을 로드해 돌린다. 프로젝트를 열어 두었으면 닫는다.
+            Script.Project.CloseProject();
+            Script.LoadCompiled(SelectedScript.Path);
+            StatusText = $"빌드된 스크립트: {SelectedScript.Name}";
+            return;
+        }
 
         if (SelectedScript.IsProject)
         {

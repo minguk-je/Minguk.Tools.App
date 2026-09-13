@@ -1,7 +1,9 @@
 ﻿<UserControl x:Class="Minguk.Tools.Views.Parts.CapturePreviewPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dxi="http://schemas.devexpress.com/winfx/2008/xaml/core/internal"
              xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:dxt="http://schemas.devexpress.com/winfx/2008/xaml/core/themekeys"
              xmlns:parts="clr-namespace:Minguk.Tools.Views.Parts">
 
     <!--
@@ -14,8 +16,12 @@
         서비스 이름(PreviewSurfaceObjectService · PreviewImageObjectService)은 CaptureViewModelBase 가
         InitializeControls 에서 찾는 이름이다. 이 컨트롤을 얹은 화면의 DataContext(그 ViewModel)에 등록된다.
     -->
+    <!--
+        미리보기 바탕(그림 둘레의 여백). 하드코딩 색 대신 DevExpress 경량 테마의 창 배경을 쓴다 - 테마를 바꾸면 같이 바뀐다.
+        Minguk.Base 의 Style.xaml 이 쓰는 것과 같은 방식(dxi:ThemeResource + dxt:PaletteBrushThemeKey). TamsTools 도 같은 길이다.
+    -->
     <Border x:Name="Surface"
-            Background="#202020"
+            Background="{dxi:ThemeResource {dxt:PaletteBrushThemeKey ResourceKey=WindowBackground}}"
             Focusable="True">
 
         <dxmvvm:Interaction.Behaviors>

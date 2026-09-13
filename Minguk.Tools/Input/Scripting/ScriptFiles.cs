@@ -46,6 +46,13 @@ public static class ScriptFiles
         _ => ".csx"
     };
 
+    /// <summary>빌드된 스크립트(.NET DLL/IL). 소스가 아니라 실행만 하는 것이라 언어가 없다.</summary>
+    public const string CompiledExtension = ".mtsx";
+
+    /// <summary>빌드 결과물(<c>.mtsx</c>)인가. 이건 편집이 아니라 플레이어에서 실행만 한다.</summary>
+    public static bool IsCompiledPath(string? path)
+        => !string.IsNullOrWhiteSpace(path) && string.Equals(Path.GetExtension(path), CompiledExtension, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// 파일 이름으로 언어를 알아낸다. 모르는 확장자면 null.
     /// </summary>
