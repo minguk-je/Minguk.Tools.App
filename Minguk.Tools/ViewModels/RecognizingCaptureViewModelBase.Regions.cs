@@ -143,7 +143,17 @@ public abstract partial class RecognizingCaptureViewModelBase
         region.Rect = new Rect(nx, ny, nw, nh);
 
         SaveRegions();
-        RaiseRegionFields();
+
+        // 고치는 칸에는 되돌려 알리지 않는다. 사람이 치는 도중에 같은 칸의 값을 되쏘으면 글자가 지워지고
+        // 캐럿이 앞으로 튀어 "고쳐지지 않는다" 로 보인다. 겹그림만 다시 그리게 하면 된다.
+        RegionsRevision++;
+        RaisePropertyChanged(nameof(Regions));
+
+        // 막힌 것은 말해 준다 - 조용히 안 바뀌면 칸이 고장 난 줄 안다.
+        if (width is { } wanted && Math.Abs(wanted - nw) > 0.0005)
+            StatusText = $"너비는 여기서 {nw * 100:0.0}% 까지다 - 가로 자리를 왼쪽으로 옮기면 더 넓혀진다.";
+        else if (height is { } tall && Math.Abs(tall - nh) > 0.0005)
+            StatusText = $"높이는 여기서 {nh * 100:0.0}% 까지다 - 세로 자리를 위로 옮기면 더 늘어난다.";
     });
 
     private void RenameSelected(string wanted) => Guard(() =>

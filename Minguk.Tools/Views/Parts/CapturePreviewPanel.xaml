@@ -14,7 +14,8 @@
         서비스 이름(PreviewSurfaceObjectService · PreviewImageObjectService)은 CaptureViewModelBase 가
         InitializeControls 에서 찾는 이름이다. 이 컨트롤을 얹은 화면의 DataContext(그 ViewModel)에 등록된다.
     -->
-    <Border Background="#202020"
+    <Border x:Name="Surface"
+            Background="#202020"
             Focusable="True">
 
         <dxmvvm:Interaction.Behaviors>
@@ -41,7 +42,21 @@
                                    PassEventArgsToCommand="True" />
         </dxmvvm:Interaction.Behaviors>
 
-        <Grid>
+        <!--
+            확대는 <c>LayoutTransform</c> 으로 한다. 그래야 속의 Image 가 제 좌표계를 그대로 써서,
+            마우스 자리를 비율로 바꾸는 계산(PreviewInputMapper)을 손대지 않아도 된다.
+            RenderTransform 으로 하면 즐은 그려지기만 하고 자리 계산은 안 바뀌어 어긋난다.
+
+            크기를 바깥 Border 에 맞춘다 - 스크롤 뷰포트에 맞추면 막대가 나타났다 사라졌다 하며 떨린다.
+        -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+            <Grid Width="{Binding ActualWidth, ElementName=Surface}"
+                  Height="{Binding ActualHeight, ElementName=Surface}">
+                <Grid.LayoutTransform>
+                    <ScaleTransform ScaleX="{Binding PreviewZoom}"
+                                    ScaleY="{Binding PreviewZoom}" />
+                </Grid.LayoutTransform>
             <!--
                 Stretch=Uniform 이라 원본 비율을 지킨다. 축소해서 보여 주는 용도이므로
                 BitmapScalingMode 는 LowQuality(선형 보간)로 둔다 — 60fps 로 갱신할 때
@@ -59,6 +74,7 @@
             <!-- 화면이 얹는 겹그림(찾은 몹 점선 등). 없으면 비어 있다. 마우스는 통과시킨다. -->
             <ContentPresenter Content="{Binding Overlay, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}"
                               IsHitTestVisible="False" />
-        </Grid>
+            </Grid>
+        </ScrollViewer>
     </Border>
 </UserControl>

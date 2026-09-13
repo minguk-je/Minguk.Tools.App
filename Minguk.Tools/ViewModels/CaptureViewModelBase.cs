@@ -1042,6 +1042,35 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     protected bool CanForwardInput => IsInputForwardingEnabled && IsRunning && _previewImage is not null && _inputRouter is not null;
 
     /// <summary>미리보기 Image 컨트롤의 현재 크기와 캡처 원본 크기.</summary>
+    /// <summary>
+    /// 미리보기 확대 배율. 1 이면 창에 딱 맞춘다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜 필요한가</b> - 영역을 지정할 때 1920 화면을 절반으로 줄여 보면 탄약 숫자 하나가 10px 도
+    /// 안 된다 - 손으로 둘레를 두르는 것이 불가능하다.
+    /// 
+    /// <b>자리 계산은 안 바뀐다.</b> 크기를 바꾸는 것은 XAML 의 <c>LayoutTransform</c> 이라, 그 안의
+    /// Image 는 제 좌표계를 그대로 쓴다. 마우스 자리를 비율로 바꾸는 계산(<see cref="PreviewSizes"/>)을
+    /// 손대지 않아도 된다 - 확대해 둘레를 두르면 그 자리가 그대로 나온다.
+    /// </remarks>
+    public double PreviewZoom
+    {
+        get => GetProperty(() => PreviewZoom);
+        set => SetProperty(() => PreviewZoom, Math.Clamp(Math.Round(value, 2), MinimumZoom, MaximumZoom));
+    }
+
+    /// <summary>창에 맞춘 크기. 이보다 작게 줄일 이유는 없다 - 이미 줄여 보여 주고 있다.</summary>
+    public const double MinimumZoom = 1;
+
+    /// <summary>여덟 배까지. 그 위는 한 화면에 들어오는 것이 너무 적어 자리를 잊는다.</summary>
+    public const double MaximumZoom = 8;
+
+    public ICommand ZoomInCommand => new DelegateCommand(() => PreviewZoom *= 1.25);
+
+    public ICommand ZoomOutCommand => new DelegateCommand(() => PreviewZoom /= 1.25);
+
+    public ICommand ZoomResetCommand => new DelegateCommand(() => PreviewZoom = 1);
+
     protected (System.Windows.Size Control, System.Windows.Size Source) PreviewSizes => (
         new System.Windows.Size(_previewImage!.ActualWidth, _previewImage.ActualHeight),
         new System.Windows.Size(_lastFrameWidth, _lastFrameHeight));
@@ -1168,6 +1197,16 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// </summary>
     private void OnPreviewMouseWheel(MouseWheelEventArgs args)
     {
+        // Ctrl 을 누른 채로 돌리면 확대다. 그냥 돌리는 것은 전처럼 게임으로 보낸다 -
+        // 휴을 쓰는 게임(무기 바꾸기)이 많아 그쪽을 뺀질 수 없다.
+        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            PreviewZoom *= args.Delta > 0 ? 1.25 : 1 / 1.25;
+            args.Handled = true;
+
+            return;
+        }
+
         if (!CanForwardInput)
             return;
 
