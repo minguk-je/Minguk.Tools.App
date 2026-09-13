@@ -26,7 +26,7 @@ namespace Minguk.Tools.Input.Scripting;
 ///
 /// 요청마다 문서의 글만 갈아 끼운다(<c>WithText</c>). 작업 공간을 다시 만들면 MEF 구성부터 다시 해 몇 초가 든다.
 /// </remarks>
-public sealed class RoslynCompletionSource : IScriptCompletionSource, IScriptClassifier
+public sealed partial class RoslynCompletionSource : IScriptCompletionSource, IScriptClassifier, IScriptReferenceFinder
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -52,7 +52,11 @@ public sealed class RoslynCompletionSource : IScriptCompletionSource, IScriptCla
     /// 완성과 색에 나온다. 자기 자신은 뺀다. 시작 파일이 아닌 파일에서는 시작 파일도 뺀다 - 실행 때 시작 파일은 맨 뒤라
     /// 다른 파일에서 그 변수를 볼 수 없다.
     /// </remarks>
-    private (Document Document, int Offset) DocumentFor(string? text, string? filePath)
+    /// <param name="includeEntry">
+    /// 시작 파일도 머리말에 넣을지. 참조를 셀 때만 켠다 - 도우미 파일의 함수를 시작 파일이 부르는 것도 세야 한다.
+    /// 완성·색에서는 끈다(실행 때 시작 파일은 맨 뒤라 그 변수가 다른 파일에서 안 보인다).
+    /// </param>
+    private (Document Document, int Offset) DocumentFor(string? text, string? filePath, bool includeEntry = false)
     {
         var unit = filePath is null ? null : UnitFor?.Invoke(filePath);
 
@@ -65,7 +69,8 @@ public sealed class RoslynCompletionSource : IScriptCompletionSource, IScriptCla
             if (unit is null) return (current.WithText(SourceText.From(text ?? string.Empty)), 0);
 
             var self = System.IO.Path.GetFullPath(filePath!);
-            var loads = unit.Sources.Where(s => !string.Equals(System.IO.Path.GetFullPath(s), self, StringComparison.OrdinalIgnoreCase)).ToList();
+            var sources = includeEntry && !string.IsNullOrEmpty(unit.EntryPath) ? unit.Sources.Append(unit.EntryPath) : unit.Sources;
+            var loads = sources.Where(s => !string.Equals(System.IO.Path.GetFullPath(s), self, StringComparison.OrdinalIgnoreCase)).ToList();
 
             var prelude = new System.Text.StringBuilder();
             foreach (var load in loads) prelude.Append("#load \"").Append(load.Replace('\\', '/')).Append("\"\n");

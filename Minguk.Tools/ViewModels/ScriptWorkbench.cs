@@ -215,6 +215,32 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
 
     public bool IsProject => Project?.IsOpen == true;
 
+    /// <summary>한 파일짜리 편집기에 "이 줄로" 요청(오류 목록·참조 창).</summary>
+    public Markup.EditorLineRequest? LineRequest
+    {
+        get => GetProperty(() => LineRequest);
+        set => SetProperty(() => LineRequest, value);
+    }
+
+    /// <summary>
+    /// 편집기가 올린 "이 파일의 이 줄로"(참조 창 더블 클릭). 프로젝트 파일이면 그 탭을 열어 가고, 아니면 한 파일짜리 편집기 안에서 간다.
+    /// </summary>
+    /// <remarks>탭 편집기의 데이터 문맥은 문서고 공용 설정이 이 워크벤치라, 명령도 여기 둔다 - 화면 VM 까지 거슬러 오르면 떠 있는 창에서 끊긴다.</remarks>
+    public DelegateCommand<Markup.EditorNavigation> NavigateCommand => _navigateCommand ??= new DelegateCommand<Markup.EditorNavigation>(target =>
+    {
+        if (target is null || target.Line <= 0) return;
+
+        if (IsProject && !string.IsNullOrEmpty(target.FilePath) && System.IO.File.Exists(target.FilePath))
+        {
+            Project.OpenFile(target.FilePath).GoToLine(target.Line);
+            return;
+        }
+
+        LineRequest = new Markup.EditorLineRequest(target.Line);
+    });
+
+    private DelegateCommand<Markup.EditorNavigation>? _navigateCommand;
+
     private const string ProjectPathKey = "ScriptProjectPath";
     private const string ProjectDocumentsKey = "ScriptProjectDocuments";
     private const string ProjectActiveKey = "ScriptProjectActive";

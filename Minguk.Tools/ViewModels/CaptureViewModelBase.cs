@@ -225,8 +225,17 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     public CaptureTarget? SelectedTarget
     {
         get => GetProperty(() => SelectedTarget);
-        set => SetProperty(() => SelectedTarget, value, () => DoStartCommand.RaiseCanExecuteChanged());
+        set => SetProperty(() => SelectedTarget, value, () =>
+        {
+            DoStartCommand.RaiseCanExecuteChanged();
+
+            // 사람이 고른 것만 "원하는 대상" 으로 기억한다. 목록을 훑다 없어서 임시로 잡힌 것(모니터)을 기억하면
+            // 게임을 켜고 새로 고침해도 안 돌아오고, 그대로 저장돼 다음 실행부터 게임을 잊는다(실측 2026-09-13).
+            if (!_isRefreshingTargets && value is not null) _lastSelectedTargetDisplay = value.Display;
+        });
     }
+
+    private bool _isRefreshingTargets;
 
     public string? StatusText
     {
@@ -462,8 +471,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         SetSetting(nameof(IsElementInspectEnabled), IsElementInspectEnabled);
         SetSetting(nameof(PreviewZoom), PreviewZoom);
 
-        if (SelectedTarget is not null)
-            SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));
+        // 지금 선택이 아니라 사람이 고른 것을 남긴다 - 임시로 잡힌 모니터를 남기면 다음 실행부터 게임을 잊는다.
+        if (!string.IsNullOrEmpty(_lastSelectedTargetDisplay))
+            SetSetting(nameof(SelectedTarget), Base64Utility.Encode(_lastSelectedTargetDisplay));
     }
 
     protected override void OnLoaded()
@@ -485,6 +495,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// <summary>캡처할 수 있는 창과 모니터를 다시 훑는다.</summary>
     private void RefreshTargets()
     {
+        _isRefreshingTargets = true;
+
         try
         {
             var previouslySelected = SelectedTarget;
@@ -498,20 +510,27 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             foreach (var window in CaptureTarget.EnumerateWindows().OrderBy(target => target.ProcessName).ThenBy(target => target.Title))
                 Targets.Add(window);
 
-            // ① 방금 전까지 보던 것 → ② 지난 실행에서 고른 것 → ③ 목록의 첫 번째
-            SelectedTarget = Targets.FirstOrDefault(target => target.Handle == previouslySelected?.Handle && target.Kind == previouslySelected.Kind)
-                             ?? Targets.FirstOrDefault(target => target.Display == _lastSelectedTargetDisplay)
+            // ① 사람이 고른 것(이번에 목록에 있으면) → ② 방금 전까지 보던 것 → ③ 목록의 첫 번째.
+            // 예전에는 ②가 먼저라, 앱을 켤 때 게임이 없어 모니터가 임시로 잡히면 게임을 켜고 새로 고침해도 모니터에 머물렀다.
+            SelectedTarget = Targets.FirstOrDefault(target => target.Display == _lastSelectedTargetDisplay)
+                             ?? Targets.FirstOrDefault(target => target.Handle == previouslySelected?.Handle && target.Kind == previouslySelected.Kind)
                              ?? Targets.FirstOrDefault();
 
             var hasSavedTarget = Targets.Any(target => target.Display == _lastSelectedTargetDisplay);
             Logger.Debug($"대상 복구: 저장='{_lastSelectedTargetDisplay}' / 후보 {Targets.Count}개 / 일치 {hasSavedTarget} / 선택='{SelectedTarget?.Display}'");
 
-            StatusText = $"대상 {Targets.Count}개 (모니터 + 창)";
+            StatusText = hasSavedTarget || string.IsNullOrEmpty(_lastSelectedTargetDisplay)
+                ? $"대상 {Targets.Count}개 (모니터 + 창)"
+                : $"고른 대상 '{_lastSelectedTargetDisplay}' 이(가) 지금 없어 '{SelectedTarget?.Display}' 를 잡았습니다 - 게임을 켠 뒤 새로 고침하면 돌아갑니다.";
         }
         catch (Exception ex)
         {
             Logger.Error(JsonConvert.SerializeObject(ex));
             ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName());
+        }
+        finally
+        {
+            _isRefreshingTargets = false;
         }
     }
 
@@ -1482,6 +1501,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     private void OnShowPreviewChanged()
     {
+        RaisePropertyChanged(nameof(PreviewHint));
+
         if (ShowPreview)
         {
             // GPU 경로는 픽셀을 CPU 로 내리지 않으므로 리드백이 필요 없다.
@@ -1669,9 +1690,23 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     // ── 정리 ─────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 미리보기 자리가 비어 있을 때 할 일. 보일 것이 있으면 빈 글.
+    /// </summary>
+    /// <remarks>
+    /// 새 화면(도킹)에서 미리보기가 "안 나온다" 고 했는데, 로그를 보니 캡처 시작을 한 번도 안 눌렀다 - 스크립트 실행(▶ 시작)만
+    /// 눌렀고 캡처 시작 버튼은 아이콘뿐이었다. 빈 창만 보이면 무엇을 눌러야 할지 모른다.
+    /// </remarks>
+    public string PreviewHint => !IsRunning
+        ? "캡처가 꺼져 있습니다 - 도구 모음 '캡처' 에서 대상을 고르고 [캡처 시작] 을 누르면 여기에 대상 화면이 나옵니다."
+        : !ShowPreview
+            ? "캡처는 도는 중입니다 - 도구 모음 '캡처' 의 [미리보기] 를 켜면 여기에 보입니다."
+            : string.Empty;
+
     private void OnRunningChanged()
     {
         RaisePropertyChanged(() => IsNotRunning);
+        RaisePropertyChanged(nameof(PreviewHint));
 
         DoStartCommand.RaiseCanExecuteChanged();
         DoStopCommand.RaiseCanExecuteChanged();

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -124,12 +124,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>오류 목록 더블 클릭 - 그 파일을 열고 그 줄로.</summary>
     public DelegateCommand<object?> GoToErrorCommand { get; }
 
-    /// <summary>한 파일짜리 편집기에 "이 줄로" 요청.</summary>
-    public EditorLineRequest? SingleLineRequest
-    {
-        get => GetProperty(() => SingleLineRequest);
-        set => SetProperty(() => SingleLineRequest, value);
-    }
+
 
     /// <summary>한 파일짜리 편집기의 캐럿 줄·열. 상태 표시줄이 본다.</summary>
     public int SingleCaretLine { get => GetProperty(() => SingleCaretLine); set => SetProperty(() => SingleCaretLine, value); }
@@ -163,7 +158,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             return;
         }
 
-        SingleLineRequest = new EditorLineRequest(error.Line);
+        Script.LineRequest = new EditorLineRequest(error.Line);
     });
 
     // ── 도킹 배치 ────────────────────────────────────────────────────────

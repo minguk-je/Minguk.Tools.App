@@ -66,6 +66,7 @@ internal static class ViewSmokeProbe
             failures += CheckErrorUnderline();
             failures += CheckCompletion();
             failures += CheckSemanticColoring();
+            failures += CheckCodeLens();
 
             app.Shutdown();
         });
@@ -756,6 +757,89 @@ internal static class ViewSmokeProbe
         catch (Exception ex)
         {
             Console.WriteLine($"[FAIL] C# 분류 덧칠 — {ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// 참조 표시 - 선언 줄 위에 "참조 N개" 가 끼워져 그 줄만 높아지는지, 참조 창에 부르는 곳이 들어가는지.
+    /// </summary>
+    private static int CheckCodeLens()
+    {
+        try
+        {
+            var source = Minguk.Tools.Input.Scripting.ScriptCompletionSourceFactory.Create(Minguk.Tools.Input.Scripting.ScriptLanguage.CSharp, isLive: true);
+            var editor = new Minguk.Tools.Markup.ScriptEditor
+            {
+                Width = 500, Height = 200, FontSize = 13,
+                SyntaxHighlighting = Minguk.Tools.Helper.SequenceScriptHighlighting.Dark,
+                CompletionSource = source
+            };
+
+            var host = new Window { Width = 520, Height = 240, ShowInTaskbar = false, WindowStyle = WindowStyle.None, Left = -5000, Top = -5000, Content = editor };
+            host.Show();
+
+            try
+            {
+                const string text = "int 둘() => 2;\n출력(둘());\n출력(둘());\n";
+                var done = false;
+                editor.LensesApplied += (_, _) => done = true;
+                editor.Text = text;
+
+                var deadline = DateTime.UtcNow.AddSeconds(20);
+                while (!done && DateTime.UtcNow < deadline)
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                editor.TextArea.TextView.EnsureVisualLines();
+
+                var view = editor.TextArea.TextView;
+                var declared = view.GetOrConstructVisualLine(editor.Document.GetLineByNumber(1)).Height;
+                var plain = view.GetOrConstructVisualLine(editor.Document.GetLineByNumber(2)).Height;
+
+                // 참조 창: 선언(둘)의 자리로 찾아 창에 넣는다.
+                var finder = (Minguk.Tools.Input.Scripting.IScriptReferenceFinder)source!;
+                var references = finder.FindReferencesAsync(text, text.IndexOf("둘", StringComparison.Ordinal)).GetAwaiter().GetResult();
+                editor.ShowReferences(references, editor);
+
+                var panel = editor.ReferencesPanel;
+                var rows = (panel?.FindName("Grid") as DevExpress.Xpf.Grid.GridControl)?.ItemsSource as System.Collections.ICollection;
+
+                var ok = done && editor.CodeLensCount == 1 && declared > plain * 1.5 && panel is not null && rows?.Count == 2;
+
+                // 눈으로 볼 수 있게 남긴다(화면 밖이라 코드 글자 층은 안 그려질 수 있다 - "참조" 글자와 줄 높이만 본다).
+                try
+                {
+                    var png = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "minguk-codelens.png");
+                    var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)editor.ActualWidth, (int)editor.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                    var visual = new System.Windows.Media.DrawingVisual();
+                    using (var dc = visual.RenderOpen())
+                    {
+                        dc.DrawRectangle(System.Windows.Media.Brushes.White, null, new Rect(0, 0, editor.ActualWidth, editor.ActualHeight));
+                        dc.DrawRectangle(new System.Windows.Media.VisualBrush(editor), null, new Rect(0, 0, editor.ActualWidth, editor.ActualHeight));
+                    }
+                    bitmap.Render(visual);
+                    var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+                    using var stream = System.IO.File.Create(png);
+                    encoder.Save(stream);
+                    Console.WriteLine($"[INFO] 참조 표시 그림: {png}");
+                }
+                catch (Exception) { }
+
+                Console.WriteLine(ok
+                    ? $"[PASS] 참조 표시 — \"참조 2개\" 1곳, 선언 줄 {declared:0}px / 보통 줄 {plain:0}px, 참조 창 {rows!.Count}줄"
+                    : $"[FAIL] 참조 표시 — 셈 끝 {done}, 표시 {editor.CodeLensCount}곳, 선언 줄 {declared:0}px / 보통 줄 {plain:0}px, 참조 창 {(panel is null ? "없음" : $"{rows?.Count}줄")}");
+
+                return ok ? 0 : 1;
+            }
+            finally
+            {
+                host.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 참조 표시 — {ex.GetType().Name}: {ex.Message}");
             return 1;
         }
     }

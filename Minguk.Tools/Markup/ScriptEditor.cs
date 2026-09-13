@@ -98,10 +98,14 @@ public sealed class ScriptEditor : TextEditor
 
         // 컴파일러 분류로 덧칠한다. xshd 색칠기(맨 앞)보다 뒤에 있어야 이긴다.
         TextArea.TextView.LineTransformers.Add(_semantic);
+
+        // 선언 줄 위의 "참조 N개".
+        TextArea.TextView.ElementGenerators.Add(_codeLens);
+        _codeLens.Clicked += OnCodeLensClicked;
         _classifyTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(ClassifyDelayMs), DispatcherPriority.Background, (_, _) => RunClassify(), Dispatcher);
         _classifyTimer.Stop();
         TextChanged += (_, _) => ScheduleClassify(immediately: false);
-        DocumentChanged += (_, _) => { _semantic.Clear(); ScheduleClassify(immediately: true); };
+        DocumentChanged += (_, _) => { _semantic.Clear(); _codeLens.Clear(); ScheduleClassify(immediately: true); };
         Unloaded += (_, _) => { _classifyTimer.Stop(); _classifyCts?.Cancel(); };
 
         TextArea.Caret.PositionChanged += OnCaretMoved;
@@ -239,9 +243,10 @@ public sealed class ScriptEditor : TextEditor
         if (Language != ScriptLanguage.CSharp || CompletionSource is not IScriptClassifier)
         {
             // 남은 C# 색이 다른 언어의 글을 칠하면 안 된다.
-            if (_semantic.Count > 0)
+            if (_semantic.Count > 0 || _codeLens.Count > 0)
             {
                 _semantic.Clear();
+                _codeLens.Clear();
                 TextArea.TextView.Redraw();
             }
 
@@ -287,6 +292,21 @@ public sealed class ScriptEditor : TextEditor
 
             TextArea.TextView.Redraw();
             Classified?.Invoke(this, EventArgs.Empty);
+
+            // 참조 표시는 분류 뒤에 센다 - 분류가 먼저 보여야 치는 동안 색이 늦지 않는다. 컴파일은 작업 공간이 들고 있어 두 번째가 빠르다.
+            if (CompletionSource is IScriptReferenceFinder finder)
+            {
+                var lenses = await System.Threading.Tasks.Task.Run(() => finder.GetLensesAsync(text, token, filePath), token);
+
+                if (token.IsCancellationRequested || !ReferenceEquals(document, Document)) return;
+
+                _codeLens.FontSize = FontSize;
+                _codeLens.Foreground = LineNumbersForeground ?? Brushes.Gray;
+
+                if (_codeLens.Apply(document, version, lenses)) TextArea.TextView.Redraw();
+
+                LensesApplied?.Invoke(this, EventArgs.Empty);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -294,9 +314,96 @@ public sealed class ScriptEditor : TextEditor
         }
         catch (Exception ex)
         {
-            NLog.LogManager.GetCurrentClassLogger().Warn(ex, "C# 분류에 실패했다 - 강조 정의 색만 쓴다");
+            NLog.LogManager.GetCurrentClassLogger().Warn(ex, "C# 분류·참조 표시에 실패했다 - 강조 정의 색만 쓴다");
         }
     }
+
+    // ── 참조 표시(CodeLens) ──────────────────────────────────────────────
+
+    private readonly CodeLensGenerator _codeLens = new();
+    private System.Windows.Controls.Primitives.Popup? _referencesPopup;
+
+    /// <summary>지금 그려진 "참조 N개" 수. 검증에서 본다.</summary>
+    public int CodeLensCount => _codeLens.Count;
+
+    /// <summary>참조 표시를 새로 셀 때마다. 검증이 기다리는 데 쓴다.</summary>
+    public event EventHandler? LensesApplied;
+
+    public static readonly DependencyProperty NavigateCommandProperty = DependencyProperty.Register(
+        nameof(NavigateCommand), typeof(ICommand), typeof(ScriptEditor), new PropertyMetadata(null));
+
+    /// <summary>다른 파일의 줄로 가야 할 때 올린다(<see cref="EditorNavigation"/>). 같은 파일이면 편집기가 스스로 간다.</summary>
+    public ICommand? NavigateCommand
+    {
+        get => (ICommand?)GetValue(NavigateCommandProperty);
+        set => SetValue(NavigateCommandProperty, value);
+    }
+
+    /// <summary>
+    /// "참조 N개" 를 눌렀다 - 부르는 곳을 찾아 VS 처럼 편집기 위에 창을 띄운다.
+    /// </summary>
+    private async void OnCodeLensClicked(int offset, FrameworkElement anchor)
+    {
+        if (CompletionSource is not IScriptReferenceFinder finder) return;
+
+        try
+        {
+            var text = Document.Text;
+            var filePath = FilePath;
+            var references = await System.Threading.Tasks.Task.Run(() => finder.FindReferencesAsync(text, offset, default, filePath));
+
+            ShowReferences(references, anchor);
+        }
+        catch (Exception ex)
+        {
+            NLog.LogManager.GetCurrentClassLogger().Warn(ex, "참조를 찾지 못했다");
+        }
+    }
+
+    /// <summary>참조 창을 띄운다. 검증도 이것을 부른다.</summary>
+    public void ShowReferences(IReadOnlyList<ScriptReference> references, FrameworkElement? anchor)
+    {
+        _referencesPopup?.SetCurrentValue(System.Windows.Controls.Primitives.Popup.IsOpenProperty, false);
+
+        // VS 처럼 "경로 (개수)" 로 묶는다. 경로는 이 파일 폴더에서 본 상대 경로 - 전체 경로는 너무 길다.
+        var baseFolder = string.IsNullOrEmpty(FilePath) ? null : System.IO.Path.GetDirectoryName(FilePath);
+
+        string Display(string path) => string.IsNullOrEmpty(path) ? "(이 스크립트)"
+            : baseFolder is null ? System.IO.Path.GetFileName(path)
+            : System.IO.Path.GetRelativePath(baseFolder, path);
+
+        var rows = references
+            .GroupBy(r => r.FilePath, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(g => g.Select(r => new CodeLensReferenceRow(r, $"{Display(g.Key)} ({g.Count()})")))
+            .ToList();
+
+        var panel = new Views.Parts.CodeLensReferencesPanel { Rows = rows };
+        var popup = new System.Windows.Controls.Primitives.Popup
+        {
+            Child = panel,
+            PlacementTarget = anchor ?? this,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            StaysOpen = false,
+            AllowsTransparency = true
+        };
+
+        panel.Navigate += (_, row) =>
+        {
+            popup.IsOpen = false;
+
+            if (string.IsNullOrEmpty(row.FilePath) || string.Equals(row.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+                OnLineRequested(new EditorLineRequest(row.Line));
+            else if (NavigateCommand?.CanExecute(null) != false)
+                NavigateCommand?.Execute(new EditorNavigation(row.FilePath, row.Line));
+        };
+
+        _referencesPopup = popup;
+        popup.IsOpen = true;
+    }
+
+    /// <summary>지금 떠 있는 참조 창. 검증에서 본다.</summary>
+    public Views.Parts.CodeLensReferencesPanel? ReferencesPanel
+        => _referencesPopup is { IsOpen: true, Child: Views.Parts.CodeLensReferencesPanel panel } ? panel : null;
 
     private void ApplyIndentation()
         => TextArea.IndentationStrategy = Language == ScriptLanguage.Python

@@ -1,0 +1,68 @@
+<UserControl x:Class="Minguk.Tools.Views.Parts.CodeLensReferencesPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
+             xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+             xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
+             xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
+             Width="640"
+             MaxHeight="320"
+             FontFamily="D2Coding, Consolas, Courier New"
+             FontSize="12">
+
+    <!--
+        참조 창 - VS 의 CodeLens "참조 N개" 를 누르면 뜨는 것.
+        파일별로 묶고(펼치고 접기), 줄마다 "줄 : 코드" 에 찾은 낱말을 칠한다. 더블 클릭하면 그 줄로 간다. 아래에 "모두 축소".
+        편집기(markup:ScriptEditor)가 코드로 만들어 팝업에 담는다 - 줄은 Rows, 더블 클릭은 Navigate 이벤트.
+    -->
+    <Border Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+            BorderBrush="#FF3C7FB1"
+            BorderThickness="1">
+        <dxlc:LayoutControl Padding="0"
+                            Orientation="Vertical">
+            <controls:BaseGridControl x:Name="Grid"
+                                      AutoExpandAllGroups="True"
+                                      AutoGenerateColumns="None"
+                                      SelectionMode="None">
+                <dxg:GridControl.Columns>
+                    <dxg:GridColumn FieldName="Group"
+                                    GroupIndex="0"
+                                    Visible="False" />
+                    <dxg:GridColumn Width="*"
+                                    FieldName="Match">
+                        <dxg:GridColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Margin="4,1"
+                                           TextTrimming="CharacterEllipsis">
+                                    <Run Foreground="Gray"
+                                         Text="{Binding RowData.Row.LineLabel, Mode=OneWay}" />
+                                    <Run Text="{Binding RowData.Row.Before, Mode=OneWay}" />
+                                    <Run Background="#FFB9D7F5"
+                                         Text="{Binding RowData.Row.Match, Mode=OneWay}" />
+                                    <Run Text="{Binding RowData.Row.After, Mode=OneWay}" />
+                                </TextBlock>
+                            </DataTemplate>
+                        </dxg:GridColumn.CellTemplate>
+                    </dxg:GridColumn>
+                </dxg:GridControl.Columns>
+                <dxg:GridControl.View>
+                    <controls:BaseTableView x:Name="View"
+                                            AllowEditing="False"
+                                            AutoWidth="True"
+                                            NavigationStyle="Row"
+                                            ShowColumnHeaders="False"
+                                            ShowGroupPanel="False"
+                                            ShowIndicator="False"
+                                            ShowSearchPanelMode="Never" />
+                </dxg:GridControl.View>
+            </controls:BaseGridControl>
+
+            <dxlc:LayoutGroup Orientation="Horizontal">
+                <dx:SimpleButton x:Name="CollapseAllButton"
+                                 HorizontalAlignment="Left"
+                                 Content="모두 축소"
+                                 ButtonKind="Simple" />
+            </dxlc:LayoutGroup>
+        </dxlc:LayoutControl>
+    </Border>
+</UserControl>

@@ -14,6 +14,7 @@
              xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
              xmlns:markup="clr-namespace:Minguk.Tools.Markup"
              xmlns:parts="clr-namespace:Minguk.Tools.Views.Parts"
+             xmlns:system="clr-namespace:System;assembly=System.Runtime"
              xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
              Style="{DynamicResource BaseControlStyle}"
              FontFamily="{DynamicResource BaseFontFamily}"
@@ -62,6 +63,7 @@
                                          Language="{Binding Settings.SelectedLanguage, Mode=OneWay}"
                                          LineNumbersForeground="{Binding Settings.EditorLineNumberForeground}"
                                          LineRequest="{Binding LineRequest, Mode=OneWay}"
+                                         NavigateCommand="{Binding Settings.NavigateCommand}"
                                          ShowLineNumbers="True"
                                          SyntaxHighlighting="{Binding Settings.Highlighting}"
                                          WordWrap="False" />
@@ -308,9 +310,9 @@
                                 Caption="디버그">
                 <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                    Command="{Binding RunOrContinueCommand}"
-                                   Content="시작"
+                                   Content="스크립트 실행"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
-                                   Hint="시작/계속 (F5) - 시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다." />
+                                   Hint="스크립트 시작/계속 (F5) - 캡처가 켜져 있어야 몹·글자를 본다.시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다." />
                 <dxb:BarButtonItem Command="{Binding StepCommand}"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_goto_next.png'}"
                                    Hint="프로시저 단위 실행 (F10) - JavaScript·Python 만" />
@@ -351,12 +353,17 @@
                                                   ItemsSource="{Binding Targets}" />
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
-                <dxb:BarButtonItem Command="{Binding DoStartCommand}"
+                <!-- 글자를 붙인다 - 아이콘만 두었더니 디버그의 "▶ 시작"(스크립트)과 헷갈려 캡처를 못 켰다(실측). -->
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding DoStartCommand}"
+                                   Content="캡처 시작"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_play.png'}"
-                                   Hint="캡처 시작" />
-                <dxb:BarButtonItem Command="{Binding DoStopCommand}"
+                                   Hint="고른 대상을 잡기 시작한다. 미리보기·몹 찾기·글자 읽기·스크립트의 눈이 이것이다." />
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding DoStopCommand}"
+                                   Content="캡처 중지"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}"
-                                   Hint="캡처 중지" />
+                                   Hint="캡처를 멈춘다." />
                 <dxb:BarEditItem Content="fps"
                                  EditValue="{Binding CaptureTargetFps}"
                                  EditWidth="60"
@@ -373,6 +380,23 @@
                 <dxb:BarCheckItem Content="미리보기"
                                   IsChecked="{Binding ShowPreview}"
                                   Hint="캡처 중인 화면을 미리보기 창에 그대로 보여 준다." />
+                <!--
+                    SpinEdit 는 값을 Decimal 로 내준다. EditValueType 을 안 주면 double 인 PreviewZoom 으로 못 바꿔
+                    바인딩이 조용히 실패한다(로그: ConvertBack cannot convert value '1.25' (type 'Decimal')) - 칸은 바뀌는데 확대가 안 됐다.
+                -->
+                <dxb:BarEditItem Content="확대"
+                                 EditValue="{Binding PreviewZoom, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={markup:ToDoubleConverter}}"
+                                 EditWidth="56"
+                                 Hint="미리보기를 키운다. 1 이면 창에 맞춤. 영역을 손보는 중에는 휠로도 된다.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:SpinEditSettings Increment="0.25"
+                                              MaxValue="8"
+                                              MinValue="1" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
+                <dxb:BarButtonItem Command="{Binding ZoomResetCommand}"
+                                   Content="맞춤"
+                                   Hint="확대를 1 로 되돌린다." />
                 <dxb:BarItemSeparator />
                 <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                    Command="{Binding CollectFrameCommand}"
@@ -540,6 +564,15 @@
                             <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
                             <parts:PreviewForwardBar DockPanel.Dock="Top" />
 
+                            <!-- 비어 있으면 할 일을 말한다. 빈 창만 보이면 무엇을 눌러야 할지 모른다(실측 - 캡처 시작을 못 찾았다). -->
+                            <dxe:TextEdit DockPanel.Dock="Top"
+                                          Margin="8"
+                                          EditValue="{Binding PreviewHint, Mode=OneWay}"
+                                          IsReadOnly="True"
+                                          ShowBorder="False"
+                                          TextWrapping="Wrap"
+                                          Visibility="{Binding PreviewHint, Converter={dxmvvm:StringToVisibilityConverter}}" />
+
                             <parts:CapturePreviewPanel Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <parts:CapturePreviewPanel.Overlay>
                                     <markup:DetectionOverlay Detections="{Binding Detections}"
@@ -604,7 +637,8 @@
                                                      IsReadOnly="{Binding Script.IsLocked}"
                                                      Language="{Binding Script.SelectedLanguage, Mode=OneWay}"
                                                      LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
-                                                     LineRequest="{Binding SingleLineRequest, Mode=OneWay}"
+                                                     LineRequest="{Binding Script.LineRequest, Mode=OneWay}"
+                                                     NavigateCommand="{Binding Script.NavigateCommand}"
                                                      ShowLineNumbers="True"
                                                      SyntaxHighlighting="{Binding Script.Highlighting}"
                                                      WordWrap="False">
@@ -849,24 +883,28 @@
                                               Orientation="Horizontal">
                                 <dxlc:LayoutItem Label="가로%">
                                     <dxe:SpinEdit EditValue="{Binding SelectedRegionX, UpdateSourceTrigger=PropertyChanged}"
+                                                  EditValueType="{x:Type system:Double}"
                                                   Increment="0.1"
                                                   MaxValue="99.9"
                                                   MinValue="0" />
                                 </dxlc:LayoutItem>
                                 <dxlc:LayoutItem Label="세로%">
                                     <dxe:SpinEdit EditValue="{Binding SelectedRegionY, UpdateSourceTrigger=PropertyChanged}"
+                                                  EditValueType="{x:Type system:Double}"
                                                   Increment="0.1"
                                                   MaxValue="99.9"
                                                   MinValue="0" />
                                 </dxlc:LayoutItem>
                                 <dxlc:LayoutItem Label="너비%">
                                     <dxe:SpinEdit EditValue="{Binding SelectedRegionWidth, UpdateSourceTrigger=PropertyChanged}"
+                                                  EditValueType="{x:Type system:Double}"
                                                   Increment="0.1"
                                                   MaxValue="100"
                                                   MinValue="0.4" />
                                 </dxlc:LayoutItem>
                                 <dxlc:LayoutItem Label="높이%">
                                     <dxe:SpinEdit EditValue="{Binding SelectedRegionHeight, UpdateSourceTrigger=PropertyChanged}"
+                                                  EditValueType="{x:Type system:Double}"
                                                   Increment="0.1"
                                                   MaxValue="100"
                                                   MinValue="0.4" />

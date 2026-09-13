@@ -310,6 +310,13 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   가장 많은 색을 본다. ClearType 가장자리가 파랗게·붉게 번지므로 한두 픽셀짜리 색은 믿지 않고 크게 잘라 눈으로도 본다. 정규식이라 종류를 어림한다 - 이름 뒤 `(` 면 메서드,
   점 뒤면 멤버(본문색), 나머지 이름은 지역 변수. 같은 자리에서는 먼저 적힌 규칙이 이기므로 키워드가 이름 규칙보다 앞이다.
   바꾸고 나면 AvalonEdit 의 `DocumentHighlighter.HighlightLine` 으로 줄마다 색 이름을 찍어 본다.
+- **참조 표시(CodeLens)** - 형식·메서드(스크립트 안 함수)·속성·필드·이벤트·스크립트 최상위 변수 선언 위에 "참조 N개"(`IScriptReferenceFinder`).
+  - 세는 법: 프로젝트 소스를 **시작 파일까지** `#load` 로 이은 컴파일의 **모든 구문 트리**에서 이름마다 `GetSymbolInfo` 로 견준다.
+    `SymbolFinder` 는 작업 공간의 문서만 뒤져 `#load` 한 파일을 못 본다.
+  - 그리는 법(`Markup/CodeLensGenerator`): AvalonEdit 에 줄 위 여백이 없어, 선언 줄의 들여쓰기 뒤에 **폭 0·문서 길이 0**, 키가
+    "참조 한 줄 + 글자 높이" 인 요소를 끼운다 - 그 줄만 높아지고 코드는 요소 밑선에 앉는다(실측 17px → 32px). 자리는 `TextAnchor` 로 문서에 맨다.
+  - 분류가 끝난 뒤 센다(색이 먼저). 누르면 참조 창(GridControl, 파일별 묶음, "줄 : 코드" 에 낱말 칠함, 모두 축소), 더블 클릭은 같은 파일이면
+    편집기가 가고 다른 파일이면 `NavigateCommand`(워크벤치)가 탭을 연다.
 - **C# 은 컴파일러 분류로 덧칠한다**(`IScriptClassifier` · `RoslynCompletionSource.ClassifyAsync` · `Markup/SemanticColorizer`).
   xshd 정규식은 이름 종류를 몰라 점 없는 필드·스크립트 안 함수·형식을 틀리게 칠했다. Roslyn `Classifier.GetClassifiedSpansAsync` 가
   VS 와 같은 분류 이름(`method name`·`keyword - control`…)을 주고, 그것을 `ScriptTokenKind` 로 옮긴다 - **이름이 곧 xshd 의 Color name** 이라

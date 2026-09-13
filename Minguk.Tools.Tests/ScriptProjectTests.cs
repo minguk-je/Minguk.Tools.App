@@ -114,6 +114,41 @@ internal static partial class Program
                       $"완성 {string.Join(", ", suggestions.Where(s => s.Text.StartsWith('더')).Select(s => s.Text))} / 더하기={call.Kind}({call.Length}) / 합={local.Kind}({local.Length})");
             }
 
+            // ── 참조 표시(CodeLens): 다른 파일에서 부르는 것까지 세고, 그 자리를 파일·줄로 준다 ──
+            {
+                const string entry = "var 합 = 더하기(1, 2);\n출력(더하기(합, 3));\nint 셋() => 3;\n출력(셋());\n";
+                var helperPath = loaded.FullPath("공통/계산.csx");
+                var helperText = File.ReadAllText(helperPath);
+                var open = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [loaded.EntryPath] = entry };
+
+                var finder = new RoslynCompletionSource(typeof(LiveScriptApi))
+                {
+                    UnitFor = path => loaded.Find(path) is null ? null : loaded.ToUnit(open)
+                };
+
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var helperLenses = finder.GetLensesAsync(helperText, filePath: helperPath).GetAwaiter().GetResult();
+                var entryLenses = finder.GetLensesAsync(entry, filePath: loaded.EntryPath).GetAwaiter().GetResult();
+                watch.Stop();
+
+                var add = helperLenses.FirstOrDefault(l => l.Name == "더하기");
+                var sum = entryLenses.FirstOrDefault(l => l.Name == "합");
+                var three = entryLenses.FirstOrDefault(l => l.Name == "셋");
+
+                Check("참조 표시: 도우미 파일의 함수를 시작 파일에서 부른 수, 최상위 변수·함수의 수",
+                      add.Count == 2 && add.Line == 1 && sum.Count == 1 && sum.Line == 1 && three.Count == 1 && three.Line == 3,
+                      $"더하기 {add.Count}개(줄 {add.Line}) · 합 {sum.Count}개(줄 {sum.Line}) · 셋 {three.Count}개(줄 {three.Line}) · {watch.ElapsedMilliseconds}ms");
+
+                var references = finder.FindReferencesAsync(helperText, add.Offset, filePath: helperPath).GetAwaiter().GetResult();
+
+                Check("참조 표시: 참조 창은 부르는 곳을 파일·줄·열과 그 줄 글로 준다",
+                      references.Count == 2 &&
+                      references.All(r => string.Equals(r.FilePath, loaded.EntryPath, StringComparison.OrdinalIgnoreCase)) &&
+                      references[0].Line == 1 && references[1].Line == 2 &&
+                      references[0].LineText.Substring(references[0].Column, references[0].Length) == "더하기",
+                      string.Join(" / ", references.Select(r => $"{Path.GetFileName(r.FilePath)}:{r.Line}:{r.Column} \"{r.LineText}\"")));
+            }
+
             // ── 파일 옮기기: 디스크와 목록이 같이 간다 ──
             {
                 loaded.Move("공통", "라이브러리");
