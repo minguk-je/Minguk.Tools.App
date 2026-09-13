@@ -112,7 +112,7 @@ public sealed class JavaScriptEngine : IScriptEngine
 
     /// <summary>
     /// 실시간으로 돌린다. 시간 상한이 없다 - 게임을 보며 도는 스크립트는 사용자가 멈출 때까지 돈다.
-    /// 멈추는 것은 토큰(중지·F9·시간 상한)이다.
+    /// 멈추는 것은 토큰(중지·비상 정지·시간 상한)이다.
     /// </summary>
     private static IReadOnlyList<ScriptError> ExecuteLive(string source, LiveScriptApi api, ScriptDebugSession? debug, CancellationToken token)
     {

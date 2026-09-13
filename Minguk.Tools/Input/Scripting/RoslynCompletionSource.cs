@@ -26,7 +26,7 @@ namespace Minguk.Tools.Input.Scripting;
 ///
 /// 요청마다 문서의 글만 갈아 끼운다(<c>WithText</c>). 작업 공간을 다시 만들면 MEF 구성부터 다시 해 몇 초가 든다.
 /// </remarks>
-public sealed class RoslynCompletionSource : IScriptCompletionSource
+public sealed class RoslynCompletionSource : IScriptCompletionSource, IScriptClassifier
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -38,22 +38,130 @@ public sealed class RoslynCompletionSource : IScriptCompletionSource
     /// <param name="globalsType">스크립트가 전역처럼 부르는 것들의 타입. 계획 모드는 SequenceScriptApi, 실시간은 LiveScriptApi.</param>
     public RoslynCompletionSource(Type globalsType) => _globalsType = globalsType;
 
-    public async Task<IReadOnlyList<CompletionSuggestion>> GetAsync(string text, int position, CancellationToken token = default)
+    /// <summary>
+    /// 파일 경로로 그 파일이 든 프로젝트의 컴파일 한 벌을 준다. 프로젝트가 아니면 null. 화면(워크벤치)이 꽂는다.
+    /// </summary>
+    /// <remarks>저장 안 한 탭의 글도 담아야 한다 - 방금 다른 탭에 만든 함수가 완성에 나와야 한다.</remarks>
+    public Func<string, ScriptUnit?>? UnitFor { get; set; }
+
+    /// <summary>
+    /// 작업 공간의 문서에 이 글을 넣은 판과, 앞에 붙인 머리말 길이. 작업 공간 자체는 안 바뀐다 - 완성과 분류가 서로의 글을 밟지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 프로젝트 파일이면 같은 프로젝트의 다른 소스를 <c>#load</c> 로 앞에 붙인다(실행 때와 같은 방식). 그러면 다른 파일의 함수가
+    /// 완성과 색에 나온다. 자기 자신은 뺀다. 시작 파일이 아닌 파일에서는 시작 파일도 뺀다 - 실행 때 시작 파일은 맨 뒤라
+    /// 다른 파일에서 그 변수를 볼 수 없다.
+    /// </remarks>
+    private (Document Document, int Offset) DocumentFor(string? text, string? filePath)
     {
-        Document document;
+        var unit = filePath is null ? null : UnitFor?.Invoke(filePath);
 
         lock (_gate)
         {
             var workspace = EnsureWorkspace();
-            var current = workspace.CurrentSolution.GetDocument(_documentId!)!;
+            var solution = workspace.CurrentSolution;
+            var current = solution.GetDocument(_documentId!)!;
 
-            document = current.WithText(SourceText.From(text ?? string.Empty));
+            if (unit is null) return (current.WithText(SourceText.From(text ?? string.Empty)), 0);
+
+            var self = System.IO.Path.GetFullPath(filePath!);
+            var loads = unit.Sources.Where(s => !string.Equals(System.IO.Path.GetFullPath(s), self, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            var prelude = new System.Text.StringBuilder();
+            foreach (var load in loads) prelude.Append("#load \"").Append(load.Replace('\\', '/')).Append("\"\n");
+
+            // 다른 탭에서 고친 글을 읽게 한다. 이 파일 자신은 문서 글로 들어가므로 빼도 된다.
+            var baseDirectory = unit.ResourceRoot ?? System.IO.Path.GetDirectoryName(self);
+            var project = solution.GetProject(_documentId!.ProjectId)!;
+            var options = ((CSharpCompilationOptions)project.CompilationOptions!)
+                .WithSourceReferenceResolver(new ScriptSourceResolver(baseDirectory, unit.OpenTexts))
+                .WithMetadataReferenceResolver(Microsoft.CodeAnalysis.Scripting.ScriptMetadataResolver.Default.WithBaseDirectory(baseDirectory));
+
+            solution = solution
+                .WithProjectCompilationOptions(project.Id, options)
+                .WithProjectMetadataReferences(project.Id, [.. BaseReferences, .. unit.References.Where(System.IO.File.Exists).Select(r => MetadataReference.CreateFromFile(r))])
+                .WithDocumentFilePath(_documentId, self)
+                .WithDocumentText(_documentId, SourceText.From(prelude + (text ?? string.Empty)));
+
+            return (solution.GetDocument(_documentId)!, prelude.Length);
         }
+    }
+
+    private IReadOnlyList<MetadataReference>? _baseReferences;
+
+    private IReadOnlyList<MetadataReference> BaseReferences => _baseReferences ??= References();
+
+    /// <summary>
+    /// 낱말마다 VS 와 같은 분류를 받아 편집기가 칠할 종류로 옮긴다.
+    /// </summary>
+    /// <remarks>
+    /// 분류 이름은 VS 의 "글꼴 및 색" 항목 이름과 같다(<see cref="Microsoft.CodeAnalysis.Classification.ClassificationTypeNames"/>).
+    /// 한 자리에 둘이 오기도 한다 - "static symbol" 같은 덧붙임 분류는 색이 아니라 표시라 건넌다.
+    /// 구두점·연산자·공백은 안 준다. 본문색 그대로라 칠할 것이 없고, 토막 수만 몇 배로 는다.
+    /// </remarks>
+    public async Task<IReadOnlyList<ScriptToken>> ClassifyAsync(string text, CancellationToken token = default, string? filePath = null)
+    {
+        var (document, offset) = DocumentFor(text, filePath);
+        var length = text?.Length ?? 0;
+
+        var spans = await Microsoft.CodeAnalysis.Classification.Classifier
+            .GetClassifiedSpansAsync(document, new TextSpan(offset, length), token)
+            .ConfigureAwait(false);
+
+        if (token.IsCancellationRequested) return [];
+
+        var tokens = new List<ScriptToken>();
+
+        foreach (var span in spans)
+        {
+            if (Microsoft.CodeAnalysis.Classification.ClassificationTypeNames.AdditiveTypeNames.Contains(span.ClassificationType)) continue;
+            if (span.TextSpan.Start < offset) continue;
+
+            if (KindOf(span.ClassificationType) is { } kind)
+                tokens.Add(new ScriptToken(span.TextSpan.Start - offset, span.TextSpan.Length, kind));
+        }
+
+        return tokens;
+    }
+
+    private static ScriptTokenKind? KindOf(string classification)
+    {
+        switch (classification)
+        {
+            case "keyword - control": return ScriptTokenKind.ControlKeyword;
+            case "keyword": case "preprocessor keyword": return ScriptTokenKind.Keyword;
+
+            case "method name": case "extension method name": return ScriptTokenKind.Method;
+
+            case "field name": case "property name": case "event name": case "constant name": case "enum member name":
+                return ScriptTokenKind.Member;
+
+            case "local name": case "parameter name": case "range variable name":
+                return ScriptTokenKind.Local;
+
+            case "class name": case "record class name": case "struct name": case "record struct name":
+            case "interface name": case "enum name": case "delegate name": case "type parameter name": case "module name":
+                return ScriptTokenKind.Type;
+
+            case "namespace name": case "label name": return ScriptTokenKind.Plain;
+
+            case "string": case "string - verbatim": case "string - escape character": return ScriptTokenKind.String;
+            case "number": return ScriptTokenKind.Number;
+        }
+
+        return classification.StartsWith("comment", StringComparison.Ordinal) || classification.StartsWith("xml doc comment", StringComparison.Ordinal)
+            ? ScriptTokenKind.Comment
+            : null;
+    }
+
+    public async Task<IReadOnlyList<CompletionSuggestion>> GetAsync(string text, int position, CancellationToken token = default, string? filePath = null)
+    {
+        var (document, offset) = DocumentFor(text, filePath);
 
         var service = CompletionService.GetService(document);
         if (service is null) return [];
 
-        var clamped = Math.Clamp(position, 0, text?.Length ?? 0);
+        var clamped = Math.Clamp(position, 0, text?.Length ?? 0) + offset;
         var list = await service.GetCompletionsAsync(document, clamped, cancellationToken: token).ConfigureAwait(false);
 
         if (token.IsCancellationRequested) return [];
@@ -78,7 +186,8 @@ public sealed class RoslynCompletionSource : IScriptCompletionSource
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
             await GetAsync("T", 1).ConfigureAwait(false);
-            Logger.Debug($"C# 완성 예열 {watch.ElapsedMilliseconds}ms");
+            await ClassifyAsync("var a = 1;").ConfigureAwait(false);
+            Logger.Debug($"C# 완성·분류 예열 {watch.ElapsedMilliseconds}ms");
         }
         catch (Exception ex)
         {

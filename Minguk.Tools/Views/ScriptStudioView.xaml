@@ -334,6 +334,8 @@
                                                  RegionDraft="{Binding RegionDraft}"
                                                  Regions="{Binding Regions}"
                                                  RegionsRevision="{Binding RegionsRevision}"
+                                                 SelectedRegion="{Binding SelectedRegion}"
+                                                 ShowRegionHandles="{Binding IsRegionPicking}"
                                                  ShowRegions="{Binding IsRegionVisible}"
                                                  Source="{Binding PreviewImage}" />
                     </parts:CapturePreviewPanel.Overlay>
@@ -363,7 +365,7 @@
                                        Command="{Binding RunOrContinueCommand}"
                                        Content="실행"
                                        Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
-                                       ToolTip="F5 - 시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 멈춰 있으면 계속. 위 도구 줄의 입력 경로로 나가고, 도는 동안 F9 가 비상 정지다." />
+                                       ToolTip="F5 - 시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 멈춰 있으면 계속. 위 도구 줄의 입력 경로로 나가고, 도는 동안 Pause 가 비상 정지다." />
                     <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                        Command="{Binding StepCommand}"
                                        Content="한 줄"

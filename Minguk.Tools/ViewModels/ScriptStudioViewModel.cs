@@ -93,7 +93,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         else if (Player.IsIdle) Player.RunOnce();
     }
 
-    /// <summary>F6 - 대기 중이든 도는 중이든 멈춘다. F9(비상 정지)는 도는 동안만 걸리므로 대기 중에는 이것뿐이다.</summary>
+    /// <summary>F6 - 대기 중이든 도는 중이든 멈춘다. 비상 정지(Pause)는 도는 동안만 걸리므로 대기 중에는 이것뿐이다.</summary>
     private void StopByHotkey()
     {
         Logger.Debug($"중지 요청(F6): 쉬는 중={Player.IsIdle}");
@@ -148,7 +148,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         }
 
         StatusText = failed.Count == 0
-            ? $"단축키: {string.Join(" · ", live)} · 도는 동안 F9 비상 정지 · 마지막에 본 화면이 받습니다"
+            ? $"단축키: {string.Join(" · ", live)} · 도는 동안 Pause 비상 정지 · 마지막에 본 화면이 받습니다"
             : $"단축키: {string.Join(" · ", live)}  (등록 실패: {string.Join(", ", failed)} - 다른 프로그램이 쥐고 있습니다)";
     });
 

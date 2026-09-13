@@ -20,5 +20,6 @@ public sealed record CompletionSuggestion(string Text, string Display, string Ki
 public interface IScriptCompletionSource
 {
     /// <summary>글 전체와 캐럿 자리로 목록을 만든다. 오래 걸릴 수 있어 비동기다. 취소되면 빈 목록.</summary>
-    Task<IReadOnlyList<CompletionSuggestion>> GetAsync(string text, int position, CancellationToken token = default);
+    /// <param name="filePath">이 글이 든 파일. 프로젝트면 같은 프로젝트의 다른 파일도 본다. 모르면 null.</param>
+    Task<IReadOnlyList<CompletionSuggestion>> GetAsync(string text, int position, CancellationToken token = default, string? filePath = null);
 }

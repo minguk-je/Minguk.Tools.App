@@ -65,7 +65,15 @@ public sealed class ScriptEditor : TextEditor
         new PropertyMetadata(null, (d, e) => ((ScriptEditor)d).OnBreakpointsChanged(e)));
 
     public static readonly DependencyProperty CompletionSourceProperty = DependencyProperty.Register(
-        nameof(CompletionSource), typeof(IScriptCompletionSource), typeof(ScriptEditor), new PropertyMetadata(null));
+        nameof(CompletionSource), typeof(IScriptCompletionSource), typeof(ScriptEditor),
+        new PropertyMetadata(null, (d, _) => ((ScriptEditor)d).ScheduleClassify(immediately: true)));
+
+    /// <summary>분류를 다시 돌리기까지 기다리는 시간. 치는 동안에는 xshd 색으로 버틴다.</summary>
+    private const int ClassifyDelayMs = 250;
+
+    private readonly SemanticColorizer _semantic = new();
+    private readonly DispatcherTimer _classifyTimer;
+    private CancellationTokenSource? _classifyCts;
 
     public static readonly DependencyProperty CurrentLineProperty = DependencyProperty.Register(
         nameof(CurrentLine), typeof(int), typeof(ScriptEditor),
@@ -87,6 +95,14 @@ public sealed class ScriptEditor : TextEditor
 
         _margin = new BreakpointMargin(this);
         TextArea.LeftMargins.Insert(0, _margin);
+
+        // 컴파일러 분류로 덧칠한다. xshd 색칠기(맨 앞)보다 뒤에 있어야 이긴다.
+        TextArea.TextView.LineTransformers.Add(_semantic);
+        _classifyTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(ClassifyDelayMs), DispatcherPriority.Background, (_, _) => RunClassify(), Dispatcher);
+        _classifyTimer.Stop();
+        TextChanged += (_, _) => ScheduleClassify(immediately: false);
+        DocumentChanged += (_, _) => { _semantic.Clear(); ScheduleClassify(immediately: true); };
+        Unloaded += (_, _) => { _classifyTimer.Stop(); _classifyCts?.Cancel(); };
 
         TextArea.TextEntered += OnTextEntered;
         TextArea.TextEntering += OnTextEntering;
@@ -123,7 +139,109 @@ public sealed class ScriptEditor : TextEditor
 
     private static void OnLanguageChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is ScriptEditor editor) editor.ApplyIndentation();
+        if (d is not ScriptEditor editor) return;
+
+        editor.ApplyIndentation();
+        editor.ScheduleClassify(immediately: true);
+    }
+
+    // ── 컴파일러 분류로 칠하기 ───────────────────────────────────────────
+
+    public static readonly DependencyProperty FilePathProperty = DependencyProperty.Register(
+        nameof(FilePath), typeof(string), typeof(ScriptEditor),
+        new PropertyMetadata(null, (d, _) => ((ScriptEditor)d).ScheduleClassify(immediately: true)));
+
+    /// <summary>
+    /// 이 편집기에 든 파일의 전체 경로. 프로젝트면 완성·색이 같은 프로젝트의 다른 파일도 보고, 오류도 이 파일 것만 긋는다.
+    /// </summary>
+    public string? FilePath
+    {
+        get => (string?)GetValue(FilePathProperty);
+        set => SetValue(FilePathProperty, value);
+    }
+
+    /// <summary>분류가 한 번이라도 칠해졌는지(토막 수). 검증에서 본다.</summary>
+    public int SemanticTokenCount => _semantic.Count;
+
+    /// <summary>분류를 글에 입힐 때마다. 검증이 기다리는 데 쓴다.</summary>
+    public event EventHandler? Classified;
+
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        // 테마가 바뀌면 강조 정의가 갈린다. 색은 정의에서 꺼내므로 새 정의로 다시 그리기만 하면 된다.
+        if (e.Property == SyntaxHighlightingProperty)
+        {
+            _semantic.Definition = SyntaxHighlighting;
+            TextArea.TextView.Redraw();
+        }
+    }
+
+    private void ScheduleClassify(bool immediately)
+    {
+        _classifyTimer.Stop();
+
+        if (Language != ScriptLanguage.CSharp || CompletionSource is not IScriptClassifier)
+        {
+            // 남은 C# 색이 다른 언어의 글을 칠하면 안 된다.
+            if (_semantic.Count > 0)
+            {
+                _semantic.Clear();
+                TextArea.TextView.Redraw();
+            }
+
+            return;
+        }
+
+        if (immediately) RunClassify();
+        else _classifyTimer.Start();
+    }
+
+    /// <summary>
+    /// 지금 글을 분류하러 보낸다. 끝나면 UI 스레드에서 입힌다.
+    /// </summary>
+    /// <remarks>
+    /// 앞선 요청은 접는다 - 마지막 글만 뜻이 있다. 돌아왔을 때 글의 판이 다르면 버린다(<see cref="SemanticColorizer.Apply"/>).
+    /// 분류는 백그라운드에서 돈다(Roslyn 이 await 로 돌려준다). 실패해도 xshd 색은 남으니 조용히 로그만 남긴다.
+    /// </remarks>
+    private async void RunClassify()
+    {
+        _classifyTimer.Stop();
+
+        if (Language != ScriptLanguage.CSharp || CompletionSource is not IScriptClassifier classifier) return;
+
+        _classifyCts?.Cancel();
+        _classifyCts = new CancellationTokenSource();
+
+        var token = _classifyCts.Token;
+        var document = Document;
+        var version = document.Version;
+        var text = document.Text;
+
+        try
+        {
+            var filePath = FilePath;
+            var tokens = await System.Threading.Tasks.Task.Run(() => classifier.ClassifyAsync(text, token, filePath), token);
+
+            if (token.IsCancellationRequested || !ReferenceEquals(document, Document)) return;
+
+            _semantic.Definition = SyntaxHighlighting;
+
+            // 판이 달라 버린 결과는 알리지 않는다 - 뒤따르는 분류가 입힌다.
+            if (!_semantic.Apply(document, version, tokens)) return;
+
+            TextArea.TextView.Redraw();
+            Classified?.Invoke(this, EventArgs.Empty);
+        }
+        catch (OperationCanceledException)
+        {
+            // 더 새 글이 들어왔다.
+        }
+        catch (Exception ex)
+        {
+            NLog.LogManager.GetCurrentClassLogger().Warn(ex, "C# 분류에 실패했다 - 강조 정의 색만 쓴다");
+        }
     }
 
     private void ApplyIndentation()
@@ -199,6 +317,23 @@ public sealed class ScriptEditor : TextEditor
 
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
+    /// <summary>
+    /// 이 파일의 오류만. 프로젝트 오류 목록에는 다른 파일의 것도 섞여 있다 - 그 줄 번호로 이 파일에 밑줄을 그으면 엉뚱한 줄이다.
+    /// 파일이 안 적힌 오류(한 파일짜리·실행 중 멈춤)는 이 편집기 것으로 본다.
+    /// </summary>
+    internal IReadOnlyList<ScriptError> OwnErrors
+    {
+        get
+        {
+            if (Errors is not { Count: > 0 } errors) return [];
+            if (string.IsNullOrEmpty(FilePath)) return errors;
+
+            var self = System.IO.Path.GetFullPath(FilePath);
+
+            return [.. errors.Where(e => e.File is null || string.Equals(System.IO.Path.GetFullPath(e.File), self, StringComparison.OrdinalIgnoreCase))];
+        }
+    }
+
     private void OnErrorsChanged()
     {
         _errorTip.IsOpen = false;
@@ -241,8 +376,8 @@ public sealed class ScriptEditor : TextEditor
 
     private void OnMouseHover(object sender, MouseEventArgs e)
     {
-        var errors = Errors;
-        if (errors is null || errors.Count == 0) return;
+        var errors = OwnErrors;
+        if (errors.Count == 0) return;
 
         var position = GetPositionFromPoint(e.GetPosition(this));
         if (position is null) return;
@@ -316,7 +451,7 @@ public sealed class ScriptEditor : TextEditor
         {
             try
             {
-                var suggestions = await source.GetAsync(Document.Text, CaretOffset, token);
+                var suggestions = await source.GetAsync(Document.Text, CaretOffset, token, FilePath);
 
                 foreach (var suggestion in suggestions)
                     items.Add(new LanguageCompletionData(suggestion));
@@ -424,8 +559,8 @@ public sealed class ScriptEditor : TextEditor
 
         public void Draw(TextView textView, DrawingContext drawingContext)
         {
-            var errors = owner.Errors;
-            if (errors is null || errors.Count == 0 || textView.Document is null) return;
+            var errors = owner.OwnErrors;
+            if (errors.Count == 0 || textView.Document is null) return;
 
             textView.EnsureVisualLines();
 

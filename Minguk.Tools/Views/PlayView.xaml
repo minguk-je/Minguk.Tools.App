@@ -205,7 +205,7 @@
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding Player.RunOnceCommand}"
                                Content="1회 실행 (F5)"
-                               ToolTip="시작 대기 뒤 게임 창을 앞으로 가져와 스크립트를 실시간으로 돌린다. 도는 동안 F9 가 비상 정지다."
+                               ToolTip="시작 대기 뒤 게임 창을 앞으로 가져와 스크립트를 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다."
                                Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}" />
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding Player.StartLoopCommand}"

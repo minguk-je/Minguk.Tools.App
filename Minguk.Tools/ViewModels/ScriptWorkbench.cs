@@ -39,6 +39,9 @@ public sealed class ScriptWorkbenchHost
 
     /// <summary>실시간 모드인가. 그러면 검사만 하고(돌리면 입력이 나간다) 계획은 만들지 않는다.</summary>
     public bool IsLive { get; init; }
+
+    /// <summary>예·아니요·취소를 묻는다(저장 안 한 탭 닫기 등). 없으면 예로 본다.</summary>
+    public Func<string, MessageButton, MessageResult>? Ask { get; init; }
 }
 
 /// <summary>
@@ -65,6 +68,7 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     private const string LanguageKey = "SelectedScriptLanguage";
     private static string TextKeyFor(ScriptLanguage language) => $"Script.{language}";
     private static string PathKeyFor(ScriptLanguage language) => $"ScriptPath.{language}";
+    private static string DirtyKeyFor(ScriptLanguage language) => $"ScriptDirty.{language}";
 
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -79,6 +83,24 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     private ScriptLanguage _shownLanguage;
 
     private Timer? _debounce;
+
+    /// <summary>열어 둔 파일을 밖에서 고치면 다시 읽으려고 본다. 파일이 바뀌면(열기·다른 이름으로 저장·언어 전환) 갈아 끼운다.</summary>
+    private System.IO.FileSystemWatcher? _watcher;
+
+    /// <summary>
+    /// 파일 알림을 묶는다. 편집기는 한 번 저장에 Changed 를 두세 번 내거나, 임시 파일에 쓰고 이름을 바꾼다 -
+    /// 첫 알림에 읽으면 반쯤 쓴 파일이거나 아직 잠겨 있다.
+    /// </summary>
+    private Timer? _reloadDebounce;
+
+    /// <summary>도는 동안 바뀌었다. 끝나면 읽는다 - 도중에 글을 갈면 무엇이 나갔는지 알 수 없다.</summary>
+    private bool _reloadPending;
+
+    private int _reloadRetries;
+
+    private const int ReloadDebounceMs = 300;
+    private const int ReloadMaxRetries = 5;
+
     private CancellationTokenSource? _compileCts;
     private bool _restoring;
     private bool _disposed;
@@ -86,6 +108,33 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     public ScriptWorkbench(ScriptWorkbenchHost host)
     {
         _host = host;
+
+        Project = new ScriptProjectWorkspace(new ScriptProjectWorkspaceHost
+        {
+            OnUi = host.OnUi,
+            Ask = host.Ask,
+            OpenDialog = host.OpenDialog,
+            SaveDialog = host.SaveDialog,
+            Notify = message => MessengerUtility.SendMainMessage(message)
+        });
+
+        // 탭의 글·목록이 바뀌면 프로젝트 전체를 다시 검사한다. 완성·분류가 다른 스레드에서 읽을 글도 떠 둔다.
+        Project.Changed += (_, _) =>
+        {
+            Project.SnapshotOpenTexts();
+            ScheduleRecompile();
+        };
+
+        Project.ProjectChanged += (_, _) =>
+        {
+            RaisePropertyChanged(nameof(IsProject));
+
+            // 프로젝트는 C# 부터다. 언어가 다르면 맞춘다 - 파이썬 엔진으로 .csx 를 검사하면 오류만 가득 뜬다.
+            if (Project.IsOpen && SelectedLanguage != ScriptLanguage.CSharp) SelectedLanguage = ScriptLanguage.CSharp;
+
+            RefreshCompletionSource();
+            ScheduleRecompile();
+        };
 
         NewCommand = new DelegateCommand(DoNew, () => !IsLocked, false);
         OpenCommand = new DelegateCommand(DoOpen, () => !IsLocked, false);
@@ -149,7 +198,59 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     {
         CompletionSource = ScriptCompletionSourceFactory.Create(SelectedLanguage, _host.IsLive);
 
-        if (CompletionSource is RoslynCompletionSource roslyn) _ = roslyn.WarmUpAsync();
+        if (CompletionSource is RoslynCompletionSource roslyn)
+        {
+            // 프로젝트 파일이면 같은 프로젝트의 다른 파일도 보게 한다.
+            roslyn.UnitFor = Project is { } project ? project.UnitFor : null;
+            _ = roslyn.WarmUpAsync();
+        }
+    }
+
+    // ── 프로젝트 ─────────────────────────────────────────────────────────
+
+    /// <summary>열린 프로젝트(탐색기·탭). 열려 있지 않으면 한 파일짜리 편집기로 돈다.</summary>
+    public ScriptProjectWorkspace Project { get; }
+
+    public bool IsProject => Project?.IsOpen == true;
+
+    private const string ProjectPathKey = "ScriptProjectPath";
+    private const string ProjectDocumentsKey = "ScriptProjectDocuments";
+    private const string ProjectActiveKey = "ScriptProjectActive";
+
+    private void ScheduleRecompile()
+    {
+        _debounce?.Dispose();
+        _debounce = new Timer(_ => _host.OnUi(() => _ = RecompileAsync()), null, DebounceMs, Timeout.Infinite);
+    }
+
+    /// <summary>지난번 프로젝트와 열어 둔 탭을 되살린다. 파일이 없어졌으면 조용히 건너뛴다.</summary>
+    private void RestoreProject()
+    {
+        var path = _host.GetSetting(ProjectPathKey, string.Empty);
+        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return;
+
+        try
+        {
+            Project.OpenProject(path);
+
+            foreach (var document in _host.GetSetting(ProjectDocumentsKey, string.Empty).Split('|', StringSplitOptions.RemoveEmptyEntries))
+                if (System.IO.File.Exists(document)) Project.OpenFile(document);
+
+            var active = _host.GetSetting(ProjectActiveKey, string.Empty);
+            if (Project.Documents.FirstOrDefault(d => string.Equals(d.FilePath, active, StringComparison.OrdinalIgnoreCase)) is { } doc)
+                Project.ActiveDocument = doc;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, $"지난번 프로젝트를 못 열었다: {path}");
+        }
+    }
+
+    private void SaveProjectSettings()
+    {
+        _host.SetSetting(ProjectPathKey, Project.Project?.FilePath ?? string.Empty);
+        _host.SetSetting(ProjectDocumentsKey, string.Join('|', Project.Documents.Select(d => d.FilePath)));
+        _host.SetSetting(ProjectActiveKey, Project.ActiveDocument?.FilePath ?? string.Empty);
     }
 
     // ── 글과 파일 ────────────────────────────────────────────────────────
@@ -165,7 +266,11 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     public string? FilePath
     {
         get => GetProperty(() => FilePath);
-        set => SetProperty(() => FilePath, value, () => RaisePropertyChanged(nameof(FileLabel)));
+        set => SetProperty(() => FilePath, value, () =>
+        {
+            RaisePropertyChanged(nameof(FileLabel));
+            WatchFile();
+        });
     }
 
     /// <summary>글이 마지막으로 저장된 뒤 바뀌었는지. "파일과 지금 글이 다르다" 는 뜻이지 잃는다는 경고가 아니다.</summary>
@@ -198,6 +303,8 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
             RaisePropertyChanged(nameof(IsEditable));
             NewCommand.RaiseCanExecuteChanged();
             OpenCommand.RaiseCanExecuteChanged();
+
+            if (!value && _reloadPending) ReloadFromDisk();
         });
     }
 
@@ -284,6 +391,16 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
                 if (string.IsNullOrWhiteSpace(text)) continue;
 
                 var path = _host.GetSetting(PathKeyFor(each), string.Empty);
+
+                // 파일과 같던 글이면 파일을 믿는다 - 꺼져 있는 동안 밖에서 고쳤을 수 있다.
+                // 표시가 없는 옛 설정은 고친 채 닫았는지 모르므로 설정의 글을 그대로 둔다.
+                if (!string.IsNullOrEmpty(path)
+                    && bool.TryParse(_host.GetSetting(DirtyKeyFor(each), string.Empty), out var dirty) && !dirty
+                    && TryReadFile(path) is { } fileText)
+                {
+                    text = fileText;
+                }
+
                 _byLanguage[each] = (text, string.IsNullOrEmpty(path) ? null : path, false);
             }
 
@@ -305,6 +422,8 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         {
             _restoring = false;
         }
+
+        if (_host.IsLive) RestoreProject();
     }
 
     /// <summary>언어와 언어별 글을 저장한다. 화면의 SaveSettings 에서 부른다.</summary>
@@ -318,7 +437,10 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         {
             _host.SetSetting(TextKeyFor(language), script.Text);
             _host.SetSetting(PathKeyFor(language), script.Path ?? string.Empty);
+            _host.SetSetting(DirtyKeyFor(language), script.Dirty.ToString());
         }
+
+        if (_host.IsLive) SaveProjectSettings();
     }
 
     // ── 언어 바꾸기 ──────────────────────────────────────────────────────
@@ -444,7 +566,15 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
             SequencePlan plan;
             IReadOnlyList<ScriptError> errors;
 
-            if (_host.IsLive)
+            if (_host.IsLive && IsProject)
+            {
+                // 프로젝트는 시작 파일 하나가 아니라 전체를 검사한다. 오류에는 파일이 붙어 탭마다 제 것만 긋는다.
+                errors = engine is IProjectScriptEngine projectEngine && Project.ToUnit() is { } unit
+                    ? await projectEngine.CheckLiveAsync(unit, token)
+                    : [new ScriptError(0, $"{engine.Name} 은(는) 여러 파일짜리 프로젝트를 아직 돌리지 못합니다. 프로젝트는 C# 으로 씁니다.")];
+                plan = new SequencePlan();
+            }
+            else if (_host.IsLive)
             {
                 // 실시간 모드는 검사만. 돌리면 입력이 나간다.
                 errors = await engine.CheckLiveAsync(source, token);
@@ -567,6 +697,151 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         MessengerUtility.SendMainMessage($"{System.IO.Path.GetFileName(path)} 에 저장했습니다.");
     }
 
+    // ── 밖에서 고친 파일 다시 읽기 ───────────────────────────────────────
+
+    /// <summary>지금 파일을 보기 시작한다. 파일이 없으면(저장 안 한 글) 보던 것만 놓는다.</summary>
+    private void WatchFile()
+    {
+        _watcher?.Dispose();
+        _watcher = null;
+        _reloadPending = false;
+
+        if (_disposed || string.IsNullOrEmpty(FilePath)) return;
+
+        var directory = System.IO.Path.GetDirectoryName(FilePath);
+        if (string.IsNullOrEmpty(directory) || !System.IO.Directory.Exists(directory)) return;
+
+        try
+        {
+            var watcher = new System.IO.FileSystemWatcher(directory, System.IO.Path.GetFileName(FilePath))
+            {
+                NotifyFilter = System.IO.NotifyFilters.LastWrite | System.IO.NotifyFilters.Size | System.IO.NotifyFilters.FileName,
+            };
+
+            // 임시 파일에 쓰고 이름을 바꾸는 편집기(VS Code·VS)는 Changed 가 아니라 Renamed·Created 로 온다.
+            watcher.Changed += OnFileEvent;
+            watcher.Created += OnFileEvent;
+            watcher.Renamed += OnFileEvent;
+            watcher.EnableRaisingEvents = true;
+
+            _watcher = watcher;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, $"스크립트 파일을 지켜보지 못했다: {FilePath}");
+        }
+    }
+
+    /// <summary>감시 스레드. 여기서는 읽지 않고 묶기만 한다.</summary>
+    private void OnFileEvent(object sender, System.IO.FileSystemEventArgs e)
+    {
+        if (_disposed || !ReferenceEquals(sender, _watcher)) return;
+
+        _reloadRetries = 0;
+        ScheduleReload();
+    }
+
+    private void ScheduleReload()
+    {
+        if (_disposed) return;
+
+        _reloadDebounce ??= new Timer(_ => _host.OnUi(ReloadFromDisk), null, Timeout.Infinite, Timeout.Infinite);
+        _reloadDebounce.Change(ReloadDebounceMs, Timeout.Infinite);
+    }
+
+    /// <summary>
+    /// 파일을 다시 읽어 글을 갈아 끼운다. UI 스레드.
+    /// </summary>
+    /// <remarks>
+    /// 여기서 고친 것이 있으면(<see cref="IsDirty"/>) 덮어쓰지 않는다 - 조용히 날리면 되돌릴 길이 없다.
+    /// 우리가 저장해서 온 알림은 글이 같으므로 아무 일도 안 한다.
+    /// </remarks>
+    private void ReloadFromDisk()
+    {
+        if (_disposed || string.IsNullOrEmpty(FilePath)) return;
+
+        if (IsLocked)
+        {
+            _reloadPending = true;
+            return;
+        }
+
+        _reloadPending = false;
+
+        var path = FilePath;
+
+        // 지우고 새로 쓰는 편집기는 잠깐 파일이 없다. 다시 생기면 Created 가 또 부른다.
+        if (!System.IO.File.Exists(path)) return;
+
+        string text;
+        try
+        {
+            text = ReadShared(path);
+        }
+        catch (System.IO.IOException ex)
+        {
+            if (++_reloadRetries <= ReloadMaxRetries)
+            {
+                ScheduleReload();
+                return;
+            }
+
+            Logger.Warn(ex, $"밖에서 바뀐 스크립트를 읽지 못했다: {path}");
+            return;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Logger.Warn(ex, $"밖에서 바뀐 스크립트를 읽지 못했다: {path}");
+            return;
+        }
+
+        var name = System.IO.Path.GetFileName(path);
+
+        if (IsSame(text, Text))
+        {
+            // 파일과 글이 같아졌다 - 우리가 저장했거나, 밖에서 같은 내용으로 맞췄다.
+            if (IsDirty) IsDirty = false;
+            return;
+        }
+
+        if (IsDirty)
+        {
+            Logger.Info($"스크립트가 밖에서 바뀌었지만 여기서 고친 것이 있어 안 읽었다: {path}");
+            MessengerUtility.SendMainMessage($"{name} 이(가) 밖에서 바뀌었지만 여기서 고친 것이 있어 불러오지 않았습니다. 버리려면 다시 여세요.");
+            return;
+        }
+
+        Text = text;
+        IsDirty = false;
+
+        Logger.Info($"밖에서 바뀐 스크립트를 다시 읽었다: {path}");
+        MessengerUtility.SendMainMessage($"밖에서 바뀐 {name} 을(를) 다시 불러왔습니다.");
+    }
+
+    /// <summary>쓰는 쪽이 아직 쥐고 있어도 읽을 수 있게 공유를 넓게 연다.</summary>
+    private static string ReadShared(string path)
+    {
+        using var stream = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read,
+            System.IO.FileShare.ReadWrite | System.IO.FileShare.Delete);
+        using var reader = new System.IO.StreamReader(stream, detectEncodingFromByteOrderMarks: true);
+
+        return reader.ReadToEnd();
+    }
+
+    /// <summary>못 읽으면(없거나 잠김) null.</summary>
+    private static string? TryReadFile(string path)
+    {
+        try
+        {
+            return System.IO.File.Exists(path) ? ReadShared(path) : null;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            Logger.Warn(ex, $"스크립트 파일을 읽지 못했다: {path}");
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -577,11 +852,19 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         _debounce?.Dispose();
         _debounce = null;
 
+        _watcher?.Dispose();
+        _watcher = null;
+
+        _reloadDebounce?.Dispose();
+        _reloadDebounce = null;
+
         _compileCts?.Cancel();
         _compileCts?.Dispose();
         _compileCts = null;
 
         _engine?.Dispose();
         _engine = null;
+
+        Project.Dispose();
     }
 }

@@ -65,6 +65,7 @@ internal static class ViewSmokeProbe
             failures += CheckScriptApiCatalog();
             failures += CheckErrorUnderline();
             failures += CheckCompletion();
+            failures += CheckSemanticColoring();
 
             app.Shutdown();
         });
@@ -698,6 +699,64 @@ internal static class ViewSmokeProbe
             {
                 host.Close();
             }
+        }
+    }
+
+    /// <summary>
+    /// 편집기에 C# 분류가 실제로 덧칠되는지. 글을 넣고 분류가 돌아오기를 기다린 뒤, 줄을 그려 낱말 자리의 글자색을 본다.
+    /// </summary>
+    private static int CheckSemanticColoring()
+    {
+        try
+        {
+            var source = Minguk.Tools.Input.Scripting.ScriptCompletionSourceFactory.Create(Minguk.Tools.Input.Scripting.ScriptLanguage.CSharp, isLive: true);
+            var editor = new Minguk.Tools.Markup.ScriptEditor
+            {
+                Width = 400, Height = 100,
+                SyntaxHighlighting = Minguk.Tools.Helper.SequenceScriptHighlighting.Dark,
+                CompletionSource = source
+            };
+
+            var host = new Window { Width = 420, Height = 140, ShowInTaskbar = false, WindowStyle = WindowStyle.None, Left = -5000, Top = -5000, Content = editor };
+            host.Show();
+
+            try
+            {
+                // 필드 `다음` 을 점 없이 쓴다 - 정규식은 지역 변수 색, 분류는 멤버 색이어야 한다.
+                const string text = "long 다음 = 0;\n다음 = 1;";
+                var done = false;
+                editor.Classified += (_, _) => done = true;
+                editor.Text = text;
+
+                var deadline = DateTime.UtcNow.AddSeconds(15);
+                while (!done && DateTime.UtcNow < deadline)
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                editor.TextArea.TextView.EnsureVisualLines();
+
+                var line = editor.TextArea.TextView.GetOrConstructVisualLine(editor.Document.GetLineByNumber(2));
+                var offset = text.IndexOf("다음", text.IndexOf('\n'), StringComparison.Ordinal) - editor.Document.GetLineByNumber(2).Offset;
+                var element = line.Elements.FirstOrDefault(e => e.RelativeTextOffset <= offset && offset < e.RelativeTextOffset + e.DocumentLength);
+                var brush = element?.TextRunProperties.ForegroundBrush as System.Windows.Media.SolidColorBrush;
+
+                var member = Minguk.Tools.Helper.SequenceScriptHighlighting.Dark.GetNamedColor("Member").Foreground.GetColor(null);
+                var ok = done && editor.SemanticTokenCount > 0 && brush is not null && brush.Color == member;
+
+                Console.WriteLine(ok
+                    ? $"[PASS] C# 분류 덧칠 — 점 없는 필드 \"다음\" 이 멤버 색 {brush!.Color}, 토막 {editor.SemanticTokenCount}개"
+                    : $"[FAIL] C# 분류 덧칠 — 분류 끝남 {done}, 토막 {editor.SemanticTokenCount}, 글자색 {brush?.Color.ToString() ?? "없음"} (기대 {member})");
+
+                return ok ? 0 : 1;
+            }
+            finally
+            {
+                host.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] C# 분류 덧칠 — {ex.GetType().Name}: {ex.Message}");
+            return 1;
         }
     }
 

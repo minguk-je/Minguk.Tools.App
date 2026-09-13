@@ -1,25 +1,35 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 
 <!--
     입력 시퀀스 스크립트 강조 (어두운 테마).
 
-    스크립트는 C# 이다. AvalonEdit 이 들고 있는 기본 C# 정의를 쓰지 않는 이유는 두 가지다.
-      하나, 그 정의는 밝은 테마 한 벌뿐이라 어두운 테마에서 읽기 어렵다.
-      둘, 이 화면에서 실제로 부르는 것은 우리 API(Type·Click·MoveTo …)인데,
-          그것이 여느 이름과 같은 색이면 무엇을 부를 수 있는지 눈에 안 들어온다.
+    색은 이 PC 의 Visual Studio 2026 다크 화면을 캡처해 글자 픽셀에서 뽑았다(2026-09-13).
+      바탕 #1E1E1E · 본문 #DCDCDC · 키워드 #569CD6 · 제어 키워드 #D8A0DF · 주석 #608B4E · 문자열 #D69D85 · 숫자 #B5CEA8
+      메서드 #00FFFF · 필드·속성 #EE82EE · 형식 #ADD8E6 · 지역 변수/매개 변수는 본문색 · 줄 번호 #8A8A8A
+    메서드·속성·형식은 ReSharper 가 칠한 것이고(Cyan·Violet·LightBlue), 키워드·제어 키워드·주석은 VS 의 것이다 -
+    ReSharper 기본값만 보고 제어 키워드를 파랑으로, 형식을 #4EC9B0 으로 두었다가 화면과 달랐다.
+    글자 가장자리는 ClearType 이라 파랗거나 붉게 번진다. 한 낱말에서 가장 많이 나온 색을 본다.
 
-    C# 전체를 칠하지 않는다. 이 화면에서 쓸 법한 것만 안다 - 모르는 낱말은 그냥 둔다.
+    VS 는 컴파일러가 이름의 종류를 알려 주지만 여기는 정규식뿐이다. 그래서 어림한다.
+      이름 뒤에 ( 가 오면 메서드, 점 뒤의 이름은 멤버, 나머지 이름은 지역 변수.
+    규칙은 같은 자리에서 먼저 적힌 것이 이긴다 - 키워드가 이름 규칙보다 앞에 있어야 if( 가 메서드가 안 된다.
+
+    C# 전체를 칠하지 않는다. 이 화면에서 쓸 법한 것만 안다.
     색만 다른 짝은 SequenceScript.Light.xshd 에 있다. 규칙이나 API 를 고치면 두 파일을 같이 고쳐야 한다.
 -->
 <SyntaxDefinition name="SequenceScript"
                   xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
 
-    <Color name="Comment" foreground="#8B949E" fontStyle="italic" />
-    <Color name="Keyword" foreground="#FF7B72" />
-    <Color name="Api" foreground="#79C0FF" fontWeight="bold" />
-    <Color name="Type" foreground="#D2A8FF" />
-    <Color name="String" foreground="#A5D6FF" />
-    <Color name="Number" foreground="#4EC9B0" />
+    <Color name="Comment" foreground="#608B4E" />
+    <Color name="String" foreground="#D69D85" />
+    <Color name="Keyword" foreground="#569CD6" />
+    <Color name="ControlKeyword" foreground="#D8A0DF" />
+    <Color name="Type" foreground="#ADD8E6" />
+    <Color name="Method" foreground="#00FFFF" />
+    <Color name="Local" foreground="#DCDCDC" />
+    <Color name="Plain" foreground="#DCDCDC" />
+    <Color name="Member" foreground="#EE82EE" />
+    <Color name="Number" foreground="#B5CEA8" />
 
     <RuleSet ignoreCase="false">
 
@@ -36,57 +46,39 @@
                 <Span begin="\\" end="." />
             </RuleSet>
         </Span>
+        <Span color="String" multiline="false">
+            <Begin>'</Begin>
+            <End>'</End>
+            <RuleSet>
+                <Span begin="\\" end="." />
+            </RuleSet>
+        </Span>
 
-        <!--  이 화면에서 부를 수 있는 것들. 영문·한글 둘 다 같은 것을 가리킨다.  -->
-        <Keywords color="Api">
-            <Word>Type</Word>
-            <Word>TypeLine</Word>
-            <Word>Enter</Word>
-            <Word>ToggleHangul</Word>
-            <Word>Click</Word>
-            <Word>RightClick</Word>
-            <Word>ClickAt</Word>
-            <Word>MoveTo</Word>
-            <Word>Scroll</Word>
-            <Word>Wait</Word>
-            <Word>글자</Word>
-            <Word>줄입력</Word>
-            <Word>엔터</Word>
-            <Word>한영</Word>
-            <Word>클릭</Word>
-            <Word>우클릭</Word>
-            <Word>이동</Word>
-            <Word>이동클릭</Word>
-            <Word>휠</Word>
-            <Word>쉬기</Word>
-            <Word>MouseDown</Word><Word>MouseUp</Word><Word>Drag</Word><Word>DragBy</Word><Word>버튼누르기</Word><Word>버튼떼기</Word><Word>끌기</Word><Word>상대끌기</Word><Word>Walk</Word><Word>걷기</Word><Word>Aim</Word>
-            <Word>MoveBy</Word>
-            <Word>Mobs</Word>
-            <Word>NearestMob</Word>
-            <Word>WaitMob</Word>
-            <Word>ReadText</Word>
-            <Word>ReadNumber</Word>
-            <Word>Key</Word>
-            <Word>KeyDown</Word>
-            <Word>KeyUp</Word>
-            <Word>IsStopped</Word>
-            <Word>Print</Word>
-            <Word>Watch</Word>
-            <Word>Stop</Word>
-            <Word>조준</Word>
-            <Word>상대이동</Word>
-            <Word>몹들</Word>
-            <Word>가장가까운몹</Word>
-            <Word>몹기다리기</Word>
-            <Word>읽기</Word>
-            <Word>숫자읽기</Word>
-            <Word>키</Word>
-            <Word>누르기</Word>
-            <Word>떼기</Word>
-            <Word>중지되었나</Word>
-            <Word>출력</Word>
-            <Word>보기</Word>
-            <Word>끝</Word>
+        <!--  VS 의 "keyword - control". 흐름을 바꾸는 것들.  -->
+        <Keywords color="ControlKeyword">
+            <Word>if</Word>
+            <Word>elif</Word>
+            <Word>else</Word>
+            <Word>for</Word>
+            <Word>foreach</Word>
+            <Word>while</Word>
+            <Word>do</Word>
+            <Word>switch</Word>
+            <Word>case</Word>
+            <Word>default</Word>
+            <Word>break</Word>
+            <Word>continue</Word>
+            <Word>return</Word>
+            <Word>goto</Word>
+            <Word>yield</Word>
+            <Word>await</Word>
+            <Word>try</Word>
+            <Word>except</Word>
+            <Word>catch</Word>
+            <Word>finally</Word>
+            <Word>throw</Word>
+            <Word>raise</Word>
+            <Word>pass</Word>
         </Keywords>
 
         <Keywords color="Keyword">
@@ -94,34 +86,26 @@
             <Word>let</Word>
             <Word>const</Word>
             <Word>new</Word>
-            <Word>for</Word>
-            <Word>foreach</Word>
             <Word>in</Word>
             <Word>of</Word>
-            <Word>while</Word>
-            <Word>do</Word>
-            <Word>if</Word>
-            <Word>elif</Word>
-            <Word>else</Word>
-            <Word>switch</Word>
-            <Word>case</Word>
-            <Word>break</Word>
-            <Word>continue</Word>
-            <Word>return</Word>
+            <Word>is</Word>
+            <Word>as</Word>
+            <Word>when</Word>
+            <Word>out</Word>
+            <Word>ref</Word>
+            <Word>static</Word>
+            <Word>async</Word>
+            <Word>using</Word>
+            <Word>this</Word>
+            <Word>typeof</Word>
+            <Word>nameof</Word>
             <Word>function</Word>
             <Word>def</Word>
             <Word>lambda</Word>
             <Word>class</Word>
-            <Word>try</Word>
-            <Word>except</Word>
-            <Word>catch</Word>
-            <Word>finally</Word>
-            <Word>raise</Word>
-            <Word>throw</Word>
             <Word>import</Word>
             <Word>from</Word>
-            <Word>as</Word>
-            <Word>pass</Word>
+            <Word>global</Word>
             <Word>and</Word>
             <Word>or</Word>
             <Word>not</Word>
@@ -131,24 +115,100 @@
             <Word>True</Word>
             <Word>False</Word>
             <Word>None</Word>
-        </Keywords>
-
-        <Keywords color="Type">
+            <!--  C# 의 기본 형식은 VS 에서 키워드 색이다.  -->
             <Word>int</Word>
+            <Word>long</Word>
             <Word>string</Word>
             <Word>bool</Word>
             <Word>double</Word>
+            <Word>float</Word>
+            <Word>decimal</Word>
             <Word>char</Word>
+            <Word>byte</Word>
+            <Word>object</Word>
             <Word>void</Word>
-            <Word>MouseButton</Word>
-            <Word>Math</Word>
-            <Word>range</Word>
-            <Word>len</Word>
-            <Word>print</Word>
         </Keywords>
 
+        <Keywords color="Type">
+            <Word>MouseButton</Word>
+            <Word>ScriptMob</Word>
+            <Word>Math</Word>
+            <Word>Environment</Word>
+            <Word>DateTime</Word>
+            <Word>TimeSpan</Word>
+            <Word>Stopwatch</Word>
+            <Word>List</Word>
+            <Word>Console</Word>
+        </Keywords>
+
+        <!--  네임스페이스는 VS 에서 본문색이다. 안 적으면 아래 지역 변수 규칙에 걸린다.  -->
+        <Keywords color="Plain">
+            <Word>System</Word>
+        </Keywords>
+
+        <!--  이 화면에서 부를 수 있는 것들(ScriptApiCatalog). 괄호 없이 적어도 메서드 색이다.  -->
+        <Keywords color="Method">
+            <Word>Type</Word><Word>글자</Word>
+            <Word>TypeLine</Word><Word>줄입력</Word>
+            <Word>Enter</Word><Word>엔터</Word>
+            <Word>ToggleHangul</Word><Word>한영</Word>
+            <Word>Click</Word><Word>클릭</Word>
+            <Word>RightClick</Word><Word>우클릭</Word>
+            <Word>ClickAt</Word><Word>이동클릭</Word>
+            <Word>MoveTo</Word><Word>이동</Word>
+            <Word>Scroll</Word><Word>휠</Word>
+            <Word>Wait</Word><Word>쉬기</Word>
+            <Word>Aim</Word><Word>조준</Word>
+            <Word>MoveBy</Word><Word>상대이동</Word>
+            <Word>MouseDown</Word><Word>버튼누르기</Word>
+            <Word>MouseUp</Word><Word>버튼떼기</Word>
+            <Word>Drag</Word><Word>끌기</Word>
+            <Word>DragBy</Word><Word>상대끌기</Word>
+            <Word>Mobs</Word><Word>몹들</Word>
+            <Word>NearestMob</Word><Word>가장가까운몹</Word>
+            <Word>TargetMob</Word><Word>목표</Word>
+            <Word>ReleaseTarget</Word><Word>목표풀기</Word>
+            <Word>WaitMob</Word><Word>몹기다리기</Word>
+            <Word>ReadText</Word><Word>읽기</Word>
+            <Word>ReadNumber</Word><Word>숫자읽기</Word>
+            <Word>Ammo</Word><Word>탄약</Word>
+            <Word>AmmoMax</Word><Word>탄약최대</Word>
+            <Word>Health</Word><Word>체력</Word>
+            <Word>HealthMax</Word><Word>체력최대</Word>
+            <Word>Ultimate</Word><Word>궁극기</Word>
+            <Word>UltimateReady</Word><Word>궁극기준비</Word>
+            <Word>HasTextAt</Word><Word>글자있나</Word>
+            <Word>Key</Word><Word>키</Word>
+            <Word>KeyDown</Word><Word>누르기</Word>
+            <Word>KeyUp</Word><Word>떼기</Word>
+            <Word>Walk</Word><Word>걷기</Word>
+            <Word>IsStopped</Word><Word>중지되었나</Word>
+            <Word>Print</Word><Word>출력</Word>
+            <Word>Watch</Word><Word>보기</Word>
+            <Word>Stop</Word><Word>끝</Word>
+            <Word>ResourcePath</Word><Word>리소스경로</Word>
+            <Word>ResourceText</Word><Word>리소스글</Word>
+            <Word>ResourceBytes</Word><Word>리소스바이트</Word>
+            <Word>PlaySound</Word><Word>소리</Word>
+        </Keywords>
+
+        <!--  이름 뒤에 ( 가 오면 메서드 - 스크립트 안에서 만든 함수도 VS 처럼 칠해진다.  -->
+        <Rule color="Method">
+            [\p{L}_][\p{L}\p{Nd}_]*(?=\s*\()
+        </Rule>
+
+        <!--  점 뒤의 이름은 멤버(몹.머리x). ReSharper 에서 속성·필드는 Violet 이다.  -->
+        <Rule color="Member">
+            (?&lt;=\.)[\p{L}_][\p{L}\p{Nd}_]*
+        </Rule>
+
         <Rule color="Number">
-            \b[+-]?\d+\b
+            \b\d+(\.\d+)?[fFdDmMlL]?\b
+        </Rule>
+
+        <!--  남은 이름은 지역 변수로 본다.  -->
+        <Rule color="Local">
+            [\p{L}_][\p{L}\p{Nd}_]*
         </Rule>
     </RuleSet>
 </SyntaxDefinition>

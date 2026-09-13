@@ -24,7 +24,38 @@ namespace Minguk.Tools.ViewModels;
 /// </remarks>
 public abstract partial class RecognizingCaptureViewModelBase
 {
+    /// <summary>미리보기에서 자리를 끄는 중에 무엇을 하는지.</summary>
+    private enum RegionDragMode
+    {
+        /// <summary>빈 자리를 눌렀다 - 새 자리를 그린다.</summary>
+        Draw,
+
+        /// <summary>자리 안쪽을 눌렀다 - 통째로 옮긴다.</summary>
+        Move,
+
+        /// <summary>고른 자리의 모서리·변 손잡이를 눌렀다 - 크기를 바꾼다.</summary>
+        Resize
+    }
+
+    /// <summary>손잡이를 잡는 반지름(화면 픽셀). 라벨링 캔버스와 같다.</summary>
+    private const double RegionGripPixels = 8d;
+
+    /// <summary>
+    /// 옮기기로 치는 최소 거리(화면 픽셀).
+    /// </summary>
+    /// <remarks>
+    /// 고르려고 누를 때마다 손이 떨려 1~2px 씩 흘러 저장할 때마다 자리가 바뀌면 안 된다(라벨링 캔버스에서 겪었다).
+    /// </remarks>
+    private const double RegionMoveDeadPixels = 4d;
+
+    private RegionDragMode _regionDragMode;
     private Point? _regionPickStart;
+    private Point _regionPickStartInControl;
+    private BoxHandle _regionDragHandle;
+    private Rect _regionDragOrigin;
+    private NamedRegion? _regionDragTarget;
+    private bool _regionDragMoved;
+
     private RegionBook? _regions;
 
     /// <summary>만들어 둔 자리들. 화면 목록이 이것을 본다.</summary>
@@ -47,11 +78,17 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             RaisePropertyChanged(nameof(IsRegionVisible));
 
-            if (!IsRegionPicking) return;
+            if (!IsRegionPicking)
+            {
+                // 끄는 도중에 모드를 껐으면 잡고 있던 것을 놓는다. 커서도 게임 쪽 모양으로 되돌린다.
+                CancelRegionDrag();
+                if (_previewSurface is not null) _previewSurface.Cursor = null;
+                return;
+            }
 
             // 같은 손짓을 두 기능이 나눠 쓴다. 글자 영역 쪽은 끈다.
             IsOcrRegionPicking = false;
-            StatusText = "미리보기에서 자리를 끌면 이름을 묻습니다. 스크립트에서 그 이름으로 읽습니다.";
+            StatusText = "빈 자리를 끌면 새 자리, 자리 안을 끌면 옮기기, 고른 자리의 손잡이를 끌면 크기 조절입니다. 끝나면 영역 지정을 끄세요.";
         });
     }
 
@@ -222,32 +259,118 @@ public abstract partial class RecognizingCaptureViewModelBase
         RaisePropertyChanged(nameof(Regions));
     });
 
-    /// <summary>지정 모드면 여기서 마우스 다운을 먹는다. true 면 클릭을 게임으로 보내지 않는다.</summary>
+    /// <summary>
+    /// 지정 모드면 여기서 마우스 다운을 먹는다. true 면 클릭을 게임으로 보내지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 누른 자리로 할 일을 정한다 - 라벨링 캔버스와 같은 규칙이다.
+    ///   고른 자리의 손잡이(모서리·변 가운데) → 크기 조절
+    ///   어느 자리의 안쪽 → 그것을 고르고 옮기기
+    ///   빈 자리 → 새로 그리기
+    /// 손잡이는 <b>고른 자리에서만</b> 잡힌다. 안 고른 것의 모서리까지 잡으면 붙어 있는 자리 사이에서
+    /// 새로 그리려다 엉뚱한 것이 늘어난다.
+    ///
+    /// Adorner·Thumb 컨트롤을 얹지 않는 이유 - 겹그림은 클릭을 게임으로 흘려보내야 해서 히트 테스트를 끈다.
+    /// 거기에 Thumb 을 얹으면 모드를 꺼도 그 자리의 클릭이 게임으로 안 간다. 여기서는 모드가 켜져 있을 때만
+    /// 마우스를 먹고, 그리는 것은 겹그림이 한다.
+    /// </remarks>
     private bool TryBeginRegionPick(Point pointInControl)
     {
         if (!IsRegionPicking) return false;
 
         var (control, source) = PreviewSizes;
 
-        if (PreviewInputMapper.TryMapToRatio(pointInControl, control, source, clamp: true, out var ratio))
+        if (!PreviewInputMapper.TryMapToRatio(pointInControl, control, source, clamp: true, out var ratio))
+            return true;
+
+        _regionPickStart = ratio;
+        _regionPickStartInControl = pointInControl;
+        _regionDragMoved = false;
+
+        if (SelectedRegion is { } selected && RegionHandleAt(selected.Rect, pointInControl) is var handle && LabelBoxEdit.IsResizeHandle(handle))
         {
-            _regionPickStart = ratio;
+            BeginRegionEdit(RegionDragMode.Resize, selected, handle);
+        }
+        else if (RegionAt(pointInControl) is { } hit)
+        {
+            if (!ReferenceEquals(hit, SelectedRegion)) SelectedRegion = hit;
+
+            BeginRegionEdit(RegionDragMode.Move, hit, BoxHandle.Inside);
+        }
+        else
+        {
+            _regionDragMode = RegionDragMode.Draw;
+            _regionDragTarget = null;
             RegionDraft = new Rect(ratio, ratio);
+        }
+
+        // 끄다가 미리보기 밖으로 나가도 놓는 것을 받아야 한다. 안 그러면 버튼을 뗐는데 계속 끌린다.
+        _previewSurface?.CaptureMouse();
+
+        return true;
+    }
+
+    private void BeginRegionEdit(RegionDragMode mode, NamedRegion region, BoxHandle handle)
+    {
+        _regionDragMode = mode;
+        _regionDragTarget = region;
+        _regionDragHandle = handle;
+        _regionDragOrigin = region.Rect;
+    }
+
+    private bool TryDragRegion(MouseEventArgs args)
+    {
+        if (_previewImage is null) return false;
+
+        var point = args.GetPosition(_previewImage);
+
+        if (_regionPickStart is not { } start)
+        {
+            // 끌고 있지 않을 때는 커서로 무엇을 잡을지 알려 준다.
+            if (IsRegionPicking && _previewSurface is not null) _previewSurface.Cursor = RegionCursorAt(point);
+            return false;
+        }
+
+        var (control, source) = PreviewSizes;
+
+        if (!PreviewInputMapper.TryMapToRatio(point, control, source, clamp: true, out var ratio))
+            return true;
+
+        switch (_regionDragMode)
+        {
+            case RegionDragMode.Draw:
+                RegionDraft = new Rect(start, ratio);
+                break;
+
+            case RegionDragMode.Move when _regionDragTarget is { } region:
+                if (!_regionDragMoved && (point - _regionPickStartInControl).Length < RegionMoveDeadPixels / Zoom) break;
+
+                _regionDragMoved = true;
+
+                // 시작 자리에 변위를 더한다. 직전 자리에 더하면 반올림이 쌓인다.
+                var moved = LabelBoxEdit.Move(ToLabelBox(_regionDragOrigin), ratio.X - start.X, ratio.Y - start.Y);
+                ApplyRegionDrag(region, moved);
+                break;
+
+            case RegionDragMode.Resize when _regionDragTarget is { } region:
+                _regionDragMoved = true;
+
+                var resized = LabelBoxEdit.Resize(ToLabelBox(_regionDragOrigin), _regionDragHandle, ratio.X, ratio.Y);
+
+                // 읽을 수 있는 크기 아래로는 안 줄인다 - 줄던 자리에서 멈춘다.
+                if (resized.Width >= MinimumRegionSize && resized.Height >= MinimumRegionSize)
+                    ApplyRegionDrag(region, resized);
+                break;
         }
 
         return true;
     }
 
-    private bool TryDragRegion(MouseEventArgs args)
+    /// <summary>끄는 동안은 저장하지 않고 그리기만 한다. 놓을 때 한 번 저장한다.</summary>
+    private void ApplyRegionDrag(NamedRegion region, LabelBox box)
     {
-        if (_regionPickStart is not { } start || _previewImage is null) return false;
-
-        var (control, source) = PreviewSizes;
-
-        if (PreviewInputMapper.TryMapToRatio(args.GetPosition(_previewImage), control, source, clamp: true, out var ratio))
-            RegionDraft = new Rect(start, ratio);
-
-        return true;
+        region.Rect = new Rect(box.Left, box.Top, box.Width, box.Height);
+        RaiseRegionFields();
     }
 
     private bool TryFinishRegionPick(MouseButtonEventArgs args)
@@ -255,20 +378,35 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (_regionPickStart is not { } start || _previewImage is null) return false;
 
         var (control, source) = PreviewSizes;
+        var mode = _regionDragMode;
+        var target = _regionDragTarget;
+        var moved = _regionDragMoved;
 
-        _regionPickStart = null;
-        RegionDraft = Rect.Empty;
-        IsRegionPicking = false;
+        CancelRegionDrag();
+
+        if (mode != RegionDragMode.Draw)
+        {
+            if (target is not null && moved)
+            {
+                SaveRegions();
+                StatusText = $"「{target.Name}」 자리를 {(mode == RegionDragMode.Move ? "옮겼습니다" : "고쳤습니다")} - " +
+                             $"{target.X * 100:0.0}%, {target.Y * 100:0.0}%  {target.Width * 100:0.0}% x {target.Height * 100:0.0}%";
+            }
+
+            if (_previewSurface is not null) _previewSurface.Cursor = RegionCursorAt(args.GetPosition(_previewImage));
+            return true;
+        }
 
         if (!PreviewInputMapper.TryMapToRatio(args.GetPosition(_previewImage), control, source, clamp: true, out var ratio))
             return true;
 
         var rect = new Rect(start, ratio);
 
-        // 클릭과 끌기를 가른다. 점짜리는 읽을 것이 없다.
-        if (rect.Width < 0.004 || rect.Height < 0.004)
+        // 클릭과 끌기를 가른다. 점짜리는 읽을 것이 없다 - 빈 자리를 누른 것은 고른 것을 푸는 뜻으로 받는다.
+        if (rect.Width < MinimumRegionSize || rect.Height < MinimumRegionSize)
         {
-            StatusText = "너무 작습니다 - 읽을 글자가 들어가게 끌어 주세요.";
+            if (SelectedRegion is not null) SelectedRegion = null;
+            else StatusText = "너무 작습니다 - 읽을 글자가 들어가게 끌어 주세요.";
             return true;
         }
 
@@ -283,6 +421,89 @@ public abstract partial class RecognizingCaptureViewModelBase
         StatusText = $"「{name}」 자리를 만들었습니다. 스크립트에서 숫자읽기(\"{name}\") 로 읽습니다.";
 
         return true;
+    }
+
+    /// <summary>이보다 작은 자리는 읽을 것이 없다(0~1). 칸의 최솟값(0.4%)과 같다.</summary>
+    private const double MinimumRegionSize = 0.004;
+
+    /// <summary>미리보기 확대. 손잡이 크기를 화면에서 늘 같게 보이게 나눈다 - 좌표는 확대 전 것이라서.</summary>
+    private double Zoom => PreviewZoom > 0 ? PreviewZoom : 1;
+
+    private void CancelRegionDrag()
+    {
+        _regionPickStart = null;
+        _regionDragTarget = null;
+        _regionDragMoved = false;
+        RegionDraft = Rect.Empty;
+
+        if (_previewSurface?.IsMouseCaptured == true) _previewSurface.ReleaseMouseCapture();
+    }
+
+    private static LabelBox ToLabelBox(Rect rect) => LabelBox.FromCorners(0, rect.Left, rect.Top, rect.Right, rect.Bottom);
+
+    /// <summary>0~1 자리를 미리보기 Image 좌표로. <see cref="PreviewInputMapper.TryMapToRatio"/> 의 반대다.</summary>
+    private Rect? RegionToControl(Rect ratio)
+    {
+        if (_previewImage is null) return null;
+
+        var (control, source) = PreviewSizes;
+
+        if (control.Width <= 0 || control.Height <= 0 || source.Width <= 0 || source.Height <= 0) return null;
+
+        var scale = Math.Min(control.Width / source.Width, control.Height / source.Height);
+        var width = source.Width * scale;
+        var height = source.Height * scale;
+        var offsetX = (control.Width - width) / 2;
+        var offsetY = (control.Height - height) / 2;
+
+        return new Rect(offsetX + (ratio.X * width), offsetY + (ratio.Y * height), ratio.Width * width, ratio.Height * height);
+    }
+
+    private BoxHandle RegionHandleAt(Rect ratio, Point point)
+    {
+        if (RegionToControl(ratio) is not { } rect) return BoxHandle.None;
+
+        return LabelBoxEdit.HitHandle(rect.Left, rect.Top, rect.Right, rect.Bottom, point.X, point.Y, RegionGripPixels / Zoom);
+    }
+
+    /// <summary>
+    /// 그 점을 안에 둔 자리. 고른 것을 먼저 보고, 겹치면 작은 것을 준다.
+    /// </summary>
+    /// <remarks>
+    /// 큰 자리 안에 작은 자리를 두는 일이 있다(체력 칸 안의 숫자). 큰 것을 주면 작은 것은 영영 못 잡는다.
+    /// </remarks>
+    private NamedRegion? RegionAt(Point point)
+    {
+        if (SelectedRegion is { } selected && RegionToControl(selected.Rect) is { } own && own.Contains(point))
+            return selected;
+
+        return Regions
+            .Select(region => (region, rect: RegionToControl(region.Rect)))
+            .Where(each => each.rect is { } rect && rect.Contains(point))
+            .OrderBy(each => each.region.Width * each.region.Height)
+            .Select(each => each.region)
+            .FirstOrDefault();
+    }
+
+    private Cursor RegionCursorAt(Point point)
+    {
+        if (SelectedRegion is { } selected)
+        {
+            var handle = RegionHandleAt(selected.Rect, point);
+
+            if (LabelBoxEdit.IsResizeHandle(handle))
+            {
+                return handle switch
+                {
+                    BoxHandle.TopLeft or BoxHandle.BottomRight => Cursors.SizeNWSE,
+                    BoxHandle.TopRight or BoxHandle.BottomLeft => Cursors.SizeNESW,
+                    BoxHandle.Top or BoxHandle.Bottom => Cursors.SizeNS,
+                    _ => Cursors.SizeWE
+                };
+            }
+        }
+
+        return RegionAt(point) is not null ? Cursors.SizeAll : Cursors.Cross;
     }
 
     private void DoRemoveRegion() => Guard(() =>

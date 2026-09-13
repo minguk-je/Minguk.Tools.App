@@ -424,6 +424,17 @@ internal static partial class Program
             Check("JS 검사가 줄 번호를 준다", js.Count > 0 && js[0].Line == 2, js.Count > 0 ? js[0].ToString() : "(오류 없음)");
             Check("검사는 입력을 보내지 않는다", adapter.Calls.Count == 0, $"{adapter.Calls.Count}건");
         }
+
+        // ── 실시간 C# 도 System 이 열려 있다 ──
+        //    Live 네임스페이스를 WithImports 로 붙였더니 목록이 갈아 끼워져 System 이 빠졌었다.
+        {
+            var errors = new RoslynScriptEngine()
+                .CheckLiveAsync("var a = Math.Abs(-1);\nlong b = Environment.TickCount64;\nScriptMob? c = null;")
+                .GetAwaiter().GetResult();
+
+            Check("실시간 C# 에서 Math·Environment·ScriptMob 을 짧게 쓴다", errors.Count == 0,
+                errors.Count == 0 ? "오류 없음" : string.Join(" / ", errors));
+        }
     }
 
     private static void RunAndCheck(string language, IScriptEngine engine, string source, CaptureTarget monitor)

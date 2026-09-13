@@ -133,7 +133,29 @@ public sealed class DetectionOverlay : FrameworkElement
 
         if (ShowRegions && Regions is { } named)
             foreach (var region in named)
-                DrawNamed(dc, area, region);
+                DrawNamed(dc, area, region, selected: ShowRegionHandles && ReferenceEquals(region, SelectedRegion));
+    }
+
+    public static readonly DependencyProperty SelectedRegionProperty = DependencyProperty.Register(
+        nameof(SelectedRegion), typeof(Minguk.Tools.Vision.Regions.NamedRegion), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>고른 자리. 편집 중이면 굵게 그리고 손잡이를 붙인다.</summary>
+    public Minguk.Tools.Vision.Regions.NamedRegion? SelectedRegion
+    {
+        get => (Minguk.Tools.Vision.Regions.NamedRegion?)GetValue(SelectedRegionProperty);
+        set => SetValue(SelectedRegionProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowRegionHandlesProperty = DependencyProperty.Register(
+        nameof(ShowRegionHandles), typeof(bool), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>손잡이를 그릴지. 영역 지정 중에만 - 그때만 잡을 수 있으니, 아닐 때 그리면 잡히는 줄 안다.</summary>
+    public bool ShowRegionHandles
+    {
+        get => (bool)GetValue(ShowRegionHandlesProperty);
+        set => SetValue(ShowRegionHandlesProperty, value);
     }
 
     /// <summary>이름 붙인 자리들. 화면에서 만든 것을 그대로 보여 준다.</summary>
@@ -186,7 +208,7 @@ public sealed class DetectionOverlay : FrameworkElement
     }
 
     /// <summary>이름 붙인 자리 하나. 글자 영역과 색을 달리해 헷갈리지 않게 한다.</summary>
-    private void DrawNamed(DrawingContext dc, Rect area, Minguk.Tools.Vision.Regions.NamedRegion region)
+    private void DrawNamed(DrawingContext dc, Rect area, Minguk.Tools.Vision.Regions.NamedRegion region, bool selected)
     {
         var box = region.Rect;
 
@@ -198,10 +220,27 @@ public sealed class DetectionOverlay : FrameworkElement
             box.Width * area.Width,
             box.Height * area.Height);
 
-        var pen = new Pen(new SolidColorBrush(NamedColour), 2d);
+        // 확대하면 이 요소도 같이 커진다(LayoutTransform). 선과 손잡이는 화면에서 늘 같은 굵기로 보이게 나눈다.
+        var zoom = Math.Max(1d, ZoomOf(this));
+        var colour = selected ? SelectedNamedColour : NamedColour;
+        var pen = new Pen(new SolidColorBrush(colour), (selected ? 3d : 2d) / zoom);
 
         pen.Freeze();
         dc.DrawRectangle(null, pen, rect);
+
+        // 고른 것에만 손잡이 - 모서리와 변 가운데. 라벨링 캔버스와 같은 모양이다.
+        if (selected)
+        {
+            var fill = new SolidColorBrush(colour);
+            var edge = new Pen(Brushes.Black, 1d / zoom);
+            fill.Freeze();
+            edge.Freeze();
+
+            var half = 4d / zoom;
+
+            foreach (var grip in Grips(rect))
+                dc.DrawRectangle(fill, edge, new Rect(grip.X - half, grip.Y - half, half * 2, half * 2));
+        }
 
         var formatted = new FormattedText(region.Name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
                                           new Typeface("Segoe UI"), 12d, Brushes.White,
@@ -217,6 +256,32 @@ public sealed class DetectionOverlay : FrameworkElement
 
     /// <summary>이름 붙인 자리의 색. 글자 영역(노랑)·몹(초록)과 달라야 한다.</summary>
     private static readonly Color NamedColour = Color.FromRgb(120, 200, 255);
+
+    /// <summary>편집 중 고른 자리. 여럿 사이에서 무엇을 잡았는지 한눈에 갈리게 주황.</summary>
+    private static readonly Color SelectedNamedColour = Color.FromRgb(255, 170, 40);
+
+    private static IEnumerable<Point> Grips(Rect rect)
+    {
+        yield return rect.TopLeft;
+        yield return new Point(rect.Left + (rect.Width / 2), rect.Top);
+        yield return rect.TopRight;
+        yield return new Point(rect.Right, rect.Top + (rect.Height / 2));
+        yield return rect.BottomRight;
+        yield return new Point(rect.Left + (rect.Width / 2), rect.Bottom);
+        yield return rect.BottomLeft;
+        yield return new Point(rect.Left, rect.Top + (rect.Height / 2));
+    }
+
+    /// <summary>위쪽 LayoutTransform 들의 배율을 곱한다. 미리보기 확대가 여기서 온다.</summary>
+    private static double ZoomOf(DependencyObject element)
+    {
+        var zoom = 1d;
+
+        for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+            if (node is FrameworkElement { LayoutTransform: ScaleTransform scale }) zoom *= scale.ScaleX;
+
+        return zoom;
+    }
 
     private void DrawOcrRegion(DrawingContext dc, Rect area, Rect region, bool dashed, string? text)
     {

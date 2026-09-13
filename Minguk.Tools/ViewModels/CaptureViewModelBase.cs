@@ -390,8 +390,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning && SupportsCollecting, false);
 
         OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
-        OnPreviewMouseMoveCommand = new DelegateCommand<MouseEventArgs>(OnPreviewMouseMove, false);
-        OnPreviewMouseUpCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseUp, false);
+        OnPreviewMouseMoveCommand = new DelegateCommand<MouseEventArgs>(args => { if (!TryPanPreview(args)) OnPreviewMouseMove(args); }, false);
+        OnPreviewMouseUpCommand = new DelegateCommand<MouseButtonEventArgs>(args => { if (!TryEndPanPreview(args)) OnPreviewMouseUp(args); }, false);
         OnPreviewMouseWheelCommand = new DelegateCommand<MouseWheelEventArgs>(OnPreviewMouseWheel, false);
         OnPreviewKeyDownCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyDown, false);
         OnPreviewKeyUpCommand = new DelegateCommand<KeyEventArgs>(OnPreviewKeyUp, false);
@@ -448,6 +448,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             ? backend
             : InputBackend.SendInput;
         ShowPreview = GetSetting(nameof(ShowPreview), false);
+
+        // 영역을 맞추려고 키워 둔 배율. 화면을 열 때마다 1 로 돌아가면 다시 키워야 한다.
+        PreviewZoom = GetSetting(nameof(PreviewZoom), 1.0);
     }
 
     protected override void SaveSettings()
@@ -457,6 +460,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
         SetSetting(nameof(IsElementInspectEnabled), IsElementInspectEnabled);
+        SetSetting(nameof(PreviewZoom), PreviewZoom);
 
         if (SelectedTarget is not null)
             SetSetting(nameof(SelectedTarget), Base64Utility.Encode(SelectedTarget.Display));
@@ -700,6 +704,84 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     /// <summary>미리보기 위에서 마우스를 뗐다.</summary>
     protected virtual void OnPreviewMouseUp(MouseButtonEventArgs args) { }
+
+    /// <summary>
+    /// 미리보기를 손보는 중인가(영역 지정 등). 그동안은 휠이 확대, 오른쪽 끌기가 화면 옮기기다.
+    /// </summary>
+    /// <remarks>
+    /// 평소에는 휠과 오른쪽 버튼이 게임으로 가야 한다(무기 바꾸기·보조 사격). 클릭이 게임으로 안 가는 동안만 가로챈다.
+    /// </remarks>
+    protected virtual bool IsPreviewEditing => false;
+
+    // ── 편집 중 화면 옮기기 ──────────────────────────────────────────────
+
+    private Point? _panStart;
+    private Point _panStartOffset;
+
+    /// <summary>미리보기의 스크롤 뷰. 확대했을 때 옮길 대상이다.</summary>
+    private System.Windows.Controls.ScrollViewer? PreviewScroller => _previewSurface?.Child as System.Windows.Controls.ScrollViewer;
+
+    private bool TryBeginPanPreview(MouseButtonEventArgs args)
+    {
+        if (!IsPreviewEditing || args.ChangedButton != System.Windows.Input.MouseButton.Right || PreviewScroller is not { } scroller) return false;
+
+        _panStart = args.GetPosition(scroller);
+        _panStartOffset = new Point(scroller.HorizontalOffset, scroller.VerticalOffset);
+        _previewSurface?.CaptureMouse();
+
+        if (_previewSurface is not null) _previewSurface.Cursor = Cursors.ScrollAll;
+
+        return true;
+    }
+
+    private bool TryPanPreview(MouseEventArgs args)
+    {
+        if (_panStart is not { } start || PreviewScroller is not { } scroller) return false;
+
+        // 잡은 그림이 손을 따라온다 - 끄는 반대쪽으로 스크롤한다.
+        var now = args.GetPosition(scroller);
+        scroller.ScrollToHorizontalOffset(_panStartOffset.X - (now.X - start.X));
+        scroller.ScrollToVerticalOffset(_panStartOffset.Y - (now.Y - start.Y));
+
+        return true;
+    }
+
+    private bool TryEndPanPreview(MouseButtonEventArgs args)
+    {
+        if (_panStart is null || args.ChangedButton != System.Windows.Input.MouseButton.Right) return false;
+
+        _panStart = null;
+
+        if (_previewSurface?.IsMouseCaptured == true) _previewSurface.ReleaseMouseCapture();
+        if (_previewSurface is not null) _previewSurface.Cursor = null;
+
+        args.Handled = true;
+        return true;
+    }
+
+    /// <summary>
+    /// 마우스 아래 자리를 그대로 두고 확대한다.
+    /// </summary>
+    /// <remarks>
+    /// 그냥 배율만 바꾸면 왼쪽 위를 기준으로 커져서, 보던 탄약 숫자가 화면 밖으로 달아난다.
+    /// 확대 전 그 점의 내용 좌표 × 새 배율 - 뷰 안의 마우스 자리 = 새 스크롤 위치.
+    /// </remarks>
+    private void ZoomPreviewAt(MouseWheelEventArgs args)
+    {
+        var scroller = PreviewScroller;
+        var content = scroller?.Content as IInputElement;
+
+        var inContent = content is null ? default : args.GetPosition(content);
+        var inView = scroller is null ? default : args.GetPosition(scroller);
+
+        PreviewZoom *= args.Delta > 0 ? 1.25 : 1 / 1.25;
+
+        if (scroller is null || content is null) return;
+
+        scroller.UpdateLayout();
+        scroller.ScrollToHorizontalOffset((inContent.X * PreviewZoom) - inView.X);
+        scroller.ScrollToVerticalOffset((inContent.Y * PreviewZoom) - inView.Y);
+    }
 
     /// <summary>담을 때 라벨로 같이 쓸 검출. 몹 찾기가 없는 화면은 빈 목록이다.</summary>
     protected virtual IReadOnlyList<Minguk.Tools.Vision.Inference.Detection> DetectionsForLabels => [];
@@ -1096,7 +1178,21 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         // Image 는 Focusable 이 아니라서 여기가 아니라 Border 를 잡아야 한다.
         _previewSurface?.Focus();
 
+        // 손보는 중이면 오른쪽 끌기는 화면 옮기기다.
+        if (TryBeginPanPreview(args))
+        {
+            args.Handled = true;
+            return;
+        }
+
         // 파생 화면이 먼저 먹을 수 있다(글자 영역을 끄는 중이면 시작점). 그러면 게임으로 보내지 않는다.
+        // 끌기는 왼쪽 버튼만 - 가운데 버튼 따위로 사각형이 생기면 안 된다.
+        if (IsPreviewEditing && args.ChangedButton != System.Windows.Input.MouseButton.Left)
+        {
+            args.Handled = true;
+            return;
+        }
+
         if (TryInterceptPreviewMouseDown(args.GetPosition(_previewImage)))
         {
             args.Handled = true;
@@ -1199,9 +1295,10 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     {
         // Ctrl 을 누른 채로 돌리면 확대다. 그냥 돌리는 것은 전처럼 게임으로 보낸다 -
         // 휴을 쓰는 게임(무기 바꾸기)이 많아 그쪽을 뺀질 수 없다.
-        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        // 영역을 손보는 중이면 휠만으로 확대한다 - 그동안은 게임으로 아무것도 안 보낸다.
+        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0 || IsPreviewEditing)
         {
-            PreviewZoom *= args.Delta > 0 ? 1.25 : 1 / 1.25;
+            ZoomPreviewAt(args);
             args.Handled = true;
 
             return;
@@ -1319,8 +1416,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             var viaDriver = _inputRouter?.AdapterName == "Interception";
 
             note = viaDriver
-                ? "대상이 관리자 권한으로 떠 있습니다. 드라이버 경로라 입력은 들어가지만, 전역 단축키(F5·F9)는 그 창이 앞에 있는 동안 안 옵니다. 관리자로 다시 시작하세요."
-                : "대상이 관리자 권한으로 떠 있는데 이 앱은 아닙니다. 입력(SendInput)도 전역 단축키(F5·F9)도 그 창에 못 닿습니다. 관리자로 다시 시작하세요.";
+                ? "대상이 관리자 권한으로 떠 있습니다. 드라이버 경로라 입력은 들어가지만, 전역 단축키(F5·Pause)는 그 창이 앞에 있는 동안 안 옵니다. 관리자로 다시 시작하세요."
+                : "대상이 관리자 권한으로 떠 있는데 이 앱은 아닙니다. 입력(SendInput)도 전역 단축키(F5·Pause)도 그 창에 못 닿습니다. 관리자로 다시 시작하세요.";
         }
 
         if (note != ElevationNote)

@@ -37,7 +37,7 @@ namespace Minguk.Tools.Input.Scripting;
 /// 여기서 필요한 것은 <b>참조를 들고 있는 것</b>이고, 안 쓰이면 놓아 주는 것이다
 /// (<see cref="KeepAlive"/>).
 /// </remarks>
-public sealed class RoslynScriptEngine : IScriptEngine
+public sealed class RoslynScriptEngine : IScriptEngine, IProjectScriptEngine
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -182,6 +182,91 @@ public sealed class RoslynScriptEngine : IScriptEngine
     /// <summary>못 한다. 스크립트 어셈블리는 디버거를 붙일 자리가 없다. 호출 로그가 그 몫을 한다.</summary>
     public bool SupportsStepping => false;
 
+    // ── 여러 파일(프로젝트) ─────────────────────────────────────────────
+
+    public Task<IReadOnlyList<ScriptError>> CheckLiveAsync(ScriptUnit unit, CancellationToken token = default) => Task.Run(() =>
+    {
+        if (string.IsNullOrWhiteSpace(unit.EntryText) && unit.Sources.Count == 0) return (IReadOnlyList<ScriptError>)[];
+
+        try
+        {
+            GetOrCompileLive(unit.Fingerprint(), () => CreateLiveScript(unit), out var errors);
+            return errors;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "프로젝트 스크립트를 컴파일하지 못했다");
+            return [new ScriptError(0, $"스크립트를 컴파일하지 못했습니다: {ex.Message}")];
+        }
+    }, token);
+
+    public async Task<IReadOnlyList<ScriptError>> RunLiveAsync(ScriptUnit unit, LiveScriptApi api, ScriptDebugSession? debug = null, CancellationToken token = default)
+    {
+        ScriptRunner<object> runner;
+
+        try
+        {
+            var compiled = GetOrCompileLive(unit.Fingerprint(), () => CreateLiveScript(unit), out var errors);
+
+            if (errors.Count > 0 || compiled is null) return errors;
+
+            runner = compiled;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "프로젝트 스크립트를 컴파일하지 못했다");
+            return [new ScriptError(0, $"스크립트를 컴파일하지 못했습니다: {ex.Message}")];
+        }
+
+        return await RunCompiledLiveAsync(runner, api, token);
+    }
+
+    /// <summary>
+    /// 시작 파일 앞에 다른 소스의 <c>#load</c> 를 붙이고 <c>#line 1</c> 로 줄 번호를 되돌린다.
+    /// </summary>
+    /// <remarks>
+    /// Roslyn 스크립팅은 제출 하나에 글 하나라 여러 파일을 넣을 길이 <c>#load</c> 뿐이다. 사람이 적지 않아도 프로젝트 소스가 다
+    /// 들어가게 여기서 붙인다. <c>#line</c> 이 없으면 시작 파일의 오류가 머리말 줄 수만큼 밀려 엉뚱한 줄에 밑줄이 간다.
+    /// 사람이 직접 적은 <c>#load "../공용.csx"</c> · <c>#r "Libs/x.dll"</c> 은 파일 경로·찾기 규칙을 주었으므로 그대로 된다.
+    /// </remarks>
+    internal static string BuildPrelude(ScriptUnit unit)
+    {
+        if (unit.Sources.Count == 0 || string.IsNullOrEmpty(unit.EntryPath)) return string.Empty;
+
+        var builder = new System.Text.StringBuilder();
+
+        foreach (var source in unit.Sources)
+        {
+            if (string.Equals(source, unit.EntryPath, StringComparison.OrdinalIgnoreCase)) continue;
+
+            builder.Append("#load \"").Append(source.Replace('\\', '/')).Append("\"\n");
+        }
+
+        builder.Append("#line 1 \"").Append(unit.EntryPath.Replace('\\', '/')).Append("\"\n");
+
+        return builder.ToString();
+    }
+
+    private static Script<object> CreateLiveScript(ScriptUnit unit)
+    {
+        var options = LiveScriptOptions;
+
+        if (!string.IsNullOrEmpty(unit.EntryPath))
+        {
+            var baseDirectory = unit.ResourceRoot ?? System.IO.Path.GetDirectoryName(unit.EntryPath);
+
+            options = options
+                .WithFilePath(unit.EntryPath)
+                .WithSourceResolver(new ScriptSourceResolver(baseDirectory, unit.OpenTexts))
+                .WithMetadataResolver(ScriptMetadataResolver.Default.WithBaseDirectory(baseDirectory));
+        }
+
+        if (unit.References.Count > 0)
+            options = options.AddReferences(unit.References.Where(System.IO.File.Exists).Select(path => MetadataReference.CreateFromFile(path)));
+
+        return CSharpScript.Create(BuildPrelude(unit) + unit.EntryText, options, typeof(LiveScriptApi));
+    }
+
     public async Task<IReadOnlyList<ScriptError>> RunLiveAsync(string? source, LiveScriptApi api, ScriptDebugSession? debug = null, CancellationToken token = default)
     {
         var text = source ?? string.Empty;
@@ -192,9 +277,11 @@ public sealed class RoslynScriptEngine : IScriptEngine
 
         try
         {
-            runner = GetOrCompileLive(text, out var errors);
+            var compiled = GetOrCompileLive(text, () => CSharpScript.Create(text, LiveScriptOptions, typeof(LiveScriptApi)), out var errors);
 
-            if (errors.Count > 0) return errors;
+            if (errors.Count > 0 || compiled is null) return errors;
+
+            runner = compiled;
         }
         catch (Exception ex)
         {
@@ -202,6 +289,11 @@ public sealed class RoslynScriptEngine : IScriptEngine
             return [new ScriptError(0, $"스크립트를 컴파일하지 못했습니다: {ex.Message}")];
         }
 
+        return await RunCompiledLiveAsync(runner, api, token);
+    }
+
+    private static async Task<IReadOnlyList<ScriptError>> RunCompiledLiveAsync(ScriptRunner<object> runner, LiveScriptApi api, CancellationToken token)
+    {
         try
         {
             await runner(api, token);
@@ -209,7 +301,7 @@ public sealed class RoslynScriptEngine : IScriptEngine
         }
         catch (Exception) when (api.Outcome == LiveScriptOutcome.Stopped || token.IsCancellationRequested)
         {
-            // 중지·F9·끝() - 정상 종료다.
+            // 중지·비상 정지(Pause)·끝() - 정상 종료다.
             return [];
         }
         catch (Exception) when (api.Outcome == LiveScriptOutcome.Guarded)
@@ -222,14 +314,16 @@ public sealed class RoslynScriptEngine : IScriptEngine
         }
     }
 
-    private ScriptRunner<object> GetOrCompileLive(string source, out IReadOnlyList<ScriptError> errors)
+    /// <param name="key">같은 것인지 가르는 열쇠. 한 파일짜리는 글, 프로젝트는 <see cref="ScriptUnit.Fingerprint"/>.</param>
+    /// <returns>틀린 곳이 있으면 null.</returns>
+    private ScriptRunner<object>? GetOrCompileLive(string key, Func<Script<object>> create, out IReadOnlyList<ScriptError> errors)
     {
         lock (_gate)
         {
             _lastUsedUtc = DateTime.UtcNow;
             ScheduleRelease();
 
-            if (_liveRunner is not null && _liveSource == source)
+            if (_liveRunner is not null && _liveSource == key)
             {
                 errors = [];
                 return _liveRunner;
@@ -237,19 +331,19 @@ public sealed class RoslynScriptEngine : IScriptEngine
 
             var watch = Stopwatch.StartNew();
 
-            var script = CSharpScript.Create(source, LiveScriptOptions, typeof(LiveScriptApi));
+            var script = create();
             var failures = ToErrors(script.Compile());
 
             if (failures.Count > 0)
             {
                 errors = failures;
-                return _liveRunner ?? throw new InvalidOperationException("컴파일 실패");
+                return null;
             }
 
-            _liveSource = source;
+            _liveSource = key;
             _liveRunner = script.CreateDelegate();
 
-            Logger.Debug($"실시간 스크립트 컴파일 {watch.ElapsedMilliseconds}ms ({source.Length}자)");
+            Logger.Debug($"실시간 스크립트 컴파일 {watch.ElapsedMilliseconds}ms");
 
             errors = [];
             return _liveRunner;
@@ -357,14 +451,26 @@ public sealed class RoslynScriptEngine : IScriptEngine
         .WithImports("System", "Minguk.Tools.Input", "Minguk.Tools.Input.Scripting");
 
     /// <summary>실시간 모드. 몹(ScriptMob) 같은 것을 이름만으로 쓸 수 있게 Live 네임스페이스를 더한다.</summary>
-    private static readonly ScriptOptions LiveScriptOptions = ScriptOptions.WithImports("Minguk.Tools.Input.Scripting.Live");
+    /// <remarks>
+    /// <c>AddImports</c> 여야 한다. <c>WithImports</c> 는 목록을 갈아 끼워 System 이 빠진다 -
+    /// 실시간 스크립트에서 <c>Math</c>·<c>Environment</c> 가 "이름이 없다" 로 막혔었다.
+    /// </remarks>
+    private static readonly ScriptOptions LiveScriptOptions = ScriptOptions.AddImports("Minguk.Tools.Input.Scripting.Live");
 
+    /// <remarks>
+    /// 줄 번호는 <c>#line</c> 을 따른 것(<c>GetMappedLineSpan</c>)을 쓴다 - 시작 파일 앞에 붙인 머리말만큼 밀리지 않게.
+    /// 파일은 오류가 난 트리의 경로다. 한 파일짜리(경로 없음)는 null.
+    /// </remarks>
     private static IReadOnlyList<ScriptError> ToErrors(IEnumerable<Diagnostic> diagnostics)
         => [.. diagnostics
             .Where(d => d.Severity == DiagnosticSeverity.Error)
-            .Select(d => new ScriptError(
-                d.Location.GetLineSpan().StartLinePosition.Line + 1,
-                d.GetMessage()))];
+            .Select(d =>
+            {
+                var span = d.Location.GetMappedLineSpan();
+                var file = string.IsNullOrEmpty(span.Path) ? null : System.IO.Path.GetFullPath(span.Path);
+
+                return new ScriptError(span.StartLinePosition.Line + 1, d.GetMessage(), file);
+            })];
 
     public void Dispose()
     {

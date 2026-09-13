@@ -252,6 +252,11 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   파일을 열어 둔 채면 그 글은 본보기가 아니라 그 파일의 것이다.
 - 파일 이름 옆의 `*` 는 **열어 둔 파일이 있을 때만** 붙는다. 견줄 파일이 없는데
   "다르다" 고 할 수 없다.
+- **밖에서 고치면 다시 읽는다**(`ScriptWorkbench.WatchFile`, `FileSystemWatcher`). 편집기는 한 번 저장에 알림을
+  여러 번 내거나 임시 파일 + 이름 바꾸기로 저장하므로 300ms 묶고, 잠겨 있으면 다섯 번까지 다시 해 본다.
+  여기서 고친 것이 있으면(`IsDirty`) **덮어쓰지 않고** 아래 바에 알린다. 도는 중(`IsLocked`)이면 끝난 뒤에 읽는다.
+  앱이 꺼져 있는 동안 고친 것은 `ScriptDirty.<언어>` 가 False 일 때만 복원 시 파일을 믿는다 - 표시가 없는 옛 설정은
+  고친 채 닫았는지 모르므로 설정의 글을 그대로 둔다.
 - 쓸 때는 **UTF-8(BOM 없이)**. 한글 이름을 열어 두고 ANSI 로 쓰면 다른 PC 에서 깨진다.
 - 대화 상자는 `dxmvvm:OpenFileDialogService` / `SaveFileDialogService` 를 화면에 두고
   ViewModel 에서 `OpenFileDialogService` · `SaveFileDialogService` 로 받는다.
@@ -273,14 +278,35 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
 - `TextEditor.Text` 는 의존 속성이 아니다. `Markup/AvalonEditText` 붙임 속성으로 양방향을 잇는다.
 - 순수 WPF 컨트롤이라 **경량 테마가 손대지 않는다.** 배경·글자색을 직접 주지 않으면
   테마를 바꿔도 이 편집기만 그대로 남는다. `Helper/SequenceScriptHighlighting` 이 색을 든다.
-- 색은 **경량 테마 팔레트에서 읽는다** — `LightweightThemeManager.CurrentTheme.Palette` 의
-  `Brush.Editor.Background` · `Brush.Foreground` · `Brush.Border`. (TamsTools 의
+- **밝은지 어두운지는 경량 테마 팔레트에서 읽는다** — `LightweightThemeManager.CurrentTheme.Palette` 의
+  `Brush.Editor.Background` 밝기. 칠하는 바탕·본문색은 VS 편집기 값(어두운 #1E1E1E/#DCDCDC, 밝은 #FFFFFF/#000000)이다 -
+  팔레트의 입력 칸 바탕은 어두운 테마에서 회색이라 VS 와 달라 보였다. 테두리(`Brush.Border`)만 팔레트 그대로. (TamsTools 의
   `SearchTermTheme.Brush` 가 같은 길을 쓴다.) 줄 번호는 팔레트에 없어 본문과 바탕을 섞어 만든다.
 - **테마 이름으로 가르지 않는다.** 팔레트로 만든 테마(VS2019Blue)는 이름에 Dark 도 Black 도
   없어 밝은 쪽으로 잘못 본다. XAML 에서 테마 **키**를 짚는 것도 아니다 — 키 이름이 판마다
   달라진다(`LayoutControlThemeKey` 를 짚었다가 MC3072/MC3074 로 막힌 적이 있다).
   강조 벌(낱말·글자 색)만은 팔레트에 없으므로 **팔레트에서 읽은 바탕색의 밝기**로 고른다.
 - 팔레트를 못 읽을 때만 이름(`Dark`·`Black`)과 레지스트리(`AppsUseLightTheme`)로 어림한다.
+- **낱말 색은 이 PC 의 Visual Studio 2026 화면과 같다**(2026-09-13). VS 의 C# 은 **ReSharper 가 칠한다** -
+  VS 설정 파일(`CurrentSettings.vssettings` 의 글꼴 및 색: 제어 키워드 굵게 · 메서드 #74531F · 지역 #1F377F)을
+  옮겼더니 VS 화면과 달랐다. 밝은 벌은 ReSharper 라이트(키워드 #0000FF · 메서드 #008B8B · 필드·속성 #800080 ·
+  지역 변수 검정 · 형식 #2B91AF, **아직 화면에서 재지 않았다**), 어두운 벌은 **VS 다크 화면을 캡처해 글자 픽셀에서 잰 값**
+  (바탕 #1E1E1E · 키워드 #569CD6 · 제어 키워드 #D8A0DF · 주석 #608B4E · 메서드 #00FFFF · 필드·속성 #EE82EE ·
+  형식 #ADD8E6 · 지역 변수 본문색 #DCDCDC · 줄 번호 #8A8A8A). 메서드·속성·형식은 ReSharper, 키워드·제어·주석은 VS 가 칠한다 -
+  ReSharper 기본값(설치 폴더 `JetBrains.ReSharper.Daemon.dll` 의 `DarkForegroundColor`)만 믿고 제어 키워드를 파랑으로 뒀다가 틀렸다.
+  재는 법: `CopyFromScreen` 으로 VS 창을 잡고(관리자 VS 는 `PrintWindow` 가 검게 나온다) 낱말 자리의 바탕과 먼 픽셀 중
+  가장 많은 색을 본다. ClearType 가장자리가 파랗게·붉게 번지므로 한두 픽셀짜리 색은 믿지 않고 크게 잘라 눈으로도 본다. 정규식이라 종류를 어림한다 - 이름 뒤 `(` 면 메서드,
+  점 뒤면 멤버(본문색), 나머지 이름은 지역 변수. 같은 자리에서는 먼저 적힌 규칙이 이기므로 키워드가 이름 규칙보다 앞이다.
+  바꾸고 나면 AvalonEdit 의 `DocumentHighlighter.HighlightLine` 으로 줄마다 색 이름을 찍어 본다.
+- **C# 은 컴파일러 분류로 덧칠한다**(`IScriptClassifier` · `RoslynCompletionSource.ClassifyAsync` · `Markup/SemanticColorizer`).
+  xshd 정규식은 이름 종류를 몰라 점 없는 필드·스크립트 안 함수·형식을 틀리게 칠했다. Roslyn `Classifier.GetClassifiedSpansAsync` 가
+  VS 와 같은 분류 이름(`method name`·`keyword - control`…)을 주고, 그것을 `ScriptTokenKind` 로 옮긴다 - **이름이 곧 xshd 의 Color name** 이라
+  색표는 xshd 한 곳뿐이다. 완성과 같은 제출 프로젝트를 쓴다(작업 공간을 또 만들면 MEF 구성에 몇 초).
+  - 능력별 인터페이스라 편집기가 `CompletionSource is IScriptClassifier` 로 묻는다. 파이썬·JS 는 xshd 색만.
+  - 치는 동안은 xshd 색으로 버티고 입력이 250ms 멎으면 분류한다. 토막은 `TextSegmentCollection` 으로 문서에 매어 뒤 글이 밀려도 따라간다.
+    돌아온 결과의 글 판(`ITextSourceVersion`)이 지금과 다르면 버린다.
+  - 스크립트 **최상위 변수는 제출 클래스의 필드**라 멤버 색(보라)이다. 함수 안 변수만 지역 변수 색이다 - 틀린 게 아니라 컴파일러가 보는 그대로다.
+  - 검증: `--vision` 이 낱말 16개의 종류를, `--views` 가 편집기에서 점 없는 필드가 멤버 색으로 그려지는지 본다.
 - 테마가 바뀌면 `LightweightThemeManager.CurrentThemeChanged` 로 다시 읽는다.
   **정적 이벤트라 화면이 닫힐 때 반드시 푼다.**
 - 전환 자체는 검증 하네스로 못 잰다. `LightweightThemeManager` 는 화면 없이 도는 곳에서
@@ -395,7 +421,7 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   `Claim` 으로 쥐고(`HotkeyClaim`), 탭이 활성화되면(`DocumentViewModelBase.OnActivated`) 제 차례를 당긴다 -
   마지막에 본 화면이 받는다. 마지막 화면이 놓으면 시스템 등록도 푼다. `--vision` 이 가짜 어댑터로 본다.
 - **대상이 관리자 권한이면 이 앱도 관리자여야 한다** (`ProcessElevation`) - 낮은 무결성에서 높은 쪽으로는 SendInput 도
-  RegisterHotKey 의 전역 단축키(F5·F9)도 못 간다(UIPI). 캡처 시작·입력 경로 변경 때 `RefreshElevationNote` 가 견줘
+  RegisterHotKey 의 전역 단축키(F5·Pause)도 못 간다(UIPI). 캡처 시작·입력 경로 변경 때 `RefreshElevationNote` 가 견줘
   `ElevationNote` 를 채우고, 화면은 "관리자로 다시 시작" 버튼(`RestartAsAdmin`, runas)을 보인다. 드라이버(Interception)는
   입력은 넣지만 단축키는 여전히 안 온다. VS(관리자)에서 띄우면 앱도 관리자라 해당 없음.
 - **Interception 은 사람이 쓰는 그 장치 자리로 보낸다** - 드라이버는 자리(1~10 키보드, 11~20 마우스)로 보낸다. 늘 첫 자리로
@@ -407,7 +433,7 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
 - **OS 커서는 보낸 카운트보다 많이 움직인다** - 실측(기본 모드 `상대 이동` 검사): 60 카운트를 보내면 커서가 135px,
   즉 **2.25배**다(포인터 속도·정밀도 향상). 게임은 Raw Input 으로 카운트를 그대로 보므로 조준 배율과 이 값을 섞지 말 것.
   큰 상대 이동을 걸음으로 나누는 이유도 이것이다 - 커서가 2배 넘게 튀어 창 밖으로 나간다.
-- **스크립트 화면 단축키**: F5 실행/계속 · F6 중지(대기 중에도) · F10 한 줄 · F9 비상 정지(도는 동안만). 호출 로그
+- **스크립트 화면 단축키**: F5 실행/계속 · F6 중지(대기 중에도) · F10 한 줄 · Pause 비상 정지(도는 동안만). F9 는 VS 처럼 중단점으로 비워 둔다(2026-09-13). 호출 로그
   (`ScriptConsole.Trace`)는 파일 로그에도 Debug 로 남긴다 - 게임에서 돌린 뒤 무엇을 불렀는지 나중에 본다.
 - **스크립트 실행은 소리로 알린다** (`ScriptPlayer.Chime`) - 게임이 앞에 있으면 화면 글자를 못 본다. 받음 한 번 ·
   시작 두 번 · 끝 높게 · 실패 낮게 길게. 단축키 눌림(`SharedHotkeys.Fire`)·시작 무시 이유·끝 상태는 로그에 남긴다.
@@ -419,14 +445,14 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   `RunLiveAsync`(실시간: 끝까지 돌림). 실시간 검사는 돌리면 입력이 나가므로 부작용이 없어야 한다.
   C# 은 전역 타입이 다르므로 캐시도 따로. 파이썬은 `name = api.name` 으로, 자바스크립트는
   `function name(){ return api.name.apply(api, arguments); }` 로 표의 이름을 심는다 - 대리자를 하나씩 안 적는다.
-- **끝난 이유는 `LiveScriptApi.Outcome`** 으로 가른다. 중지·F9·끝() 은 오류가 아니라 빈 목록, 안전장치가 막은
+- **끝난 이유는 `LiveScriptApi.Outcome`** 으로 가른다. 중지·비상 정지·끝() 은 오류가 아니라 빈 목록, 안전장치가 막은
   것은 `GuardMessage`, 그 밖은 스크립트 오류. 예외 타입으로 가르면 안 된다 - 파이썬을 거치면 전부
   PythonException 이 된다.
 - **안전장치는 전부 `LiveScriptApi` 안에**: 대상 창이 앞에 없으면 입력을 보내지 않고 멈춤(SendInput·Interception 만),
   초당 입력 상한 30(넘으면 기다림), 모든 호출이 중지 토큰을 봄(`쉬기()` 도 토큰으로 기다린다), 눈이 없으면
   `몹들()` 은 빈 목록이 아니라 멈추고 이유를 말함. 실행 시간 상한은 `ScriptPlayer.RunTimeLimitSeconds`(기본 600).
-- **비상 정지 F9** 는 `EmergencyStop` 이 스크립트가 도는 동안만 쥔다. 누르면 중지 + 누르고 있던 키 전부 뗌.
-  늘 쥐면 다른 화면·프로그램의 F9 를 빼앗는다.
+- **비상 정지 Pause** 는 `EmergencyStop` 이 스크립트가 도는 동안만 쥔다. 누르면 중지 + 누르고 있던 키 전부 뗌.
+  늘 쥐면 다른 화면·프로그램의 Pause 를 빼앗는다. 원래 F9 였는데 VS 의 중단점 키와 겹쳐 옮겼다.
 - **인식 허브 `Vision/Perception/IPerceptionHub`**: 인식 베이스가 상태(잡는 중·찾는 중·대상)·검출·이름표를
   올리고, 스크립트가 읽는다. 프레임 픽셀은 `WantsFrames` 일 때만(읽기() 를 부른 뒤) 0.25초마다 복사해 올린다.
   앱에 하나(`PerceptionHubFactory.Default`), 하네스는 가짜 허브를 꽂는다.
@@ -434,7 +460,7 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   **겨누는 곳은 `머리x`·`머리y`**(사각형 위에서 높이의 18%). 가운데는 사람으로 치면 배다 - 머리가 한 발의 값이
   크고, 팔다리가 사각형을 넓혔다 좁혔다 하는 것은 아래쪽이라 머리가 덜 흔들린다. 꼭대기에 붙이지 않는 이유는
   검출 사각형이 늘 조금 넉넉해서 머리 위 허공을 보기 때문이다. `중심x`·`중심y` 는 그대로 있다.
-- `LiveScriptSession`(ViewModels) 이 화면 둘이 같이 쓰는 묶음 - 출력 칸(`ScriptConsole`), F9, API 에 빌려 줄 것.
+- `LiveScriptSession`(ViewModels) 이 화면 둘이 같이 쓰는 묶음 - 출력 칸(`ScriptConsole`), 비상 정지, API 에 빌려 줄 것.
   `ScriptPlayer` 는 한 바퀴를 `ScriptRunContext.RunOnce` 대리자로 받아 계획·실시간을 가리지 않는다.
 - 검증: `--vision` 의 실시간 검사는 **가짜 어댑터**(누른 것을 적기만)와 가짜 허브로 돈다. 입력은 절대 실제로 안 나간다.
   MoveTo 는 부드럽게 여러 걸음이라 "마지막 걸음이 몹 자리" 로 본다.
@@ -456,7 +482,7 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
 - **C#** 은 `SupportsStepping=false`. Roslyn 스크립트 어셈블리에는 디버거를 붙일 자리가 없다. 한 줄(F10)을 누르면 상태 줄이 그렇게 말한다.
 - 편집기(`ScriptEditor`): 왼쪽 여백(`BreakpointMargin`, AbstractMargin)을 누르면 중단점, Ctrl+B 도 같다. `CurrentLine` 이 0 이
   아니면 그 줄을 노랗게 칠하고 굴린다. 여백은 `OnRender` 에 투명 판을 깔아야 클릭이 온다 - 안 그린 자리는 히트 테스트에 안 걸린다.
-- 스크립트 화면 단축키: F5 실행/계속, F10 한 줄, F9 비상 정지(도는 동안). 플레이·입력 자동화도 F5 를 쥐므로 같이 열면 나중 것이 실패한다.
+- 스크립트 화면 단축키: F5 실행/계속, F10 한 줄, Pause 비상 정지(도는 동안). 플레이·입력 자동화도 F5 를 쥐므로 같이 열면 나중 것이 실패한다.
 - 검증(`--vision`): 가짜 어댑터로 JS 중단점(2번 줄에서 멈춤·변수 `a=1`·계속하면 끝), 한 줄씩(1→2→3), 멈춘 채 중지, 호출 로그.
 
 ## 몹 검출 (이미지 캡처 → 라벨링 → 학습 → 추론)
@@ -963,6 +989,11 @@ D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 �
     끌고 나서 대화 상자로 물으면 그 창이 게임 화면을 가리고 그 사이 화면이 바뀐다. 비우면 `자리1` 처럼 붙는다.
   - **`지금 읽기` 버튼이 없으면 자리를 못 맞춘다.** 끌어 놓고 맞는지 보려면 스크립트를 짜서 돌려야 하는데 한 번에
     몇십 초다. 누르는 즉시 읽은 글이 상태 줄에 뜬다 - 비면 자리를 넓히거나 `전처리` 를 켜고 끈다.
+  - **`영역 지정` 을 켜 둔 동안 미리보기가 편집기다**(라벨링 캔버스와 같은 규칙, 계산은 `LabelBoxEdit`). 빈 자리 끌기 = 새 자리,
+    자리 안 끌기 = 옮기기, 고른 자리의 모서리·변 가운데 손잡이 = 크기 조절. 휠 = 마우스 아래를 두고 확대, 오른쪽 끌기 = 화면 옮기기
+    (`CaptureViewModelBase.IsPreviewEditing`). 새 자리를 만들어도 모드를 끄지 않는다 - 바로 손잡이로 다듬게.
+    **Adorner·Thumb 컨트롤을 얹지 않는다** - 겹그림은 클릭을 게임으로 흘려야 해서 히트 테스트를 끈다. 손잡이는 겹그림이 그리고
+    마우스는 모드가 켜져 있을 때만 VM 이 먹는다. 선·손잡이 굵기는 확대 배율로 나눠 화면에서 같게 보인다.
   - 같은 끌기 손짓을 `글자 영역` 과 나눠 쓴다. 한쪽을 켜면 다른 쪽을 끈다 - 둘 다 켜져 있으면 끈 사각형이
     어디로 갈지 알 수 없다.
   - 이름은 대소문자를 안 가린다. 스크립트에서 글자 하나가 달라 못 찾으면 사람은 자리가 틀린 줄 안다.
@@ -1045,6 +1076,14 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --scale-check         # 실�
 
 - 폰트·크기는 `BaseFontFamily` / `BaseFontSize` 리소스를 **DynamicResource** 로 참조한다. StaticResource 로 쓰면 설정 변경이 반영되지 않는다.
 - 경량 테마를 쓰므로(`UseLightweightThemes = true`) 표준 WPF 컨트롤에는 테마가 적용되지 않는다. 화면은 DevExpress 컨트롤로 짠다.
+- **화면 규칙(사용자, 2026-09-13)**
+  - **모든 것을 Visual Studio 2026 과 DevExpress WPF 기준으로 생각한다** - 배치·동작·컨트롤·메뉴·도구 모음·단축키.
+    **VS Code 가 아니다**(한 번 VSC 로 잘못 말했다가 바로잡았다). VS 에 같은 기능이 있으면 그 모양과 조작을 따르고 DevExpress 컨트롤로 만든다.
+  - 배치는 **LayoutControl**(`dxlc:LayoutControl`·`LayoutGroup`·`LayoutItem`). Grid·StackPanel 로 뼈대를 짜지 않는다.
+    단 **VS 같은 도킹 화면(스크립트 화면의 개발 부분)의 큰 틀은 DockLayoutManager** 고, 그 창 안의 폼 칸이 LayoutControl 이다.
+  - 메뉴·도구 모음·상태 표시줄은 BarManager, 단축키는 VS 2026 과 같게.
+  - **리스트성 데이터(목록·표·트리)는 GridControl**. 트리는 GridControl + `TreeListView`. ListBox·ListView 로 목록을 새로 만들지 않는다.
+  - 컨트롤도 **대부분 DevExpress WPF**. 표준 WPF 는 DevExpress 에 없는 것만(AvalonEdit 편집기 등).
 - 그리드는 `Minguk.Base.Controls.BaseGridControl` / `BaseTableView` 를 쓴다. 기본값이 이미 잡혀 있다.
   - 행 번호를 쓸 때(`GridControlDependency.IsRowNumber="True"`) **화면에서 `IndicatorWidth` 를 물려야 한다.**
     `InitRowIndicatorWidth` 가 폭을 계산해 두지만 인디케이터 칸에 연결하는 쪽이 없으면 세 자리부터 앞이 잘린다.

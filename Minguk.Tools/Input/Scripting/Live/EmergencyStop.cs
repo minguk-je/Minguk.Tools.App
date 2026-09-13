@@ -6,18 +6,18 @@ using Minguk.Tools.Input.Hotkeys;
 namespace Minguk.Tools.Input.Scripting.Live;
 
 /// <summary>
-/// 비상 정지 (F9). 스크립트가 도는 동안만 전역으로 쥐고, 끝나면 놓는다.
+/// 비상 정지 (Pause). F9 는 VS 처럼 중단점이라 옮겼다(2026-09-13). 스크립트가 도는 동안만 전역으로 쥐고, 끝나면 놓는다.
 /// </summary>
 /// <remarks>
 /// 스크립트가 게임에 입력을 보내는 동안 사용자는 게임을 보고 있다. 이 앱의 중지 버튼은 앱이 앞에 있어야
 /// 눌리므로, 어느 창에 있어도 눌리는 키가 있어야 한다. 도는 동안만 쥐는 이유는 늘 쥐고 있으면 다른 화면·
-/// 다른 프로그램의 F9 를 빼앗기 때문이다.
+/// 다른 프로그램의 Pause 를 빼앗기 때문이다.
 /// 누르면 중지와 함께 누르고 있던 키를 전부 뗀다 - 누른 채로 멈추면 게임이 계속 달린다.
 /// </remarks>
 public sealed class EmergencyStop : IDisposable
 {
-    public const string Label = "F9";
-    private const Key Hotkey = Key.F9;
+    public const string Label = "Pause";
+    private const Key Hotkey = Key.Pause;
 
     private IGlobalHotkeyAdapter? _hotkeys;
 

@@ -22,7 +22,7 @@ public enum LiveScriptOutcome
     /// <summary>끝까지 돌았거나 아직 도는 중.</summary>
     None,
 
-    /// <summary>중지·F9·<c>끝()</c> 으로 멈췄다. 오류가 아니다.</summary>
+    /// <summary>중지·비상 정지(Pause)·<c>끝()</c> 으로 멈췄다. 오류가 아니다.</summary>
     Stopped,
 
     /// <summary>안전장치가 막았다. 이유는 <see cref="LiveScriptApi.GuardMessage"/>.</summary>
@@ -1265,6 +1265,42 @@ public sealed class LiveScriptApi
     public void 출력(object? value) => Print(value);
 
     public void 보기(string name, object? value) => Watch(name, value);
+
+    // ── 리소스(프로젝트) ─────────────────────────────────────────────────
+    //    이름은 프로젝트 기준 경로("Resources/적.png")도, Resources 아래 이름("적.png")도 받는다.
+    //    못 찾으면 null 을 주지 않고 멈춘다 - null 을 받아 한참 뒤 엉뚱한 줄에서 터지면 이름이 틀린 줄 모른다.
+
+    public string ResourcePath(string name) => Traced(nameof(ResourcePath), Quote(name), () => FindResource(name));
+
+    public string ResourceText(string name) => Traced(nameof(ResourceText), Quote(name), () => System.IO.File.ReadAllText(FindResource(name), System.Text.Encoding.UTF8));
+
+    public byte[] ResourceBytes(string name) => Traced(nameof(ResourceBytes), Quote(name), () => System.IO.File.ReadAllBytes(FindResource(name)));
+
+    /// <summary>wav 를 한 번 울린다. 끝나기를 기다리지 않는다 - 소리 때문에 조준이 밀리면 안 된다.</summary>
+    public void PlaySound(string name) => Traced(nameof(PlaySound), Quote(name), () =>
+    {
+        var path = FindResource(name);
+        var player = new System.Media.SoundPlayer(path);
+
+        player.Play();
+    });
+
+    public string 리소스경로(string name) => ResourcePath(name);
+
+    public string 리소스글(string name) => ResourceText(name);
+
+    public byte[] 리소스바이트(string name) => ResourceBytes(name);
+
+    public void 소리(string name) => PlaySound(name);
+
+    private string FindResource(string name)
+    {
+        var root = _host.ResourceRoot
+                   ?? throw Guard("리소스를 쓰려면 프로젝트로 열어야 합니다 - 한 파일짜리 스크립트에는 Resources 폴더가 없습니다.");
+
+        return Projects.ScriptProject.ResolveResource(root, name)
+               ?? throw Guard($"리소스 「{name}」 를 찾지 못했습니다. 프로젝트 폴더나 {Projects.ScriptProject.ResourceFolder} 폴더에 있는지 보세요 ({root}).");
+    }
 
     // ── 호출 기록 ────────────────────────────────────────────────────────
 

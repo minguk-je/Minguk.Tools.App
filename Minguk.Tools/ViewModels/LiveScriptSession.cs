@@ -16,9 +16,9 @@ namespace Minguk.Tools.ViewModels;
 /// 화면이 실시간 스크립트를 돌릴 때 필요한 것을 한데 묶은 것 - API 에 빌려 줄 것들, 비상 정지, 출력 칸.
 /// </summary>
 /// <remarks>
-/// 스크립트·플레이 두 화면이 똑같이 한다. 화면마다 적으면 F9 나 잠금 하나를 한쪽에서만 고치게 된다.
+/// 스크립트·플레이 두 화면이 똑같이 한다. 화면마다 적으면 비상 정지나 잠금 하나를 한쪽에서만 고치게 된다.
 /// <see cref="Resolve"/> 가 <see cref="ScriptPlayer"/> 에 줄 문맥을 만든다: 한 바퀴 = 엔진이 스크립트를
-/// 실시간 API 로 끝까지 돌리는 것. 도는 동안 F9 를 쥐고, 끝나면 놓고 누르고 있던 키를 뗀다.
+/// 실시간 API 로 끝까지 돌리는 것. 도는 동안 비상 정지(Pause)를 쥐고, 끝나면 놓고 누르고 있던 키를 뗀다.
 /// </remarks>
 public sealed class LiveScriptSession : IDisposable
 {
@@ -65,7 +65,7 @@ public sealed class LiveScriptSession : IDisposable
     public IPerceptionHub Hub { get; init; } = PerceptionHubFactory.Default;
 
     /// <summary>
-    /// 돌릴 문맥을 만든다. 틀린 줄이 있으면 안 돌린다. 문맥의 한 바퀴가 엔진을 돌리고, 도는 동안 F9 가 산다.
+    /// 돌릴 문맥을 만든다. 틀린 줄이 있으면 안 돌린다. 문맥의 한 바퀴가 엔진을 돌리고, 도는 동안 비상 정지(Pause)가 산다.
     /// </summary>
     public ScriptRunContext? Resolve(ScriptWorkbench script, ScriptPlayer player)
     {
@@ -75,7 +75,25 @@ public sealed class LiveScriptSession : IDisposable
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(script.Text))
+        // 프로젝트면 시작할 때 전체를 한 벌로 굳힌다(저장 안 한 탭 포함). 도는 중에 탭을 고쳐도 그 바퀴는 안 바뀐다.
+        var unit = script.IsProject ? script.Project.ToUnit() : null;
+        var engine = script.Engine;
+
+        if (unit is not null)
+        {
+            if (engine is not IProjectScriptEngine)
+            {
+                MessengerUtility.SendMainMessage($"{engine.Name} 은(는) 프로젝트를 돌리지 못합니다. 프로젝트는 C# 으로 씁니다.");
+                return null;
+            }
+
+            if (string.IsNullOrEmpty(unit.EntryPath))
+            {
+                MessengerUtility.SendMainMessage("시작 파일이 없습니다 - 탐색기에서 .csx 를 오른쪽 눌러 '시작 파일로' 를 고르세요.");
+                return null;
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(script.Text))
         {
             MessengerUtility.SendMainMessage("스크립트가 비어 있습니다.");
             return null;
@@ -87,7 +105,6 @@ public sealed class LiveScriptSession : IDisposable
         service.JitterMs = player.JitterMs;
 
         var source = script.Text;
-        var engine = script.Engine;
 
         Debug.SupportsStepping = engine.SupportsStepping;
         Console.ClearCalls();
@@ -122,6 +139,7 @@ public sealed class LiveScriptSession : IDisposable
                 Hub = Hub,
                 Ocr = _ocr,
                 Regions = _regions,
+                ResourceRoot = unit?.ResourceRoot,
                 Print = Console.Print,
                 Watch = Console.Watch,
                 Trace = Console.Trace,
@@ -146,7 +164,10 @@ public sealed class LiveScriptSession : IDisposable
             try
             {
                 // 줄 단위로 멈출 수 있는 언어에만 디버그 세션을 준다. C# 은 호출 로그로 본다.
-                var errors = await engine.RunLiveAsync(source, api, engine.SupportsStepping ? Debug : null, token);
+                var debug = engine.SupportsStepping ? Debug : null;
+                var errors = unit is not null && engine is IProjectScriptEngine projectEngine
+                    ? await projectEngine.RunLiveAsync(unit, api, debug, token)
+                    : await engine.RunLiveAsync(source, api, debug, token);
 
                 if (errors.Count > 0)
                 {

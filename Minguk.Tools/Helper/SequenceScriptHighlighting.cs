@@ -45,10 +45,18 @@ public static class SequenceScriptHighlighting
 
     public static IHighlightingDefinition Dark => _dark ??= Load("SequenceScript.Dark.xshd");
 
-    /// <summary>편집기 바탕. 그 테마가 입력 칸에 쓰는 색이다.</summary>
-    public static Brush Background => Palette("Brush.Editor.Background") ?? Fallback("#1E1E1E", "#FFFFFF");
+    /// <summary>
+    /// 편집기 바탕. Visual Studio 편집기와 같은 색이다.
+    /// </summary>
+    /// <remarks>
+    /// 처음에는 테마가 입력 칸에 쓰는 색(<c>Brush.Editor.Background</c>)을 썼는데, 어두운 테마에서 그 색은
+    /// 회색이라 VS 에서 보던 글과 달라 보였다(낱말 색을 VS 와 맞춘 뒤 바탕만 튀었다). 밝은·어두운 갈래는 여전히
+    /// 팔레트의 밝기로 가르고, 칠하는 색만 VS 의 것을 쓴다. 테두리는 창에 섞여야 하므로 팔레트 그대로다.
+    /// </remarks>
+    public static Brush Background => Frozen(IsDarkTheme() ? "#1E1E1E" : "#FFFFFF");
 
-    public static Brush Foreground => Palette("Brush.Foreground") ?? Fallback("#D4D4D4", "#1F2328");
+    /// <summary>본문 글자. VS 의 일반 텍스트 색 - 강조 정의의 Plain 과 같다.</summary>
+    public static Brush Foreground => Frozen(IsDarkTheme() ? "#DCDCDC" : "#000000");
 
     public static Brush Border => Palette("Brush.Border") ?? Fallback("#3C3C3C", "#D0D7DE");
 
@@ -63,6 +71,9 @@ public static class SequenceScriptHighlighting
     {
         get
         {
+            // 어두운 쪽은 VS 화면에서 잰 값이 있다(#8A8A8A). 밝은 쪽은 아직 못 재 섞어 만든다.
+            if (IsDarkTheme()) return Frozen("#8A8A8A");
+
             if (Foreground is SolidColorBrush fore && Background is SolidColorBrush back)
                 return Frozen(Blend(fore.Color, back.Color, 0.55));
 

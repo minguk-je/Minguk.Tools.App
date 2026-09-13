@@ -29,7 +29,7 @@ public enum ScriptStepMode
 ///
 /// 언어마다 되는 것이 다르다. 자바스크립트(Jint)와 파이썬(sys.settrace)은 줄 단위로 멈추고 변수를 보여 준다.
 /// C# 은 Roslyn 스크립트가 디버거 없이 돌아 멈추지 못한다 - 그때는 호출 로그(<see cref="ScriptCall"/>)로 본다.
-/// 멈춘 채로 중지(F9·중지 버튼)를 누르면 토큰이 깨워 그 자리에서 끝난다.
+/// 멈춘 채로 중지(Pause·중지 버튼)를 누르면 토큰이 깨워 그 자리에서 끝난다.
 /// </remarks>
 public sealed class ScriptDebugSession : ViewModelBase
 {

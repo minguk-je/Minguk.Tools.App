@@ -37,6 +37,9 @@ public sealed class LiveScriptHost
     /// </remarks>
     public Func<Minguk.Tools.Vision.Regions.RegionBook?>? Regions { get; init; }
 
+    /// <summary>리소스를 찾는 폴더(프로젝트 폴더). 한 파일짜리 스크립트면 null - 리소스 API 가 그렇게 말한다.</summary>
+    public string? ResourceRoot { get; init; }
+
     public required Action<string> Print { get; init; }
 
     public required Action<string, string> Watch { get; init; }

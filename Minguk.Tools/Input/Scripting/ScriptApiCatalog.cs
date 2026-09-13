@@ -91,9 +91,13 @@ public static class ScriptApiCatalog
         new("KeyDown", "누르기", "name", "키를 누른 채로 둔다. 떼기 전까지.", ScriptApiMode.Live),
         new("KeyUp", "떼기", "name", "누르고 있던 키를 뗀다.", ScriptApiMode.Live),
         new("Walk", "걷기", "keys, milliseconds", "키를 그 시간만큼 누르고 있다가 뗀다. 게임 이동은 이것 - 걷기(\"W\", 500), 대각선은 \"W+A\".", ScriptApiMode.Live),
-        new("IsStopped", "중지되었나", "", "중지를 눌렀거나 F9 를 눌렀으면 true. 반복문 조건에 쓴다.", ScriptApiMode.Live),
+        new("IsStopped", "중지되었나", "", "중지를 눌렀거나 비상 정지(Pause)를 눌렀으면 true. 반복문 조건에 쓴다.", ScriptApiMode.Live),
         new("Print", "출력", "value", "출력 칸에 한 줄 적는다.", ScriptApiMode.Live),
         new("Watch", "보기", "name, value", "이름표를 붙여 최신값을 보여 준다. 같은 이름은 덮어쓴다.", ScriptApiMode.Live),
+        new("ResourcePath", "리소스경로", "name", "프로젝트 리소스의 전체 경로. \"적.png\" 처럼 Resources 아래 이름도 된다. 없으면 멈춘다.", ScriptApiMode.Live),
+        new("ResourceText", "리소스글", "name", "프로젝트 리소스를 글(UTF-8)로 읽는다. json·csv·txt.", ScriptApiMode.Live),
+        new("ResourceBytes", "리소스바이트", "name", "프로젝트 리소스를 바이트로 읽는다.", ScriptApiMode.Live),
+        new("PlaySound", "소리", "name", "프로젝트 리소스의 wav 를 울린다. 끝나기를 기다리지 않는다.", ScriptApiMode.Live),
         new("Stop", "끝", "", "스크립트를 여기서 끝낸다.", ScriptApiMode.Live)
     ];
 
