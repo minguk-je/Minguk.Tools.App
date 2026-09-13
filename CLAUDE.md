@@ -23,7 +23,7 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
 |---|---|---|
 | 캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 순수 캡처. 대상·fps·미리보기·프레임 저장·데이터셋에 담기(F8)·통계 표 |
 | 스크립트 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | 몹 찾기·추적·글자 영역·글자 읽기·이름표 읽기를 보면서 스크립트를 쓰고 한 번씩 돌린다. 담기(F8)도 된다 - 찾은 것이 라벨로 들어간다 |
-| 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 게임 연결, 미리보기 켜고 끄기, Scripts 폴더의 스크립트를 골라 1회(F5)·반복(F6). 편집 없음 |
+| 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 게임 연결, 미리보기 켜고 끄기, Scripts 폴더의 스크립트나 **프로젝트(.mtsproj)** 를 골라 1회(F5)·반복(F6). 편집 없음 |
 
 - **바탕 둘.** `CaptureViewModelBase`(잡기·미리보기·입력 전달·저장·담기·1초 통계) 위에
   `RecognizingCaptureViewModelBase`(`.Detect.cs` 찾기 · `.Ocr.cs` 글자). 캡처 화면은 첫 바탕만 쓴다 -

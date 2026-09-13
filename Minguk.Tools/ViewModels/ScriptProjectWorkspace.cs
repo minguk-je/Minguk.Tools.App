@@ -257,10 +257,15 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
             _folderWatcher = new FileSystemWatcher(project.Directory)
             {
                 IncludeSubdirectories = true,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                // 내용 변경(LastWrite)도 받는다 - 다른 화면(스크립트 화면)이 도우미 파일을 고쳐 저장하거나 프로젝트에 파일을 넣으면
+                // 같은 프로젝트를 연 이 화면(플레이)도 다시 검사하고 목록을 다시 읽어야 한다.
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
                 InternalBufferSize = 64 * 1024
             };
 
+            // 폴더에 오는 "바뀜" 은 버린다 - 안의 것이 생기거나 지워질 때마다 부모 폴더(뿌리까지)에 온다. 뿌리 알림은 전체 다시 훑기를
+            // 부르는데, 폴더를 지우는 도중이면 아직 남은 폴더를 다시 목록에 넣었다(실측: 지운 폴더가 안 빠짐). 파일 것만 받는다.
+            _folderWatcher.Changed += (_, e) => { if (!Directory.Exists(e.FullPath)) QueueFolderChange(e.FullPath); };
             _folderWatcher.Created += (_, e) => QueueFolderChange(e.FullPath);
             _folderWatcher.Deleted += (_, e) => QueueFolderChange(e.FullPath);
             _folderWatcher.Renamed += (_, e) => { QueueFolderChange(e.OldFullPath); QueueFolderChange(e.FullPath); };
@@ -306,12 +311,27 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         }
 
         var changed = false;
+        var contentChanged = false;
 
         foreach (var path in paths)
         {
             if (string.Equals(Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar), project.Directory.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
             {
                 changed |= ScanFolder(project);
+                continue;
+            }
+
+            // 프로젝트 파일을 밖(다른 화면)에서 고쳤다 - 목록을 다시 읽는다. 우리가 저장해서 온 알림이면 같아서 할 일이 없다.
+            if (string.Equals(Path.GetFullPath(path), project.FilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                changed |= ReloadProjectFile(project);
+                continue;
+            }
+
+            // 목록에 있는 파일의 내용이 바뀌었다 - 목록은 그대로, 검사만 다시.
+            if (File.Exists(path) && project.RelativePath(path) is { } listed && project.Find(listed) is not null)
+            {
+                contentChanged = true;
                 continue;
             }
 
@@ -358,11 +378,40 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
             }
         }
 
-        if (!changed) return;
+        if (!changed)
+        {
+            if (contentChanged) Changed?.Invoke(this, EventArgs.Empty);
+            return;
+        }
 
         project.Save();
         RebuildNodes();
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 디스크의 프로젝트 파일이 지금 들고 있는 목록과 다르면 그것으로 갈아 끼운다. 다르면 true.
+    /// </summary>
+    /// <remarks>
+    /// 같은 프로젝트를 두 화면(스크립트·플레이)이 열어 둔다. 한쪽이 파일을 넣고 저장하면 다른 쪽은 옛 목록으로 돌아 새 파일의 함수가
+    /// "없다" 가 된다. 저장한 쪽의 알림도 여기로 오지만 그때는 목록이 같아 아무 일도 없다.
+    /// </remarks>
+    private bool ReloadProjectFile(ScriptProject project)
+    {
+        ScriptProject disk;
+
+        try
+        {
+            disk = ScriptProject.Load(project.FilePath);
+        }
+        catch (Exception ex)
+        {
+            // 쓰는 도중에 읽었을 수 있다 - 다음 알림에 다시 본다.
+            Logger.Debug(ex, "프로젝트 파일을 다시 읽지 못했다");
+            return false;
+        }
+
+        return project.ReplaceListWith(disk);
     }
 
     /// <summary>알림이 넘쳤을 때 - 디스크와 목록을 통째로 견준다(없어진 것은 빼고 새것은 넣는다).</summary>

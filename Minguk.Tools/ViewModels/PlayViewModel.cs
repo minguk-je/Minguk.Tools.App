@@ -17,10 +17,18 @@ using Minguk.Tools.Input.Scripting;
 
 namespace Minguk.Tools.ViewModels;
 
-/// <summary>스크립트 폴더의 파일 하나. 콤보에 이름만 보이고 실제로는 경로를 든다.</summary>
-public sealed record ScriptFileItem(string Name, string Path)
+/// <summary>스크립트 폴더의 파일 하나(또는 프로젝트). 콤보에 이름만 보이고 실제로는 경로를 든다.</summary>
+/// <param name="IsProject">스크립트 프로젝트(<c>.mtsproj</c>)인가. 그러면 여러 파일·리소스를 한 벌로 돌린다.</param>
+public sealed record ScriptFileItem(string Name, string Path, bool IsProject = false)
 {
     public override string ToString() => Name;
+
+    public static ScriptFileItem From(string path) => IsProjectPath(path)
+        ? new ScriptFileItem($"{System.IO.Path.GetFileNameWithoutExtension(path)} (프로젝트)", path, IsProject: true)
+        : new ScriptFileItem(System.IO.Path.GetFileName(path), path);
+
+    public static bool IsProjectPath(string path)
+        => string.Equals(System.IO.Path.GetExtension(path), Input.Scripting.Projects.ScriptProject.Extension, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -110,7 +118,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
     private ScriptRunContext? ResolveRun()
     {
-        if (SelectedScript is null && string.IsNullOrEmpty(Script.FilePath))
+        if (SelectedScript is null && string.IsNullOrEmpty(Script.FilePath) && !Script.IsProject)
         {
             MessengerUtility.SendMainMessage("돌릴 스크립트를 먼저 고르세요.");
             return null;
@@ -145,25 +153,62 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
         SelectedScript = Scripts.FirstOrDefault(s => string.Equals(s.Path, chosen, StringComparison.OrdinalIgnoreCase));
 
+        var projects = Scripts.Count(s => s.IsProject);
+
         StatusText = Scripts.Count == 0
-            ? $"스크립트가 없습니다. 스크립트 화면에서 저장하면 여기 보입니다 ({ScriptFiles.DefaultDirectory})."
-            : $"스크립트 {Scripts.Count}개 ({ScriptFiles.DefaultDirectory})";
+            ? $"스크립트가 없습니다. 스크립트 화면에서 저장하거나 프로젝트를 만들면 여기 보입니다 ({ScriptFiles.DefaultDirectory})."
+            : $"스크립트 {Scripts.Count - projects}개 · 프로젝트 {projects}개 ({ScriptFiles.DefaultDirectory})";
     });
 
-    private static IEnumerable<ScriptFileItem> ListScripts()
+    private static IEnumerable<ScriptFileItem> ListScripts() => ListScripts(ScriptFiles.DefaultDirectory);
+
+    /// <summary>
+    /// 폴더의 스크립트 파일과 프로젝트. 프로젝트가 먼저다 - 여러 파일로 짠 것이 대개 "진짜로 돌리는 것" 이다.
+    /// </summary>
+    /// <remarks>
+    /// 프로젝트는 스크립트 화면이 <c>Scripts\이름\이름.mtsproj</c> 로 만든다(프로젝트마다 폴더). 그래서 폴더 바로 아래와 한 겹 아래까지 본다.
+    /// 더 깊이는 안 본다 - 프로젝트 안의 하위 폴더에 든 .csx 가 한 파일짜리 스크립트처럼 목록에 섞이면 안 된다.
+    /// 프로젝트 폴더 안의 .csx 는 목록에 안 넣는다 - 그것은 그 프로젝트의 조각이지 혼자 돌리는 것이 아니다.
+    /// </remarks>
+    public static IEnumerable<ScriptFileItem> ListScripts(string folder)
     {
-        var folder = ScriptFiles.DefaultDirectory;
+        if (!Directory.Exists(folder)) return [];
 
-        if (!Directory.Exists(folder)) yield break;
+        var projects = Directory.EnumerateFiles(folder, "*" + Input.Scripting.Projects.ScriptProject.Extension)
+            .Concat(Directory.EnumerateDirectories(folder).SelectMany(d => Directory.EnumerateFiles(d, "*" + Input.Scripting.Projects.ScriptProject.Extension)))
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .Select(ScriptFileItem.From);
 
-        foreach (var path in Directory.EnumerateFiles(folder).Where(p => ScriptFiles.FromPath(p) is not null).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
-            yield return new ScriptFileItem(Path.GetFileName(path), path);
+        var files = Directory.EnumerateFiles(folder)
+            .Where(p => ScriptFiles.FromPath(p) is not null)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .Select(ScriptFileItem.From);
+
+        return [.. projects, .. files];
     }
 
+    /// <summary>
+    /// 고른 것을 연다. 프로젝트면 작업 공간으로(여러 파일·리소스를 한 벌로 검사·실행), 파일이면 예전처럼 한 파일짜리로.
+    /// </summary>
     private void OnSelectedScriptChanged() => Guard(() =>
     {
         if (SelectedScript is null) return;
 
+        if (SelectedScript.IsProject)
+        {
+            Script.Project.OpenProject(SelectedScript.Path);
+
+            var project = Script.Project.Project!;
+            var sources = project.Items.Count(i => i.Kind == Input.Scripting.Projects.ScriptItemKind.Source);
+
+            StatusText = string.IsNullOrEmpty(project.Entry)
+                ? $"프로젝트 '{project.Name}' - 시작 파일이 없습니다. 스크립트 화면 솔루션 탐색기에서 '시작 파일로 설정' 을 고르세요."
+                : $"프로젝트 '{project.Name}' · 시작 {project.Entry} · 소스 {sources}개";
+            return;
+        }
+
+        // 한 파일짜리로 돌아간다. 열려 있던 프로젝트는 닫는다(여기서는 고친 것이 없어 묻지 않는다).
+        Script.Project.CloseProject();
         Script.LoadFile(SelectedScript.Path);
         StatusText = $"스크립트: {SelectedScript.Name}";
     });
@@ -173,7 +218,8 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
     {
         var dialog = OpenFileDialogService;
 
-        dialog.Filter = ScriptFiles.OpenFilter(Script.SelectedLanguage);
+        var extension = Input.Scripting.Projects.ScriptProject.Extension;
+        dialog.Filter = $"스크립트 프로젝트 (*{extension})|*{extension}|" + ScriptFiles.OpenFilter(Script.SelectedLanguage);
         dialog.InitialDirectory = ScriptFiles.DefaultDirectory;
 
         if (!dialog.ShowDialog()) return;
@@ -183,7 +229,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
         if (item is null)
         {
-            item = new ScriptFileItem(Path.GetFileName(path), path);
+            item = ScriptFileItem.From(path);
             Scripts.Add(item);
         }
 
@@ -248,7 +294,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
             if (item is null)
             {
-                item = new ScriptFileItem(Path.GetFileName(saved), saved);
+                item = ScriptFileItem.From(saved);
                 Scripts.Add(item);
             }
 

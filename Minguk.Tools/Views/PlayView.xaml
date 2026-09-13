@@ -183,7 +183,7 @@
                              EditValue="{Binding SelectedScript}"
                              EditWidth="260"
                              IsEnabled="{Binding Player.IsIdle}"
-                             ToolTip="Scripts 폴더의 파일. 스크립트 화면에서 저장한 것이 여기 보인다.">
+                             ToolTip="Scripts 폴더의 스크립트 파일과 프로젝트(.mtsproj). 스크립트 화면에서 저장하거나 만든 것이 여기 보인다. 프로젝트는 여러 파일·리소스를 한 벌로 돌린다.">
                 <dxb:BarEditItem.EditSettings>
                     <dxe:ComboBoxEditSettings DisplayMember="Name"
                                               IsTextEditable="False"

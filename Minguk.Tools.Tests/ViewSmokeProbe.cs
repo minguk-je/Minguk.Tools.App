@@ -67,6 +67,7 @@ internal static class ViewSmokeProbe
             failures += CheckCompletion();
             failures += CheckSemanticColoring();
             failures += CheckCodeLens();
+            failures += CheckPlayProject();
 
             app.Shutdown();
         });
@@ -758,6 +759,56 @@ internal static class ViewSmokeProbe
         {
             Console.WriteLine($"[FAIL] C# 분류 덧칠 — {ex.GetType().Name}: {ex.Message}");
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// 플레이 화면에서 프로젝트를 고르면 워크벤치가 프로젝트로 열리고 틀린 곳이 파일·줄로 잡히는지, 파일을 고르면 프로젝트가 닫히는지.
+    /// </summary>
+    private static int CheckPlayProject()
+    {
+        var folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "minguk-play-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var project = Minguk.Tools.Input.Scripting.Projects.ScriptProject.Create(System.IO.Path.Combine(folder, "사냥"), "사냥", "출력(도우미());\n");
+            Minguk.Tools.Input.Scripting.Projects.ScriptProject.WriteText(project.FullPath("도우미.csx"), "int 도우미() => 없는것;\n");
+            project.Add("도우미.csx");
+            project.Save();
+
+            var single = System.IO.Path.Combine(folder, "혼자.csx");
+            System.IO.File.WriteAllText(single, "출력(1);");
+
+            var vm = PlayViewModel.Create();
+            vm.SelectedScript = ScriptFileItem.From(project.FilePath);
+
+            // 검사는 입력이 멈춘 뒤(500ms) 돈다 - 기다린다.
+            var deadline = DateTime.UtcNow.AddSeconds(20);
+            while (vm.Script.Errors.Count == 0 && DateTime.UtcNow < deadline)
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Background);
+
+            var error = vm.Script.Errors.FirstOrDefault();
+            var projectOk = vm.Script.IsProject && error.FileName == "도우미.csx" && error.Line == 1;
+
+            vm.SelectedScript = ScriptFileItem.From(single);
+            var singleOk = !vm.Script.IsProject && vm.Script.Text == "출력(1);";
+
+            var ok = projectOk && singleOk;
+            Console.WriteLine(ok
+                ? $"[PASS] 플레이 화면 프로젝트 — 고르면 프로젝트로 열려 '{error}' 를 잡고, 파일을 고르면 한 파일짜리로 돌아간다"
+                : $"[FAIL] 플레이 화면 프로젝트 — 프로젝트 {vm.Script.IsProject}/{projectOk} (오류 {vm.Script.Errors.Count}: {error}), 한 파일짜리 {singleOk}");
+
+            vm.Script.Dispose();
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FAIL] 플레이 화면 프로젝트 — {ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(folder, recursive: true); } catch (Exception) { }
         }
     }
 

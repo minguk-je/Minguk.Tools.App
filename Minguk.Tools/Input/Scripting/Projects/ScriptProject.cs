@@ -270,6 +270,25 @@ public sealed class ScriptProject
         if (!string.IsNullOrEmpty(parent)) AddFolder(parent);
     }
 
+    /// <summary>
+    /// 다른 프로젝트 객체(디스크에서 다시 읽은 것)의 목록·시작 파일·폴더로 갈아 끼운다. 달랐으면 true.
+    /// </summary>
+    /// <remarks>객체를 바꾸지 않고 안만 바꾼다 - 이 객체를 들고 있는 쪽(작업 공간·탐색기)을 다 다시 이을 필요가 없게.</remarks>
+    public bool ReplaceListWith(ScriptProject other)
+    {
+        static string Key(ScriptProject p) => System.Text.Json.JsonSerializer.Serialize(new { p.Name, p.Language, p.Entry, p.Items, p.Folders });
+
+        if (Key(this) == Key(other)) return false;
+
+        Name = other.Name;
+        Language = other.Language;
+        Entry = other.Entry;
+        Items = [.. other.Items.Select(i => new ScriptProjectItem { Path = i.Path, Kind = i.Kind })];
+        Folders = [.. other.Folders];
+
+        return true;
+    }
+
     // ── 컴파일에 넘길 것 ─────────────────────────────────────────────────
 
     /// <summary>

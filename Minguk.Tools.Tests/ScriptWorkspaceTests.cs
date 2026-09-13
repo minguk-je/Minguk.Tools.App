@@ -188,6 +188,55 @@ internal static partial class Program
                       $"들어옴 {appeared}({kind}), 임시 무시 {ignored}, 파일 빠짐 {gone}, 폴더 빠짐 {folderGone}");
             }
 
+            // ── 같은 프로젝트를 연 두 화면: 한쪽이 목록을 고치고 저장하면 다른 쪽이 따라간다(스크립트 화면 ↔ 플레이 화면) ──
+            {
+                bool WaitFor(Func<bool> condition)
+                {
+                    var deadline = DateTime.UtcNow.AddSeconds(5);
+                    while (DateTime.UtcNow < deadline) { if (condition()) return true; System.Threading.Thread.Sleep(50); }
+                    return condition();
+                }
+
+                var other = new ScriptProjectWorkspace(new ScriptProjectWorkspaceHost { OnUi = action => action(), Ask = (_, _) => MessageResult.Yes });
+                other.OpenProject(project.FilePath);
+
+                var otherChanged = 0;
+                other.Changed += (_, _) => System.Threading.Interlocked.Increment(ref otherChanged);
+
+                // 앞 검사에서 main.csx 는 휴지통으로 갔다 - 새 파일로 본다.
+                var fresh = workspace.AddNewFile(ScriptProjectWorkspace.RootId, "새시작")!;
+                WaitFor(() => other.Nodes.Any(n => n.Id == fresh.Id));
+
+                // 시작 파일만 바꾸면 폴더에는 아무 파일도 안 생긴다 - 프로젝트 파일 변경으로만 알 수 있다.
+                workspace.SetEntry(workspace.Nodes.First(n => n.Id == fresh.Id));
+                var entryFollowed = WaitFor(() => other.Project!.Entry == fresh.Id && other.Nodes.Single(n => n.IsEntry).Id == fresh.Id);
+
+                // 목록에 있는 파일의 내용만 바꿔도 다시 검사하라고 알린다.
+                var before = otherChanged;
+                File.AppendAllText(project.FullPath(fresh.Id), "\n// 밖에서 고침\n");
+                var contentNoticed = WaitFor(() => otherChanged > before);
+
+                Check("작업 공간: 같은 프로젝트를 연 다른 화면이 시작 파일 변경을 따라가고, 파일 내용이 바뀌면 다시 검사하라고 알린다",
+                      entryFollowed && contentNoticed,
+                      $"시작 따라감 {entryFollowed} ({other.Project!.Entry}), 내용 알림 {contentNoticed}");
+
+                other.Dispose();
+            }
+
+            // ── 플레이 화면 목록: 한 파일짜리와 프로젝트, 프로젝트 안의 .csx 는 안 섞는다 ──
+            {
+                var scripts = Path.Combine(folder, "Scripts");
+                Directory.CreateDirectory(scripts);
+                File.WriteAllText(Path.Combine(scripts, "혼자.csx"), "출력(1);");
+                ScriptProject.Create(Path.Combine(scripts, "사냥"), "사냥", "출력(2);");
+
+                var items = PlayViewModel.ListScripts(scripts).ToList();
+
+                Check("플레이 목록: 프로젝트가 먼저 '(프로젝트)' 로, 한 파일짜리는 그대로, 프로젝트 안의 main.csx 는 안 나온다",
+                      items.Count == 2 && items[0] is { IsProject: true, Name: "사냥 (프로젝트)" } && items[1] is { IsProject: false, Name: "혼자.csx" },
+                      string.Join(", ", items.Select(i => $"{i.Name}{(i.IsProject ? "[P]" : "")}")));
+            }
+
             // 진짜 휴지통(ShellFileRecycler)은 여기서 안 본다 - --vision 을 돌릴 때마다 사람의 휴지통에 파일이 쌓인다.
             // 2026-09-13 에 한 번 보내 보고 자리에서 사라지는 것을 확인했다.
         }
