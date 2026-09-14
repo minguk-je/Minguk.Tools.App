@@ -22,7 +22,8 @@ namespace Minguk.Tools.Vision.Training;
 /// <b>내 PC 시험용이다</b> - Ultralytics 는 AGPL 이라 학습한 가중치까지 그 조건이다. 배포 모델은 D-FINE-N 이다(CLAUDE.md "모델 정책").
 ///
 /// <b>진행 읽기</b> - 진행 막대는 <c>\r</c> 로 줄을 덮어써 줄 단위로 읽으면 바퀴 끝에만 한 줄이 온다. 그 줄(<c>3/60 1.31G 1.95 2.26 1.34 … 100%</c>)의
-/// 앞 두 수가 바퀴, 다음 수가 box loss 다. 98장이면 바퀴가 5초라 그만큼이면 충분하다.
+/// 앞 두 수가 바퀴, 다음 수가 box loss 다. 바퀴 안의 진행은 스크립트가 묶음마다 찍는 <c>BATCH</c> 줄로, 학습 묶음 그림은 바퀴마다 <c>PREVIEW</c> 줄로 온다
+/// (사용자, 2026-09-15 - 라벨링 화면에서 학습하는 모습을 본다).
 /// </remarks>
 public static class YoloTrainer
 {
@@ -65,9 +66,10 @@ public static class YoloTrainer
     /// <summary>학습 → ONNX 내보내기 → 데이터셋에 들이기 → 보관본 갱신. 돌려주는 것은 들인 detector.onnx 자리.</summary>
     /// <param name="modelName">화면에 뜨는 이름("YOLO11n"). 가중치 이름은 여기서 뽑는다.</param>
     /// <param name="device">GPU 번호.</param>
+    /// <param name="previews">바퀴마다 학습 묶음 그림(라벨 상자를 그린 jpg) 경로. 같은 자리의 파일이 바뀌어 끼워진다.</param>
     public static async Task<(string ModelPath, TimeSpan Elapsed)> TrainAsync(LabelDataset dataset, string modelName, int epochs, int device,
                                                                            IProgress<string> status, IProgress<TrainingStep> steps,
-                                                                           CancellationToken token)
+                                                                           CancellationToken token, IProgress<string>? previews = null)
     {
         if (WhyUnavailable() is { } why) throw new InvalidOperationException(why);
 
@@ -117,6 +119,33 @@ public static class YoloTrainer
             if (line.StartsWith("ONNX ", StringComparison.Ordinal)) onnx = line[5..].Trim();
             else if (line.Contains("Traceback", StringComparison.Ordinal) || line.Contains("Error", StringComparison.Ordinal)) lastError = line.Trim();
 
+            // 스크립트가 묶음마다 찍는 줄(report_progress). 진행 막대 조각 뒤에 붙어 올 수 있어 줄 머리가 아니라 줄 안에서 찾는다.
+            var batch = Regex.Match(line, @"BATCH (\d+) (\d+) (\d+) (\d+) ([\d.]+)");
+            if (batch.Success)
+            {
+                int Number(int group) => int.Parse(batch.Groups[group].Value, CultureInfo.InvariantCulture);
+
+                var (current, total, index, count) = (Number(1), Number(2), Number(3), Number(4));
+                var loss = double.Parse(batch.Groups[5].Value, CultureInfo.InvariantCulture);
+
+                steps.Report(new TrainingStep(current - 1, total, null, Batch: index, BatchCount: count));
+                status.Report($"YOLO 학습 중 - {current}/{total} 바퀴 · 묶음 {index}/{count} · box loss {loss:0.000} · {watch.Elapsed:mm\\:ss}");
+                return;
+            }
+
+            var preview = Regex.Match(line, @"PREVIEW (.+\.jpg)\s*$");
+            if (preview.Success)
+            {
+                previews?.Report(preview.Groups[1].Value.Trim());
+                return;
+            }
+
+            if (line.Contains("PREVIEW_FAILED", StringComparison.Ordinal))
+            {
+                Logger.Warn($"학습 묶음 그림을 못 그렸다: {line}");
+                return;
+            }
+
             var epoch = Regex.Match(line, @"^\s*(\d+)/(\d+)\s+\S+G\s+([\d.]+)\s+([\d.]+)\s+([\d.]+).*100%");
             if (epoch.Success)
             {
@@ -124,6 +153,7 @@ public static class YoloTrainer
                 var total = int.Parse(epoch.Groups[2].Value, CultureInfo.InvariantCulture);
                 var boxLoss = double.Parse(epoch.Groups[3].Value, CultureInfo.InvariantCulture);
 
+                // 바퀴 끝 줄 - loss 꺾은선은 여기서만 한 점 찍는다(묶음마다 찍으면 한 바퀴 안의 들쭉날쭉이 추세를 가린다).
                 steps.Report(new TrainingStep(done, total, boxLoss));
                 status.Report($"YOLO 학습 중 - {done}/{total} 바퀴 · box loss {boxLoss:0.000} · {watch.Elapsed:mm\\:ss}");
             }

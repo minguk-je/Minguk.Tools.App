@@ -169,16 +169,29 @@ public partial class LabelingViewModel
 
     public DelegateCommand DoCancelTrainCommand { get; private set; } = null!;
 
-    /// <summary>몇 바퀴 돌릴지.</summary>
+    /// <summary>몇 바퀴 돌릴지. 한 바퀴 = 학습 그림을 전부 한 번씩 보는 것.</summary>
     /// <remarks>
     /// 기본 20 은 작은 데이터셋에서 흔히 쓰는 값이다. 적으면 아무것도 못 배우고 많으면
     /// 외워 버린다(과적합). 얼마가 맞는지는 데이터마다 달라 화면에서 고치게 둔다.
+    /// 왜 여러 바퀴인지는 화면 툴팁에 적었다(사용자, 2026-09-15) - 한 번 볼 때 조금씩만 고치고, 바퀴마다 같은 그림을 다르게 비틀어 본다.
     /// </remarks>
     public int TrainEpochs
     {
         get => GetProperty(() => TrainEpochs);
         set => SetProperty(() => TrainEpochs, value);
     }
+
+    /// <summary>바퀴 칸 툴팁 - 왜 여러 바퀴를 돌리는지(사용자 요청, 2026-09-15).</summary>
+    public string EpochHelp { get; } =
+        "바퀴(epoch) = 학습 그림을 전부 한 번씩 보는 것입니다. 98장이면 한 바퀴에 98장(묶음 8장씩 13묶음)을 봅니다.\n" +
+        "\n" +
+        "왜 여러 바퀴를 돌리나\n" +
+        "• 한 번 볼 때 조금씩만 고칩니다. 한 묶음을 보고 크게 고치면 그 묶음에만 맞춰 흔들려서, 여러 번 보며 조금씩 맞춰 갑니다.\n" +
+        "• 바퀴마다 같은 그림을 다르게 봅니다. 네 장을 이어 붙이고 크기·자리·색을 비틀어서, 바퀴가 늘면 몹이 놓일 수 있는 모습을 더 많이 봅니다.\n" +
+        "• 처음 몇 바퀴는 거의 못 찾습니다. 아래 loss 꺾은선이 내려가는 동안 배우는 중이고, 평평해지면 더 돌려도 얻는 것이 적습니다.\n" +
+        "\n" +
+        "너무 적으면 몹을 못 찾고, 너무 많으면 학습 그림만 외워(과적합) 새 장면에서 못 찾습니다.\n" +
+        "YOLO11n 은 98장 60바퀴에 약 5분이었습니다. 그림을 크게 늘렸거나 loss 가 아직 내려가는 중이면 바퀴를 늘리세요.";
 
     public bool IsTraining
     {
@@ -187,6 +200,7 @@ public partial class LabelingViewModel
         {
             DoTrainCommand.RaiseCanExecuteChanged();
             DoCancelTrainCommand.RaiseCanExecuteChanged();
+            RaisePropertyChanged(nameof(IsTrainingBatchVisible));
         });
     }
 
@@ -220,8 +234,47 @@ public partial class LabelingViewModel
     /// <summary>학습 중 흘러나온 loss. 꺾은선이 이것을 그린다. 새로 시작하면 비운다.</summary>
     public System.Collections.ObjectModel.ObservableCollection<double> LossHistory { get; } = [];
 
+    /// <summary>지금 바퀴에서 끝난 묶음 / 한 바퀴의 묶음 수. YOLO 가 묶음마다 알린다. 모르면 0.</summary>
+    public int TrainBatchDone
+    {
+        get => GetProperty(() => TrainBatchDone);
+        set => SetProperty(() => TrainBatchDone, value, () => RaisePropertyChanged(nameof(TrainProgressLabel)));
+    }
+
+    public int TrainBatchTotal
+    {
+        get => GetProperty(() => TrainBatchTotal);
+        set => SetProperty(() => TrainBatchTotal, value, () => RaisePropertyChanged(nameof(TrainProgressLabel)));
+    }
+
+    /// <summary>"12/60 바퀴 · 묶음 3/13". 묶음을 모르면(D-FINE) 바퀴만.</summary>
     public string TrainProgressLabel
-        => TrainEpochsTotal <= 0 ? string.Empty : $"{TrainEpochsDone}/{TrainEpochsTotal} 바퀴";
+        => TrainEpochsTotal <= 0
+            ? string.Empty
+            : $"{TrainEpochsDone}/{TrainEpochsTotal} 바퀴" + (TrainBatchTotal > 0 ? $" · 묶음 {TrainBatchDone}/{TrainBatchTotal}" : string.Empty);
+
+    /// <summary>
+    /// 학습 묶음을 라벨 판 자리에 보일지(사용자, 2026-09-15 - 없어진 "학습 중인 그림 보기" 를 되살림). 저장한다.
+    /// </summary>
+    /// <remarks>
+    /// 켜 두면 학습하는 동안 라벨 판 위에 묶음 그림이 덮여 라벨을 못 고친다 - 그래서 기본은 끔이고, 끄면 곧바로 라벨 판이 돌아온다.
+    /// 옛 학습(TorchSharp)은 그림을 한 장씩 넘겨 그 그림을 띄웠지만, YOLO 는 여러 장을 이어 붙여 묶음으로 배우므로 묶음을 보인다.
+    /// </remarks>
+    public bool ShowTrainingBatch
+    {
+        get => GetProperty(() => ShowTrainingBatch);
+        set => SetProperty(() => ShowTrainingBatch, value, () => RaisePropertyChanged(nameof(IsTrainingBatchVisible)));
+    }
+
+    /// <summary>바퀴마다 새로 오는 학습 묶음 그림(라벨 상자 포함). 학습을 새로 시작하면 비운다.</summary>
+    public System.Windows.Media.ImageSource? TrainingBatchImage
+    {
+        get => GetProperty(() => TrainingBatchImage);
+        set => SetProperty(() => TrainingBatchImage, value, () => RaisePropertyChanged(nameof(IsTrainingBatchVisible)));
+    }
+
+    /// <summary>라벨 판 대신 묶음 그림을 덮을지 - 켰고, 학습 중이고, 그림이 왔을 때. 학습이 끝나면 라벨 판이 알아서 돌아온다.</summary>
+    public bool IsTrainingBatchVisible => ShowTrainingBatch && IsTraining && TrainingBatchImage is not null;
 
     /// <summary>
     /// 고를 수 있는 GPU. "자동" 다음에 카드마다 하나씩. 이름은 Windows 가 아는 대로 적는다.

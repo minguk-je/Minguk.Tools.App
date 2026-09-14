@@ -296,15 +296,38 @@
                                 바뀐 것을 CollectionChanged 로 안다. 확대·옮기기도 그 안이 한다 -
                                 LayoutTransform 으로 키우면 테두리·글자까지 굵어져 경계가 안 보인다.
                             -->
-                            <Border Background="#20808080">
-                                <markup:LabelCanvas Boxes="{Binding Boxes}"
-                                                    ClassNames="{Binding ClassNameSnapshot}"
-                                                    CurrentClassId="{Binding SelectedClassIndex}"
-                                                    ImageSource="{Binding CurrentImage}"
-                                                    Predictions="{Binding Predictions}"
-                                                    SelectedIndex="{Binding SelectedBoxIndex, Mode=TwoWay}"
-                                                    Zoom="{Binding LabelZoom, Mode=TwoWay}" />
-                            </Border>
+                            <!--
+                                학습 묶음 보기(학습 칸의 체크)를 켜면 학습하는 동안 라벨 판 위에 묶음 그림을 덮는다(2026-09-15).
+                                뼈대가 아니라 같은 자리에 둘을 겹치는 것이라 Grid 한 칸이다. 끄거나 학습이 끝나면 라벨 판이 그대로 돌아온다.
+                            -->
+                            <Grid>
+                                <Border Background="#20808080">
+                                    <markup:LabelCanvas Boxes="{Binding Boxes}"
+                                                        ClassNames="{Binding ClassNameSnapshot}"
+                                                        CurrentClassId="{Binding SelectedClassIndex}"
+                                                        ImageSource="{Binding CurrentImage}"
+                                                        Predictions="{Binding Predictions}"
+                                                        SelectedIndex="{Binding SelectedBoxIndex, Mode=TwoWay}"
+                                                        Zoom="{Binding LabelZoom, Mode=TwoWay}" />
+                                </Border>
+
+                                <DockPanel Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                                           LastChildFill="True"
+                                           Visibility="{Binding IsTrainingBatchVisible, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Margin="6,4"
+                                               VerticalAlignment="Center"
+                                               DockPanel.Dock="Top"
+                                               TextWrapping="Wrap">
+                                        <Run FontWeight="Bold"
+                                             Text="학습 묶음" />
+                                        <Run Text="{Binding TrainProgressLabel, Mode=OneWay}" />
+                                        <Run Foreground="#666666"
+                                             Text=" - 모델이 지금 한 번에 받는 그림 묶음입니다. 네 장을 이어 붙이고 비틀어(크기·자리·색) 바퀴마다 다르게 봅니다. 바퀴마다 새로 바뀝니다. 라벨을 고치려면 체크를 끄세요." />
+                                    </TextBlock>
+                                    <Image Source="{Binding TrainingBatchImage}"
+                                           Stretch="Uniform" />
+                                </DockPanel>
+                            </Grid>
                         </DockPanel>
                     </dxdo:LayoutPanel>
 
@@ -456,12 +479,13 @@
                             <!-- 학습 -->
                             <dxlc:LayoutGroup Orientation="Horizontal">
                                 <dxlc:LayoutItem Width="140"
-                                                 Label="바퀴(epoch)">
+                                                 Label="바퀴(epoch)"
+                                                 ToolTip="{Binding EpochHelp}">
                                     <dxe:SpinEdit EditValue="{Binding TrainEpochs, Mode=TwoWay}"
                                                   IsEnabled="{Binding IsTraining, Converter={StaticResource NotBool}}"
                                                   MaxValue="500"
                                                   MinValue="1"
-                                                  ToolTip="적으면 아무것도 못 배우고 많으면 외워 버립니다." />
+                                                  ToolTip="{Binding EpochHelp}" />
                                 </dxlc:LayoutItem>
                                 <!-- 아래 '쓰는 모델' 콤보에 고른 모델로 학습한다(TrainButtonText). YOLO 는 yolo-venv, D-FINE 은 제 저장소를 돌린다. -->
                                 <dx:SimpleButton Width="131"
@@ -542,9 +566,14 @@
                                                              Maximum="100"
                                                              Minimum="0"
                                                              ShowBorder="True"
-                                                             ToolTip="끝난 바퀴 수. 한 바퀴 안에서는 안 움직입니다." />
+                                                             ToolTip="학습이 어디까지 왔는지. YOLO 는 묶음마다 움직이고, D-FINE 은 바퀴가 끝날 때 움직입니다." />
                                     </DockPanel>
                                 </dxlc:LayoutItem>
+                                <!-- 없어졌던 "학습 중인 그림 보기" 를 묶음으로 되살렸다(2026-09-15). 켜면 학습하는 동안 라벨 판 자리에 묶음 그림이 덮인다. -->
+                                <dxe:CheckEdit VerticalAlignment="Center"
+                                               Content="학습 묶음 보기"
+                                               IsChecked="{Binding ShowTrainingBatch, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                               ToolTip="켜면 학습하는 동안 라벨 판 자리에 모델이 지금 받는 그림 묶음(라벨 상자 포함)을 띄웁니다. 바퀴마다 바뀝니다.&#10;YOLO 는 여러 장을 이어 붙여 묶음으로 배워서 한 장씩이 아니라 묶음을 보여 줍니다. D-FINE 학습은 아직 그림을 보내지 않습니다.&#10;켜 둔 동안은 라벨을 고칠 수 없습니다 - 끄면 곧바로 라벨 판이 돌아옵니다." />
                                 <!-- YOLO 학습이 쓸 카드. 따로 뜨는 파이썬이라 다음 학습부터 바로 먹는다. -->
                                 <dxlc:LayoutItem Width="290"
                                                  Label="GPU">

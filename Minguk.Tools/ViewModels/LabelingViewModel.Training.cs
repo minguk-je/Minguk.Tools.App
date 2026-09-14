@@ -62,7 +62,10 @@ public partial class LabelingViewModel
         LossHistory.Clear();
         TrainEpochsDone = 0;
         TrainEpochsTotal = TrainEpochs;
+        TrainBatchDone = 0;
+        TrainBatchTotal = 0;
         TrainPercent = 0;
+        TrainingBatchImage = null;
 
         // "GPU 1 - ..." 이면 그 번호. 자동이면 모니터가 안 붙은·지금 덜 바쁜 카드(GpuProbe) - 예전에는 늘 0번이라
         // 게임·캡처·몹 찾기가 도는 카드에 학습을 얹어 GPU 가 리셋됐다(실측 2026-09-14). 고를 근거가 없으면 0.
@@ -85,8 +88,14 @@ public partial class LabelingViewModel
                     TrainEpochsDone = step.EpochsDone;
                     TrainEpochsTotal = step.MaxEpoch;
                     TrainPercent = step.Fraction * 100;
+
+                    // 묶음 알림이면 묶음 칸을 채우고, 바퀴 끝 알림이면 다음 바퀴를 기다리며 비운다.
+                    TrainBatchDone = step.IsBatch ? step.Batch : 0;
+                    if (step.IsBatch) TrainBatchTotal = step.BatchCount;
+
                     if (step.Loss is { } loss) LossHistory.Add(loss);
                 });
+                var previews = new Progress<string>(path => _ = LoadTrainingBatchAsync(path));
 
                 // 둘은 걸리는 시간이 크게 다르다 - YOLO11n 은 5분, D-FINE-N 은 1시간 45분(98장 60바퀴, GTX 1060).
                 // 학습하는 동안 켜 둔 스크립트·플레이 화면이 몹 찾기 모델을 내려놓는다(TrainingActivity) - 같은 카드에서 겹치면 GPU 가 리셋됐다.
@@ -97,10 +106,11 @@ public partial class LabelingViewModel
                 {
                     (modelPath, elapsed) = DFineTrainer.Handles(choice.Name)
                         ? await DFineTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token)
-                        : await YoloTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token);
+                        : await YoloTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token, previews);
                 }
 
                 TrainEpochsDone = TrainEpochsTotal;
+                TrainBatchDone = TrainBatchTotal;
                 TrainPercent = 100;
                 TrainingStatus = $"끝났습니다 - {choice.Name} 을 {elapsed.TotalMinutes:0.0}분 동안 학습해 몹 찾기에 넣었습니다.";
 
@@ -138,6 +148,42 @@ public partial class LabelingViewModel
             }
         });
     });
+
+    /// <summary>파이썬이 바꿔 끼운 학습 묶음 그림을 읽어 띄운다. 끄고 있어도 읽어 둔다 - 켜는 순간 마지막 묶음이 보이게.</summary>
+    /// <remarks>
+    /// 파일을 잡지 않게 바이트로 읽어 메모리에서 푼다(OnLoad) - 쥐고 있으면 다음 바퀴에 파이썬이 바꿔 끼우지 못한다.
+    /// 1280px jpg 라 푸는 데 수십 ms 여서 스레드풀에서 하고, 늦게 끝난 옛 그림이 새 그림을 덮지 않게 순번을 본다.
+    /// </remarks>
+    private async Task LoadTrainingBatchAsync(string path)
+    {
+        var order = Interlocked.Increment(ref _trainingBatchOrder);
+
+        try
+        {
+            var image = await Task.Run(() =>
+            {
+                var bytes = System.IO.File.ReadAllBytes(path);
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+
+                bitmap.BeginInit();
+                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = new System.IO.MemoryStream(bytes);
+                bitmap.EndInit();
+                bitmap.Freeze();
+
+                return bitmap;
+            });
+
+            if (order == Volatile.Read(ref _trainingBatchOrder)) TrainingBatchImage = image;
+        }
+        catch (Exception ex)
+        {
+            // 그림 한 장 못 읽었다고 학습을 흔들지 않는다. 다음 바퀴에 또 온다.
+            Logger.Warn(ex, $"학습 묶음 그림을 읽지 못했다: {path}");
+        }
+    }
+
+    private int _trainingBatchOrder;
 
     /// <summary>
     /// 학습에 쓴 그림마다 모델로 다시 찾아 몇 개를 다시 찾았는지 목록에 적는다.

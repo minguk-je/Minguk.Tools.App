@@ -4,6 +4,7 @@ YOLO11 을 우리 데이터셋으로 학습해 ONNX 로 내보낸다. 보통은 
     python 도구/yolo-학습.py --root <데이터셋> --work <시험 폴더> --runs <결과 폴더> [--model yolo11n] [--epochs 60] [--batch 8] [--device 0]
 
 마지막 줄에 `ONNX <경로>` 를 찍는다 - ps1 이 그 경로를 받아 앱에 들인다.
+학습 중에는 `BATCH …`(묶음마다)·`PREVIEW <그림>`(바퀴마다)을 찍는다 - 앱(YoloTrainer)이 진행 줄과 학습 묶음 그림을 띄운다(report_progress).
 
 왜 이렇게 하나
 --------------
@@ -79,6 +80,64 @@ def allow_capital_folders() -> None:
     dataset.img2label_paths = img2label_paths
 
 
+def report_progress(model, runs: Path) -> None:
+    """
+    앱이 학습을 따라가게 두 가지를 찍는다(사용자, 2026-09-15 - 라벨링 화면에서 학습하는 모습을 보고 싶다).
+
+    - `BATCH <바퀴> <바퀴 수> <묶음> <묶음 수> <box loss>` - 묶음마다 한 줄. Ultralytics 진행 막대는 `\\r` 로 덮어써
+      앱이 줄 단위로 읽으면 바퀴 끝에만 한 줄이 왔다(98장이면 5초에 한 번). loss 는 그 바퀴 안의 평균이다.
+    - `PREVIEW <경로>` - 바퀴마다 첫 묶음을 라벨 상자와 함께 그린 그림(`학습-묶음.jpg`). YOLO 는 네 장을 이어 붙이고
+      비틀어(mosaic) 한 묶음으로 배우므로 "지금 보는 그림 한 장" 이 없다 - 실제로 모델에 들어가는 묶음을 보여 준다.
+      `plots=True` 로 켜면 결과 그래프까지 다 그려 느려져 필요한 것만 직접 그린다. 임시 파일에 쓰고 바꿔 끼워 앱이 반쯤 쓴 파일을 읽지 않게 한다.
+
+    묶음 그림은 `on_train_batch_end` 에 오지 않는다 - 전처리(preprocess_batch)를 감싸 마지막 묶음을 붙들어 둔다.
+    """
+    from PIL import Image
+    from ultralytics.utils.plotting import plot_images
+
+    preview = runs / "학습-묶음.jpg"
+    state = {"batch": None, "index": 0}
+
+    def on_train_start(trainer):
+        original = trainer.preprocess_batch
+
+        def capture(batch):
+            batch = original(batch)
+            state["batch"] = batch
+            return batch
+
+        trainer.preprocess_batch = capture
+
+    def on_train_epoch_start(trainer):
+        state["index"] = 0
+
+    def on_train_batch_end(trainer):
+        state["index"] += 1
+        count = len(trainer.train_loader)
+        loss = float(next(iter(trainer.tloss.values()))) if trainer.tloss else 0.0
+        print(f"BATCH {trainer.epoch + 1} {trainer.epochs} {state['index']} {count} {loss:.4f}", flush=True)
+
+        batch = state["batch"]
+        if state["index"] != 1 or batch is None:
+            return
+
+        try:
+            # 넘긴 사전을 plot_images 가 고쳐 쓴다(텐서 → numpy) - 학습 중인 묶음을 건드리지 않게 얕은 복사본을 준다.
+            grid = plot_images(labels=dict(batch), paths=batch["im_file"], names=trainer.data["names"],
+                               max_size=1280, save=False, threaded=False)
+            preview.parent.mkdir(parents=True, exist_ok=True)
+            temporary = preview.with_suffix(".tmp.jpg")
+            Image.fromarray(grid).save(temporary, quality=85)
+            os.replace(temporary, preview)
+            print(f"PREVIEW {preview}", flush=True)
+        except Exception as error:  # 그림 하나 못 그렸다고 학습을 멈추지 않는다
+            print(f"PREVIEW_FAILED {error}", flush=True)
+
+    model.add_callback("on_train_start", on_train_start)
+    model.add_callback("on_train_epoch_start", on_train_epoch_start)
+    model.add_callback("on_train_batch_end", on_train_batch_end)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, help="데이터셋 폴더(images·labels·classes.txt)")
@@ -104,7 +163,9 @@ def main() -> None:
     allow_capital_folders()
 
     started = time.time()
-    YOLO(f"{args.model}.pt").train(
+    model = YOLO(f"{args.model}.pt")
+    report_progress(model, runs / args.model)
+    model.train(
         data=str(data), imgsz=640, epochs=args.epochs, batch=args.batch, device=args.device, workers=2,
         project=str(runs), name=args.model, exist_ok=True, plots=False, verbose=False)
     print(f"TRAIN_SECONDS {round(time.time() - started)}", flush=True)

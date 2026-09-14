@@ -134,6 +134,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
         DatasetRoot = LabelDataset.ConfiguredRoot;
 
         TrainEpochs = GetSetting(nameof(TrainEpochs), 20);
+        ShowTrainingBatch = GetSetting(nameof(ShowTrainingBatch), false);
         MinimumScore = GetSetting(nameof(MinimumScore), 0.5);
         LabelZoom = GetSetting(nameof(LabelZoom), 1.0);
 
@@ -218,6 +219,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
     protected override void SaveSettings()
     {
         SetSetting(nameof(TrainEpochs), TrainEpochs);
+        SetSetting(nameof(ShowTrainingBatch), ShowTrainingBatch);
         SetSetting(nameof(MinimumScore), MinimumScore);
         SetSetting(nameof(LabelZoom), LabelZoom);
         SaveLayouts();
