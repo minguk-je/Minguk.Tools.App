@@ -12,3 +12,7 @@ Releases/
 
 # WPF 빌드가 잠깐 만드는 임시 프로젝트 - 빌드 도중 git add 하면 섞여 들어간다
 *_wpftmp.csproj
+
+# 파이썬이 도구 스크립트(도구/*.py)를 돌리며 남기는 캐시
+__pycache__/
+*.pyc
