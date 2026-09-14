@@ -87,6 +87,12 @@ internal static partial class Program
 
                             var copy = Path.Combine(folder, $"죽은척-{i + 1}.mp4");
                             var bytes = ReadShared(flushPath);
+
+                            // 녹화 줄의 크기(FileSizeBytes)는 쓰는 도중에도 실제 크기다 - 폴더 목록(FileInfo)은 닫기 전까지 늦게 고친다.
+                            if (i == 74)
+                                Check("녹화: 쓰는 도중 크기(FileSizeBytes)가 실제로 쓴 크기와 맞다",
+                                      live.FileSizeBytes >= bytes.LongLength && bytes.LongLength > 0,
+                                      $"FileSizeBytes {live.FileSizeBytes:N0} · 읽은 {bytes.LongLength:N0} · 폴더 목록 {new FileInfo(flushPath).Length:N0}");
                             File.WriteAllBytes(copy, bytes);
                             snapshots.Add((live.FramesWritten, bytes.LongLength, CountBox(bytes, "moof"), copy));
                         }

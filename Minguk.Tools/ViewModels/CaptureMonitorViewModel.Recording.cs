@@ -34,7 +34,7 @@ public partial class CaptureMonitorViewModel
         set => SetProperty(() => IsRecording, value, OnIsRecordingChanged);
     }
 
-    /// <summary>녹화 줄 - "녹화 중 00:12 · 360장" / 마지막 파일.</summary>
+    /// <summary>녹화 줄 - "녹화 중 00:12 · 360장 · 18.4 MB" / 마지막 파일.</summary>
     public string? RecordingStatus
     {
         get => GetProperty(() => RecordingStatus);
@@ -97,14 +97,14 @@ public partial class CaptureMonitorViewModel
         {
             recorder.Dispose();
 
-            var size = File.Exists(recorder.FilePath) ? new FileInfo(recorder.FilePath).Length / 1024.0 / 1024.0 : 0;
+            var size = File.Exists(recorder.FilePath) ? new FileInfo(recorder.FilePath).Length : 0;
             var names = Path.GetFileName(recorder.FilePath);
 
             var done = recorder.FramesWritten == 0
                 ? $"녹화된 프레임이 없어 파일을 만들지 않았습니다{(recorder.Error is null ? "." : $": {DescribeRecordingError(recorder.Error)}")}"
                 : $"녹화 저장 - {names} · {FormatDuration(recorder.Duration)} · {recorder.FramesWritten}장" +
                   (recorder.FramesDropped > 0 ? $"(버림 {recorder.FramesDropped})" : string.Empty) +
-                  $" · {size:0.#} MB" +
+                  $" · {FormatSize(size)}" +
                   (recorder.Error is null ? string.Empty : $" · 도중 오류: {DescribeRecordingError(recorder.Error)}");
 
             if (reason is not null) done = $"{reason} {done}";
@@ -153,7 +153,9 @@ public partial class CaptureMonitorViewModel
     {
         if (_recorder is not { } recorder) return;
 
-        RecordingStatus = $"녹화 중 {FormatDuration(recorder.Duration)} · {recorder.FramesWritten}장" + (recorder.FramesDropped > 0 ? $" · 버림 {recorder.FramesDropped}" : string.Empty);
+        // 크기는 파일을 열어 잰다 - 탐색기는 녹화 중 0 이나 옛 크기를 보여 줘 쓰는지 알 수 없었다(사용자, 2026-09-15).
+        RecordingStatus = $"녹화 중 {FormatDuration(recorder.Duration)} · {recorder.FramesWritten}장 · {FormatSize(recorder.FileSizeBytes)}" +
+                          (recorder.FramesDropped > 0 ? $" · 버림 {recorder.FramesDropped}" : string.Empty);
         StatusText = $"{StatusText} · {RecordingStatus}";
     }
 
@@ -181,6 +183,14 @@ public partial class CaptureMonitorViewModel
             _ => $"녹화 인코더(Media Foundation) 오류입니다 - 자세한 내용은 로그를 보세요({code})"
         };
     }
+
+    /// <summary>"820 KB" · "18.4 MB" · "1.25 GB" - 한 시간이면 GB 를 넘는다(60fps 12Mbps 에 약 5.4GB).</summary>
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 * 1024 => $"{bytes / 1024.0:0} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / 1024.0 / 1024.0:0.0} MB",
+        _ => $"{bytes / 1024.0 / 1024.0 / 1024.0:0.00} GB"
+    };
 
     /// <summary>녹화 길이 "12:34" - 한 시간이 넘어도 분으로 센다("75:02"). TimeSpan 의 mm 은 시간 안의 분이라 넘으면 0 으로 돌아간다.</summary>
     private static string FormatDuration(TimeSpan duration) => $"{(int)duration.TotalMinutes:00}:{duration.Seconds:00}";

@@ -115,6 +115,24 @@ public sealed class MediaFoundationVideoRecorder : IVideoRecorder
 
     public Exception? Error => _error;
 
+    public long FileSizeBytes
+    {
+        get
+        {
+            try
+            {
+                // 녹화기가 쓰기로 쥐고 있다 - 읽기로 열되 쓰기·지우기 공유를 허락해야 열린다. 길이만 보고 곧바로 닫는다.
+                using var stream = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                return stream.Length;
+            }
+            catch (Exception)
+            {
+                // 아직 첫 프레임 전이라 파일이 없거나, 닫는 중이다. 크기를 못 보여 줄 뿐이다.
+                return 0;
+            }
+        }
+    }
+
     public bool TryAddFrame(IntPtr pixels, int rowPitch, int width, int height, long timestamp)
     {
         if (_error is not null || Volatile.Read(ref _finished) != 0 || _queue.IsAddingCompleted) return false;

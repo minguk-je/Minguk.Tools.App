@@ -29,6 +29,14 @@ public interface IVideoRecorder : IDisposable
     Exception? Error { get; }
 
     /// <summary>
+    /// 지금까지 디스크에 쓴 크기(바이트). 아직 파일이 없으면 0. 부를 때마다 파일을 열어 잰다 - 1초에 한 번 정도로.
+    /// </summary>
+    /// <remarks>
+    /// 폴더 목록(FileInfo·탐색기)은 열어 두고 쓰는 파일의 크기를 닫을 때까지 늦게 고친다 - 녹화 중 0 으로 보였다(실측 2026-09-15, 실제 212MB).
+    /// </remarks>
+    long FileSizeBytes { get; }
+
+    /// <summary>
     /// 프레임 한 장(BGRA 8888, 위에서 아래로). 캡처 스레드에서 부르고 곧바로 돌아온다. 받았으면 true, 버렸거나 끝났으면 false.
     /// </summary>
     /// <param name="timestamp"><see cref="System.Diagnostics.Stopwatch.GetTimestamp"/> 값 - 영상의 시각이 된다(프레임이 고르지 않아도 제 시각에 나온다).</param>
