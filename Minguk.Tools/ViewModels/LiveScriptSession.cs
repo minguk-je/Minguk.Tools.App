@@ -208,12 +208,18 @@ public sealed class LiveScriptSession : IDisposable
     /// </summary>
     private Func<Task> MakeBeforeRun(ScriptPlayer player, InputService service) => async () =>
     {
-        // 드라이버 경로는 사람이 쓰는 바로 그 마우스로 보내야 게임이 본다. 아직 못 봤으면 지금 말해 준다.
-        if (service.Adapter is Minguk.Tools.Input.Adapters.InterceptionInputAdapter { SawHumanMouse: false })
+        // 드라이버 경로는 사람이 쓰는 바로 그 마우스로 보내야 게임이 본다. 아직 못 봤으면 지금 말해 준다(영상이면 보내지 않으니 해당 없다).
+        if (!IsVideoTarget && service.Adapter is Minguk.Tools.Input.Adapters.InterceptionInputAdapter { SawHumanMouse: false })
             _notify("마우스를 한 번 움직여 주세요 - Interception 이 어느 마우스로 보낼지 아직 모릅니다(붙은 첫 자리로 보냅니다).");
 
         if (!_emergency.Arm(() => { player.Stop(); _api?.ReleaseAll(); }, out var problem) && problem is not null)
             _notify(problem);
+
+        if (IsVideoTarget)
+        {
+            Console.Print("대상이 영상입니다 - 키·클릭·조준은 보내지 않고 호출 로그에만 남깁니다. 몹 좌표는 영상 픽셀이고, 조준 배율은 배우지 않습니다.");
+            return;
+        }
 
         // 배율이 안 맞으면 조준이 목표를 지나치거나 못 미친다. 꺼 두고 돌리다 "왜 안 배우지" 로 1,003번을
         // 돌린 적이 있어(실측), 어느 쪽이든 시작할 때 한 줄로 말해 준다.
@@ -224,11 +230,20 @@ public sealed class LiveScriptSession : IDisposable
         await _activateTarget();
     };
 
+    /// <summary>잡은 대상이 영상 파일인가. 그러면 입력을 보내지 않는다 - 보내면 앞에 있는 진짜 창으로 들어간다.</summary>
+    private bool IsVideoTarget => _target() is { Kind: CaptureTargetKind.Video };
+
     /// <summary>API 에 빌려 줄 것들을 한데 묶는다. 소스·빌드된 것 두 경로가 똑같이 쓴다 - 한쪽만 고쳐 어긋나지 않게.</summary>
-    private LiveScriptHost BuildHost(ScriptPlayer player, InputService service, string? resourceRoot, CancellationToken token) => new()
+    /// <remarks>대상이 영상이면 한 바퀴마다 보내지 않는 경로로 바꾸고 배율 배우기를 끈다 - 화면이 안 따라 움직여 배율이 끝없이 커진다.</remarks>
+    private LiveScriptHost BuildHost(ScriptPlayer player, InputService service, string? resourceRoot, CancellationToken token)
+        => IsVideoTarget
+            ? BuildHostCore(player, new InputService(InputAdapterFactory.CreateSilent()) { JitterMs = service.JitterMs }, resourceRoot, learnsAim: false)
+            : BuildHostCore(player, service, resourceRoot, learnsAim: true);
+
+    private LiveScriptHost BuildHostCore(ScriptPlayer player, InputService service, string? resourceRoot, bool learnsAim) => new()
     {
         Service = service,
-        RequiresForeground = _requiresForeground(),
+        RequiresForeground = learnsAim && _requiresForeground(),
         Target = _target,
         Hub = Hub,
         Ocr = _ocr,
@@ -240,14 +255,16 @@ public sealed class LiveScriptSession : IDisposable
         HoldTimeMs = player.HoldTimeMs,
         AimScale = player.AimScale,
         // 늘 물린다. 켜고 끄는 것은 IsAimScaleAuto 가 부를 때마다 본다 - 도중에 켜도 바로 먹게.
-        AimScaleLearned = learned =>
-        {
-            var percent = (int)Math.Round(learned * 100);
+        AimScaleLearned = learnsAim
+            ? learned =>
+            {
+                var percent = (int)Math.Round(learned * 100);
 
-            Console.Print($"조준 배율을 {percent}% 로 맞췄습니다.");
-            _onUi(() => player.AimScalePercent = percent);
-        },
-        IsAimScaleAuto = () => player.IsAimScaleAuto
+                Console.Print($"조준 배율을 {percent}% 로 맞췄습니다.");
+                _onUi(() => player.AimScalePercent = percent);
+            }
+            : null,
+        IsAimScaleAuto = () => learnsAim && player.IsAimScaleAuto
     };
 
     public void Dispose()

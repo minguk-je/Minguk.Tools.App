@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -15,7 +16,13 @@ public enum CaptureTargetKind
     Window,
 
     /// <summary>모니터 하나(HMONITOR). 독점 전체화면까지 확실히 잡으려면 이쪽이다.</summary>
-    Monitor
+    Monitor,
+
+    /// <summary>
+    /// 녹화한 영상 파일(<see cref="CaptureTarget.FilePath"/>). 게임 창 대신 영상 프레임이 흐른다 - 몹 찾기·글자 읽기·스크립트 흐름 시험용.
+    /// 입력은 받지 않는다(<see cref="Capture.Input.InputForwardResult.VideoTarget"/>). 화면 자리가 없어 좌표는 영상 픽셀 그대로다.
+    /// </summary>
+    Video
 }
 
 /// <summary>
@@ -29,7 +36,7 @@ public sealed class CaptureTarget
 {
     public required CaptureTargetKind Kind { get; init; }
 
-    /// <summary><see cref="CaptureTargetKind.Window"/> 면 HWND, <see cref="CaptureTargetKind.Monitor"/> 면 HMONITOR.</summary>
+    /// <summary><see cref="CaptureTargetKind.Window"/> 면 HWND, <see cref="CaptureTargetKind.Monitor"/> 면 HMONITOR. 영상이면 0.</summary>
     public required IntPtr Handle { get; init; }
 
     public required string Title { get; init; }
@@ -37,13 +44,29 @@ public sealed class CaptureTarget
     /// <summary>창일 때만 채운다. 어느 게임인지 눈으로 고르라고 붙여 둔다.</summary>
     public string? ProcessName { get; init; }
 
+    /// <summary>영상일 때만 채운다 - 틀 파일의 전체 경로.</summary>
+    public string? FilePath { get; init; }
+
     public int Width { get; init; }
 
     public int Height { get; init; }
 
-    public string Display => Kind == CaptureTargetKind.Window
-        ? $"[창] {Title}  ({ProcessName}, {Width}×{Height})"
-        : $"[모니터] {Title}  ({Width}×{Height})";
+    /// <summary>
+    /// 같은 대상인지 가르는 열쇠. 창·모니터는 핸들, 영상은 경로(핸들이 모두 0 이라 핸들로 가르면 영상끼리 세션이 섞인다).
+    /// </summary>
+    public string Key => Kind == CaptureTargetKind.Video
+        ? $"Video:{FilePath?.ToUpperInvariant()}"
+        : $"{Kind}:{Handle}";
+
+    /// <summary>
+    /// 콤보에 보이는 글. 저장하는 선택도 이것이라 영상은 크기를 넣지 않는다 - 목록을 만들 때 파일을 열어 크기를 읽지 않으려고.
+    /// </summary>
+    public string Display => Kind switch
+    {
+        CaptureTargetKind.Window => $"[창] {Title}  ({ProcessName}, {Width}×{Height})",
+        CaptureTargetKind.Video => $"[영상] {Title}",
+        _ => $"[모니터] {Title}  ({Width}×{Height})"
+    };
 
     public override string ToString() => Display;
 
@@ -128,6 +151,30 @@ public sealed class CaptureTarget
 
         WinApi32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, 0);
         GC.KeepAlive(callback);
+
+        return result;
+    }
+
+    /// <summary>
+    /// 폴더의 녹화 영상(mp4) - 새것부터. 폴더가 없으면 빈 목록. 파일은 열지 않는다(크기는 틀 때 안다).
+    /// </summary>
+    public static List<CaptureTarget> EnumerateVideos(string? folder)
+    {
+        var result = new List<CaptureTarget>();
+
+        if (string.IsNullOrEmpty(folder) || !System.IO.Directory.Exists(folder))
+            return result;
+
+        foreach (var file in new System.IO.DirectoryInfo(folder).EnumerateFiles("*.mp4").OrderByDescending(file => file.LastWriteTimeUtc))
+        {
+            result.Add(new CaptureTarget
+            {
+                Kind = CaptureTargetKind.Video,
+                Handle = IntPtr.Zero,
+                Title = file.Name,
+                FilePath = file.FullName
+            });
+        }
 
         return result;
     }

@@ -18,7 +18,7 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
 {
     private readonly Func<CaptureTarget, bool, IScreenCaptureAdapter> _create;
     private readonly object _gate = new();
-    private readonly Dictionary<(CaptureTargetKind Kind, IntPtr Handle), Shared> _shared = new();
+    private readonly Dictionary<string, Shared> _shared = new();
 
     public SharedCaptureHub(Func<CaptureTarget, bool, IScreenCaptureAdapter> create) => _create = create;
 
@@ -26,7 +26,7 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
     {
         lock (_gate)
         {
-            var key = (target.Kind, target.Handle);
+            var key = target.Key;
 
             if (!_shared.TryGetValue(key, out var shared))
             {
@@ -44,14 +44,14 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
     public int ConsumerCount(CaptureTarget target)
     {
         lock (_gate)
-            return _shared.TryGetValue((target.Kind, target.Handle), out var shared) ? shared.Count : 0;
+            return _shared.TryGetValue(target.Key, out var shared) ? shared.Count : 0;
     }
 
     private void Forget(Shared shared)
     {
         lock (_gate)
         {
-            var key = (shared.Target.Kind, shared.Target.Handle);
+            var key = shared.Target.Key;
 
             if (_shared.TryGetValue(key, out var current) && ReferenceEquals(current, shared))
                 _shared.Remove(key);

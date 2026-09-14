@@ -95,11 +95,11 @@ public static class SolutionMigration
 
         var captures = ProjectPaths.LegacyCaptures;
 
-        if (Directory.Exists(captures) && !Same(captures, Path.Combine(projectDirectory, "captures")))
+        if (Directory.Exists(captures) && !Same(captures, Path.Combine(projectDirectory, ProjectPaths.CapturesFolder)))
         {
             var count = Directory.EnumerateFiles(captures).Count();
 
-            steps.Add(new MigrationStep($"프레임 저장 ({count}장)", captures, Path.Combine(projectDirectory, "captures")));
+            steps.Add(new MigrationStep($"프레임 저장 ({count}장)", captures, Path.Combine(projectDirectory, ProjectPaths.CapturesFolder)));
         }
 
         foreach (var script in OldScripts())

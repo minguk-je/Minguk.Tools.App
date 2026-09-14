@@ -56,6 +56,11 @@ public static class InputAdapterFactory
     };
 
     /// <summary>
+    /// 아무것도 보내지 않는 경로. 고르는 목록(<see cref="InputBackend"/>)에는 없다 - 캡처 대상이 영상일 때 스크립트가 알아서 쓴다.
+    /// </summary>
+    public static IInputAdapter CreateSilent() => new SilentInputAdapter();
+
+    /// <summary>
     /// 고른 경로를 만들되, 쓸 수 없으면 <paramref name="fallback"/> 으로 내려앉는다.
     /// </summary>
     /// <remarks>

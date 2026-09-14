@@ -21,7 +21,10 @@ public enum InputForwardResult
     OutsideImage,
 
     /// <summary>OS 가 막았다. 대상이 이 앱보다 높은 권한으로 떠 있으면 그렇다(UIPI).</summary>
-    Blocked
+    Blocked,
+
+    /// <summary>대상이 영상 파일이다. 받을 창이 없어 보내지 않았다 - 보내면 진짜 화면을 누른다.</summary>
+    VideoTarget
 }
 
 /// <summary>결과를 사람이 읽을 문장으로.</summary>
@@ -34,6 +37,7 @@ public static class InputForwardResultText
         InputForwardResult.TargetGone => "대상 창을 찾을 수 없다 (닫혔을 수 있다)",
         InputForwardResult.OutsideImage => "그림 바깥이다 - 대상 위를 눌러야 한다",
         InputForwardResult.Blocked => "OS 가 막았다. 대상이 관리자 권한이면 이 앱도 관리자로 실행해야 한다",
+        InputForwardResult.VideoTarget => "영상은 입력을 받지 않는다 - 보내지 않았다",
         _ => string.Empty
     };
 }

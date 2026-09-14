@@ -244,6 +244,10 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
         }
 
         ProjectDirectory = solution.DirectoryOf(choice.Entry);
+
+        // 옛 소문자 폴더(images·labels·captures·recordings)를 대문자로 시작하게 맞춘다(사용자, 2026-09-15). 아래 화면이 닫힌 뒤라 쥔 파일이 없다.
+        if (Vision.ProjectPaths.NormalizeFolderCase(ProjectDirectory) is > 0 and var renamed)
+            Logger.Info($"프로젝트 폴더 이름을 대문자로 맞췄다: {renamed}개 · {ProjectDirectory}");
     }
 
     /// <summary>닫기를 막은 화면이 있어 바꾸지 못했다 - 콤보를 지금 솔루션으로 되돌린다.</summary>
@@ -311,8 +315,8 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
         var project = Input.Scripting.Projects.ScriptProject.Create(folder, name, NewProjectEntrySource);
 
         // 사진·라벨 자리를 미리 만든다 - 캡처 화면이 담을 때 만들기는 하지만 처음부터 보이는 편이 낫다.
-        Directory.CreateDirectory(Path.Combine(folder, "images"));
-        Directory.CreateDirectory(Path.Combine(folder, "labels"));
+        Directory.CreateDirectory(Path.Combine(folder, Vision.ProjectPaths.ImagesFolder));
+        Directory.CreateDirectory(Path.Combine(folder, Vision.ProjectPaths.LabelsFolder));
 
         var entry = solution.Add(project.FilePath);
         solution.Save();

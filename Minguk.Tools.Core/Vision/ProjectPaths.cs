@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 
 using Minguk.Base.Utilities;
 
@@ -51,8 +52,53 @@ public static class ProjectPaths
     /// <summary>데이터셋들이 놓이는 자리(게임마다 하나). 지금 어느 것을 쓰는지는 <see cref="Labeling.LabelDataset.ConfiguredRoot"/> 가 정한다.</summary>
     public static string Datasets => Path.Combine(Root, "Datasets");
 
+    // ── 프로젝트 폴더 안 폴더 이름 - 대문자로 시작한다(사용자, 2026-09-15). VS 의 Resources·Properties 와 같이 ──────────────
+    // bin 은 VS 관례대로 소문자로 둔다. Windows 는 대소문자를 안 가려 옛 소문자 폴더도 그대로 열린다 - 보이는 이름은 NormalizeFolderCase 가 맞춘다.
+
+    public const string ImagesFolder = "Images";
+    public const string LabelsFolder = "Labels";
+    public const string CapturesFolder = "Captures";
+    public const string RecordingsFolder = "Recordings";
+    public const string ResourcesFolder = "Resources";
+
     /// <summary>
-    /// 프레임 저장 버튼이 떨어뜨리는 그림. Automation 에서 프로젝트를 골랐으면 <b>그 프로젝트의 captures</b> 다.
+    /// 프로젝트 폴더 안의 옛 소문자 폴더(images·labels·captures·recordings·resources)를 대문자로 시작하게 이름을 바꾼다. 바꾼 개수.
+    /// </summary>
+    /// <remarks>
+    /// Windows 는 대소문자만 다른 이름으로 곧장 옮기지 못할 때가 있어 임시 이름을 거쳐 두 번 옮긴다. 폴더를 쥔 화면이 있으면 실패할 수 있다 -
+    /// 그때는 그대로 둔다(안의 파일은 대소문자와 무관하게 열린다). 솔루션 탭이 아래 화면을 닫은 뒤에 부른다.
+    /// </remarks>
+    public static int NormalizeFolderCase(string projectDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(projectDirectory) || !Directory.Exists(projectDirectory)) return 0;
+
+        var renamed = 0;
+
+        foreach (var wanted in new[] { ImagesFolder, LabelsFolder, CapturesFolder, RecordingsFolder, ResourcesFolder })
+        {
+            try
+            {
+                var existing = new DirectoryInfo(projectDirectory).EnumerateDirectories()
+                    .FirstOrDefault(d => string.Equals(d.Name, wanted, System.StringComparison.OrdinalIgnoreCase));
+
+                if (existing is null || existing.Name == wanted) continue;
+
+                var temporary = Path.Combine(projectDirectory, wanted + ".~이름바꾸기");
+                Directory.Move(existing.FullName, temporary);
+                Directory.Move(temporary, Path.Combine(projectDirectory, wanted));
+                renamed++;
+            }
+            catch (System.Exception)
+            {
+                // 쥐고 있는 프로그램이 있다 - 다음에 다시 해 본다. 대소문자만 다른 것이라 동작에는 지장이 없다.
+            }
+        }
+
+        return renamed;
+    }
+
+    /// <summary>
+    /// 프레임 저장 버튼이 떨어뜨리는 그림. 솔루션 탭에서 프로젝트를 골랐으면 <b>그 프로젝트의 Captures</b> 다.
     /// </summary>
     /// <remarks>
     /// 프로젝트가 없을 때만 옛 자리(<see cref="LegacyCaptures"/>)를 본다. 솔루션으로 옮긴 뒤에도 옛 자리를 보면 새로 저장한 그림이
@@ -60,8 +106,17 @@ public static class ProjectPaths
     /// </remarks>
     public static string Captures
         => Projects.SolutionWorkspace.StartupDirectory is { } project
-            ? Path.Combine(project, "captures")
+            ? Path.Combine(project, CapturesFolder)
             : LegacyCaptures;
+
+    /// <summary>
+    /// 화면캡처 녹화(mp4)가 쌓이는 자리 - 고른 프로젝트의 <c>Recordings</c>. 프로젝트가 없으면 작업공간 바로 아래 <c>Recordings</c>.
+    /// </summary>
+    /// <remarks>1분에 50~100MB 라 사진보다 빨리 찬다. 사진·라벨처럼 프로젝트 것이라 같이 옮기고 백업한다.</remarks>
+    public static string Recordings
+        => Projects.SolutionWorkspace.StartupDirectory is { } project
+            ? Path.Combine(project, RecordingsFolder)
+            : Path.Combine(Root, RecordingsFolder);
 
     /// <summary>
     /// 솔루션을 쓰기 전의 프레임 저장 자리. 옛 자리에 이미 쌓인 것이 있으면 그것을 쓴다 - 말없이 빈 폴더를 보여 주지 않는다.
@@ -80,7 +135,7 @@ public static class ProjectPaths
                 if (Directory.Exists(legacy)) return legacy;
             }
 
-            return Path.Combine(Root, "captures");
+            return Path.Combine(Root, CapturesFolder);
         }
     }
 }

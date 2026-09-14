@@ -64,10 +64,13 @@ public partial class LabelingViewModel
         TrainEpochsTotal = TrainEpochs;
         TrainPercent = 0;
 
-        // "GPU 1 - ..." 이면 그 번호, 자동이면 0.
+        // "GPU 1 - ..." 이면 그 번호. 자동이면 모니터가 안 붙은·지금 덜 바쁜 카드(GpuProbe) - 예전에는 늘 0번이라
+        // 게임·캡처·몹 찾기가 도는 카드에 학습을 얹어 GPU 가 리셋됐다(실측 2026-09-14). 고를 근거가 없으면 0.
         var device = SelectedGpuOption is { } gpu && System.Text.RegularExpressions.Regex.Match(gpu, @"^GPU (\d+)") is { Success: true } m
             ? int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)
-            : 0;
+            : GpuProbe.PickForTraining(GpuProbe.List())?.Index ?? 0;
+
+        Logger.Info($"학습 GPU: {device} ({SelectedGpuOption ?? "자동"})");
 
         var token = _trainingCts.Token;
 
@@ -86,9 +89,16 @@ public partial class LabelingViewModel
                 });
 
                 // 둘은 걸리는 시간이 크게 다르다 - YOLO11n 은 5분, D-FINE-N 은 1시간 45분(98장 60바퀴, GTX 1060).
-                var (modelPath, elapsed) = DFineTrainer.Handles(choice.Name)
-                    ? await DFineTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token)
-                    : await YoloTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token);
+                // 학습하는 동안 켜 둔 스크립트·플레이 화면이 몹 찾기 모델을 내려놓는다(TrainingActivity) - 같은 카드에서 겹치면 GPU 가 리셋됐다.
+                string modelPath;
+                TimeSpan elapsed;
+
+                using (TrainingActivity.Begin())
+                {
+                    (modelPath, elapsed) = DFineTrainer.Handles(choice.Name)
+                        ? await DFineTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token)
+                        : await YoloTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token);
+                }
 
                 TrainEpochsDone = TrainEpochsTotal;
                 TrainPercent = 100;
@@ -98,7 +108,19 @@ public partial class LabelingViewModel
                 RefreshModelSummary();
                 MessengerUtility.SendMainMessage($"{choice.Name} 학습이 끝났습니다. 켜 둔 스크립트·플레이 화면도 몇 초 안에 새 모델로 찾습니다.");
 
-                await RunSelfCheckAsync(dataset, modelPath, token);
+                // 재현율은 덤이다 - 여기서 실패해도 학습은 된 것이다. 예전에는 "학습에 실패" 로 적혀 새 모델이 들어간 줄 몰랐다.
+                var finished = TrainingStatus;
+
+                try
+                {
+                    await RunSelfCheckAsync(dataset, modelPath, token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    Logger.Error(ex, "학습 뒤 재현율을 재지 못했다");
+                    TrainingStatus = $"{finished}  재현율은 못 쟀습니다: " +
+                                     (TrainingActivity.IsGpuLost(ex) ? TrainingActivity.GpuLostMessage : ex.Message);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -107,8 +129,8 @@ public partial class LabelingViewModel
             catch (Exception ex)
             {
                 // 예외 창을 띄우지 않는다. 사람이 자리를 비웠을 수 있고, 돌아왔을 때 무엇이 잘못됐는지 화면에 남아 있는 편이 낫다.
-                Logger.Error(ex, "YOLO 학습에 실패했다");
-                TrainingStatus = $"실패: {ex.Message}";
+                Logger.Error(ex, "학습에 실패했다");
+                TrainingStatus = TrainingActivity.IsGpuLost(ex) ? $"실패: {TrainingActivity.GpuLostMessage}" : $"실패: {ex.Message}";
             }
             finally
             {

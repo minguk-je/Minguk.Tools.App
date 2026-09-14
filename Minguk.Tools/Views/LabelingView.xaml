@@ -512,7 +512,8 @@
                                 <dxlc:LayoutItem Label="결과">
                                     <dxe:TextEdit EditValue="{Binding DetectStatus, Mode=OneWay}"
                                                   IsReadOnly="True"
-                                                  NullText="아직 안 찾아봤습니다." />
+                                                  NullText="아직 안 찾아봤습니다."
+                                                  TextWrapping="NoWrap" />
                                 </dxlc:LayoutItem>
                             </dxlc:LayoutGroup>
 

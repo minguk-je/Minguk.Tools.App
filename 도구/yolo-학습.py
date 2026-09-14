@@ -50,6 +50,35 @@ def write_data_yaml(root: Path, work: Path) -> Path:
     return target
 
 
+def allow_capital_folders() -> None:
+    """
+    Ultralytics 가 라벨을 대소문자 안 가리고 찾게 한다 - 프로젝트 폴더가 `Images`·`Labels` 로 대문자로 시작하기 때문이다(2026-09-15).
+
+    Ultralytics 는 사진 경로의 `\\images\\` 를 `\\labels\\` 로 **대소문자를 가려** 바꿔 라벨을 찾는다(data/utils.py img2label_paths).
+    그런데 data.yaml 의 경로를 `resolve()` 로 실제 경로로 풀어 Windows 에서는 디스크의 이름(`Images`)이 돌아온다 - 그대로 두면
+    라벨을 한 장도 못 찾고 "no labels found" 로 배경만 배운다. 데이터셋을 만드는 곳(dataset.py)이 가져다 쓴 이름을 바꿔 끼운다.
+    """
+    import re
+
+    import ultralytics.data.dataset as dataset
+    import ultralytics.data.utils as utils
+
+    folder = re.compile(re.escape(os.sep) + "images" + re.escape(os.sep), re.IGNORECASE)
+
+    def img2label_paths(img_paths, label_dir="labels", suffix=".txt"):
+        result = []
+        for path in img_paths:
+            found = list(folder.finditer(path))
+            if found:
+                last = found[-1]
+                path = path[: last.start()] + os.sep + label_dir + os.sep + path[last.end():]
+            result.append(path.rsplit(".", 1)[0] + suffix)
+        return result
+
+    utils.img2label_paths = img2label_paths
+    dataset.img2label_paths = img2label_paths
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, help="데이터셋 폴더(images·labels·classes.txt)")
@@ -71,6 +100,8 @@ def main() -> None:
     os.chdir(runs)
 
     from ultralytics import YOLO  # 무겁다(torch). 인자 오류는 이것을 읽기 전에 끝낸다.
+
+    allow_capital_folders()
 
     started = time.time()
     YOLO(f"{args.model}.pt").train(

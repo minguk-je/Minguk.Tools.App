@@ -332,8 +332,8 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             DispatcherService?.BeginInvoke(() => Guard(() =>
             {
-                // 매 프레임 같은 오류를 쏟지 않는다
-                TurnOffDetection($"실패: {ex.Message}");
+                // 매 프레임 같은 오류를 쏟지 않는다. GPU 리셋이면 무엇을 해야 하는지(앱 다시 켜기)를 말한다.
+                TurnOffDetection(Vision.Training.TrainingActivity.IsGpuLost(ex) ? Vision.Training.TrainingActivity.GpuLostMessage : $"실패: {ex.Message}");
             }));
         }
         finally
@@ -359,6 +359,15 @@ public abstract partial class RecognizingCaptureViewModelBase
             ClickDetectionCommand.RaiseCanExecuteChanged();
             _tracker.Reset();
 
+            return;
+        }
+
+        // 학습 중에 켰으면 모델은 끝난 뒤에 읽는다 - 같은 카드에서 추론과 학습이 겹치면 GPU 가 리셋된다(실측).
+        if (Vision.Training.TrainingActivity.IsBusy)
+        {
+            _pausedForTraining = true;
+            DetectionStatus = "학습 중이라 끝나면 몹 찾기를 시작합니다.";
+            StatusText = DetectionStatus;
             return;
         }
 
@@ -629,6 +638,54 @@ public abstract partial class RecognizingCaptureViewModelBase
         DetectionStatus = reason;
         StatusText = reason;
     }
+
+    /// <summary>학습 때문에 모델을 내려놓았는가. 학습이 끝나면 이것이 켜진 화면만 다시 읽는다.</summary>
+    private bool _pausedForTraining;
+
+    /// <summary>
+    /// 학습이 시작·끝났다(<see cref="Vision.Training.TrainingActivity"/>). 시작이면 GPU 모델을 내려놓고, 끝이면 켜 둔 몹 찾기를 다시 읽는다.
+    /// </summary>
+    /// <remarks>
+    /// 3GB 카드에서 캡처·DirectML 추론과 CUDA 학습이 같이 돌다 드라이버가 GPU 를 리셋했다(실측). 토글은 켠 채로 두어 끝나면 사람이 다시 켤 것이 없다.
+    /// 모델을 내려놓는 동안 <c>_detector</c> 가 null 이라 프레임 콜백은 알아서 건너뛴다(<see cref="MaybeReloadDetector"/> 도 null 이면 안 읽는다).
+    /// </remarks>
+    private void OnTrainingActivityChanged(object? sender, EventArgs e) => DispatcherService?.BeginInvoke(() => Guard(() =>
+    {
+        if (Vision.Training.TrainingActivity.IsBusy)
+        {
+            if (!IsMobDetectionOn || _pausedForTraining) return;
+
+            _pausedForTraining = true;
+
+            var stale = _detector;
+            _detector = null;
+            _tracker.Reset();
+
+            if (stale is not null)
+            {
+                // 돌고 있는 추론이 옛 모델을 쓰는 중일 수 있다 - 끝나기를 기다렸다 놓는다(LoadDetector 와 같다).
+                _ = System.Threading.Tasks.Task.Run(() =>
+                {
+                    var waited = Stopwatch.StartNew();
+                    while (Volatile.Read(ref _isDetectRunning) != 0 && waited.ElapsedMilliseconds < 3000) Thread.Sleep(20);
+                    stale.Dispose();
+                });
+            }
+
+            Detections.Clear();
+            DetectionStatus = "학습 중이라 몹 찾기를 멈췄습니다 - 끝나면 다시 찾습니다.";
+            StatusText = DetectionStatus;
+            Logger.Info("학습이 시작돼 몹 찾기 모델을 내려놓았다(GPU 메모리)");
+            return;
+        }
+
+        if (!_pausedForTraining) return;
+
+        _pausedForTraining = false;
+
+        // 학습이 끝나며 새 모델이 들어왔을 수 있다 - 켤 때와 같은 길로 지금 모델을 읽는다.
+        if (IsMobDetectionOn) OnMobDetectionChanged();
+    }));
 
     /// <summary>지난번에 죽으면서 남긴 임시 파일을 치운다. 지금 쓰는 것은 건드리지 않는다.</summary>
     private void SweepStaleScratch()

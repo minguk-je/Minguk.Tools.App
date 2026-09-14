@@ -19,7 +19,7 @@
         <dxb:BarEditItem Content="갱신 상한"
                          EditValue="{Binding PreviewTargetFps}"
                          EditWidth="70"
-                         ToolTip="미리보기 갱신 상한(fps). 캡처 자체는 이 값과 무관하게 계속 돈다.">
+                         ToolTip="미리보기 갱신 상한(FPS). 캡처 자체는 이 값과 무관하게 계속 돈다.">
             <dxb:BarEditItem.EditSettings>
                 <dxe:ComboBoxEditSettings IsTextEditable="False"
                                           ItemsSource="{Binding FpsOptions}" />
@@ -27,7 +27,7 @@
         </dxb:BarEditItem>
 
         <dxb:BarStaticItem Content="{Binding PreviewFpsText, Mode=OneWay}"
-                           ToolTip="지금 화면에 올라가고 있는 실제 fps. 왼쪽 값은 상한일 뿐이다." />
+                           ToolTip="지금 화면에 올라가고 있는 실제 FPS. 왼쪽 값은 상한일 뿐이다." />
 
         <dxb:BarItemSeparator />
 

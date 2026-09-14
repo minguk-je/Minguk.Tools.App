@@ -66,7 +66,7 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
 
 | 화면 | ViewModel | 하는 일 |
 |---|---|---|
-| 화면캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 대상·fps·미리보기·프레임 저장·담기(F8)·통계 |
+| 화면캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 대상·fps·미리보기·프레임 저장·담기(F8)·**녹화(mp4)**·통계 |
 | 스크립트 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | VS 모양 편집기. 몹 찾기·추적·글자 읽기를 보며 쓰고 돌린다, 빌드, 담기(F8) |
 | 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 완성품(.mtsx)을 골라 1회(F5)·반복(F6). 편집 없음. 모델·영역은 완성품의 프로젝트 폴더(`RecognitionRoot`) |
 
@@ -81,6 +81,24 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
   - 탭 편집기의 데이터 문맥은 **문서** - 공용 설정은 문서가 든 `Settings`(워크벤치)로 묶는다(떠 있는 창에서 조상 찾기가 끊긴다).
   - 탭 활성화는 한 방향으로만 기다린다(`ScriptDocumentsBehavior._requested`) - 늦게 오는 `DockItemActivated` 와 핑퐁이 났다.
   - 기본 배치를 바꾸면 `DockLayoutVersion` 을 올린다. 도구 모음 자리는 `BarLayout` 설정. 미리보기 | 문서 나누기는 `DesignSplitGroup`(`SetSplit`·`SwapPanes`).
+- **녹화**(`CaptureMonitorViewModel.Recording.cs`, 어댑터 `IVideoRecorder`·`MediaFoundationVideoRecorder`·`VideoRecorderFactory`): 프로젝트 `Recordings\*.mp4`(`ProjectPaths.Recordings`), H.264.
+  **fps 는 화면캡처 fps 콤보 값**이고 더 빨리 오는 프레임은 솎는다(세션을 나눈 다른 화면이 더 높은 fps 를 원하면 세션이 그 fps 로 돈다). 비트레이트는 30fps 8Mbps · 60fps 12Mbps(`DefaultBitrate`).
+  캡처 스레드는 픽셀만 복사해 넘기고 쓰기 스레드가 SinkWriter 를 첫 프레임 크기로 만들어 쓴다(0.2초어치 넘게 밀리면 버린다 - 1080p 30·60fps 실측 버림 0).
+  리드백을 알아서 켜는데 그때 세션이 다시 시작되므로 **녹화기는 그 뒤에** 만든다. 입력은 RGB32 + 양수 `DefaultStride`(안 적으면 뒤집힌다), 크기는 짝수로 자른다.
+  캡처가 멈추거나 크기가 바뀌면 파일을 닫는다. 길이 제한은 없고 디스크가 한도다.
+  **한 녹화 = 한 파일, 조각 mp4**(`MFCreateFile` + `MFCreateFMPEG4MediaSink` + `MFCreateSinkWriterFromMediaSink`) - 쓰는 도중에도 조각(moof)이 디스크에 붙어 **앱이 죽어도 그때까지는 튼다**
+  (사용자 요구 "10초·1분마다 확정"). 싱크를 직접 만들면 SinkWriter 가 싱크를 안 내린다 - 싱크 `Shutdown`·바이트 스트림 `Close` 는 우리가.
+  **조각 간격은 싱크가 정하고 키프레임과 무관**(실측 2026-09-15): 약 7~9장마다(1080p 30fps 0.25초 · 60fps 0.13초), 키프레임은 [0,9,90]. `MaxKeyframeSpacing` 은 1초·10초가 바이트까지 같아 안 먹는다.
+  그래서 간격 콤보(`나눠 쓰기`/`RecordingSegment`)는 **없앴다** - 요구보다 촘촘히 확정되고, 효과 없는 콤보는 되는 줄 알게 만든다.
+  검사 `--vision` 의 녹화 줄: 쓰는 도중 파일을 떠 둔 사본을 MF 로 풀어 프레임을 읽는다(40장→36 · 75장→72), 닫으면 75/75.
+- **영상을 캡처 대상으로**(사용자, 2026-09-15 - 게임 없이 몹 찾기·글자 읽기·스크립트 흐름 시험): 대상 콤보 맨 아래 `[영상] 파일.mp4`(프로젝트 `Recordings`, 새것부터).
+  `CaptureTargetKind.Video` + `CaptureTarget.FilePath`, 구현 `VideoFileCaptureSession`(SourceReader 고급 영상 처리 → RGB32 → 위에서 아래·알파 255 로 고쳐 D3D 텍스처 + 리드백 픽셀).
+  녹화 속도대로 흐르고 끝나면 되감는다, fps 솎기는 WGC 와 같은 90% 규칙. 핸들이 모두 0 이라 허브·선택 복원은 `CaptureTarget.Key`(영상은 경로)로 가른다.
+  **자리는 영상 픽셀**(`CaptureTargetBounds` 가 (0,0,w,h), 크기는 `TryGetFrameSize` 캐시) - 몹 좌표가 그대로 나온다.
+  **입력은 절대 안 나간다**: 미리보기는 `PreviewInputRouter` 가 `InputForwardResult.VideoTarget`(안 막으면 영상 좌표로 진짜 화면 왼쪽 위를 누른다),
+  실시간 스크립트는 `LiveScriptSession.BuildHost` 가 `InputAdapterFactory.CreateSilent()`(부른 것은 호출 로그에만)로 바꾸고 조준 배율 학습을 끈다(화면이 안 돌아 배율이 끝없이 커져 저장된다).
+  검사 `--vision` 의 `영상 대상:` 줄(1080p 크기·방향·속도·되감기·솎기·허브·입력 막기).
+- **학습하는 동안 몹 찾기는 GPU 모델을 내려놓는다**(`TrainingActivity`) - 3GB 카드에서 캡처·DirectML 추론·CUDA 학습이 겹쳐 GPU 가 리셋됐다(실측). 리셋 뒤에는 앱을 다시 켜야 해 그렇게 알린다(`IsGpuLost`).
 - **버튼을 숨긴 설정은 저장값을 믿지 않는다** - 화면캡처 `미리보기` 는 `RestoreSettings` 에서 늘 켠다(숨긴 채 False 로 저장되면 켤 길이 없다). 그리드 배치를 복원한 뒤 자동 너비를 다시 건다.
 - **서비스를 View 에 선언하지 않으면 `Guard` 가 예외를 삼켜 아무 일도 안 일어난 것처럼 보인다** - 새 서비스를 쓰면 View 의 `Interaction.Behaviors` 부터 본다.
 
@@ -109,7 +127,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
 
 | 인터페이스 | 구현 | 고르는 곳 |
 |---|---|---|
-| `IScreenCaptureAdapter` | `WgcCaptureSession` | `ScreenCaptureAdapterFactory` · `SharedCaptureHub` |
+| `IScreenCaptureAdapter` | `WgcCaptureSession` · `VideoFileCaptureSession`(영상) | `ScreenCaptureAdapterFactory` · `SharedCaptureHub` |
 | `IInputAdapter` | `SendInputAdapter` · `WindowMessageInputAdapter` · `InterceptionInputAdapter` | `InputAdapterFactory` |
 | `IUiAutomationAdapter` | `WindowsUiAutomationAdapter` | `UiAutomationAdapterFactory` |
 | `IGlobalHotkeyAdapter` | `GlobalHotkeyAdapter` | `GlobalHotkeyAdapterFactory` · `SharedHotkeysFactory` |
@@ -164,6 +182,9 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
 ## 규칙
 
 - **화면 규칙(사용자)**
+  - **화면에 보이는 글은 모두 한국어**(사용자, 2026-09-15) - 버튼·툴팁·상태 줄·아래 바·대화 상자·오류 안내. 영어 예외 문장(.NET·COM·Media Foundation·
+    파이썬)을 그대로 띄우지 않는다: 무엇을 하다 실패했는지·어떻게 하면 되는지를 한국어로 적고, 원문은 로그에 남긴다(필요하면 코드만 괄호로, 예: `(0x887A0005)`).
+    이름이 굳은 것(fps·GPU·ONNX·YOLO·mp4·H.264·F5 같은 키)은 그대로 둔다. 로그(NLog)는 한국어가 기본이되 원문 예외는 그대로.
   - **모든 것을 Visual Studio 2026 과 DevExpress WPF 기준으로**(VS Code 아님) - 배치·동작·메뉴·도구 모음·단축키.
   - 배치는 **LayoutControl**(`dxlc:`). Grid·StackPanel 로 뼈대를 짜지 않는다. VS 같은 도킹 화면의 큰 틀만 DockLayoutManager.
   - 메뉴·도구 모음·상태 표시줄은 BarManager. **목록·표·트리는 GridControl**(트리는 `TreeListView`). 컨트롤은 대부분 DevExpress(없는 것만 표준 WPF).

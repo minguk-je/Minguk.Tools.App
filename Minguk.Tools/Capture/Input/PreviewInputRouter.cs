@@ -124,6 +124,9 @@ public sealed class PreviewInputRouter
         if (target is null)
             return InputForwardResult.NoTarget;
 
+        if (target.Kind == CaptureTargetKind.Video)
+            return InputForwardResult.VideoTarget;
+
         if (!CaptureTargetBounds.TryGet(target, out var bounds))
             return InputForwardResult.TargetGone;
 
@@ -154,8 +157,11 @@ public sealed class PreviewInputRouter
     /// </summary>
     public InputForwardResult SendKey(ushort virtualKey, bool isKeyUp)
     {
-        if (_targetProvider() is null)
+        if (_targetProvider() is not { } target)
             return InputForwardResult.NoTarget;
+
+        if (target.Kind == CaptureTargetKind.Video)
+            return InputForwardResult.VideoTarget;
 
         // PostMessage 경로는 포커스와 무관하게 대상 창으로 바로 들어간다.
         if (InputAdapter.RequiresForegroundTarget)
@@ -184,6 +190,10 @@ public sealed class PreviewInputRouter
         var target = _targetProvider();
         if (target is null)
             return InputForwardResult.NoTarget;
+
+        // 영상은 화면 자리가 없다 - 영상 픽셀 자리를 화면 좌표로 내주면 그 자리의 진짜 창을 누르거나 검사한다.
+        if (target.Kind == CaptureTargetKind.Video)
+            return InputForwardResult.VideoTarget;
 
         if (!CaptureTargetBounds.TryGet(target, out var bounds))
             return InputForwardResult.TargetGone;

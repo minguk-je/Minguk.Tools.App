@@ -141,7 +141,7 @@ public static class DFineTrainer
     private static void RewriteDatasetConfig(LabelDataset dataset, string cocoPath)
     {
         var text = File.ReadAllText(DatasetConfigPath);
-        var images = Path.Combine(dataset.Root, "images").Replace('\\', '/');
+        var images = dataset.ImageDirectory.Replace('\\', '/');
         var annotations = cocoPath.Replace('\\', '/');
         var classes = Math.Max(dataset.LoadClasses().Count, 1);
 

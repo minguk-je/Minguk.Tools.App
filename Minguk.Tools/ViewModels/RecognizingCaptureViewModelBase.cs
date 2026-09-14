@@ -134,6 +134,14 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         if (extra.Length > 0) StatusText = $"{StatusText} · {extra}";
     }
 
+    protected override void InitializeObservable()
+    {
+        base.InitializeObservable();
+
+        // 라벨링 화면에서 학습하는 동안 GPU 모델을 내려놓는다(정적 이벤트 - ReleaseResources 에서 푼다).
+        Vision.Training.TrainingActivity.Changed += OnTrainingActivityChanged;
+    }
+
     protected override void RestoreSettings()
     {
         base.RestoreSettings();
@@ -166,6 +174,8 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
 
     protected override void ReleaseResources()
     {
+        Vision.Training.TrainingActivity.Changed -= OnTrainingActivityChanged;
+
         // 눈을 감는다. 스크립트가 옛 결과를 읽지 않게.
         Hub.PublishState(false, false, null);
 

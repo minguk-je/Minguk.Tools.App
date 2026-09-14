@@ -221,10 +221,10 @@
                                    Content="캡처 중지"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}"
                                    Hint="캡처를 멈춘다." />
-                <dxb:BarEditItem Content="fps"
+                <dxb:BarEditItem Content="FPS"
                                  EditValue="{Binding CaptureTargetFps}"
                                  EditWidth="60"
-                                 Hint="캡처 상한(fps). 넘는 프레임은 받지 않는다.">
+                                 Hint="캡처 상한(FPS). 넘는 프레임은 받지 않는다.">
                     <dxb:BarEditItem.EditSettings>
                         <dxe:ComboBoxEditSettings IsTextEditable="False"
                                                   ItemsSource="{Binding FpsOptions}" />

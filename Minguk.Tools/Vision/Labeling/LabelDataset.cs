@@ -25,8 +25,8 @@ public readonly record struct LabelItem(string ImagePath, string LabelPath)
 /// <b>폴더 짜임</b>
 /// <code>
 /// &lt;데이터셋&gt;/
-///   images/        그림 (.png · .jpg)
-///   labels/        라벨 (.txt) - 그림과 이름이 같다
+///   Images/        그림 (.png · .jpg)
+///   Labels/        라벨 (.txt) - 그림과 이름이 같다
 ///   classes.txt    몹 이름 목록
 /// </code>
 ///
@@ -59,9 +59,13 @@ public sealed class LabelDataset
 
     public string Root { get; }
 
-    public string ImageDirectory => Path.Combine(Root, "images");
+    /// <remarks>
+    /// 폴더 이름은 대문자로 시작한다(<see cref="Vision.ProjectPaths.ImagesFolder"/>). Windows 는 대소문자를 안 가려 옛 <c>images</c> 도 그대로 열린다.
+    /// YOLO 학습 설정에는 소문자 <c>images</c> 로 적는다 - Ultralytics 가 경로의 <c>\images\</c> 를 <c>\labels\</c> 로 바꿔 라벨을 찾는다(<c>도구\yolo-학습.py</c>).
+    /// </remarks>
+    public string ImageDirectory => Path.Combine(Root, Vision.ProjectPaths.ImagesFolder);
 
-    public string LabelDirectory => Path.Combine(Root, "labels");
+    public string LabelDirectory => Path.Combine(Root, Vision.ProjectPaths.LabelsFolder);
 
     public string ClassesPath => Path.Combine(Root, LabelClasses.FileName);
 

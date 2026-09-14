@@ -373,7 +373,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     public int PreviewFps
     {
         get => GetProperty(() => PreviewFps);
-        set => SetProperty(() => PreviewFps, value, () => PreviewFpsText = $"실제 {value} fps");
+        set => SetProperty(() => PreviewFps, value, () => PreviewFpsText = $"실제 {value} FPS");
     }
 
     /// <summary>
@@ -515,17 +515,22 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             foreach (var window in CaptureTarget.EnumerateWindows().OrderBy(target => target.ProcessName).ThenBy(target => target.Title))
                 Targets.Add(window);
 
+            // 녹화한 영상은 맨 아래 - 게임 없이 몹 찾기·글자 읽기·스크립트를 시험한다. 고른 프로젝트의 Recordings, 새것부터.
+            var videos = CaptureTarget.EnumerateVideos(Vision.ProjectPaths.Recordings);
+            foreach (var video in videos)
+                Targets.Add(video);
+
             // ① 사람이 고른 것(이번에 목록에 있으면) → ② 방금 전까지 보던 것 → ③ 목록의 첫 번째.
             // 예전에는 ②가 먼저라, 앱을 켤 때 게임이 없어 모니터가 임시로 잡히면 게임을 켜고 새로 고침해도 모니터에 머물렀다.
             SelectedTarget = Targets.FirstOrDefault(target => target.Display == _lastSelectedTargetDisplay)
-                             ?? Targets.FirstOrDefault(target => target.Handle == previouslySelected?.Handle && target.Kind == previouslySelected.Kind)
+                             ?? Targets.FirstOrDefault(target => target.Key == previouslySelected?.Key)
                              ?? Targets.FirstOrDefault();
 
             var hasSavedTarget = Targets.Any(target => target.Display == _lastSelectedTargetDisplay);
             Logger.Debug($"대상 복구: 저장='{_lastSelectedTargetDisplay}' / 후보 {Targets.Count}개 / 일치 {hasSavedTarget} / 선택='{SelectedTarget?.Display}'");
 
             StatusText = hasSavedTarget || string.IsNullOrEmpty(_lastSelectedTargetDisplay)
-                ? $"대상 {Targets.Count}개 (모니터 + 창)"
+                ? $"대상 {Targets.Count}개 (모니터 + 창{(videos.Count > 0 ? $" + 영상 {videos.Count}" : string.Empty)})"
                 : $"고른 대상 '{_lastSelectedTargetDisplay}' 이(가) 지금 없어 '{SelectedTarget?.Display}' 를 잡았습니다 - 게임을 켠 뒤 새로 고침하면 돌아갑니다.";
         }
         catch (Exception ex)
@@ -1699,7 +1704,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
                          $", GPU복사 {_gpuPreviewBridge?.LastCopyMs:n2}ms, 화면반영 {_gpuPreviewBridge?.LastPresentMs:n2}ms)");
 
         if (_captureSession is not null)
-            StatusText = $"캡처 중: {_captureSession.Target.Display} — {row.Fps:n0} fps, 지연 {row.AvgLatencyMs:n2} ms{SharedNote()}";
+            StatusText = $"캡처 중: {_captureSession.Target.Display} — {row.Fps:n0} FPS, 지연 {row.AvgLatencyMs:n2} ms{SharedNote()}";
     }
 
     // ── 정리 ─────────────────────────────────────────────────────────────────

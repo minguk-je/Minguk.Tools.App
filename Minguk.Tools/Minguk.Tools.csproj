@@ -70,6 +70,8 @@
 		<PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
 		<!-- WPF 의 D3DImage 는 D3D9 표면만 받는다. 캡처는 D3D11 이라 공유 표면으로 다리를 놓는다. -->
 		<PackageReference Include="Vortice.Direct3D9" Version="3.8.3" />
+		<!-- 화면캡처 녹화(mp4). Windows 기본 Media Foundation 의 H.264 인코더를 SinkWriter 로 쓴다 - 받을 것이 없다. -->
+		<PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
 		<!-- 추론. DirectML EP 라 GPU 벤더를 안 가린다 -->
 		<PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
 

@@ -108,12 +108,19 @@ public partial class CaptureMonitorViewModel : CaptureViewModelBase
             }));
     }
 
+    /// <summary>화면을 닫으면 녹화 파일도 닫는다 - 안 닫으면 mp4 가 재생되지 않는 채로 남는다.</summary>
+    protected override void ReleaseResources()
+    {
+        ReleaseRecording();
+
+        base.ReleaseResources();
+    }
+
     protected override void SaveSettings()
     {
         base.SaveSettings();
 
         SetSetting(nameof(IsColumnAutoWidth), IsColumnAutoWidth);
-
         try
         {
             SetSetting(nameof(GridLayoutService), GridLayoutService.Serialize());
@@ -129,6 +136,8 @@ public partial class CaptureMonitorViewModel : CaptureViewModelBase
     protected override void OnStatisticsRow(FrameLogRow row)
     {
         base.OnStatisticsRow(row);
+
+        AppendRecordingStatus();
 
         Rows.Insert(0, row);
 

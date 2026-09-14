@@ -122,10 +122,10 @@
                 </dxb:BarEditItem.EditSettings>
             </dxb:BarEditItem>
 
-            <dxb:BarEditItem Content="fps"
+            <dxb:BarEditItem Content="FPS"
                              EditValue="{Binding CaptureTargetFps}"
                              EditWidth="70"
-                             ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다.">
+                             ToolTip="캡처 상한(FPS). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다.">
                 <dxb:BarEditItem.EditSettings>
                     <dxe:ComboBoxEditSettings IsTextEditable="False"
                                               ItemsSource="{Binding FpsOptions}" />

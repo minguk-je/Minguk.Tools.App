@@ -189,6 +189,9 @@ internal static partial class Program
         TestRegionBook();
         TestRegionGeometry();
         TestCompiledScript();
+        TestTrainingActivity();
+        TestVideoRecorder();
+        TestVideoCapture();
         TestScriptProject();
         TestScriptWorkspace();
     }

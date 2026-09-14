@@ -22,7 +22,7 @@
              d:DataContext="{d:DesignInstance {x:Type viewModels:CaptureMonitorViewModel},
                                               IsDesignTimeCreatable=False}"
              d:DesignHeight="500"
-             d:DesignWidth="900">
+             d:DesignWidth="1200">
 
     <!--
         캡처 화면. 순수하게 잡는 일만 한다 - 대상을 골라 시작하고, 미리보기로 확인하고, 한 장을
@@ -92,12 +92,34 @@
                                Command="{Binding SaveFrameCommand}"
                                Content="프레임 저장"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
-                               ToolTip="다음 프레임 한 장을 captures 폴더에 PNG 로 저장한다. 캡처가 무엇을 잡고 있는지 눈으로 확인하는 용도라 라벨링에는 안 보인다." />
+                               ToolTip="다음 프레임 한 장을 프로젝트의 Captures 폴더에 PNG 로 저장한다. 캡처가 무엇을 잡고 있는지 눈으로 확인하는 용도라 라벨링에는 안 보인다." />
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding CollectFrameCommand}"
                                Content="데이터셋에 담기 (F8)"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
                                ToolTip="라벨링 화면이 읽는 폴더에 한 장 담는다. 여기 담은 그림에 몹 사각형을 찍는다. F8 은 게임이 앞에 있어도 눌린다 - 담기면 알림음, 안 되면 거절음. 스크립트 화면에서 몹 찾기를 켜고 담으면 찾은 것이 라벨로 같이 들어간다." />
+
+            <dxb:BarItemSeparator />
+
+            <!-- 녹화(mp4) - 게임을 매번 켜지 않고 영상으로 다시 보려고. 영상은 다른 플레이어로 튼다. -->
+            <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                              Content="녹화"
+                              Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_record.png'}"
+                              IsChecked="{Binding IsRecording, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="잡고 있는 화면을 프로젝트 폴더의 Recordings 에 mp4(H.264)로 녹화한다. fps 는 아래 fps 콤보를 따른다. 다시 누르면 파일을 닫는다. 한 녹화는 한 파일이고, 쓰는 도중에도 1초 안쪽마다 디스크에 확정해 앱이 죽어도 그때까지는 튼다. 1080p 30fps 1분에 약 60MB, 60fps 약 90MB." />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding OpenRecordingsFolderCommand}"
+                               Content="녹화 폴더"
+                               Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder.png'}"
+                               ToolTip="녹화한 mp4 가 든 폴더를 탐색기로 연다." />
+            <dxb:BarEditItem Content="{x:Null}"
+                             EditValue="{Binding RecordingStatus, Mode=OneWay}"
+                             EditWidth="400"
+                             IsReadOnly="True">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:TextEditSettings />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
         </dxb:MainMenuControl>
 
         <!-- ── 설정 ────────────────────────────────────────────────── -->
@@ -120,10 +142,10 @@
 
             <dxb:BarItemSeparator />
 
-            <dxb:BarEditItem Content="fps"
+            <dxb:BarEditItem Content="FPS"
                              EditValue="{Binding CaptureTargetFps}"
                              EditWidth="70"
-                             ToolTip="캡처 상한(fps). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다.">
+                             ToolTip="캡처 상한(FPS). 넘는 프레임은 받지 않는다 - 그만큼 일이 준다.">
                 <dxb:BarEditItem.EditSettings>
                     <dxe:ComboBoxEditSettings IsTextEditable="False"
                                               ItemsSource="{Binding FpsOptions}" />
@@ -146,7 +168,7 @@
             -->
             <dxb:BarStaticItem Content="{Binding PreviewFpsText, Mode=OneWay}"
                                IsVisible="{Binding ShowPreview}"
-                               ToolTip="지금 화면에 올라가고 있는 실제 fps. 왼쪽 값은 상한일 뿐이다." />
+                               ToolTip="지금 화면에 올라가고 있는 실제 FPS. 왼쪽 값은 상한일 뿐이다." />
 
             <dxb:BarItemSeparator />
 
@@ -276,12 +298,12 @@
                                 캡처 fps 는 WGC 가 주는 속도, 미리보기 fps 는 그중 화면에 올린 장수다.
                                 미리보기 상한을 30 으로 두면 캡처는 60 인데 미리보기만 30 이 된다.
                             -->
-                            <dxg:GridColumn Width="80" FieldName="Fps" Header="fps">
+                            <dxg:GridColumn Width="80" FieldName="Fps" Header="FPS">
                                 <dxg:GridColumn.EditSettings>
                                     <dxe:TextEditSettings DisplayFormat="n0" />
                                 </dxg:GridColumn.EditSettings>
                             </dxg:GridColumn>
-                            <dxg:GridColumn Width="90" FieldName="PreviewFps" Header="미리보기 fps" Visible="False">
+                            <dxg:GridColumn Width="90" FieldName="PreviewFps" Header="미리보기 FPS" Visible="False">
                                 <dxg:GridColumn.EditSettings>
                                     <dxe:TextEditSettings DisplayFormat="n0" />
                                 </dxg:GridColumn.EditSettings>

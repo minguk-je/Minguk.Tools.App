@@ -188,8 +188,8 @@ public class StartWindowViewModel : ViewModelBase
         var project = ScriptProject.Create(projectFolder, NewProjectName.Trim(), DefaultEntrySource);
 
         // 사진·라벨 자리를 미리 만든다. 캡처 화면이 담을 때 만들기는 하지만, 처음부터 보이는 편이 낫다.
-        Directory.CreateDirectory(Path.Combine(projectFolder, "images"));
-        Directory.CreateDirectory(Path.Combine(projectFolder, "labels"));
+        Directory.CreateDirectory(Path.Combine(projectFolder, Vision.ProjectPaths.ImagesFolder));
+        Directory.CreateDirectory(Path.Combine(projectFolder, Vision.ProjectPaths.LabelsFolder));
 
         solution.Add(project.FilePath);
         solution.Save();
