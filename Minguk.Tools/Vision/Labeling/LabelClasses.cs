@@ -82,6 +82,21 @@ public sealed class LabelClasses
         _names[classId] = trimmed;
     }
 
+    /// <summary>
+    /// 번호 하나를 빼고 뒤를 당긴다.
+    /// </summary>
+    /// <remarks>
+    /// 라벨에는 번호가 들어 있어, 이것만 부르면 그 번호 뒤의 사각형이 전부 다른 몹을 가리킨다.
+    /// 화면은 <see cref="LabelDataset.RemoveClass"/> 로 불러야 한다 - 그쪽이 라벨 파일의 번호도 같이 당긴다.
+    /// </remarks>
+    public void RemoveAt(int classId)
+    {
+        if (classId < 0 || classId >= _names.Count)
+            throw new ArgumentOutOfRangeException(nameof(classId), $"없는 번호다: {classId}");
+
+        _names.RemoveAt(classId);
+    }
+
     public static LabelClasses Load(string path)
     {
         if (!File.Exists(path)) return new LabelClasses();

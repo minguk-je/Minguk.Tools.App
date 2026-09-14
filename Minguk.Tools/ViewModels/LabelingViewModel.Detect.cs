@@ -102,7 +102,7 @@ public partial class LabelingViewModel
         var trained = _model!.Manifest.Describe;
 
         DetectStatus = found.Count == 0
-            ? $"못 찾았습니다 (모델 {trained}, 자신 있는 정도 {MinimumScore:P0} 이상만 봅니다)."
+            ? $"못 찾았습니다 (모델 {trained}, 신뢰도 {MinimumScore:P0} 이상만 봅니다)."
             : $"{found.Count}마리 찾았습니다: {string.Join(", ", found.Take(4).Select(d => d.Describe))}"
               + (found.Count > 4 ? " …" : string.Empty);
     }
@@ -126,7 +126,7 @@ public partial class LabelingViewModel
 
         Predictions.Clear();
         SelectedBoxIndex = Boxes.Count - 1;
-        DetectStatus = $"찾은 {count}개를 라벨로 받았습니다. 틀린 것은 골라서 지우세요.";
+        DetectStatus = $"자동 라벨 {count}개를 확정했습니다. 틀린 것은 골라서 지우세요.";
     });
 
     /// <summary>점선을 지운다. 사람이 찍은 것은 그대로 둔다.</summary>

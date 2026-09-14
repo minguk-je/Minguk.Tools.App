@@ -1,6 +1,7 @@
 ﻿using System;
 using Minguk.Base.Utilities;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Media;
 
@@ -28,7 +29,8 @@ public partial class LabelingViewModel
 
     public DelegateCommand DoAddClassCommand { get; private set; } = null!;
 
-    public DelegateCommand DoRenameClassCommand { get; private set; } = null!;
+    /// <summary>고른 몹을 지운다. 아무 라벨에도 안 쓰인 것만 - 뒤 번호는 라벨 파일까지 같이 당긴다.</summary>
+    public DelegateCommand DoDeleteClassCommand { get; private set; } = null!;
 
     public DelegateCommand DoPreviousCommand { get; private set; } = null!;
 
@@ -38,6 +40,42 @@ public partial class LabelingViewModel
 
     /// <summary>앞 장의 사각형을 가져온다. 연달아 담은 그림은 몹 자리가 거의 같다.</summary>
     public DelegateCommand DoCopyPreviousCommand { get; private set; } = null!;
+
+    /// <summary>그림 판 확대를 1(창에 맞춤)로 되돌린다.</summary>
+    public DelegateCommand DoZoomResetCommand { get; private set; } = null!;
+
+    // ── 그림 목록 패널 너비 ──────────────────────────────────────────────
+
+    /// <summary>
+    /// 그림 목록 패널의 너비(px). 열을 다 합친 것에 행 번호 칸·세로 스크롤 막대를 더한 값이다.
+    /// </summary>
+    /// <remarks>
+    /// 열은 내용 너비(Auto)라 그리드 너비와 무관하게 정해진다. 그것을 패널 너비로 되돌려 주지 않으면 패널은 비율(0.22*)로
+    /// 잡혀 이름이 긴 그림에서 가로 스크롤이 생기거나, 짧으면 오른쪽이 빈다. 0 이면(첫 배치 전) 화면이 기본 비율을 쓴다.
+    /// </remarks>
+    public double ImagesPanelWidth
+    {
+        get => GetProperty(() => ImagesPanelWidth);
+        set => SetProperty(() => ImagesPanelWidth, value);
+    }
+
+    // ── 그림 판 확대 ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 그림 판 배율. 1 이 창에 맞춤.
+    /// </summary>
+    /// <remarks>
+    /// 캔버스(<c>LabelCanvas.Zoom</c>)와 양방향이라 휠로 바꾼 값이 도구 줄 콤보에도 뜨고, 콤보에서 고른 값이
+    /// 캔버스로 간다. 범위는 캔버스와 같다 - 콤보에 아무 값이나 쳐도 여기서 잘린다.
+    /// </remarks>
+    public double LabelZoom
+    {
+        get => GetProperty(() => LabelZoom);
+        set => SetProperty(() => LabelZoom, Math.Clamp(Math.Round(value, 2), Markup.LabelCanvas.MinimumZoom, Markup.LabelCanvas.MaximumZoom));
+    }
+
+    /// <summary>확대 콤보의 프리셋. 캡처 미리보기와 같은 값이다.</summary>
+    public ObservableCollection<double> ZoomOptions { get; } = new([0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0]);
 
     // ── 데이터셋 ─────────────────────────────────────────────────────────
 
@@ -86,6 +124,19 @@ public partial class LabelingViewModel
         set => SetProperty(() => SelectedClassIndex, value, OnSelectedClassChanged);
     }
 
+    /// <summary>
+    /// 몹 목록(그리드)이 고른 줄.
+    /// </summary>
+    /// <remarks>
+    /// 그리드는 <c>SelectedItem</c> 으로만 묶이므로 번호(<see cref="SelectedClassIndex"/>)와 여기서 서로 맞춘다.
+    /// 캔버스·라벨은 여전히 번호를 쓴다 - 이름은 바뀌어도 번호는 그대로기 때문이다.
+    /// </remarks>
+    public LabelClassRow? SelectedClass
+    {
+        get => GetProperty(() => SelectedClass);
+        set => SetProperty(() => SelectedClass, value, OnSelectedClassRowChanged);
+    }
+
     /// <summary>지금 고른 몹의 색. 사각형에 쓰이는 색과 같아야 어느 몹을 찍는 중인지 안다.</summary>
     public Brush CurrentClassBrush
     {
@@ -97,7 +148,7 @@ public partial class LabelingViewModel
     /// 캔버스에 넘길 이름 목록.
     /// </summary>
     /// <remarks>
-    /// <see cref="ClassNames"/> 를 그대로 넘기지 않고 한 번 복사해 넘긴다. 캔버스가 받는 것은
+    /// <see cref="Classes"/> 를 그대로 넘기지 않고 이름만 복사해 넘긴다. 캔버스가 받는 것은
     /// 읽기만 하는 목록이어야 하고, 이름이 바뀔 때마다 새 목록을 넘겨야 다시 그린다.
     /// </remarks>
     public IReadOnlyList<string> ClassNameSnapshot
@@ -106,11 +157,11 @@ public partial class LabelingViewModel
         set => SetProperty(() => ClassNameSnapshot, value);
     }
 
-    /// <summary>새 몹 이름을 받는 칸.</summary>
-    public string? NewClassName
+    /// <summary>캔버스에 넘길 몹 색 목록(번호 순). 고른 색이 없는 번호는 기본 색이다. 색을 고르면 새 목록을 넘긴다.</summary>
+    public IReadOnlyList<Color> ClassColors
     {
-        get => GetProperty(() => NewClassName);
-        set => SetProperty(() => NewClassName, value);
+        get => GetProperty(() => ClassColors);
+        set => SetProperty(() => ClassColors, value);
     }
 
     // ── 학습 ─────────────────────────────────────────────────────────────
@@ -173,63 +224,6 @@ public partial class LabelingViewModel
     public string TrainProgressLabel
         => TrainEpochsTotal <= 0 ? string.Empty : $"{TrainEpochsDone}/{TrainEpochsTotal} 바퀴";
 
-    /// <summary>학습기가 지금 보고 있는 그림 이름. 끝나면 비운다.</summary>
-    public string? TrainingImageName
-    {
-        get => GetProperty(() => TrainingImageName);
-        set => SetProperty(() => TrainingImageName, value);
-    }
-
-    /// <summary>
-    /// 학습기가 보는 그림을 가운데 화면에도 띄울지.
-    /// </summary>
-    /// <remarks>
-    /// 켜면 학습 중에는 목록 선택이 학습기를 따라다녀 라벨을 못 고친다. 그래서 기본은 끔이고,
-    /// 지켜보며 "이건 다시 찍어야겠다" 를 고르고 싶을 때만 켠다. 그림 한 장 그리는 데
-    /// 30~50ms 라 초당 두세 장은 부담이 없다.
-    /// </remarks>
-    public bool FollowTraining
-    {
-        get => GetProperty(() => FollowTraining);
-        set => SetProperty(() => FollowTraining, value);
-    }
-
-    /// <summary>고를 수 있는 모델 크기들.</summary>
-    public System.Collections.Generic.IReadOnlyList<string> InputSizes { get; } =
-        [.. Vision.Training.DetectorTrainer.InputSizes.Select(s => $"{s.Width}x{s.Height}")];
-
-    /// <summary>
-    /// 모델이 실제로 볼 크기.
-    /// </summary>
-    /// <remarks>
-    /// 작은 몹을 놓칠 때만 키운다. 1080p 화면에서 60px 짜리 몹은 320x180 으로 줄이면
-    /// 10px 가 되어 잘 안 잡힌다. 대신 값이 픽셀 수에 비례해 늘어난다 -
-    /// 실측으로 320x180 이 220ms, 640x360 이 587ms 다. 학습 시간도 같은 비율이다.
-    ///
-    /// 바꾸면 <b>반드시 다시 학습해야 한다.</b> 이미 만들어 둔 모델은 제가 학습된 크기를
-    /// 옆에 들고 있어서(<c>detector.json</c>) 여기를 바꿔도 그쪽은 안 흔들린다.
-    /// </remarks>
-    public string? SelectedInputSize
-    {
-        get => GetProperty(() => SelectedInputSize);
-        set => SetProperty(() => SelectedInputSize, value);
-    }
-
-    /// <summary>
-    /// 학습을 누르기 전에 알아야 할 것. 다 갖춰져 있으면 null.
-    /// </summary>
-    /// <remarks>
-    /// libtorch 를 아직 안 받았다거나 GPU 가 없다는 것을 <b>누르기 전에</b> 알려 준다.
-    /// 2.2GB 를 받고 나서 "CPU 로는 못 씁니다" 라고 하면 안 된다.
-    /// </remarks>
-    public string? TrainingNotice
-    {
-        get => GetProperty(() => TrainingNotice);
-        set => SetProperty(() => TrainingNotice, value, () => RaisePropertyChanged(nameof(HasTrainingNotice)));
-    }
-
-    public bool HasTrainingNotice => !string.IsNullOrEmpty(TrainingNotice);
-
     /// <summary>
     /// 고를 수 있는 GPU. "자동" 다음에 카드마다 하나씩. 이름은 Windows 가 아는 대로 적는다.
     /// </summary>
@@ -286,7 +280,8 @@ public partial class LabelingViewModel
         if (index == saved) return;
 
         AppSettingUtility.Set(Vision.Training.LibTorchRuntime.GpuSettingKey, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        GpuNotice = "GPU 선택은 앱을 다시 실행해야 적용됩니다. 한 앱은 카드 하나만 씁니다 - 두 장을 다 쓰려면 하네스(--gpu=)나 앱 하나를 더 띄웁니다.";
+        // YOLO 학습은 따로 뜨는 파이썬이라 다음 학습부터 바로 이 카드로 돈다. 안내를 띄울 것이 없다.
+        GpuNotice = null;
     }
 
     private static int ParseGpuIndex(string? option)
@@ -299,12 +294,35 @@ public partial class LabelingViewModel
         return int.TryParse(end < 0 ? rest : rest[..end], out var index) ? index : -1;
     }
 
-    /// <summary>지금 폴더의 모델이 어떤 것인지 한 줄. 쪽지(detector.json)에서 읽는다.</summary>
+    /// <summary>몹 찾기가 지금 실제로 쓰는 모델 한 줄(ONNX 가 있으면 그것). 그 모델의 쪽지에서 읽는다.</summary>
     public string? ModelSummary
     {
         get => GetProperty(() => ModelSummary);
         set => SetProperty(() => ModelSummary, value);
     }
+
+    /// <summary>고를 수 있는 모델들(보관본 ONNX + 이 화면의 학습 모델). "쓰는 모델" 콤보가 보인다.</summary>
+    public ObservableCollection<Vision.Training.DetectorChoice> ModelChoices { get; } = [];
+
+    /// <summary>
+    /// 몹 찾기에 쓸 모델. 고르면 그 모델이 몹 찾기 자리(detector.onnx)에 앉는다 - 켜 둔 스크립트·플레이 화면도 몇 초 안에 따라온다.
+    /// </summary>
+    public Vision.Training.DetectorChoice? SelectedModelChoice
+    {
+        get => GetProperty(() => SelectedModelChoice);
+        set => SetProperty(() => SelectedModelChoice, value, () =>
+        {
+            RaisePropertyChanged(nameof(TrainButtonText));
+            OnSelectedModelChoiceChanged();
+        });
+    }
+
+    /// <summary>학습 버튼 글. 무엇으로 학습할지 누르기 전에 보이게 콤보에 고른 모델 이름을 붙인다.</summary>
+    /// <remarks>앱이 못 돌리는 모델(우리가 모르는 이름)이면 꺼진 채 그렇게 적는다.</remarks>
+    public string TrainButtonText => SelectedModelChoice is { } choice
+        ? (IsTrainable(choice.Name) ? $"{choice.Name} 학습" : $"{choice.Name} 은 앱에서 학습 못 함")
+        : "학습";
+
 
     // ── 찾아보기 ─────────────────────────────────────────────────────────
 
@@ -322,7 +340,7 @@ public partial class LabelingViewModel
     }
 
     /// <summary>
-    /// 이보다 자신 없는 것은 안 보여 준다.
+    /// 이보다 신뢰도가 낮은 것은 안 보여 준다.
     /// </summary>
     /// <remarks>
     /// 낮추면 놓친 것까지 보이지만 헛것도 같이 늘어난다. 학습이 잘 됐는지 볼 때는

@@ -66,7 +66,26 @@ public sealed class LabelDataset
     public string ClassesPath => Path.Combine(Root, LabelClasses.FileName);
 
     /// <summary>앱이 기본으로 쓰는 자리.</summary>
-    public static string DefaultRoot => Path.Combine(Helper.UserDataPaths.Root, "Datasets", "몹");
+    /// <remarks>
+    /// 프로젝트 폴더 아래다(사용자 결정 2026-09-14) - 학습 환경(도구)과 내가 만든 것(사진·라벨)은 설정을 나눠 둔다.
+    /// 옛 자리에 이미 담아 둔 것이 있으면 그것을 쓴다 - 사진 수백 장을 말없이 잃어버리면 안 된다.
+    /// </remarks>
+    public static string DefaultRoot
+    {
+        get
+        {
+            foreach (var legacy in new[]
+                     {
+                         Path.Combine(Training.TrainingPaths.Root, "Datasets", "몹"),
+                         Path.Combine(Helper.UserDataPaths.Root, "Datasets", "몹")
+                     })
+            {
+                if (Directory.Exists(legacy)) return legacy;
+            }
+
+            return Path.Combine(Vision.ProjectPaths.Datasets, "몹");
+        }
+    }
 
     /// <summary>
     /// 화면들이 <b>함께</b> 보는 데이터셋 자리.
@@ -134,6 +153,66 @@ public sealed class LabelDataset
     public LabelClasses LoadClasses() => LabelClasses.Load(ClassesPath);
 
     public void SaveClasses(LabelClasses classes) => classes.Save(ClassesPath);
+
+    /// <summary>몹 색(사람이 고른 것만). classes.txt 옆에 둔다 - 그 파일은 YOLO 형식이라 색을 못 넣는다.</summary>
+    public string PalettePath => Path.Combine(Root, LabelPalette.FileName);
+
+    public LabelPalette LoadPalette() => LabelPalette.Load(PalettePath);
+
+    public void SavePalette(LabelPalette palette) => palette.Save(PalettePath);
+
+    /// <summary>그 번호의 사각형이 든 라벨 파일 이름들. 비어 있으면 아무 데도 안 쓰인 몹이다.</summary>
+    /// <remarks>그림이 없는 고아 라벨까지 본다 - 그림 목록으로 훑으면 놓친다.</remarks>
+    public IReadOnlyList<string> FindLabelsUsing(int classId)
+    {
+        if (!Directory.Exists(LabelDirectory)) return [];
+
+        return Directory.EnumerateFiles(LabelDirectory, "*" + LabelFile.Extension)
+            .Where(path => LabelFile.Load(path).Any(box => box.ClassId == classId))
+            .Select(Path.GetFileName)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+    }
+
+    /// <summary>
+    /// 몹 하나를 지운다. 뒤 번호는 하나씩 당기고, 그 번호가 든 라벨 파일과 색도 같이 당긴다.
+    /// </summary>
+    /// <remarks>
+    /// <b>아무 라벨에도 안 쓰인 몹만 지운다.</b> 쓰인 것을 지우면 찍어 둔 사각형을 잃거나(지우면) 다른 몹을 가리키게
+    /// 된다(안 지우면). 부르기 전에 <see cref="FindLabelsUsing"/> 으로 보고, 쓰였으면 여기서 터진다.
+    /// 시험으로 넣은 몹처럼 아직 아무것도 안 찍은 것은 지워도 잃는 것이 없다 - 그것 때문에 열었다(2026-09-14).
+    /// </remarks>
+    /// <returns>번호를 당겨 고쳐 쓴 라벨 파일 수.</returns>
+    public int RemoveClass(LabelClasses classes, int classId)
+    {
+        var used = FindLabelsUsing(classId);
+
+        if (used.Count > 0)
+            throw new InvalidOperationException($"{classes.NameOf(classId)} ({classId}번) 은 라벨 {used.Count}장에 쓰여 못 지운다: {string.Join(", ", used.Take(3))}");
+
+        var rewritten = 0;
+
+        if (Directory.Exists(LabelDirectory))
+        {
+            foreach (var path in Directory.EnumerateFiles(LabelDirectory, "*" + LabelFile.Extension).ToArray())
+            {
+                var boxes = LabelFile.Load(path);
+                if (!boxes.Any(box => box.ClassId > classId)) continue;
+
+                LabelFile.Save(path, boxes.Select(box => box.ClassId > classId ? box with { ClassId = box.ClassId - 1 } : box));
+                rewritten++;
+            }
+        }
+
+        classes.RemoveAt(classId);
+        SaveClasses(classes);
+
+        var palette = LoadPalette();
+        palette.RemoveAt(classId);
+        SavePalette(palette);
+
+        return rewritten;
+    }
 
     /// <summary>
     /// 담을 그림의 이름을 짓는다. 시각으로 지어 이름순이 곧 담은 순서가 되게 한다.

@@ -55,6 +55,19 @@ public sealed class LabelCanvas : FrameworkElement
     /// <summary>끌기 시작할 때의 사각형. 옮기기는 여기에 변위를 더하지, 직전 위치에 더하지 않는다 - 오차가 쌓인다.</summary>
     private LabelBox _dragOrigin;
 
+    /// <summary>
+    /// 확대했을 때 그림을 가운데에서 얼마나 밀어 두었는지(화면 픽셀).
+    /// </summary>
+    /// <remarks>
+    /// 창에 다 들어오는 축은 <see cref="ComputeImageRect"/> 가 0 으로 되돌리고, 큰 축도 그림 가장자리가
+    /// 창 안으로 들어오지는 않게 잡는다 - 밀다가 그림을 잃어버리지 않게.
+    /// </remarks>
+    private Vector _pan;
+
+    /// <summary>오른쪽 버튼으로 옮기는 중이면 누른 자리. 왼쪽 끌기(사각형)와는 따로 논다.</summary>
+    private Point? _panStart;
+    private Vector _panOrigin;
+
     static LabelCanvas()
     {
         FocusableProperty.OverrideMetadata(typeof(LabelCanvas), new FrameworkPropertyMetadata(true));
@@ -162,6 +175,64 @@ public sealed class LabelCanvas : FrameworkElement
         set => SetValue(ClassNamesProperty, value);
     }
 
+    public static readonly DependencyProperty ClassColorsProperty = DependencyProperty.Register(
+        nameof(ClassColors), typeof(IReadOnlyList<Color>), typeof(LabelCanvas),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>몹 번호마다 색(사람이 고른 것 포함). 없거나 짧으면 그 번호는 기본 색(<see cref="ColorOf"/>).</summary>
+    public IReadOnlyList<Color>? ClassColors
+    {
+        get => (IReadOnlyList<Color>?)GetValue(ClassColorsProperty);
+        set => SetValue(ClassColorsProperty, value);
+    }
+
+    private Color ColorFor(int classId)
+        => ClassColors is { } colors && classId >= 0 && classId < colors.Count ? colors[classId] : ColorOf(classId);
+
+    public static readonly DependencyProperty ZoomProperty = DependencyProperty.Register(
+        nameof(Zoom), typeof(double), typeof(LabelCanvas),
+        new FrameworkPropertyMetadata(1d,
+            FrameworkPropertyMetadataOptions.BindsTwoWayByDefault | FrameworkPropertyMetadataOptions.AffectsRender,
+            OnZoomChanged, CoerceZoom));
+
+    /// <summary>
+    /// 배율. 1 이 창에 맞춤(비율 유지)이고 그 위로 키운다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜 LayoutTransform 이 아닌가</b> - 캡처 미리보기는 밖에서 LayoutTransform 으로 키우지만, 여기서 그렇게 하면
+    /// 테두리·글자까지 같이 굵어져 확대한 그림에서 경계가 안 보인다(이 컨트롤을 만든 이유가 그것이다). 그래서
+    /// 배율은 <see cref="ComputeImageRect"/> 안에서 <b>그림 자리</b>에만 곱한다. 좌표 변환은 여전히
+    /// <see cref="ToScreen"/> · <see cref="ToNormalized"/> 두 곳뿐이라 사각형 계산은 아무것도 안 바뀐다.
+    ///
+    /// 휠은 마우스 아래 자리를 그대로 두고 바꾸고(<see cref="OnMouseWheel"/>), 콤보로 바꾸면 보던 가운데를 그대로 둔다.
+    /// 오른쪽 버튼으로 끌면 옮겨진다. 그림을 넘겨도 배율·자리는 그대로다 - 연달아 담은 그림은 몹이 같은 자리라
+    /// 확대해 둔 곳을 계속 찍는다.
+    /// </remarks>
+    public double Zoom
+    {
+        get => (double)GetValue(ZoomProperty);
+        set => SetValue(ZoomProperty, value);
+    }
+
+    /// <summary>가장 작게. 1 이 창에 맞춘 크기고, 0.5 는 그 절반(캡처 미리보기와 같은 범위).</summary>
+    public const double MinimumZoom = 0.5;
+
+    /// <summary>여덟 배까지. 그 위는 한 화면에 들어오는 것이 너무 적어 자리를 잊는다.</summary>
+    public const double MaximumZoom = 8;
+
+    private static object CoerceZoom(DependencyObject d, object value)
+        => Math.Clamp(Math.Round((double)value, 2), MinimumZoom, MaximumZoom);
+
+    private static void OnZoomChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var canvas = (LabelCanvas)d;
+        var before = (double)e.OldValue;
+        var after = (double)e.NewValue;
+
+        // 밀어 둔 만큼도 같은 비율로 늘린다 - 그래야 보던 가운데가 그대로 있다. 휠은 이 뒤에 제 값으로 덮는다.
+        if (before > 0) canvas._pan *= after / before;
+    }
+
     private static void OnBoxesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var canvas = (LabelCanvas)d;
@@ -200,22 +271,94 @@ public sealed class LabelCanvas : FrameworkElement
     }
 
     /// <summary>
-    /// 그림이 놓일 자리. 비율을 지키고 가운데 둔다.
+    /// 그림이 놓일 자리. 비율을 지키고 가운데 둔 뒤 배율(<see cref="Zoom"/>)과 밀어 둔 만큼(<see cref="_pan"/>)을 더한다.
     /// </summary>
     /// <remarks>
     /// 늘려서 꽉 채우면 안 된다 - 사람이 보고 찍은 사각형과 실제 그림의 비율이 어긋난다.
+    /// 밀기는 창보다 큰 축만 되고, 그 축도 그림 가장자리가 창 안으로 들어오지 않는 범위다.
     /// </remarks>
     private Rect ComputeImageRect()
     {
         if (ImageSource is not { Width: > 0, Height: > 0 } image) return Rect.Empty;
         if (RenderSize.Width <= 0 || RenderSize.Height <= 0) return Rect.Empty;
 
-        var scale = Math.Min(RenderSize.Width / image.Width, RenderSize.Height / image.Height);
+        var fit = FitRect(image.Width, image.Height, Zoom);
 
-        var width = image.Width * scale;
-        var height = image.Height * scale;
+        _pan.X = fit.Width <= RenderSize.Width
+            ? 0
+            : Math.Clamp(_pan.X, (RenderSize.Width - fit.Width) / 2, (fit.Width - RenderSize.Width) / 2);
+        _pan.Y = fit.Height <= RenderSize.Height
+            ? 0
+            : Math.Clamp(_pan.Y, (RenderSize.Height - fit.Height) / 2, (fit.Height - RenderSize.Height) / 2);
+
+        return new Rect(fit.X + _pan.X, fit.Y + _pan.Y, fit.Width, fit.Height);
+    }
+
+    /// <summary>비율을 지켜 창에 맞춘 크기에 배율을 곱해 가운데 둔 자리(밀기 전).</summary>
+    private Rect FitRect(double imageWidth, double imageHeight, double zoom)
+    {
+        var scale = Math.Min(RenderSize.Width / imageWidth, RenderSize.Height / imageHeight) * zoom;
+
+        var width = imageWidth * scale;
+        var height = imageHeight * scale;
 
         return new Rect((RenderSize.Width - width) / 2, (RenderSize.Height - height) / 2, width, height);
+    }
+
+    // ── 확대 · 옮기기 ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 휠로 확대·축소. 마우스 아래의 그림 자리가 그대로 마우스 아래에 있게 민다.
+    /// </summary>
+    /// <remarks>
+    /// 배율만 바꾸면 가운데 기준으로 커져서 보던 몹이 화면 밖으로 달아난다.
+    /// 확대 전 마우스 아래의 그림 자리(0~1) 를 재고, 새 자리에서 그 점이 마우스에 오도록 밀어 둔 양을 다시 푼다.
+    /// </remarks>
+    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnMouseWheel(e);
+
+        if (_imageRect.IsEmpty || ImageSource is not { Width: > 0, Height: > 0 } image) return;
+
+        var mouse = e.GetPosition(this);
+        var nx = (mouse.X - _imageRect.X) / _imageRect.Width;
+        var ny = (mouse.Y - _imageRect.Y) / _imageRect.Height;
+
+        Zoom *= e.Delta > 0 ? 1.25 : 1 / 1.25;   // 잘린 값이 들어간다(CoerceZoom). OnZoomChanged 가 _pan 을 늘리지만 바로 덮는다.
+
+        var fit = FitRect(image.Width, image.Height, Zoom);
+
+        _pan = new Vector(mouse.X - (fit.X + (nx * fit.Width)), mouse.Y - (fit.Y + (ny * fit.Height)));
+
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    /// <summary>오른쪽 버튼으로 끌면 그림이 손을 따라온다. 왼쪽 끌기(사각형)가 진행 중이면 안 받는다.</summary>
+    protected override void OnMouseRightButtonDown(MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonDown(e);
+
+        if (_imageRect.IsEmpty || _dragStart is not null) return;
+
+        _panStart = e.GetPosition(this);
+        _panOrigin = _pan;
+
+        Cursor = Cursors.ScrollAll;
+        CaptureMouse();
+        e.Handled = true;
+    }
+
+    protected override void OnMouseRightButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonUp(e);
+
+        if (_panStart is null) return;
+
+        _panStart = null;
+        ReleaseMouseCapture();
+        UpdateCursor(e.GetPosition(this));
+        e.Handled = true;
     }
 
     // ── 그리기 ───────────────────────────────────────────────────────────
@@ -251,7 +394,7 @@ public sealed class LabelCanvas : FrameworkElement
     }
 
     /// <summary>
-    /// 모델이 찾은 것. 점선으로 그리고 얼마나 자신 있는지 같이 적는다.
+    /// 모델이 찾은 것. 점선으로 그리고 신뢰도를 같이 적는다.
     /// </summary>
     /// <remarks>
     /// 점선인 것과 이름 뒤에 %가 붙는 것, 둘로 사람이 찍은 것과 갈린다. 색은 같은 몹이면
@@ -260,7 +403,7 @@ public sealed class LabelCanvas : FrameworkElement
     private void DrawPrediction(DrawingContext dc, PredictedBox prediction)
     {
         var rect = ToScreen(prediction.Box);
-        var color = ColorOf(prediction.Box.ClassId);
+        var color = ColorFor(prediction.Box.ClassId);
 
         var pen = new Pen(new SolidColorBrush(color), 2d)
         {
@@ -286,7 +429,7 @@ public sealed class LabelCanvas : FrameworkElement
     private void DrawBox(DrawingContext dc, LabelBox box, bool selected)
     {
         var rect = ToScreen(box);
-        var color = ColorOf(box.ClassId);
+        var color = ColorFor(box.ClassId);
 
         // 고른 것은 굵게. 색까지 바꾸면 무슨 몹인지가 안 보인다.
         var pen = new Pen(new SolidColorBrush(color), selected ? 3d : 1.5d);
@@ -328,7 +471,7 @@ public sealed class LabelCanvas : FrameworkElement
     {
         if (_dragStart is not { } start) return;
 
-        var pen = new Pen(new SolidColorBrush(ColorOf(CurrentClassId)), 1.5d)
+        var pen = new Pen(new SolidColorBrush(ColorFor(CurrentClassId)), 1.5d)
         {
             DashStyle = DashStyles.Dash
         };
@@ -359,41 +502,13 @@ public sealed class LabelCanvas : FrameworkElement
         => ClassNames is { } names && classId >= 0 && classId < names.Count ? names[classId] : $"{classId}번";
 
     /// <summary>
-    /// 몹 번호로 색을 정한다.
+    /// 몹 번호로 만드는 기본 색(황금각). 사람이 고른 색은 <see cref="ClassColors"/> 로 온다 - 그리는 쪽은 <see cref="ColorFor"/> 를 쓴다.
     /// </summary>
     /// <remarks>
-    /// 황금각(137.5도)씩 돌린다. 번호가 몇 개든 이웃한 번호끼리 색이 가장 멀어져,
-    /// 사각형이 겹쳐 있어도 어느 것이 어느 몹인지 눈으로 갈린다.
-    /// 목록에 색을 적어 두지 않는 것은 몹이 늘 때마다 색을 새로 고르게 하지 않기 위해서다.
+    /// 계산은 <see cref="LabelPalette.DefaultColor"/> 에 있다. 여기 남겨 둔 것은 겹그림(DetectionOverlay)·꺾은선이
+    /// 이 이름으로 부르기 때문이다.
     /// </remarks>
-    public static Color ColorOf(int classId)
-    {
-        var hue = (Math.Abs(classId) * 137.508) % 360;
-
-        return FromHsv(hue, 0.85, 0.95);
-    }
-
-    private static Color FromHsv(double hue, double saturation, double value)
-    {
-        var c = value * saturation;
-        var x = c * (1 - Math.Abs((hue / 60 % 2) - 1));
-        var m = value - c;
-
-        var (r, g, b) = hue switch
-        {
-            < 60 => (c, x, 0d),
-            < 120 => (x, c, 0d),
-            < 180 => (0d, c, x),
-            < 240 => (0d, x, c),
-            < 300 => (x, 0d, c),
-            _ => (c, 0d, x)
-        };
-
-        return Color.FromRgb(
-            (byte)Math.Round((r + m) * 255),
-            (byte)Math.Round((g + m) * 255),
-            (byte)Math.Round((b + m) * 255));
-    }
+    public static Color ColorOf(int classId) => LabelPalette.DefaultColor(classId);
 
     private static IEnumerable<Point> Grips(Rect rect)
     {
@@ -424,6 +539,7 @@ public sealed class LabelCanvas : FrameworkElement
 
         Focus();   // Delete 키를 받으려면 포커스가 있어야 한다
 
+        if (_panStart is not null) return;   // 오른쪽 버튼으로 옮기는 중이다
         if (_imageRect.IsEmpty || Boxes is not { } boxes) return;
 
         var point = e.GetPosition(this);
@@ -509,6 +625,13 @@ public sealed class LabelCanvas : FrameworkElement
         base.OnMouseMove(e);
 
         var point = e.GetPosition(this);
+
+        if (_panStart is { } panStart)
+        {
+            _pan = _panOrigin + (point - panStart);
+            InvalidateVisual();
+            return;
+        }
 
         if (_dragStart is not { } start)
         {

@@ -1537,7 +1537,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     {
         try
         {
-            var folder = Path.Combine(UserDataPaths.Root, "captures");
+            var folder = Vision.ProjectPaths.Captures;
             var path = Path.Combine(folder, $"frame_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
             FrameSnapshot.SavePng(e, path);
 

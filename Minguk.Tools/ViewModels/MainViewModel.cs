@@ -38,7 +38,7 @@ namespace Minguk.Tools.ViewModels;
 /// 메신저를 한 번 거치는 이유는, 나중에 다른 화면에서도 "이 화면 열어줘" 를
 /// MainViewModel 참조 없이 보낼 수 있게 하기 위함이다.
 /// </summary>
-public class MainViewModel : ViewModelBase, ISupportLogicalLayout
+public class MainViewModel : ViewModelBase, ISupportLogicalLayout, Modules.IMainShell
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 

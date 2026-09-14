@@ -38,7 +38,7 @@ internal static partial class Program
             Check("engine 은 적은 대로 읽히고 저장해도 남는다", onnx.Engine == DetectorEngine.Onnx && round.Engine == DetectorEngine.Onnx,
                   $"읽음 {onnx.Engine}, 저장 뒤 {round.Engine}, 쪽지 {File.ReadAllText(DetectorManifest.PathFor(modelPath)).Replace(Environment.NewLine, " ")[..Math.Min(60, File.ReadAllText(DetectorManifest.PathFor(modelPath)).Length)]}");
 
-            // 3) 쪽지는 모델마다 따로다 - 가져오기가 옛 모델의 입력 크기를 덮으면 안 된다(실측: 되찾기 70%→0%)
+            // 3) 쪽지는 모델마다 따로다 - 가져오기가 옛 모델의 입력 크기를 덮으면 안 된다(실측: 재현율 70%→0%)
             {
                 var zipPath = Path.Combine(folder, "detector.zip");
                 var onnxPath = Path.Combine(folder, "detector.onnx");

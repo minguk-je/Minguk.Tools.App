@@ -43,28 +43,8 @@ public sealed class LabelingRow : BindableBase
         set => SetValue(value);
     }
 
-    /// <summary>학습기가 지금 이 그림을 보고 있는지. 목록에서 표시가 따라 움직인다.</summary>
-    public bool IsTrainingNow
-    {
-        get => GetValue<bool>();
-        set => SetValue(value);
-    }
-
     /// <summary>
-    /// 이 그림을 마지막으로 봤을 때의 loss.
-    /// </summary>
-    /// <remarks>
-    /// "이건 다시 찍어야겠다" 를 고르는 단서다. 다른 그림은 1 근처인데 혼자 3 이면 라벨이
-    /// 틀렸거나 장면이 애매한 것이다. 바퀴마다 새 값으로 덮인다.
-    /// </remarks>
-    public double? LastLoss
-    {
-        get => GetValue<double?>();
-        set => SetValue(value);
-    }
-
-    /// <summary>
-    /// 학습 뒤 모델이 이 그림의 라벨을 몇 개 되찾았나. "2/2", "1/2 · 헛것 3".
+    /// 학습 뒤 모델이 이 그림의 라벨을 몇 개 다시 찾았나. "2/2", "1/2 · 헛것 3".
     /// </summary>
     /// <remarks>
     /// loss 는 오차라 낮을수록 좋고 인식률은 높을수록 좋다. 둘을 나란히 두면 loss 를 인식률로

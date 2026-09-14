@@ -1,0 +1,42 @@
+task: detection
+
+evaluator:
+  type: CocoEvaluator
+  iou_types: ['bbox', ]
+
+# classes.txt 의 줄 수. 우리 분류 번호는 0 부터라 이 값이 곧 종류 수다.
+num_classes: 1
+remap_mscoco_category: False
+
+train_dataloader:
+  type: DataLoader
+  dataset:
+    type: CocoDetection
+    img_folder: C:/Users/MINGUK/AppData/Roaming/Minguk.Tools/Datasets/몹/images
+    ann_file: C:/Users/MINGUK/AppData/Roaming/Minguk.Tools/Datasets/몹/coco.json
+    return_masks: False
+    transforms:
+      type: Compose
+      ops: ~
+  shuffle: True
+  num_workers: 2
+  drop_last: True
+  collate_fn:
+    type: BatchImageCollateFunction
+
+# 97장을 나누지 않았다. 학습에 쓴 그림을 되찾는지로 본다(앱의 --detect-check 와 같은 잣대).
+val_dataloader:
+  type: DataLoader
+  dataset:
+    type: CocoDetection
+    img_folder: C:/Users/MINGUK/AppData/Roaming/Minguk.Tools/Datasets/몹/images
+    ann_file: C:/Users/MINGUK/AppData/Roaming/Minguk.Tools/Datasets/몹/coco.json
+    return_masks: False
+    transforms:
+      type: Compose
+      ops: ~
+  shuffle: False
+  num_workers: 2
+  drop_last: False
+  collate_fn:
+    type: BatchImageCollateFunction

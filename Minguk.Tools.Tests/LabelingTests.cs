@@ -230,9 +230,155 @@ internal static partial class Program
 
             TestTrainingShape(dataset, imagePath);
 
+            TestClassRemovalAndPalette();
+
+            TestModelChoices();
+
             Check("classes.txt 가 없으면 빈 목록",
                   LabelClasses.Load(Path.Combine(root, "없는파일.txt")).Count == 0,
                   "터지지 않음");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (Exception) { }
+        }
+    }
+
+    /// <summary>
+    /// 몹 지우기(안 쓰인 것만, 뒤 번호는 라벨 파일까지 당김)와 색 고르기(class-colors.json).
+    /// </summary>
+    /// <remarks>
+    /// 제 데이터셋을 따로 만든다 - 앞 단계가 남긴 라벨 파일과 섞이면 "쓰였다" 가 달라진다(실제로 그래서 한 번 틀렸다).
+    /// 몹은 [왕슬라임, 버섯, 두 줄]. 라벨 둘을 심는다 - 가.txt 는 0·2 번, 나.txt 는 2 번.
+    /// 1번(버섯)은 아무 데도 안 쓰여 지워지고, 그러면 2번이 1번으로 당겨져야 한다. 0번은 쓰여서 못 지운다.
+    /// </remarks>
+    private static void TestClassRemovalAndPalette()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "minguk-classes-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            TestClassRemovalAndPalette(new LabelDataset(root));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (Exception) { }
+        }
+    }
+
+    private static void TestClassRemovalAndPalette(LabelDataset dataset)
+    {
+        dataset.EnsureCreated();
+
+        var classes = new LabelClasses(["왕슬라임", "버섯", "두 줄"]);
+        dataset.SaveClasses(classes);
+
+        var first = Path.Combine(dataset.LabelDirectory, "가.txt");
+        var second = Path.Combine(dataset.LabelDirectory, "나.txt");
+
+        LabelFile.Save(first, [LabelBox.FromCorners(0, 0.1, 0.1, 0.3, 0.3), LabelBox.FromCorners(2, 0.5, 0.5, 0.7, 0.7)]);
+        LabelFile.Save(second, [LabelBox.FromCorners(2, 0.2, 0.2, 0.4, 0.4)]);
+
+        // 색: 2번(두 줄)에 고른 색을 둔다. 지운 뒤 1번으로 따라와야 한다.
+        var palette = new LabelPalette();
+        var chosen = System.Windows.Media.Color.FromRgb(0x12, 0x34, 0x56);
+
+        Check("안 고른 번호는 기본 색",
+              palette.ColorOf(1) == LabelPalette.DefaultColor(1) && !palette.IsChosen(1),
+              LabelPalette.Format(palette.ColorOf(1)));
+
+        palette.Set(2, chosen);
+        palette.Set(0, LabelPalette.DefaultColor(0));   // 기본 색과 같은 값은 "안 고름" 으로 남아야 한다
+        dataset.SavePalette(palette);
+
+        var reloadedPalette = dataset.LoadPalette();
+
+        Check("고른 색만 파일에 남는다",
+              reloadedPalette.IsChosen(2) && reloadedPalette.ColorOf(2) == chosen && !reloadedPalette.IsChosen(0),
+              File.Exists(dataset.PalettePath) ? File.ReadAllText(dataset.PalettePath) : "파일 없음");
+
+        Check("쓰인 몹은 어느 파일에 쓰였는지 말한다",
+              dataset.FindLabelsUsing(0).SequenceEqual(["가.txt"]) && dataset.FindLabelsUsing(2).Count == 2,
+              string.Join(", ", dataset.FindLabelsUsing(2)));
+
+        Check("쓰인 몹은 못 지운다",
+              Throws(() => dataset.RemoveClass(classes, 0)) && classes.Count == 3,
+              string.Join(", ", classes.Names));
+
+        var rewritten = dataset.RemoveClass(classes, 1);
+
+        var firstBack = LabelFile.Load(first);
+        var secondBack = LabelFile.Load(second);
+
+        Check("안 쓰인 몹을 지우면 뒤 번호가 당겨진다",
+              classes.Names.SequenceEqual(["왕슬라임", "두 줄"]) && dataset.LoadClasses().Names.SequenceEqual(classes.Names),
+              string.Join(", ", classes.Names));
+
+        Check("라벨 파일의 번호도 같이 당겨진다",
+              rewritten == 2
+              && firstBack.Select(b => b.ClassId).SequenceEqual([0, 1])
+              && secondBack.Select(b => b.ClassId).SequenceEqual([1]),
+              $"고쳐 쓴 파일 {rewritten}장, 가=[{string.Join(",", firstBack.Select(b => b.ClassId))}] 나=[{string.Join(",", secondBack.Select(b => b.ClassId))}]");
+
+        var afterRemoval = dataset.LoadPalette();
+
+        Check("고른 색도 같이 당겨진다",
+              afterRemoval.IsChosen(1) && afterRemoval.ColorOf(1) == chosen && !afterRemoval.IsChosen(2),
+              LabelPalette.Format(afterRemoval.ColorOf(1)));
+    }
+
+    /// <summary>
+    /// "쓰는 모델" 콤보: 보관본 둘 + 학습 zip 이 뜨고, 고르면 몹 찾기 자리에 그것이 앉고 쪽지(이름·레터박스)가 따라오는지.
+    /// </summary>
+    /// <remarks>모델 파일은 가짜 바이트다 - 여기서 보는 것은 파일 옮기기와 고르기 규칙이지 추론이 아니다. 크기를 달리해 둘을 가른다.</remarks>
+    private static void TestModelChoices()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "minguk-choices-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var dataset = new LabelDataset(root);
+            dataset.EnsureCreated();
+            dataset.SaveClasses(new LabelClasses(["일반 봇"]));
+
+            void Archive(string file, string name, bool letterbox, int size)
+            {
+                var path = Path.Combine(root, file);
+                File.WriteAllBytes(path, new byte[size]);
+                new DetectorManifest { Engine = DetectorEngine.Onnx, ModelName = name, Letterbox = letterbox, InputWidth = 640, InputHeight = 640 }.Save(path);
+            }
+
+            Archive("detector.yolo11n.onnx", "YOLO11n", letterbox: true, size: 10);
+            Archive("detector.d-fine-n.onnx", "D-FINE-N", letterbox: false, size: 20);
+            File.WriteAllBytes(DetectorTrainer.ModelPathFor(dataset), new byte[5]);
+            new DetectorManifest { InputWidth = 640, InputHeight = 360 }.Save(DetectorTrainer.ModelPathFor(dataset));
+
+            var choices = DetectorFiles.ListChoices(dataset);
+
+            Check("콤보에 보관본 둘만 뜬다(옛 TorchSharp zip 은 안 뜬다)",
+                  choices.Count == 2
+                  && choices.Any(c => c.Name == "YOLO11n") && choices.Any(c => c.Name == "D-FINE-N"),
+                  string.Join(", ", choices.Select(c => c.Name)));
+
+            var dfine = choices.First(c => c.Name == "D-FINE-N");
+            DetectorFiles.Use(dataset, dfine);
+            var seated = DetectorManifest.Load(DetectorFiles.OnnxPathFor(dataset));
+
+            Check("D-FINE-N 을 고르면 그 파일·이름·늘리기가 자리에 앉는다",
+                  DetectorFiles.CurrentFor(dataset) == DetectorFiles.OnnxPathFor(dataset)
+                  && new FileInfo(DetectorFiles.OnnxPathFor(dataset)).Length == 20
+                  && seated.ModelName == "D-FINE-N" && !seated.Letterbox
+                  && DetectorFiles.CurrentChoice(dataset, choices) == dfine,
+                  $"{seated.ModelName} · letterbox {seated.Letterbox}");
+
+            var yolo = choices.First(c => c.Name == "YOLO11n");
+            DetectorFiles.Use(dataset, yolo);
+
+            Check("YOLO11n 으로 바꾸면 비율(레터박스)로 바뀐다",
+                  DetectorManifest.Load(DetectorFiles.OnnxPathFor(dataset)) is { ModelName: "YOLO11n", Letterbox: true }
+                  && DetectorFiles.CurrentChoice(dataset, choices) == yolo,
+                  DetectorFiles.CurrentChoice(dataset, choices)?.Name ?? "모름");
+
         }
         finally
         {

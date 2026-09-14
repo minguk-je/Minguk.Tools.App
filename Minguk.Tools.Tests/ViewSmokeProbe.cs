@@ -53,8 +53,10 @@ internal static class ViewSmokeProbe
             failures += CheckMenu("Minguk.Tools.Views.CaptureMonitorView");
             failures += CheckMenu("Minguk.Tools.Views.ScriptStudioView");
             failures += CheckMenu("Minguk.Tools.Views.PlayView");
-            failures += CheckMenu("Minguk.Tools.Views.DashboardView");
             failures += CheckMenu("Minguk.Tools.Views.LabelingView");
+
+            // 모듈이 들고 온 화면. 이름을 여기 적지 않는다 - 모듈이 늘어도 이 파일은 안 고친다.
+            failures += CheckModules();
 
             failures += CheckPathWarning();
             failures += CheckEditorPalette();
@@ -351,6 +353,40 @@ internal static class ViewSmokeProbe
     /// DI 에서 뷰를 꺼내므로, 틀리면 메뉴는 보이는데 탭이 비어서 열린다.
     /// 아이콘 경로도 마찬가지로 문자열이다 - 없으면 조용히 빈 아이콘이 된다.
     /// </remarks>
+    /// <summary>
+    /// 붙어 있는 모듈이 제 화면·메뉴·설정 페이지를 제대로 들고 오는지.
+    /// </summary>
+    /// <remarks>
+    /// 모듈은 둘을 스스로 들고 와야 한다 - 메뉴 항목(타입·아이콘)과 DI 에 등록한 View.
+    /// 빠지면 앱에서는 "메뉴를 눌렀는데 탭이 비었다" 처럼만 보여서 원인을 찾기 어렵다.
+    /// </remarks>
+    private static int CheckModules()
+    {
+        var failures = 0;
+
+        foreach (var module in Minguk.Tools.Modules.ToolModules.All)
+        {
+            foreach (var item in module.CreateMenuItems())
+            {
+                failures += CheckMenu(item.CLASS_NM);
+
+                // 실제로 만들어 본다 - XAML 은 빌드를 통과하고 런타임에만 터진다.
+                if (ResolveViewType(item.CLASS_NM) is { } viewType)
+                    failures += Check($"{viewType.Name} 생성", () => (FrameworkElement)Activator.CreateInstance(viewType)!);
+            }
+
+        }
+
+        return failures;
+    }
+
+    /// <summary>CLASS_NM 으로 타입을 찾는다. 셸만 뒤지면 모듈 화면을 못 찾는다 - 앱의 MainViewLocator 와 같은 자리를 본다.</summary>
+    private static Type? ResolveViewType(string className)
+        => Type.GetType($"{className}, Minguk.Tools")
+           ?? Minguk.Tools.Modules.ToolModules.All
+               .Select(module => module.GetType().Assembly.GetType(className))
+               .FirstOrDefault(found => found is not null);
+
     private static int CheckMenu(string className)
     {
         var item = MainMenu.FindMenuItem(className);
@@ -361,7 +397,7 @@ internal static class ViewSmokeProbe
             return 1;
         }
 
-        var type = Type.GetType($"{className}, Minguk.Tools");
+        var type = ResolveViewType(className);
         var hasIcon = item.Icon is byte[] { Length: > 0 };
 
         if (type is null)

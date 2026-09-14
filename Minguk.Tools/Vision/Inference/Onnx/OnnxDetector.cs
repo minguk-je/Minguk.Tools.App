@@ -26,7 +26,7 @@ public sealed class OnnxDetector : IDetector, ITensorDetector
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
-    private static readonly IDetectionDecoder[] Decoders = [new DetrDecoder(), new DFineDecoder()];
+    private static readonly IDetectionDecoder[] Decoders = [new DetrDecoder(), new DFineDecoder(), new YoloDecoder()];
 
     private readonly OnnxDmlEngine _engine;
     private readonly IDetectionDecoder _decoder;
@@ -57,7 +57,7 @@ public sealed class OnnxDetector : IDetector, ITensorDetector
         _decoder = Decoders.FirstOrDefault(d => d.CanDecode(_engine.OutputNames))
                    ?? throw new NotSupportedException(
                        $"이 모델의 출력을 풀 줄 모른다: {string.Join(", ", _engine.OutputNames)}. " +
-                       "지금은 DETR 계열(logits · pred_boxes)과 후처리를 넣어 내보낸 것(labels · boxes · scores)만 안다.");
+                       "지금은 DETR 계열(logits · pred_boxes), 후처리를 넣어 내보낸 것(labels · boxes · scores), Ultralytics YOLO(output0)만 안다.");
 
         _tensor = new float[_spec.ElementCount];
 

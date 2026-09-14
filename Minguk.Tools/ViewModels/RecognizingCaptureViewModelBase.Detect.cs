@@ -156,7 +156,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             // 모델이 보는 크기보다 작게 줄이면 안 된다. 640x360 모델에 320 으로 줄인 그림을 넣으면
             // 파이프라인이 도로 키워서 보는 꼴이라, 작은 몹 때문에 640 으로 올린 뜻이 실시간에서
-            // 사라진다 - 실제로 되찾기 검사(원본 파일)는 97% 인데 실시간은 320 을 넣고 있었다.
+            // 사라진다 - 실제로 재현율 검사(원본 파일)는 97% 인데 실시간은 320 을 넣고 있었다.
             var longestSide = Math.Max(DetectLongestSide, _detector?.Manifest.InputWidth ?? DetectLongestSide);
 
             size = FrameSnapshot.SaveScaledPng(e, _detectScratchPath, longestSide);
@@ -447,7 +447,7 @@ public abstract partial class RecognizingCaptureViewModelBase
                 var loaded = $"몹 찾기 준비됐습니다 - {manifest.Describe}"
                              + (manifest.TrainCount > 0 ? $" · {manifest.TrainCount}번째 학습" : string.Empty)
                              + (manifest.Images > 0 ? $" · 그림 {manifest.Images}장 · {manifest.Epochs}바퀴" : string.Empty)
-                             + (manifest.RecallFound is { } f && manifest.RecallLabels is { } l && l > 0 ? $" · 되찾기 {f}/{l}" : string.Empty)
+                             + (manifest.RecallFound is { } f && manifest.RecallLabels is { } l && l > 0 ? $" · 재현율 {f}/{l}" : string.Empty)
                              + $" · {_detectClasses.Count}종";
 
                 DispatcherService?.BeginInvoke(() =>

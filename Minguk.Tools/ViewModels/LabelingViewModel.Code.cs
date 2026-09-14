@@ -6,6 +6,8 @@ using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
+using DevExpress.Mvvm;
+
 using Minguk.Base.Utilities;
 
 using Minguk.Tools.Markup;
@@ -17,6 +19,9 @@ public partial class LabelingViewModel
 {
     private LabelDataset? _dataset;
     private LabelClasses _classes = new();
+
+    /// <summary>몹 색(사람이 고른 것). 데이터셋 폴더의 class-colors.json. 안 고른 번호는 기본 색이다.</summary>
+    private LabelPalette _palette = new();
 
     /// <summary>지금 화면에 뜬 그림. 저장할 자리를 알기 위해 따로 든다.</summary>
     /// <remarks>
@@ -39,6 +44,7 @@ public partial class LabelingViewModel
         _dataset.EnsureCreated();
 
         _classes = _dataset.LoadClasses();
+        _palette = _dataset.LoadPalette();
         RefreshClassNames();
 
         var previous = SelectedItem?.ImagePath;
@@ -345,50 +351,209 @@ public partial class LabelingViewModel
 
     // ── 몹 이름 ──────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 몹을 하나 더하고 바로 이름 칸을 연다.
+    /// </summary>
+    /// <remarks>
+    /// 이름을 따로 적는 칸이 없다(2026-09-14). VS 솔루션 탐색기의 새 항목처럼 임시 이름("몹 3")으로 넣고
+    /// 그리드 안에서 고쳐 쓰게 한다 - 같은 일을 두 곳(칸·그리드)에서 하면 하나는 안 쓰인다.
+    /// </remarks>
     private void DoAddClass() => Guard(() =>
     {
-        if (string.IsNullOrWhiteSpace(NewClassName))
-        {
-            MessengerUtility.SendMainMessage("몹 이름을 적어 주세요.");
-            return;
-        }
+        var n = _classes.Count + 1;
+        string name;
 
-        var index = _classes.Add(NewClassName);
+        do name = $"몹 {n++}";
+        while (_classes.IndexOf(name) >= 0);
+
+        var index = _classes.Add(name);
 
         SaveClasses();
         RefreshClassNames();
 
         SelectedClassIndex = index;
-        NewClassName = null;
 
-        StatusText = $"몹을 더했습니다: {_classes.NameOf(index)} ({index}번)";
+        StatusText = $"몹을 더했습니다: {name} ({index}번) - 이름을 고쳐 쓰세요.";
+
+        BeginRename();
     });
 
     /// <summary>
-    /// 고른 몹의 이름을 바꾼다. 번호는 그대로라 찍어 둔 라벨은 안 흔들린다.
+    /// 고른 몹을 지운다. 아무 라벨에도 안 쓰인 몹만이다.
     /// </summary>
-    private void DoRenameClass() => Guard(() =>
+    /// <remarks>
+    /// 라벨에는 번호가 들어 있어 중간을 지우면 뒤가 당겨진다 - <see cref="LabelDataset.RemoveClass"/> 가 라벨 파일의
+    /// 번호와 색까지 같이 당긴다. 쓰인 몹은 못 지운다(사각형을 잃거나 다른 몹을 가리키게 된다) - 어느 파일에 쓰였는지
+    /// 상태 줄에 적어 사람이 그 사각형을 먼저 지우게 한다. 시험으로 넣은 몹처럼 안 찍은 것은 잃을 것이 없다.
+    /// </remarks>
+    private void DoDeleteClass() => Guard(() =>
     {
-        if (SelectedClassIndex < 0) return;
+        if (_dataset is not { } dataset) return;
 
-        if (string.IsNullOrWhiteSpace(NewClassName))
+        // 그리드에서 여러 줄을 골랐으면 다 지운다. 하나만 지우면 "멀티 선택이 되는데 하나만 지워진다" 가 된다(실제 그랬다).
+        var indices = (_classGrid?.SelectedItems.OfType<LabelClassRow>().Select(r => r.Index) ?? [])
+            .Distinct()
+            .OrderBy(i => i)
+            .ToArray();
+
+        if (indices.Length == 0 && SelectedClassIndex >= 0) indices = [SelectedClassIndex];
+        if (indices.Length == 0) return;
+
+        // 지금 그림의 사각형도 파일에 있어야 "쓰였는지" 를 제대로 센다.
+        SaveCurrentIfDirty();
+
+        var names = indices.Select(_classes.NameOf).ToArray();
+
+        foreach (var index in indices)
         {
-            MessengerUtility.SendMainMessage("바꿀 이름을 적어 주세요.");
+            var used = dataset.FindLabelsUsing(index);
+
+            if (used.Count == 0) continue;
+
+            StatusText = $"'{_classes.NameOf(index)}' 은 라벨 {used.Count}장에 쓰여 못 지웁니다. 그 사각형을 먼저 지우세요: {string.Join(", ", used.Take(3))}{(used.Count > 3 ? " …" : "")}";
+            MessengerUtility.SendMainMessage(StatusText);
             return;
         }
 
-        var index = SelectedClassIndex;
-        var before = _classes.NameOf(index);
+        var answer = MessageBoxService.ShowMessage(
+            $"몹 {indices.Length}개를 지웁니다: {string.Join(", ", names)}\n아직 아무 라벨에도 안 쓰였습니다.\n뒤 번호는 당겨지고 라벨 파일도 같이 고쳐집니다.\n\n계속할까요?",
+            "몹 지우기",
+            MessageButton.OKCancel,
+            MessageIcon.Question);
 
-        _classes.Rename(index, NewClassName);
+        if (answer != MessageResult.OK) return;
 
+        // 뒤에서부터 지운다 - 앞을 먼저 지우면 뒤 번호가 당겨져 다른 몹을 지운다.
+        var rewritten = 0;
+        foreach (var index in indices.Reverse()) rewritten += dataset.RemoveClass(_classes, index);
+
+        // 번호가 당겨졌으니 목록과 지금 그림의 사각형을 파일에서 다시 읽는다.
+        DoReload();
+        SelectedClassIndex = _classes.Count == 0 ? -1 : Math.Min(indices[0], _classes.Count - 1);
+
+        StatusText = rewritten > 0
+            ? $"몹을 지웠습니다: {string.Join(", ", names)}. 라벨 파일 {rewritten}장의 번호를 당겼습니다."
+            : $"몹을 지웠습니다: {string.Join(", ", names)}.";
+    });
+
+    // ── 그림 목록 패널 너비 ──────────────────────────────────────────────
+
+    /// <summary>
+    /// 그리드 배치가 끝날 때마다 열 너비를 합쳐 패널 너비로 되돌린다.
+    /// </summary>
+    /// <remarks>
+    /// <c>LayoutUpdated</c> 는 자주 오지만 더하는 것이 열 대여섯 개라 값이 싸다. 1px 넘게 다를 때만 쓴다 - 패널 너비를
+    /// 바꾸면 다시 배치가 오는데, 열은 내용 너비라 그리드 너비와 무관해 같은 값이 나오고 거기서 멈춘다(되먹임 없음).
+    /// 세로 스크롤 막대와 테두리 몫(24px)은 고정으로 더한다 - 막대가 나타났다 사라지며 패널이 떨리지 않게.
+    /// </remarks>
+    private void OnImagesGridLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (_imagesGrid is not { View: DevExpress.Xpf.Grid.TableView view } grid) return;
+
+        var columns = grid.Columns.Where(c => c.Visible).Sum(c => c.ActualWidth);
+        if (columns <= 0) return;
+
+        var indicator = double.IsNaN(view.IndicatorWidth) ? 0 : view.IndicatorWidth;
+        var width = Math.Ceiling(columns + indicator + 24);
+
+        if (Math.Abs(width - ImagesPanelWidth) > 1) ImagesPanelWidth = width;
+    }
+
+    /// <summary>더하기 직후 새 줄의 이름 칸을 연다.</summary>
+    private void BeginRename() => BeginClassEdit(nameof(LabelClassRow.Name));
+
+    /// <summary>
+    /// 그리드의 고른 줄에서 그 칸을 연다.
+    /// </summary>
+    /// <remarks>
+    /// 한 박자 뒤에 연다 - 더하기는 줄을 통째로 갈아 끼운 직후라 바로 열면 그리드가 아직 옛 줄을 보고 있다.
+    /// 칸은 <see cref="OnClassEditorShowing"/> 이 막고 있어 <c>_allowClassEdit</c> 을 먼저 세운다.
+    /// </remarks>
+    private void BeginClassEdit(string fieldName)
+    {
+        if (SelectedClassIndex < 0 || _classGrid is not { View: DevExpress.Xpf.Grid.TableView view } grid) return;
+
+        DispatcherService.BeginInvoke(() =>
+        {
+            _allowClassEdit = true;
+            grid.CurrentColumn = grid.Columns[fieldName] ?? grid.CurrentColumn;
+            view.ShowEditor(selectAll: true);
+        });
+    }
+
+    /// <summary>처음에는 어느 칸도 안 열린다. 더블 클릭·더하기 직후에만 연다 - 한 번 누를 때마다 열리면 줄을 고르려다 편집이 된다.</summary>
+    private void OnClassEditorShowing(object sender, DevExpress.Xpf.Grid.ShowingEditorEventArgs e)
+        => e.Cancel = !_allowClassEdit;
+
+    private void OnClassEditorHidden(object sender, DevExpress.Xpf.Grid.EditorEventArgs e) => _allowClassEdit = false;
+
+    /// <summary>칸을 더블 클릭하면 그 칸(이름·색)을 고친다. 행 번호 자리를 더블 클릭하면 이름 칸이다.</summary>
+    private void OnClassRowDoubleClick(object sender, DevExpress.Xpf.Grid.RowDoubleClickEventArgs e)
+    {
+        if (_classGrid?.GetRow(e.HitInfo.RowHandle) is not LabelClassRow row) return;
+
+        var field = e.HitInfo.Column?.FieldName is nameof(LabelClassRow.Color) ? nameof(LabelClassRow.Color) : nameof(LabelClassRow.Name);
+
+        SelectedClassIndex = row.Index;
+        BeginClassEdit(field);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// 그리드 안에서 이름이나 색을 고치면 여기로 온다.
+    /// </summary>
+    /// <remarks>
+    /// 빈 이름과 이미 있는 이름은 되돌린다 - 되돌리는 세터가 다시 여기로 오지만 같은 이름이라 곧바로 끝난다.
+    /// 목록을 다시 채우지 않는다(줄을 갈아 끼우면 고른 줄이 풀린다). 캔버스에 주는 복사본만 새로 만든다.
+    /// </remarks>
+    private void OnClassRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Guard(() =>
+    {
+        if (sender is not LabelClassRow row) return;
+
+        if (e.PropertyName == nameof(LabelClassRow.Color))
+        {
+            if (_palette.ColorOf(row.Index) == row.Color) return;
+
+            _palette.Set(row.Index, row.Color);
+            _dataset?.SavePalette(_palette);
+
+            ClassColors = _palette.Snapshot(_classes.Count);
+            if (row.Index == SelectedClassIndex) OnSelectedClassChanged();
+
+            return;
+        }
+
+        if (e.PropertyName != nameof(LabelClassRow.Name)) return;
+
+        var before = _classes.NameOf(row.Index);
+        var wanted = row.Name?.Trim() ?? string.Empty;
+
+        if (string.Equals(row.Name, before, StringComparison.Ordinal)) return;
+
+        if (wanted.Length == 0)
+        {
+            row.Name = before;
+            StatusText = "몹 이름이 비어 되돌렸습니다.";
+            return;
+        }
+
+        var duplicate = _classes.IndexOf(wanted);
+
+        if (duplicate >= 0 && duplicate != row.Index)
+        {
+            row.Name = before;
+            StatusText = $"이미 있는 이름입니다: {wanted} ({duplicate}번)";
+            return;
+        }
+
+        _classes.Rename(row.Index, wanted);
         SaveClasses();
-        RefreshClassNames();
 
-        SelectedClassIndex = index;
-        NewClassName = null;
+        if (!string.Equals(row.Name, wanted, StringComparison.Ordinal)) row.Name = wanted;   // 앞뒤 빈칸을 뗀 것
 
-        StatusText = $"이름을 바꿨습니다: {before} → {_classes.NameOf(index)} ({index}번 그대로)";
+        ClassNameSnapshot = _classes.Names.ToArray();
+
+        StatusText = $"이름을 바꿨습니다: {before} → {wanted} ({row.Index}번 그대로)";
     });
 
     private void SaveClasses()
@@ -405,30 +570,66 @@ public partial class LabelingViewModel
     {
         var index = SelectedClassIndex;
 
-        ClassNames.Clear();
-        foreach (var name in _classes.Names) ClassNames.Add(name);
+        foreach (var old in Classes) old.PropertyChanged -= OnClassRowChanged;
+        Classes.Clear();
+
+        for (var i = 0; i < _classes.Count; i++)
+        {
+            var row = new LabelClassRow(i, _classes.NameOf(i), _palette.ColorOf(i));
+            row.PropertyChanged += OnClassRowChanged;
+            Classes.Add(row);
+        }
 
         ClassNameSnapshot = _classes.Names.ToArray();
+        ClassColors = _palette.Snapshot(_classes.Count);
 
         // 아직 몹이 하나도 없으면 고를 것이 없다. 0번을 고른 척하면 없는 몹으로 찍힌다.
-        SelectedClassIndex = ClassNames.Count == 0
+        SelectedClassIndex = Classes.Count == 0
             ? -1
-            : Math.Clamp(index < 0 ? 0 : index, 0, ClassNames.Count - 1);
+            : Math.Clamp(index < 0 ? 0 : index, 0, Classes.Count - 1);
 
-        DoRenameClassCommand.RaiseCanExecuteChanged();
+        // 목록을 비우는 순간 그리드가 고른 것을 풀었다(SelectedClass = null). 번호가 그대로면 세터 콜백이
+        // 안 돌아 되살아나지 않으므로 여기서 줄을 다시 맞춘다.
+        SyncSelectedClass();
+
+        DoDeleteClassCommand.RaiseCanExecuteChanged();
     }
 
     private void OnSelectedClassChanged()
     {
         // 캔버스가 쓰는 색과 같은 것을 보여 준다. 다른 색을 보여 주면 어느 몹을 찍는 중인지
-        // 화면과 그림이 어긋난다.
-        var color = LabelCanvas.ColorOf(Math.Max(SelectedClassIndex, 0));
+        // 화면과 그림이 어긋난다. 사람이 고른 색이 있으면 그것이다.
+        var color = _palette.ColorOf(Math.Max(SelectedClassIndex, 0));
         var brush = new SolidColorBrush(color);
         brush.Freeze();
 
         CurrentClassBrush = brush;
 
-        DoRenameClassCommand.RaiseCanExecuteChanged();
+        SyncSelectedClass();
+
+        DoDeleteClassCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>번호에 맞는 줄을 그리드의 고른 줄로. 같으면 안 건드린다 - 서로 되부르지 않게.</summary>
+    private void SyncSelectedClass()
+    {
+        var row = SelectedClassIndex >= 0 && SelectedClassIndex < Classes.Count ? Classes[SelectedClassIndex] : null;
+
+        if (!ReferenceEquals(SelectedClass, row)) SelectedClass = row;
+    }
+
+    /// <summary>
+    /// 그리드에서 고른 줄을 번호로.
+    /// </summary>
+    /// <remarks>
+    /// 고른 것을 풀면(null) 번호는 그대로 둔다 - 캔버스는 늘 찍을 몹이 있어야 하고, 목록을 다시 채울 때
+    /// 잠깐 비는 순간에도 번호를 잃으면 안 된다.
+    /// </remarks>
+    private void OnSelectedClassRowChanged()
+    {
+        if (SelectedClass is not { } row) return;
+
+        if (row.Index != SelectedClassIndex) SelectedClassIndex = row.Index;
     }
 
     // ── 알림 ─────────────────────────────────────────────────────────────

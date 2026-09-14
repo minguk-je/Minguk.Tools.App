@@ -46,7 +46,7 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         set => SetProperty(() => IsTrackingOn, value, () => _tracker.Reset());
     }
 
-    /// <summary>이보다 자신 없는 것은 안 보여 준다.</summary>
+    /// <summary>이보다 신뢰도가 낮은 것은 안 보여 준다.</summary>
     /// <summary>
     /// 화면에서 만지는 문턱. 0~1 인 <see cref="DetectMinimumScore"/> 를 사람이 읽는 % 로 바꿔 준다.
     /// </summary>

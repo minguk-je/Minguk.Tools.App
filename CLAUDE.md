@@ -14,6 +14,66 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
 
 3번을 빠뜨리면 메뉴는 보이지만 탭이 비어서 열린다 — `MainViewLocator` 가 DI 에서 뷰를 꺼내기 때문이다.
 
+**새 기능은 이제 모듈 프로젝트로 만든다**(아래 「기능 모듈」). 위 네 단계는 셸에 이미 있는 화면들 이야기다.
+
+메뉴 이름(2026-09-14): 화면캡처 · 라벨링 · 스크립트 · 플레이 · 입력 테스트. 대시보드는 메뉴에서 뺐다(주석 처리, 화면과 DI 등록은 그대로 -
+ViewModel 최소 예시로 남긴다). 탭 캡션(`Caption`)도 메뉴 이름과 같게 둔다.
+
+## 솔루션과 프로젝트 (만드는 중)
+
+게임 하나 = **솔루션**(`.mtsln`), 그 안의 모드·스테이지·런 = **프로젝트**(`.mtsproj`). VS 2026 구조를 그대로 따른다.
+사진·라벨·몹 이름·모델·영역·스크립트는 **프로젝트마다 제 것**이고, 실행은 **시작 프로젝트** 하나가 돈다.
+정한 것·폴더 모양·만들 순서는 전부 **`docs/프로젝트-설계.md`** 에 있다.
+
+1단계(모델)까지 됐다 - `Minguk.Tools.Core/Projects` 의 `Solution` · `SolutionWorkspace`, 검사는 `--solution`.
+아직 화면에는 안 붙어 있다.
+
+## 기능 모듈 - 셸은 뼈대로 두고 기능은 프로젝트로 붙인다
+
+2026-09-14, 사용자 결정. "또 다른 기능을 하는 프로젝트를 만들어 추가할 수도 있으니" 셸(`Minguk.Tools`)은 뼈대로 두고
+기능은 프로젝트를 따로 만들어 붙인다. 첫 모듈이 **`Minguk.Tools.Training`**(학습 환경)이고, 그것이 본보기다.
+
+```
+Minguk.Tools.Core        ← 셸과 모듈이 함께 보는 가운데 조각
+   ↑              ↑
+Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 제 설정 페이지를 들고 온다
+  (뼈대)
+```
+
+**왜 가운데 프로젝트가 있나** - 모듈이 화면 바탕(`DocumentViewModelBase`)과 메뉴 항목(`MenuItemModel`)을 써야 하는데
+그것이 셸에 있으면 순환 참조가 된다. 그래서 Core 로 내렸다. **네임스페이스는 `Minguk.Tools.*` 그대로**라(어셈블리 이름만 다르다)
+옮기면서 고친 `using` 이 한 줄도 없다. Core 에 든 것: `MenuItemModel` · `DocumentViewModelBase`(3파일) ·
+`IToolModule`/`ISettingsPage`/`IFolderPicking`/`IMainShell` · `ToolModules` · 경로 도우미(`InstallPaths`·`UserDataPaths`·
+`TrainingPaths`·`ProjectPaths`). **기능 코드는 넣지 않는다.**
+
+`DocumentViewModelBase` 가 부모를 `MainViewModel` 로 들고 있던 것은 `IMainShell`(아래 바 두 줄)로 바꿨다 -
+파생 화면에서 쓰는 곳이 **한 군데도 없어서**(실측) 값이 쌌다. 이름도 `Shell` 로 바뀌었다.
+
+**모듈을 하나 더 만들려면**
+
+1. 프로젝트를 만들고 `Minguk.Base` · `Minguk.Tools.Core` 만 참조한다(**셸은 참조하지 않는다** - 순환).
+   아이콘을 쓰면 `Libs\Minguk.Image.dll` 을 `Reference` + `HintPath` 로 문다.
+2. `IToolModule` 구현을 하나 둔다 - `RegisterServices`(View 를 `AddTransient`) · `CreateMenuItems` · `CreateSettingsPages`.
+3. 셸 `App.xaml.cs` 의 `ToolModules.Use(...)` 에 한 줄, 셸 csproj 에 `ProjectReference` 한 줄.
+4. 하네스 `Program.cs` 의 `ToolModules.Use(...)` 에도 같은 줄 - 안 넣으면 `--views` 가 그 모듈을 안 본다.
+
+메뉴 번호(`menu_cd`)는 셸이 1000번대라 모듈은 2000번대부터 쓴다. **리플렉션으로 DLL 을 훑지 않는다** - 어느 모듈이
+붙어 있는지는 코드에 적혀 있어야 빌드가 알려 준다.
+
+- `MainViewLocator.Assemblies` 가 셸 + 모듈 어셈블리를 본다. 셸만 보면 모듈 화면의 `CLASS_NM` 을 못 찾아
+  **메뉴를 눌러도 아무 일이 안 난다.**
+- **설정도 모듈이 들고 온다**(`ISettingsPage`). 셸의 ConfigView 는 `ToolModules.SettingsPages()` 가 준 것을 범주(GroupBox)로
+  그리기만 하고 무엇이 들었는지 모른다. 학습 경로·프로젝트 경로가 ConfigView 에 박혀 있던 것을 이 방식으로 학습 모듈에
+  내렸다 - 기능이 늘 때마다 ConfigView 가 길어지지 않게. 페이지는 열 때 `Load`, **확인을 눌렀을 때만** `Save` 다.
+  폴더 고르기 대화 상자는 화면 쪽 물건이라 페이지가 직접 만들지 않고 `IFolderPicking` 으로 받는다(능력별 인터페이스).
+  칸(View)은 `SettingsPageHost` 가 **한 번만** 만들어 든다 - XAML 에서 `CreateView()` 를 바로 묶으면 배치를 다시 잴 때마다
+  새 칸이 생겨 치던 글이 사라진다.
+- 검증: `--views` 의 `CheckModules` 가 붙어 있는 모듈을 **이름을 적지 않고** 돈다 - 메뉴 항목의 타입·아이콘, 화면을 실제로
+  만들어 보기, 설정 페이지 `Load`+`CreateView`. 모듈이 늘어도 하네스는 안 고친다.
+
+**dxlc 에는 `ItemHeight`·`ShowLabel` 이 없다**(실측 MC3072). `ItemHeight` 는 도킹(`dxdo:LayoutPanel`) 것이고,
+라벨을 비우려면 `AddColonToLabel="False" Label=""` 로 적는다 - 이 코드베이스가 쓰는 방식이다.
+
 ## 화면 셋: 캡처 · 스크립트 · 플레이
 
 창을 잡는 화면이 셋이다(2026-09-11 에 캡처 모니터 하나를 나눴다). 한 화면에 담기·검출·OCR·스크립트를
@@ -584,9 +644,10 @@ DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)�
   `==` 로 다르다. 눈에 안 보이는 차이지만 "고른 사각형" 을 못 찾는 식으로 샌다.
 - **라벨을 다 지우면 파일도 지운다.** 빈 파일을 남기면 학습 쪽 관습으로는 "배경 사진" 이라
   사람이 의도하지 않은 것을 가르치게 된다.
-- **몹은 지우지 않는다**(`LabelClasses` 에 지우기가 없다). 라벨에는 이름이 아니라 번호가
-  들어 있어, 중간을 지우면 뒤가 당겨져 찍어 둔 것이 조용히 다른 몹을 가리킨다.
-  이름 바꾸기는 번호가 그대로라 안전하다.
+- **몹은 아무 라벨에도 안 쓰인 것만 지운다**(`LabelDataset.RemoveClass`, 2026-09-14). 라벨에는 이름이 아니라 번호가
+  들어 있어, 중간을 지우면 뒤가 당겨져 찍어 둔 것이 조용히 다른 몹을 가리킨다. 그래서 지울 때 뒤 번호가 든 라벨 파일과
+  색(class-colors.json)을 같이 당기고, 쓰인 몹은 어느 파일에 쓰였는지 말하고 거절한다(`FindLabelsUsing`) - 사각형을 먼저
+  지우게. 시험으로 넣은 몹처럼 안 찍은 것은 잃을 것이 없어서 열었다. 이름 바꾸기는 번호가 그대로라 안전하다.
 
 ### 학습 (TorchSharp) - 실측해 둔 것
 
@@ -695,9 +756,9 @@ ML.NET `ObjectDetectionTrainer` 의 기본 `InitLearningRate` 는 1.0(SGD) 이�
   목록에는 그림마다 **마지막 loss** 를 적는다 - 혼자 높은 그림이 라벨이 틀렸거나 다시 찍을
   장면이다. "이건 다시 찍어야겠다" 는 그림을 지켜보는 것보다 이 숫자로 고르는 것이 빠르다.
 - **쪽지(detector.json)에 사람이 물을 만한 것을 다 적는다** - 몇 번째 학습인지(지난 쪽지 +1),
-  언제, 크기, 장수·사각형·몹 종, 바퀴, 걸린 시간, GPU 여부, 학습률, 마지막 loss, 되찾기 결과.
+  언제, 크기, 장수·사각형·몹 종, 바퀴, 걸린 시간, GPU 여부, 학습률, 마지막 loss, 재현율 결과.
   화면의 "모델" 줄(`ModelSummary`)이 이것을 한 줄로 보인다. 옛 쪽지는 있는 것만 적는다.
-- **학습이 끝나면 학습 그림을 되찾아 목록에 "2/2" 로 적는다** (`RunSelfCheckAsync`). loss 를
+- **학습이 끝나면 학습 그림을 다시 찾아 목록에 "2/2" 로 적는다** (`RunSelfCheckAsync`). loss 를
   인식률로 읽는 일이 있어("인식률 맞지?") 개수로 따로 보인다. 계산은 하네스 `--detect-check`
   와 같은 `DetectionMatch`(IoU 0.5, 라벨 하나에 검출 하나) 다 - 두 벌이면 숫자가 어긋난다.
   학습에 쓴 그림이라 외운 것도 맞은 것으로 센다. 한 장 0.3초라 학습의 일부로 돈다.
@@ -824,7 +885,9 @@ CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 �
 
 ### 크기를 바꾸려면
 
-화면(라벨링 → 학습 칸)에서 **320x180 · 480x270 · 640x360 · 960x540** 중에 고른다.
+화면(라벨링 → 학습 칸)에서 **320x180 · 480x270 · 640x360 · 960x540** 중에 고른다. **기본은 640x360** 이다(2026-09-14,
+`LabelingViewModel.DefaultInputSize`) - 이 데이터셋에서 320·480 은 30% 대라 쓸 일이 없고, 목록에 남긴 것은 나중에 해상도가 낮은
+게임을 위해서다. 옛 설정의 값은 `InputSizeDefaultVersion` 으로 한 번 640 으로 되돌린다.
 1080p 화면에서 60px 짜리 몹은 320x180 으로 줄이면 10px 가 되어 잘 안 잡힌다 -
 **작은 몹을 놓칠 때만** 키운다. 대신 위 표만큼 느려지고 학습 시간도 같은 비율로 늘어난다.
 
@@ -866,12 +929,55 @@ ONNX 로 32ms 가 되자 그 값이 **조준을 붙잡는 쪽**이 됐다 - 조�
 
 | | 옛 모델(우리 학습, 640x360) | 새 모델(D-FINE-N 640x640) |
 |---|---|---|
-| 되찾기 | 135/192 (70%) | **191/192 (99%)** |
+| 재현율 | 135/192 (70%) | **191/192 (99%)** |
 | 헛것 | 5 | **0** |
 | 추론 한 장 | 606 ms | **32 ms** |
 | 모델 | 83 MB + libtorch 4.3GB | 15 MB, 받을 것 없음 |
 
 학습하는 법은 `docs/ONNX-모델-학습.md`.
+
+**YOLO11 도 시험했다** (2026-09-14, 같은 98장, `Vision/Inference/Onnx/YoloDecoder` - `output0` 을 풀고 몹별 겹침 제거 0.45):
+YOLO11n 은 학습 5분 · 재현율 194/194 · **추론 10.9ms**(D-FINE 28.5ms), YOLO11s 는 10분 · 194/194 · 23.5ms. DirectML 이 YOLO 는 맞게
+계산한다(MatMul 고칠 것 없음). 재현율은 D-FINE 과 같고 속도·학습 시간만 앞선다.
+
+**모델 정책(사용자, 2026-09-14): 내 PC 시험은 YOLO11n, 배포는 D-FINE-N.** YOLO 는 AGPL 이라 남에게 넘기는 모델에 못 쓴다.
+- **라벨링 화면 "쓰는 모델" 콤보로 고른다**(2026-09-14). 목록은 데이터셋 폴더의 보관본 `detector.<이름>.onnx`(지금 `detector.yolo11n.onnx`·
+  `detector.d-fine-n.onnx`)과 이 화면의 학습 모델 `detector.zip`. 고르면 `DetectorFiles.Use` 가 보관본과 쪽지를 몹 찾기 자리(`detector.onnx`)에
+  복사하고 시각을 지금으로 찍는다 - 켜 둔 스크립트·플레이 화면은 시각이 바뀐 것을 보고 몇 초 안에 따라온다. 보관본은 지우지 않는다.
+- **배포 전에는 콤보에서 D-FINE-N 을 고른다.** 줄에 "D-FINE-N (ONNX · 늘리기)" 가 뜨면 된 것이다. 모델은 설치 패키지(publish.ps1)가 아니라
+  데이터셋 폴더에 있다. 명령으로 하려면 `--import-onnx --model=<몹>\detector.d-fine-n.onnx --size=640x640 --fit=늘리기 --name=D-FINE-N`.
+- 모델 쪽지에 `modelName` 이 있다. `--import-onnx --name=` 으로 적고, 이름이 있으면 보관본(`KeepAsChoice`, 이름을 소문자·공백은 -)도 남긴다.
+  `--detect-check` 는 재현율을 지금 모델과 그 보관본 쪽지에 적는다 - 콤보 옆 줄이 그것을 읽는다.
+- 데이터를 늘려 다시 학습할 때도 둘 다: 빠른 확인은 YOLO11n(5분), 배포 모델은 D-FINE-N 을 다시 학습(1시간 45분) - 절차는 `docs/ONNX-모델-학습.md`.
+- **자리는 둘로 나눈다**(사용자 결정 2026-09-14) - 도구와 내 것을 한 폴더에 두면 "학습 폴더를 다시 만들어라" 가 데이터를 지우라는 말이 된다.
+  - **학습 경로** `Vision.TrainingRoot`(`Vision/Training/TrainingPaths`) - 도구다. `yolo-venv`(파이썬 3.14 · torch cu126 · ultralytics) ·
+    `dfine-venv`(uv 파이썬 3.12 · torch cu124) · `D-FINE`(저장소 + 우리 설정) · `dfine_n_coco.pth` · `runs`(결과·로그). 지워도 `도구\학습-환경-준비.ps1`
+    로 다시 만들면 된다(둘 다 약 5.5GB, 이미 있으면 건너뛰고 옛 자리의 것은 옮긴다).
+  - **프로젝트 경로** `Vision.ProjectsRoot`(`Vision/ProjectPaths`) - 내 것이다. `Datasets\<게임>`(사진·라벨·모델·영역) · `captures`(프레임 저장).
+    다시 만들 수 없다 - 백업할 것은 이쪽이다. 데이터셋만 따로 두려면 라벨링 화면의 `폴더 고르기`(`Vision.DatasetRoot`)가 이긴다.
+  - 둘 다 **설정 화면(ConfigView) "폴더"** 에서 고른다. 기본값은 **설치 루트 아래**(`Helper/InstallPaths` - 실행 폴더가 아니라 그 부모다.
+    Velopack 이 업데이트 때 `current` 를 통째로 갈아 끼우므로 그 안에 두면 사라진다). 설치 루트는 앱을 제거하면 같이 지워지니 오래 모을 사진은
+    설정에서 다른 드라이브로 옮긴다. 옛 자리(%AppData%)에 이미 있으면 그것을 계속 쓴다 - 말없이 빈 폴더를 보여 주지 않는다.
+  - **하네스도 `UserDataPaths.Initialize()` 를 부른다**(Program.Main 맨 앞) - 안 부르면 AppSettingUtility 가 하네스 bin 폴더를 봐서 두 경로가
+    기본값으로 떨어지고 "모델이 없다" 가 된다(실측).
+  - 앱은 환경을 안 받는다 - 없으면 무엇이 없는지 적고 그 스크립트를 가리킨다. **가상환경은 복사해 못 옮긴다**(pyvenv.cfg 에 그 PC 파이썬 경로가
+    박힌다) - 새 PC 에서는 다시 만든다. 자세한 표는 `docs/ONNX-모델-학습.md` 0.5 절.
+- **라벨링 화면 학습 버튼은 콤보에 고른 모델로 학습한다**(버튼 글 "YOLO11n 학습" 처럼 이름을 붙인다). YOLO 면 `Vision/Training/YoloTrainer` 가
+  `yolo-venv` 파이썬으로 앱 출력의 `Tools\yolo-학습.py`(csproj 가 `도구\` 에서 복사)를 띄워 바퀴마다 진행·box loss 를 읽고, 끝나면 ONNX 를 들여
+  보관본을 갈아 끼우고 재현율을 잰다. 멈추기는 파이썬 프로세스 트리를 끈다. D-FINE-N 이 골라져 있으면 버튼이 꺼진다("앱 밖에서 학습").
+  **옛 TorchSharp 학습(AutoFormerV2·detector.zip)은 화면에서 뺐다**(2026-09-14, "안 쓰는 건 없애줘 - 헷갈린다") - 크기 고르기·따라가기·그림별 loss·◀ 열·
+  libtorch 받기 안내가 같이 빠졌고 콤보에도 안 뜬다. 엔진(`DetectorTrainer`·`LibTorchRuntime`)은 하네스(`--train-check` 등)와 ONNX 가 없을 때의 대체 경로가 쓴다.
+  아래 「학습률」「모델이 보는 크기」 등 TorchSharp 절의 화면 이야기(따라가기·목록 loss·크기 콤보)는 그 시절 기록이다.
+  **D-FINE 이면 `Vision/Training/DFineTrainer`** 가 제 저장소를 돌린다(2026-09-14, 사용자 결정 "어느 모델로 할지는 사용자가 정할 문제") - 데이터셋을
+  COCO 로 내보내고(`DatasetExport.WriteCoco`) `mob_detection.yml` 의 사진 자리·몹 수를 지금 것으로 다시 쓴 뒤 `train.py -u epochs=N` →
+  `export_onnx.py` → `도구\onnx-DirectML-고치기.py` 를 이어 돌리고 **늘리기**로 들인다. 진행은 저쪽이 찍는 `Epoch: [3/60]` 줄로 읽는다.
+  환경이 없으면 만들지 않고 `도구\학습-환경-준비.ps1` 을 한 번 돌리라고 알린다. Ultralytics 진행 줄은 앞에 `ESC[K` 가 붙어 떼고 읽는다(실측).
+  `--yolo-train --root=<시험 폴더> [--epochs=2]` 가 같은 길을 화면 없이 돈다 - 들이기까지 하므로 **앱이 쓰는 폴더에는 돌리지 않는다**.
+- **YOLO11n 한 방 명령: `.\도구\yolo-학습.ps1`** - 환경 만들기(없으면) → 학습·ONNX 내보내기(`도구\yolo-학습.py`) → 하네스 빌드 → 들이기(`--fit=비율`)
+  → 재현율 → 속도. 앱을 닫고 돌린다(실행 파일 잠금). 실측 98장: 전부 약 7분, 195/195 · 헛것 0 · 10.3ms. 앱 안에서는 라벨링 화면 학습 버튼이 같은 일을 한다. 5.1 에서 돌게 짰다 - 삼항 연산자 없음, 한글 때문에 UTF-8 BOM, 파이썬 stderr 구간은 `Continue`.
+- 시험 폴더 `Datasets\몹-yolo`(11n)·`몹-yolo11s` 는 사진·라벨이 junction 이라 복사가 아니다.
+`--import-onnx` 는 `--root=` 가 없으면 앱 설정 폴더의 detector.onnx 를 **덮는다** - 다른 모델을 시험할 때는 꼭 준다.
+`--onnx-detect` 는 결과 그림을 임시 폴더에 남긴다 - 예전에는 원본 옆(데이터셋 images)에 써서 라벨링 목록에 끼어들었다.
 
 **DirectML 은 `MatMul(행렬, 1차원 벡터)` 을 틀리게 계산한다** (2026-09-13 실측, onnxruntime-directml
 1.24.4 / DirectML 1.15.4). 그 벡터를 아예 무시하고 행 합계를 돌려준다:
@@ -896,7 +1002,7 @@ D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 �
 | | 640x360 (20 바퀴) | 480x270 (20 바퀴) | 480x270 (40 바퀴) |
 |---|---|---|---|
 | 추론 한 장 | ~700 ms | 453 ms | 486 ms |
-| 되찾기 | 135/192 (70%) | 62/192 (32%) | 58/192 (30%) |
+| 재현율 | 135/192 (70%) | 62/192 (32%) | 58/192 (30%) |
 | 헛것 | 5 | 40 | 20 |
 | 마지막 loss | 0.369 | 0.425 | 0.422 |
 
@@ -959,7 +1065,7 @@ D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 �
   WPF 로 640 으로 줄인 PNG 60/64 · 80%. 차이는 가장 작은 봇 둘뿐). 실시간에서 흔들리면
   경로가 아니라 **거리**(학습 범위 밖의 작은 봇)와 **움직임**(0.65초 사이 이동)을 본다.
 - **추론용 임시 PNG 는 모델이 보는 크기 이상으로 만든다**(`Math.Max(320, InputWidth)`). 320 으로
-  고정했더니 640x360 모델이 320 짜리를 도로 키워 봐서, 되찾기 검사(원본)는 97% 인데 실시간은
+  고정했더니 640x360 모델이 320 짜리를 도로 키워 봐서, 재현율 검사(원본)는 97% 인데 실시간은
   작은 봇을 못 봤다. 상태 줄의 "(320x180, …ms)" 가 그 임시 그림 크기다.
 - 추론용 임시 PNG 는 프로세스마다 이름을 나눈다. 앱이 강제로 죽으면 정리가 안 돌아
   실제로 두 개가 남았던 적이 있어, 켤 때 옛것을 치운다.
@@ -1091,8 +1197,10 @@ D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 �
   화면 좌표 ↔ 0~1 변환은 이 안 두 곳(`ToScreen`·`ToNormalized`)에서만 한다.
 - 캔버스는 컬렉션(`Boxes`)을 **직접 고친다**. 사각형 하나 그릴 때마다 커맨드로 올렸다
   내리면 좌표를 두 번 옮겨 적게 되고 얻는 것이 없다. ViewModel 은 `CollectionChanged` 로 안다.
-- 몹 색은 번호에서 만든다(황금각 137.5도). 목록에 색을 적어 두면 몹이 늘 때마다 색을
-  새로 골라야 한다.
+- 몹 색은 **처음에는 번호에서 만들고**(황금각 137.5도, `LabelPalette.DefaultColor`) 사람이 몹 그리드의 색 칸에서 고르면
+  그것만 데이터셋 폴더의 `class-colors.json` 에 남는다(`LabelPalette`, 번호 순 배열, 안 고른 자리는 null). classes.txt 에
+  안 넣는 것은 그 파일이 YOLO 형식이라서다. 번호로 매어 이름을 바꿔도 따라오고 몹을 지우면 같이 당긴다. 캔버스는
+  `ClassColors` 로 받고, 없는 번호는 기본 색이다. 스크립트 화면의 겹그림(DetectionOverlay)은 여전히 기본 색이다.
 - 학습은 **라벨링 화면 아래 칸**에 있다. 바퀴 수를 정하고 누르면, libtorch 가 없으면
   먼저 받고(물어본다) 이어서 학습한다. "받기" 버튼을 따로 두지 않는 것은, 그러면 사람이
   그것을 먼저 눌러야 한다는 걸 알아야 하고 안 눌렀을 때 학습이 왜 안 되는지도 설명해야 해서다.
@@ -1108,6 +1216,35 @@ D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 �
   `File.Exists` 를 보므로, 그대로 얹으면 화면이 한 번 읽고 그만이라 **방금 저장했는데도
   표시가 안 켜진다**(실제로 그랬다). 컬렉션의 줄을 갈아 끼워 다시 그리게 하는 방법은
   고른 줄이 풀리면서 `SelectedItem` 이 null 로 떨어져 찍던 사각형이 지워진다.
+- **라벨링 화면 뼈대는 캡처 화면과 같다**(2026-09-14): 위 도구 줄(데이터셋), 가운데 `dxdo:DockLayoutManager`
+  (세로 그룹: 위에 그림 0.22* | 라벨 0.58* | 몹 0.2* 가로 그룹, 아래 학습 패널. 캡션 없음, 끌기·띄우기·닫기·숨기기 막음 -
+  배치를 저장하지 않는다), 맨 아래 상태 줄. 학습 칸은 `dxlc:LayoutControl`(폼 칸 규칙). 도킹 패널은 Auto 높이가 없어 학습 패널은
+  **내용(LayoutControl)의 ActualHeight 를 픽셀 ItemHeight 로 묶는다**(`Markup/PixelsToGridLengthConverter`) - 190px 로 못 박았더니
+  모델 줄 아래가 비었다. 내용은 ScrollViewer 안에 `VerticalAlignment=Top` 으로 둔다 - 안 붙이면 ScrollViewer 가 내용을 뷰포트
+  높이로 늘려 "패널 = 내용 + 10" 이 배치마다 자라는 되먹임이 된다(실측). 안내 줄이 생기면 같이 자라고, 스플리터를 끌면 그 뒤로는
+  손으로 잡은 높이다(지역값이 바인딩을 덮는다). **`--labeling-screen [--out=png]`** 이 화면 밖 창에 띄워 패널·내용 높이·가장 아래
+  요소 밑선을 재고(자라는지·잘리는지·40px 넘게 비는지), 바인딩 오류를 모으고, PNG 로 찍는다(실측 139px 패널 / 129px 내용).
+  - **그림 목록의 열은 내용 너비(Auto)고 패널은 열 합만큼 넓다.** `ApplyColumnAutoWidth` 는 ViewModel 의 `InitializeControls` 에서
+    직접 부른다 - XAML 첨부 속성은 콜백이 GridControl 에서만 돌고 그때는 열이 없어 헛일이다(실측: 전부 Pixel). 패널 너비는 그리드의
+    `LayoutUpdated` 마다 보이는 열 `ActualWidth` 합 + 행 번호 칸 + 24(스크롤 막대·테두리)를 `ImagesPanelWidth` 로 되돌려 `ItemWidth`
+    에 묶는다(`PixelsToGridLengthConverter`, 0 이면 `FallbackValue` 0.22*). 열이 내용 너비라 그리드 너비와 무관해 되먹임이 없다.
+  - **배치 저장**: 두 그리드의 정렬·열 순서(`LayoutSerializationService`, `ImagesGridLayout`·`ClassGridLayout`, `GridLayoutVersion`)와
+    몹 패널 너비(`ClassesPanelWidth`)만 남긴다. 그림 패널 너비·학습 패널 높이는 내용에서 매번 재고, 도킹 배치 전체는 끌기·띄우기를
+    막아 둬 바뀔 것이 없다. 복원은 ContextIdle 에 얹고 그 뒤 그림 그리드를 다시 Auto 로 놓는다(복원이 열을 Pixel 로 써 넣는다).
+    `ActualShowSearchPanel` 은 복원 글에서 지운다(캡처 화면과 같은 이유).
+  - **그림·몹 목록은 GridControl** 이다. 그림은 loss 열로 정렬해 혼자 높은 그림을 찾고, 몹은 이름·색 칸을 그리드 안에서 고친다
+    (`LabelClassRow`, `PropertyChanged` → `OnClassRowChanged` 가 classes.txt · class-colors.json 에 쓴다. 빈 이름·겹치는 이름은
+    되돌린다). 번호 열은 없고 두 그리드 다 행 번호 인디케이터다(`IsRowNumber` + `IndicatorWidth` 되돌리기). **처음에는 어느 칸도
+    안 열리고 더블 클릭한 칸(이름·색)과 더하기 직후의 이름 칸만 열린다**(`ShowingEditor` 에서 막고 `_allowClassEdit` 로 연다, VS
+    솔루션 탐색기와 같은 수법) - 한 번 누를 때마다 열리면 줄을 고르려다 편집이 된다. 색은 `PopupColorEditSettings`. 더하기는
+    임시 이름("몹 3")으로 넣고 바로 이름 칸을 연다(`BeginRename`) - 이름 칸이 따로 없고 이름 바꾸기 버튼도 없다. 지우기는 그리드에서
+    고른 줄을 전부(`SelectedItems`), 뒤 번호부터 지운다 - 앞을 먼저 지우면 뒤 번호가 당겨져 다른 몹을 지운다. 몹 그리드는 정렬을
+    막는다 - 줄의 자리가 곧 번호다. 그리드 선택(`SelectedClass`)과 번호(`SelectedClassIndex`)는 서로 맞추되 목록을 다시 채울 때
+    잠깐 null 이 되는 순간에는 번호를 안 잃는다.
+  - **그림 판 확대·옮기기는 `LabelCanvas` 안에서 한다**(`Zoom`, 휠 = 마우스 아래를 두고, 오른쪽 끌기 = 옮기기, 도구 줄 확대 콤보·맞춤).
+    캡처 미리보기처럼 LayoutTransform 으로 키우면 테두리·글자까지 굵어져 경계가 안 보인다 - 그래서 `ComputeImageRect` 가 그림 자리에만
+    배율을 곱하고 좌표 변환은 여전히 `ToScreen`·`ToNormalized` 둘뿐이다. 그림을 넘겨도 배율·자리는 그대로다(연달아 담은 그림은 몹이
+    같은 자리). 배율은 `LabelZoom` 설정에 남는다.
 
 ## 검증
 
@@ -1117,12 +1254,14 @@ D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 �
 ```
 dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 경로별 전체
 dotnet run --project Minguk.Tools.Tests -c Debug -- --views               # 화면 생성만 (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --labeling-screen     # 라벨링 화면을 화면 밖에 띄워 학습 패널 높이·바인딩 오류·PNG (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --vision              # 라벨·학습 준비·추론 변환 (안전, 2초)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --solution            # 솔루션·프로젝트 모델 (안전, 임시 폴더만)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --canvas-drag         # 라벨 캔버스를 실제 마우스로 끌기 (커서 3초)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --fallback            # 드라이버 없는 상황
 dotnet run --project Minguk.Tools.Tests -c Debug -- --calibrate           # 정규화 규칙 실측
 dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-bench        # 추론 속도 (libtorch 필요)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 학습한 모델이 라벨을 되찾는지 (libtorch 필요)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 학습한 모델이 라벨을 다시 찾는지 (libtorch 필요)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --scale-check         # 실시간 경로(WPF 축소 PNG)와 파일 경로가 같은 답인지
 ```
 
@@ -1132,7 +1271,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --scale-check         # 실�
   커서를 못 쓴다. `--backend=` 로 도는 전체 검증에도 그대로 끼므로 한 번에 다 볼 수도 있다.
 - `--detect-bench` 는 libtorch(4GB)와 학습한 `detector.zip` 이 있어야 돈다. 없으면 그렇게 말하고 끝난다.
 - **학습이 끝나면 `--detect-check` 로 본다.** "끝났습니다" 는 모델이 만들어졌다는 뜻이지 찾는다는
-  뜻이 아니다. 라벨 찍은 그림마다 검출을 돌려 IoU 0.5 이상으로 되찾은 개수와 헛것을 센다.
+  뜻이 아니다. 라벨 찍은 그림마다 검출을 돌려 IoU 0.5 이상으로 다시 찾은 개수와 헛것을 센다.
   문턱 기본은 앱과 같은 50% (`--score=` 로 바꾼다). 실측(14장·60바퀴): 50% 에서 17/27 · 헛것 9,
   30% 에서 23/27 · 헛것 70.
   학습에 쓴 그림이라 외운 것도 맞은 것이 된다 - 여기서 못 찾으면 확실히 문제고, 다 찾아도
@@ -1166,6 +1305,9 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --scale-check         # 실�
   콤보에는 보이는데 ViewModel 은 그대로여서, **화면과 실제 동작이 어긋난다** —
   입력 자동화 화면에서 콤보는 PostMessage 라고 하는데 실제로는 SendInput 으로 나가고 있었다.
   `Mode=TwoWay, UpdateSourceTrigger=PropertyChanged` 를 함께 적는다.
+- **칸 옆에 버튼을 두지 말고 `dxe:ButtonEdit` 안에 넣는다**(폴더 고르기·지금 읽기처럼). 그때 **`AllowDefaultButton="False"` 를 같이 적는다** -
+  `Buttons` 에 넣은 것은 기본 `…` 버튼 **옆에** 더해져 버튼이 둘이 되는데, 그 기본 버튼은 커맨드가 없어 눌러도 아무 일도 안 한다.
+  쓰는 곳은 설정 화면의 학습·프로젝트 경로와 스크립트 화면의 영역 이름 칸이다.
 - ViewModel 간 통신은 직접 참조 대신 `MessengerUtility` 를 쓴다.
 - 예외는 `ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName())` 로 보여 주고 NLog 로 남긴다.
 - `Libs/DirectML/x64/` 의 DirectML 네이티브는 NuGet 이 아니라 저장소에서 나간다.

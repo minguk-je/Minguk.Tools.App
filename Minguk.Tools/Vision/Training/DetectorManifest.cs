@@ -39,6 +39,16 @@ public sealed class DetectorManifest
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public DetectorEngine Engine { get; set; } = DetectorEngine.Torch;
 
+    /// <summary>
+    /// 사람이 읽을 모델 이름("YOLO11n", "D-FINE-N"). 들일 때 적는다. 없으면 엔진 이름으로 부른다.
+    /// </summary>
+    /// <remarks>
+    /// 2026-09-14 에 생겼다. 시험은 YOLO11n, 배포는 D-FINE-N 으로 같은 자리(detector.onnx)를 번갈아 쓰게 되어,
+    /// 화면의 "쓰는 모델" 줄이 둘을 가르지 못하면 배포 전에 되돌렸는지 눈으로 확인할 길이 없다.
+    /// </remarks>
+    [JsonPropertyName("modelName")]
+    public string? ModelName { get; set; }
+
     [JsonPropertyName("inputWidth")]
     public int InputWidth { get; set; } = LegacyWidth;
 
@@ -94,7 +104,7 @@ public sealed class DetectorManifest
     [JsonPropertyName("usedGpu")]
     public bool UsedGpu { get; set; }
 
-    /// <summary>학습 뒤 학습 그림을 되찾은 결과. 되찾기를 안 돌렸으면 비어 있다.</summary>
+    /// <summary>학습 뒤 학습 그림을 다시 찾은 결과. 재현율을 안 돌렸으면 비어 있다.</summary>
     [JsonPropertyName("recallFound")]
     public int? RecallFound { get; set; }
 
@@ -112,7 +122,7 @@ public sealed class DetectorManifest
     /// </summary>
     /// <remarks>
     /// 한 폴더에 우리 학습(detector.zip)과 밖에서 가져온 detector.onnx 가 같이 있을 수 있다. 쪽지를 하나만 두면
-    /// 가져오기가 입력 크기를 640x640 으로 덮어써, 640x360 으로 학습한 옛 모델이 되찾기 70%→0% 가 됐다(실측).
+    /// 가져오기가 입력 크기를 640x640 으로 덮어써, 640x360 으로 학습한 옛 모델이 재현율 70%→0% 가 됐다(실측).
     /// 옛 이름(detector.json)은 zip 쪽이 그대로 쓴다 - 이미 있는 데이터셋을 건드리지 않으려고.
     /// </remarks>
     public static string PathFor(string modelPath)
@@ -178,18 +188,25 @@ public sealed class DetectorManifest
         {
             var parts = new System.Collections.Generic.List<string>();
 
+            // 무엇인지가 맨 앞이다 - YOLO11n(시험)과 D-FINE-N(배포)이 같은 자리를 번갈아 쓴다.
+            parts.Add(Engine == DetectorEngine.Onnx
+                ? $"{ModelName ?? "ONNX 모델"} (ONNX · {(Letterbox ? "비율" : "늘리기")})"
+                : $"{ModelName ?? "AutoFormerV2"} (TorchSharp)");
+
             if (TrainCount > 0) parts.Add($"{TrainCount}번째 학습");
             if (TrainedAt != default) parts.Add(TrainedAt.ToString("MM-dd HH:mm"));
             parts.Add($"{InputWidth}x{InputHeight}");
-            parts.Add($"그림 {Images}장 · 사각형 {Boxes}개 · 몹 {Classes.Length}종");
-            parts.Add($"{Epochs}바퀴");
+
+            // 밖에서 들인 ONNX 는 우리 학습 기록이 없다(0 으로 둔다) - "그림 0장 · 0바퀴" 를 적으면 안 배운 모델처럼 보인다.
+            if (Images > 0) parts.Add($"그림 {Images}장 · 사각형 {Boxes}개 · 몹 {Classes.Length}종");
+            if (Epochs > 0) parts.Add($"{Epochs}바퀴");
             if (ElapsedSeconds > 0) parts.Add($"{ElapsedSeconds / 60:0.0}분 ({(UsedGpu ? "GPU" : "CPU")})");
             if (LearningRate > 0) parts.Add($"학습률 {LearningRate:0.###}");
             if (FinalLoss is { } loss) parts.Add($"마지막 바퀴 loss {loss:0.00}");
 
             if (RecallFound is { } found && RecallLabels is { } labels && labels > 0)
             {
-                var recall = $"되찾기 {found}/{labels} ({100.0 * found / labels:0}%)";
+                var recall = $"재현율 {found}/{labels} ({100.0 * found / labels:0}%)";
                 if (RecallExtra is > 0) recall += $" · 헛것 {RecallExtra}";
                 if (RecallThreshold is { } threshold) recall += $" @{threshold:P0}";
                 parts.Add(recall);

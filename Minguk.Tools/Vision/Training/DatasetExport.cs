@@ -33,7 +33,7 @@ public static class DatasetExport
     /// </summary>
     /// <remarks>
     /// 학습·검증을 나누지 않고 같은 폴더를 준다. 97장에서 10장을 떼면 검증 숫자가 너무 흔들려 쓸모가 없다 -
-    /// 대신 학습 뒤 <c>--detect-check</c> 로 <b>학습에 쓴 그림을 되찾는지</b> 본다(옛 모델과 같은 잣대).
+    /// 대신 학습 뒤 <c>--detect-check</c> 로 <b>학습에 쓴 그림을 다시 찾는지</b> 본다(옛 모델과 같은 잣대).
     /// </remarks>
     public static string WriteYolo(LabelDataset dataset, string? path = null)
     {
@@ -109,7 +109,7 @@ public static class DatasetExport
                     id = annotationId++,
                     image_id = imageId,
                     // 분류 번호는 우리 것(0부터) 그대로 둔다. COCO 관습은 1부터지만, 그렇게 적으면 학습한 모델의
-                    // 0번 자리가 비고 우리 라벨(0번)과 한 칸씩 어긋나 되찾기가 0% 가 된다. 학습기는 번호를 그대로 쓴다.
+                    // 0번 자리가 비고 우리 라벨(0번)과 한 칸씩 어긋나 재현율이 0% 가 된다. 학습기는 번호를 그대로 쓴다.
                     category_id = classId,
                     bbox = new[] { Math.Round(left, 2), Math.Round(top, 2), Math.Round(boxWidth, 2), Math.Round(boxHeight, 2) },
                     area = Math.Round(boxWidth * boxHeight, 2),

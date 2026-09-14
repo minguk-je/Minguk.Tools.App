@@ -6,7 +6,7 @@ using Minguk.Tools.Vision.Labeling;
 namespace Minguk.Tools.Vision.Inference;
 
 /// <summary>
-/// 사람이 찍은 사각형과 모델이 찾은 것을 짝지어 "몇 개를 되찾았나" 를 센다.
+/// 사람이 찍은 사각형과 모델이 찾은 것을 짝지어 "몇 개를 다시 찾았나" 를 센다.
 /// </summary>
 /// <remarks>
 /// 라벨링 화면의 그림별 인식률과 하네스 <c>--detect-check</c> 가 같은 계산을 써야 한다.
@@ -20,7 +20,7 @@ public static class DetectionMatch
     /// <summary>이만큼 겹치면 같은 것을 찾은 것으로 친다. 검출 쪽에서 흔히 쓰는 기준이다.</summary>
     public const double MatchIou = 0.5;
 
-    /// <summary>되찾은 라벨 수와 라벨에 안 붙은 검출(헛것) 수.</summary>
+    /// <summary>다시 찾은 라벨 수와 라벨에 안 붙은 검출(헛것) 수.</summary>
     public readonly record struct Result(int Found, int Labels, int Extra)
     {
         public bool IsComplete => Found == Labels;

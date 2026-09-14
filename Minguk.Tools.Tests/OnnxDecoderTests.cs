@@ -95,11 +95,59 @@ internal static partial class Program
                   found.Count == 0 ? "하나도 안 나왔다" : $"{found.Count}개, {first.Describe} 가운데({first.Box.CenterX:0.000}, {first.Box.CenterY:0.000}) 크기({first.Box.Width:0.000})");
         }
 
+        // ── YOLO(Ultralytics): output0 [1, 4+몹수, 후보수]. 중심 xywh 픽셀 + 몹별 점수. 겹침은 우리가 누른다 ──
+        {
+            var decoder = new YoloDecoder();
+            var classes = new LabelClasses(["일반 봇", "다른 몹"]);
+            var map = LetterboxMap.For(1920, 1080, 640, 640, letterbox: false);
+
+            // 후보 여덟(채널 6 = 4 + 몹 2). 채널이 먼저다: 채널마다 후보 여덟이 이어진다. 뒤 넷은 점수 0 인 빈 후보 -
+            // 해석기가 "후보 축이 채널 축보다 길다" 로 모양을 가리므로 후보가 채널보다 많아야 한다(실제 모델은 8,400개다).
+            //   0: 가운데 64x64, 일반 봇 0.9
+            //   1: 0 과 거의 같은 자리(4px 옆), 일반 봇 0.7  → 겹쳐서 눌린다
+            //   2: 0 과 같은 자리, 다른 몹 0.6              → 다른 몹이라 산다
+            //   3: 왼쪽 위, 일반 봇 0.2                    → 문턱 아래
+            const int n = 8;
+            float[] cx = [320, 324, 320, 64, 0, 0, 0, 0], cy = [320, 320, 320, 32, 0, 0, 0, 0];
+            float[] w = [64, 64, 64, 64, 0, 0, 0, 0], h = [64, 64, 64, 64, 0, 0, 0, 0];
+            float[] bot = [0.9f, 0.7f, 0.05f, 0.2f, 0, 0, 0, 0], other = [0.1f, 0.1f, 0.6f, 0.1f, 0, 0, 0, 0];
+            var output = cx.Concat(cy).Concat(w).Concat(h).Concat(bot).Concat(other).ToArray();
+
+            var found = decoder.Decode(
+                new Dictionary<string, (float[], long[])> { ["output0"] = (output, [1, 6, n]) },
+                map, classes, minimumScore: 0.5f);
+
+            var first = found.Count > 0 ? found[0] : default;
+            var second = found.Count > 1 ? found[1] : default;
+
+            Check("YOLO: 중심 xywh 를 원본 0~1 로 · 같은 몹의 겹침은 누르고 다른 몹은 산다 · 문턱 아래는 버린다",
+                  found.Count == 2
+                  && first.Label == "일반 봇" && Near(first.Score, 0.9, 0.001)
+                  && Near(first.Box.CenterX, 0.5, 0.001) && Near(first.Box.CenterY, 0.5, 0.001) && Near(first.Box.Width, 0.1, 0.001)
+                  && second.Label == "다른 몹" && Near(second.Score, 0.6, 0.001),
+                  found.Count == 0 ? "하나도 안 나왔다" : $"{found.Count}개, {string.Join(" / ", found.Select(f => f.Describe))}");
+
+            // 뒤집힌 모양 [1, 후보수, 4+몹수] 도 같은 답이어야 한다.
+            var transposed = new float[output.Length];
+            for (var i = 0; i < n; i++)
+                for (var c = 0; c < 6; c++)
+                    transposed[(i * 6) + c] = output[(c * n) + i];
+
+            var foundT = decoder.Decode(
+                new Dictionary<string, (float[], long[])> { ["output0"] = (transposed, [1, n, 6]) },
+                map, classes, minimumScore: 0.5f);
+
+            Check("YOLO: 뒤집힌 출력도 같은 답",
+                  foundT.Count == 2 && foundT[0].Label == first.Label && Near(foundT[0].Box.CenterX, first.Box.CenterX),
+                  $"{foundT.Count}개");
+        }
+
         // ── 아는 출력인지 팩터리가 가린다 ──
         {
             Check("해석기는 제 출력만 맡는다",
                   new DetrDecoder().CanDecode(["logits", "pred_boxes"]) && !new DetrDecoder().CanDecode(["output"])
-                  && new DFineDecoder().CanDecode(["labels", "boxes", "scores"]) && !new DFineDecoder().CanDecode(["logits", "pred_boxes"]),
+                  && new DFineDecoder().CanDecode(["labels", "boxes", "scores"]) && !new DFineDecoder().CanDecode(["logits", "pred_boxes"])
+                  && new YoloDecoder().CanDecode(["output0"]) && !new YoloDecoder().CanDecode(["labels", "boxes", "scores"]),
                   "");
         }
     }

@@ -9,7 +9,7 @@ using Minguk.Tools.Vision.Training;
 namespace Minguk.Tools.Tests;
 
 /// <summary>
-/// 지정한 폴더의 데이터셋으로 학습하고 곧바로 되찾는지 센다. 앱 화면 없이.
+/// 지정한 폴더의 데이터셋으로 학습하고 곧바로 다시 찾는지 센다. 앱 화면 없이.
 /// </summary>
 /// <remarks>
 /// "학습이 되긴 되는데 실제 그림에서는 0개" 같은 것을 가르려면 조건을 하나씩 바꿔 가며

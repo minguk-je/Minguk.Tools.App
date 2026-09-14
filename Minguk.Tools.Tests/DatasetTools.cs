@@ -47,7 +47,9 @@ internal static class DatasetTools
         var fit = Program.ArgValue(args, "--fit=") ?? "늘리기";
         var letterbox = fit is "비율" or "letterbox" or "레터박스";
 
-        var dataset = new LabelDataset(LabelDataset.ConfiguredRoot);
+        // --root= 를 주면 그 폴더에 들인다. 다른 모델 가족을 시험할 때 쓰던 detector.onnx 를 덮지 않으려고 있다
+        // (YOLO 시험은 사진·라벨을 가리키기만 하는 Datasets\몹-yolo 에서 한다).
+        var dataset = new LabelDataset(Program.ArgValue(args, "--root=") ?? LabelDataset.ConfiguredRoot);
 
         // 들이기 전에 본다. 뒤에 보면 못 쓸 모델이 이미 자리에 앉은 뒤라, 쓰던 것까지 같이 잃는다.
         if (!CheckProviders(dataset, modelPath, width, height, letterbox) && !args.Contains("--그래도"))
@@ -56,12 +58,19 @@ internal static class DatasetTools
             return 1;
         }
 
-        var target = DetectorFiles.ImportOnnx(dataset, modelPath, width, height, letterbox);
+        // 화면의 "쓰는 모델" 줄에 뜰 이름. 시험(YOLO11n)과 배포(D-FINE-N)가 같은 자리를 번갈아 써서, 이름이 없으면 둘이 안 갈린다.
+        var name = Program.ArgValue(args, "--name=");
+        if (name is null) Console.WriteLine("이름(--name=)을 안 줬다 - 화면에는 \"ONNX 모델\" 로 뜬다. 예: --name=YOLO11n · --name=D-FINE-N");
 
-        Console.WriteLine($"들였다: {target} (입력 {width}x{height} · {(letterbox ? "비율 지켜 여백" : "늘려 맞춤")})");
+        var target = DetectorFiles.ImportOnnx(dataset, modelPath, width, height, letterbox, name);
+
+        // 이름이 있으면 보관본(detector.<이름>.onnx)도 남긴다 - 라벨링 화면 "쓰는 모델" 콤보에 뜨고 다시 고를 수 있게.
+        if (DetectorFiles.KeepAsChoice(dataset, name) is { } kept) Console.WriteLine($"보관본: {kept} (라벨링 화면 콤보에서 고른다)");
+
+        Console.WriteLine($"들였다: {target} ({name ?? "이름 없음"} · 입력 {width}x{height} · {(letterbox ? "비율 지켜 여백" : "늘려 맞춤")})");
         Console.WriteLine($"지금 쓰는 모델: {DetectorFiles.CurrentFor(dataset)}");
         Console.WriteLine();
-        Console.WriteLine("되찾기를 견주려면: --detect-check");
+        Console.WriteLine("재현율을 견주려면: --detect-check");
         Console.WriteLine("옛 모델로 돌아가려면: --use-trained");
 
         return 0;

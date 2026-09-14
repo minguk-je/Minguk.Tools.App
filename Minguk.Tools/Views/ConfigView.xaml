@@ -33,6 +33,7 @@
     <dxmvvm:Interaction.Behaviors>
         <dx:CurrentDialogService />
         <dx:DXMessageBoxService />
+        <!-- 학습 폴더 고르기. 선언하지 않으면 ViewModel 에서 부를 때 예외로 터진다. -->
         <dxmvvm:DispatcherService />
         <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}" EventName="Loaded" />
     </dxmvvm:Interaction.Behaviors>
@@ -95,6 +96,7 @@
                     MinValue="10" />
             </dxlc:LayoutItem>
         </dxlc:LayoutGroup>
+
 
         <dxlc:LayerSeparator
             Height="5"

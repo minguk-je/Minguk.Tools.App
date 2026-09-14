@@ -1,9 +1,7 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-
-using DevExpress.Mvvm;
 
 using Minguk.Base.Utilities;
 
@@ -13,148 +11,119 @@ using Minguk.Tools.Vision.Training;
 
 namespace Minguk.Tools.ViewModels;
 
+/// <summary>
+/// 학습 칸. "쓰는 모델" 콤보로 몹 찾기 모델을 고르고, YOLO 가 골라져 있으면 그것을 다시 학습한다.
+/// </summary>
+/// <remarks>
+/// 2026-09-14 에 옛 TorchSharp 학습(AutoFormerV2 · detector.zip)을 이 화면에서 뺐다 - 크기 고르기·따라가기·그림별 loss·libtorch 받기 안내가
+/// 딸려 있었는데 시험은 YOLO11n, 배포는 D-FINE-N 으로 정하고 나니 쓰지 않는 것이 화면을 헷갈리게만 했다. 엔진(DetectorTrainer·libtorch)은
+/// 하네스와 "ONNX 가 없을 때" 대체 경로가 쓰므로 남았다.
+/// </remarks>
 public partial class LabelingViewModel
 {
     private CancellationTokenSource? _trainingCts;
 
-    /// <summary>
-    /// 누르기 전에 알아야 할 것을 적는다.
-    /// </summary>
-    /// <remarks>
-    /// 2.2GB 를 받고 나서 "GPU 가 없어 못 씁니다" 라고 하면 안 된다. 받기 전에 말한다.
-    /// </remarks>
-    private void UpdateTrainingNotice() => Guard(() =>
-    {
-        if (!LibTorchRuntime.HasCudaDriver)
-        {
-            TrainingNotice =
-                "CUDA 를 쓸 수 있는 NVIDIA 드라이버가 없습니다. CPU 로도 돌릴 수는 있지만 " +
-                "실측으로 29배 느려(그림 8장 1 epoch 이 248초 대 8.6초) 실제 데이터셋에는 못 씁니다.";
-            return;
-        }
+    /// <summary>학습할 수 있는 모델이 골라져 있는가. YOLO(Ultralytics)와 D-FINE 둘 다 앱에서 돌린다.</summary>
+    private bool CanTrain => !IsTraining && SelectedModelChoice is { } choice && IsTrainable(choice.Name);
 
-        if (LibTorchRuntime.Installed is null)
-        {
-            TrainingNotice =
-                $"학습을 처음 누르면 libtorch 를 받습니다({LibTorchRuntime.DescribeSize(LibTorchFlavor.Cuda)}). " +
-                "한 번만 받고 다음부터는 바로 시작합니다.";
-            return;
-        }
+    /// <summary>이 모델을 앱이 학습할 수 있는가. 둘 다 밖의 파이썬을 띄우는 길이다(YOLO 는 yolo-venv, D-FINE 은 제 저장소).</summary>
+    private static bool IsTrainable(string? modelName)
+        => YoloTrainer.WeightsFor(modelName) is not null || DFineTrainer.Handles(modelName);
 
-        TrainingNotice = null;
-    });
+    /// <summary>고른 모델을 못 돌리는 이유. 다 갖춰져 있으면 null.</summary>
+    private static string? WhyCannotTrain(string modelName)
+        => DFineTrainer.Handles(modelName) ? DFineTrainer.WhyUnavailable() : YoloTrainer.WhyUnavailable();
 
     /// <summary>
-    /// 학습시킨다. libtorch 가 없으면 먼저 받는다.
+    /// 콤보에 고른 YOLO 모델을 다시 학습한다.
     /// </summary>
     /// <remarks>
-    /// 받는 것부터 학습까지 한 흐름으로 둔다. "받기" 버튼을 따로 두면 사람이 그것을 먼저
-    /// 눌러야 한다는 것을 알아야 하고, 안 눌렀을 때 학습 버튼이 왜 안 되는지도 설명해야 한다.
+    /// 끝나면 새 모델이 몹 찾기 자리와 콤보 보관본에 들어가고, 학습 그림을 다시 찾아 목록에 적는다.
+    /// YOLO 는 <see cref="YoloTrainer"/>(yolo-venv), D-FINE 은 <see cref="DFineTrainer"/>(제 저장소)로 간다 - 어느 쪽을 쓸지는 사람이 고른다
+    /// (사용자 결정 2026-09-14). 환경이 없으면 무엇이 없는지 상태 줄에 적는다.
     /// </remarks>
     private void DoTrain() => Guard(() =>
     {
         // 찍던 것을 먼저 저장한다. 안 하면 방금 찍은 사각형이 학습에 안 들어간다.
         SaveCurrentIfDirty();
 
-        var flavor = LibTorchRuntime.Installed ?? LibTorchRuntime.Recommended;
+        if (SelectedModelChoice is not { } choice || !IsTrainable(choice.Name)) return;
 
-        if (!LibTorchRuntime.IsInstalled(flavor) && !ConfirmDownload(flavor)) return;
+        if (WhyCannotTrain(choice.Name) is { } why)
+        {
+            TrainingStatus = why;
+            return;
+        }
 
         _trainingCts?.Dispose();
         _trainingCts = new CancellationTokenSource();
 
         IsTraining = true;
-        TrainingStatus = "준비하는 중...";
-
-        // 지난번 그래프는 지운다. 남겨 두면 이번 loss 가 지난번 꼬리에 이어 붙어 어디서부터가 이번인지 안 보인다.
         LossHistory.Clear();
         TrainEpochsDone = 0;
         TrainEpochsTotal = TrainEpochs;
         TrainPercent = 0;
 
+        // "GPU 1 - ..." 이면 그 번호, 자동이면 0.
+        var device = SelectedGpuOption is { } gpu && System.Text.RegularExpressions.Regex.Match(gpu, @"^GPU (\d+)") is { Success: true } m
+            ? int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)
+            : 0;
+
+        var token = _trainingCts.Token;
+
         _ = GuardAsync(async () =>
         {
             try
             {
-                await RunTrainingAsync(flavor, _trainingCts.Token);
+                var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
+                var status = new Progress<string>(message => TrainingStatus = message);
+                var steps = new Progress<TrainingStep>(step =>
+                {
+                    TrainEpochsDone = step.EpochsDone;
+                    TrainEpochsTotal = step.MaxEpoch;
+                    TrainPercent = step.Fraction * 100;
+                    if (step.Loss is { } loss) LossHistory.Add(loss);
+                });
+
+                // 둘은 걸리는 시간이 크게 다르다 - YOLO11n 은 5분, D-FINE-N 은 1시간 45분(98장 60바퀴, GTX 1060).
+                var (modelPath, elapsed) = DFineTrainer.Handles(choice.Name)
+                    ? await DFineTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token)
+                    : await YoloTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token);
+
+                TrainEpochsDone = TrainEpochsTotal;
+                TrainPercent = 100;
+                TrainingStatus = $"끝났습니다 - {choice.Name} 을 {elapsed.TotalMinutes:0.0}분 동안 학습해 몹 찾기에 넣었습니다.";
+
+                ReleaseModel();
+                RefreshModelSummary();
+                MessengerUtility.SendMainMessage($"{choice.Name} 학습이 끝났습니다. 켜 둔 스크립트·플레이 화면도 몇 초 안에 새 모델로 찾습니다.");
+
+                await RunSelfCheckAsync(dataset, modelPath, token);
             }
             catch (OperationCanceledException)
             {
-                TrainingStatus = "학습을 멈췄습니다.";
+                TrainingStatus = "학습을 멈췄습니다. 쓰던 모델은 그대로입니다.";
             }
             catch (Exception ex)
             {
-                // 여기서 예외 창을 띄우지 않는다. 몇 시간짜리 일이라 사람이 자리를 비웠을 수 있고,
-                // 돌아왔을 때 무엇이 잘못됐는지 화면에 남아 있는 편이 낫다.
-                Logger.Error(ex, "학습에 실패했다");
+                // 예외 창을 띄우지 않는다. 사람이 자리를 비웠을 수 있고, 돌아왔을 때 무엇이 잘못됐는지 화면에 남아 있는 편이 낫다.
+                Logger.Error(ex, "YOLO 학습에 실패했다");
                 TrainingStatus = $"실패: {ex.Message}";
             }
             finally
             {
                 IsTraining = false;
-                UpdateTrainingNotice();
             }
         });
     });
 
-    private async Task RunTrainingAsync(LibTorchFlavor flavor, CancellationToken token)
-    {
-        var progress = new Progress<string>(message => TrainingStatus = message);
-
-        if (!LibTorchRuntime.IsInstalled(flavor))
-            await LibTorchRuntime.EnsureInstalledAsync(flavor, progress, token);
-
-        TrainingStatus = "libtorch 를 올리는 중...";
-
-        // 네이티브를 올리는 것은 몇 초 걸린다(2GB 를 읽는다). UI 스레드에서 하면 화면이 멈춘다.
-        await Task.Run(() => LibTorchRuntime.Load(flavor), token);
-
-        var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
-
-        var (width, height) = ParseInputSize();
-
-        // Progress<T> 는 만든 스레드(UI)로 돌아와서 부른다. 컬렉션을 여기서 고쳐도 된다.
-        var steps = new Progress<TrainingStep>(step =>
-        {
-            TrainEpochsDone = step.EpochsDone;
-            TrainEpochsTotal = step.MaxEpoch;
-            TrainPercent = step.Fraction * 100;
-
-            if (step.Loss is { } loss) LossHistory.Add(loss);
-            if (step.ImagePath is { } image) MarkTrainingImage(image, step.Loss);
-        });
-
-        var result = await DetectorTrainer.TrainAsync(dataset, TrainEpochs, progress, token, width, height, steps: steps);
-
-        TrainEpochsDone = TrainEpochsTotal;
-        TrainPercent = 100;
-        MarkTrainingImage(null, null);
-
-        TrainingStatus =
-            $"끝났습니다 - 그림 {result.Images}장 · 사각형 {result.Boxes}개 · 몹 {result.Classes}종 을 " +
-            $"{result.InputSize} 로 {result.Elapsed.TotalMinutes:0.0}분 동안 " +
-            $"{(result.UsedGpu ? "GPU" : "CPU")} 로 학습했습니다. " +
-            $"{System.IO.Path.GetFileName(result.ModelPath)}";
-
-        // 다시 학습했으니 읽어 둔 모델은 옛것이다. 버려야 다음 찾아보기가 새 것을 읽는다.
-        ReleaseModel();
-        RefreshModelSummary();
-
-        MessengerUtility.SendMainMessage($"학습이 끝났습니다: {result.ModelPath}");
-
-        // 학습한 모델로 학습 그림을 되찾아 본다. "끝났습니다" 만으로는 무엇을 배웠는지 모른다 -
-        // 실제로 27개 중 0개를 찾는 모델을 두 번 만들고도 화면에서는 몰랐다.
-        await RunSelfCheckAsync(dataset, result.ModelPath, token);
-    }
-
     /// <summary>
-    /// 학습에 쓴 그림마다 모델로 다시 찾아 몇 개를 되찾았는지 목록에 적는다.
+    /// 학습에 쓴 그림마다 모델로 다시 찾아 몇 개를 다시 찾았는지 목록에 적는다.
     /// </summary>
     /// <remarks>
     /// 하네스 <c>--detect-check</c> 와 같은 계산(<see cref="DetectionMatch"/>)이다. 학습에 쓴
     /// 그림이라 외운 것도 맞은 것으로 센다. 그러니 여기서 못 찾은 그림은 라벨이 틀렸거나 장면이
     /// 애매한 것이고, 다 찾았다는 것이 새 장면에서도 찾는다는 뜻은 아니다.
-    /// 한 장에 0.3초라 26장이면 8초다. 학습 시간에 견주면 없는 값이라 학습의 일부로 돈다.
     /// </remarks>
     private async Task RunSelfCheckAsync(LabelDataset dataset, string modelPath, CancellationToken token)
     {
@@ -193,18 +162,18 @@ public partial class LabelingViewModel
                 {
                     row.Recognition = match.Describe;
                     row.RecognitionIsPoor = !match.IsComplete || match.Extra > 0;
-                    TrainingStatus = $"{finished}  되찾는 중 {index}/{rows.Count}...";
+                    TrainingStatus = $"{finished}  재현율 재는 중 {index}/{rows.Count}...";
                 });
             }
         }, token);
 
         var rate = total.Labels == 0 ? 0 : 100.0 * total.Found / total.Labels;
 
-        TrainingStatus = $"{finished}  되찾기: 라벨 {total.Labels}개 중 {total.Found}개 ({rate:0}%)" +
+        TrainingStatus = $"{finished}  재현율: 라벨 {total.Labels}개 중 {total.Found}개 ({rate:0}%)" +
                          (total.Extra > 0 ? $" · 헛것 {total.Extra}개" : string.Empty) +
-                         $" (자신 있는 정도 {MinimumScore:P0} 기준)";
+                         $" (신뢰도 {MinimumScore:P0} 기준)";
 
-        // 되찾기 결과를 쪽지에도 남긴다. 다음에 화면을 열었을 때 "지난 모델이 얼마나 찾았나" 가 보여야 한다.
+        // 재현율 결과를 쪽지에도 남긴다. 다음에 화면을 열었을 때 "지난 모델이 얼마나 찾았나" 가 보여야 한다.
         try
         {
             var manifest = DetectorManifest.Load(modelPath);
@@ -213,127 +182,85 @@ public partial class LabelingViewModel
             manifest.RecallExtra = total.Extra;
             manifest.RecallThreshold = MinimumScore;
             manifest.Save(modelPath);
+
+            // 콤보는 보관본 쪽지를 읽는다 - 지금 자리에 앉은 모델의 보관본에도 적는다.
+            if (DetectorFiles.CurrentChoice(dataset, DetectorFiles.ListChoices(dataset)) is { } kept)
+                manifest.Save(kept.Path);
         }
         catch (Exception ex)
         {
-            Logger.Warn(ex, "되찾기 결과를 쪽지에 적지 못했다");
+            Logger.Warn(ex, "재현율 결과를 쪽지에 적지 못했다");
         }
 
         RefreshModelSummary();
     }
 
-    /// <summary>쪽지를 읽어 "모델" 줄을 다시 쓴다. 폴더를 바꿀 때, 학습 뒤, 되찾기 뒤.</summary>
+    /// <summary>
+    /// "쓰는 모델" 콤보와 옆 줄을 다시 채운다. 폴더를 바꿀 때, 학습 뒤, 재현율 뒤, 모델을 고른 뒤.
+    /// </summary>
+    /// <remarks>
+    /// 줄은 <b>몹 찾기가 실제로 쓰는 모델</b>(<see cref="DetectorFiles.CurrentFor"/>)이다. 예전에는 이 화면의 학습 결과(detector.zip)만 읽어,
+    /// 몹 찾기는 YOLO11n(ONNX)으로 도는데 줄에는 "640x360 · 재현율 70%" 가 떠서 70% 짜리가 도는 것처럼 보였다(2026-09-14).
+    /// </remarks>
     private void RefreshModelSummary()
     {
         var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
-        var modelPath = DetectorTrainer.ModelPathFor(dataset);
+        var current = DetectorFiles.CurrentFor(dataset);
 
-        ModelSummary = System.IO.File.Exists(modelPath)
-            ? DetectorManifest.Load(modelPath).Summary
-            : "아직 학습한 모델이 없습니다.";
-    }
+        ModelSummary = System.IO.File.Exists(current)
+            ? DetectorManifest.Load(current).Summary
+            : "아직 쓸 모델이 없습니다.";
 
-    private LabelingRow? _trainingRow;
-
-    /// <summary>
-    /// 학습기가 보고 있는 그림을 목록과 진행 줄에 표시한다. null 이면 지운다.
-    /// </summary>
-    /// <remarks>
-    /// 목록의 선택을 옮기지 않는다. 사람이 학습 중에 다른 그림을 찍고 있을 수 있는데,
-    /// 선택이 스텝마다 튀면 찍던 것이 저장되고 넘어가 버린다. 표시만 따라간다.
-    /// </remarks>
-    private void MarkTrainingImage(string? imagePath, double? loss)
-    {
-        if (_trainingRow is { } previous) previous.IsTrainingNow = false;
-
-        _trainingRow = imagePath is null ? null : Items.FirstOrDefault(row => row.ImagePath == imagePath);
-
-        if (_trainingRow is { } current)
-        {
-            current.IsTrainingNow = true;
-            if (loss is not null) current.LastLoss = loss;
-
-            // 따라가기를 켰으면 가운데 그림도 옮긴다. 선택을 바꾸면 찍던 것은 저장되고 넘어간다 -
-            // 그래서 기본은 끔이다.
-            if (FollowTraining && !ReferenceEquals(SelectedItem, current)) SelectedItem = current;
-        }
-
-        TrainingImageName = _trainingRow?.Name;
-    }
-
-    /// <summary>
-    /// 2.2GB 를 받기 전에 물어본다.
-    /// </summary>
-    /// <remarks>
-    /// 버튼 한 번에 2GB 가 나가면 안 된다. 종량제 회선일 수도 있다.
-    /// </remarks>
-    private bool ConfirmDownload(LibTorchFlavor flavor)
-    {
-        var size = LibTorchRuntime.DescribeSize(flavor);
-
-        var extra = flavor == LibTorchFlavor.Cpu
-            ? "\n\nGPU 를 못 찾아 CPU 판을 받습니다. 실제 데이터셋을 학습시키기에는 너무 느립니다."
-            : string.Empty;
-
-        // 서비스가 없으면 GetService 가 null 이 아니라 예외로 터진다. 그것을 Guard 가 삼키면
-        // 버튼을 눌러도 아무 일이 안 일어난 것처럼 보인다 - 실제로 한 번 그렇게 막혔다.
-        // 여기서 잡아 화면에 남긴다.
-        IMessageBoxService service;
-
+        // 채우는 동안 고른 것이 바뀌어도 모델을 옮기지 않는다(_isRefreshingModels).
+        _isRefreshingModels = true;
         try
         {
-            service = MessageBoxService;
+            var choices = DetectorFiles.ListChoices(dataset);
+
+            ModelChoices.Clear();
+            foreach (var choice in choices) ModelChoices.Add(choice);
+
+            SelectedModelChoice = DetectorFiles.CurrentChoice(dataset, choices);
         }
-        catch (Exception ex)
+        finally
         {
-            Logger.Error(ex, "MessageBoxService 를 못 얻었다");
-            TrainingStatus = "확인 창을 띄우지 못했습니다. 화면에 DXMessageBoxService 가 선언돼 있는지 보세요.";
-
-            return false;
+            _isRefreshingModels = false;
         }
-
-        var answer = service.ShowMessage(
-            $"학습에 필요한 libtorch 를 받습니다. ({size}){extra}\n\n" +
-            $"받는 곳: {LibTorchRuntime.RootDirectory}\n" +
-            "한 번만 받고 다음부터는 바로 시작합니다.\n\n계속할까요?",
-            "libtorch 를 받습니다",
-            MessageButton.OKCancel,
-            MessageIcon.Question);
-
-        return answer == MessageResult.OK;
     }
 
+    /// <summary>콤보를 다시 채우는 중인가. 그동안 고른 것이 바뀌는 것은 사람이 고른 것이 아니다.</summary>
+    private bool _isRefreshingModels;
+
     /// <summary>
-    /// 화면에서 고른 크기를 숫자로. 못 읽으면 기본값.
+    /// 콤보에서 모델을 고르면 그것을 몹 찾기 자리에 앉힌다.
     /// </summary>
     /// <remarks>
-    /// 목록에서 고르게 해 두었으므로 어긋날 일이 없지만, 설정 파일을 손으로 고칠 수 있다.
-    /// 그때 터지는 대신 기본값으로 돈다.
+    /// 이 화면의 찾아보기가 들고 있던 모델도 놓는다 - 안 놓으면 옛 모델로 계속 찾는다.
+    /// 배포 전에 D-FINE-N 으로 돌렸는지는 줄에 뜨는 이름으로 본다(YOLO 는 AGPL 이라 넘기는 모델에 못 쓴다).
     /// </remarks>
-    private (int Width, int Height) ParseInputSize()
+    private void OnSelectedModelChoiceChanged() => Guard(() =>
     {
-        var parts = (SelectedInputSize ?? string.Empty).Split('x');
+        DoTrainCommand.RaiseCanExecuteChanged();
 
-        if (parts.Length == 2
-            && int.TryParse(parts[0], out var width)
-            && int.TryParse(parts[1], out var height)
-            && width > 0 && height > 0)
-            return (width, height);
+        if (_isRefreshingModels || SelectedModelChoice is not { } choice) return;
 
-        return (DetectorTrainer.DefaultInputWidth, DetectorTrainer.DefaultInputHeight);
-    }
+        var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
+        if (DetectorFiles.CurrentChoice(dataset, ModelChoices) == choice) return;
 
-    /// <summary>
-    /// 멈춘다.
-    /// </summary>
-    /// <remarks>
-    /// 받는 중이면 곧바로 멈춘다. 학습 중이면 <b>지금 도는 epoch 이 끝나야</b> 듣는다 -
-    /// 학습기가 중간에 멈춰 주지 않는다. 화면에 그렇게 적어 둔다.
-    /// </remarks>
+        DetectorFiles.Use(dataset, choice);
+        ReleaseModel();
+
+        StatusText = $"몹 찾기 모델을 {choice.Name} 로 바꿨습니다. 켜 둔 스크립트·플레이 화면도 몇 초 안에 따라옵니다.";
+        MessengerUtility.SendMainMessage(StatusText);
+
+        RefreshModelSummary();
+    });
+
+    /// <summary>멈춘다. 파이썬 학습 프로세스를 통째로 끈다 - 쓰던 모델은 그대로다.</summary>
     private void DoCancelTrain() => Guard(() =>
     {
         _trainingCts?.Cancel();
 
-        TrainingStatus = "멈추는 중... (학습 중이면 지금 바퀴가 끝나야 멈춥니다)";
+        TrainingStatus = "멈추는 중...";
     });
 }

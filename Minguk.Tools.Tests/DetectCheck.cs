@@ -26,7 +26,7 @@ namespace Minguk.Tools.Tests;
 /// </remarks>
 internal static class DetectCheck
 {
-    /// <summary>앱의 "자신 있는 정도" 기본값과 같다. 다르게 두면 하네스 숫자와 화면이 안 맞는다.</summary>
+    /// <summary>앱의 "신뢰도" 기본값과 같다. 다르게 두면 하네스 숫자와 화면이 안 맞는다.</summary>
     public const float DefaultMinimumScore = 0.5f;
 
     public static int Run() => Run(new LabelDataset(LabelDataset.ConfiguredRoot), DefaultMinimumScore);
@@ -60,7 +60,7 @@ internal static class DetectCheck
         using var model = DetectorFactory.Create(modelPath);
 
         Console.WriteLine($"모델: {model.Manifest.Describe}");
-        Console.WriteLine($"기준: 자신 있는 정도 {MinimumScore:P0} 이상 · 겹침(IoU) {DetectionMatch.MatchIou:0.0} 이상이면 찾은 것");
+        Console.WriteLine($"기준: 신뢰도 {MinimumScore:P0} 이상 · 겹침(IoU) {DetectionMatch.MatchIou:0.0} 이상이면 찾은 것");
         Console.WriteLine();
 
         var classes = dataset.LoadClasses();
@@ -106,6 +106,26 @@ internal static class DetectCheck
         }
 
         times.Sort();
+
+        // 앱의 자체 재현율(LabelingViewModel.RunSelfCheckAsync)처럼 결과를 그 모델의 쪽지에 남긴다 - 화면의 "쓰는 모델" 줄이 읽는다.
+        // 밖에서 들인 ONNX 는 앱이 재현율을 안 돌리므로, 여기서 안 적으면 줄에 재현율 수가 영영 안 뜬다.
+        try
+        {
+            var manifest = DetectorManifest.Load(modelPath);
+            manifest.RecallFound = totalFound;
+            manifest.RecallLabels = totalLabels;
+            manifest.RecallExtra = totalExtra;
+            manifest.RecallThreshold = MinimumScore;
+            manifest.Save(modelPath);
+
+            // 콤보는 보관본 쪽지를 읽는다 - 지금 자리에 앉은 것의 보관본에도 같이 적는다.
+            if (DetectorFiles.CurrentChoice(dataset, DetectorFiles.ListChoices(dataset)) is { } choice)
+                manifest.Save(choice.Path);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"재현율 결과를 쪽지에 못 적었다: {ex.Message}");
+        }
 
         Console.WriteLine();
         Console.WriteLine($"== 라벨 {totalLabels}개 중 {totalFound}개 찾음 ({(totalLabels == 0 ? 0 : 100.0 * totalFound / totalLabels):0}%) · 헛것 {totalExtra}개 · 한 장 중앙값 {(times.Count == 0 ? 0 : times[times.Count / 2]):N0} ms ==");

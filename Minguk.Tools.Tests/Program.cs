@@ -28,6 +28,14 @@ internal static partial class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
 
+        // 앱과 같은 설정 파일을 읽는다(%AppData%\Minguk.Tools). 이것을 안 부르면 AppSettingUtility 가 하네스 bin 폴더를 보고,
+        // 데이터셋·학습 폴더가 기본값으로 떨어져 "모델이 없다" 가 된다(실측 2026-09-14).
+        Minguk.Tools.Helper.UserDataPaths.Initialize();
+
+        // 기능 모듈. 앱(App.xaml.cs)과 같은 목록을 써야 --views 가 모듈 화면·설정 페이지를 본다 -
+        // 안 부르면 모듈이 안 붙은 셈이라 조용히 지나간다.
+        Minguk.Tools.Modules.ToolModules.Use(new Minguk.Tools.Training.TrainingModule());
+
         // 어느 카드를 쓸지. libtorch 를 올리기 전에 정해야 하므로 맨 앞에서 한 번.
         // 두 학습을 동시에 돌리려면 창을 둘 열고 --gpu=0 · --gpu=1 로 나눠 준다.
         // 안 주면 자동 - libtorch 를 올리는 순간 모니터가 안 붙었거나 한가한 카드로 간다(LibTorchRuntime.Load).
@@ -59,8 +67,20 @@ internal static partial class Program
         if (args.Contains("--use-trained")) return DatasetTools.UseTrained();
         if (args.Contains("--views")) return ViewSmokeProbe.Run();
 
+        // 솔루션·프로젝트 모델. 임시 폴더만 만지고 화면이 없다 - --vision 처럼 안전하다.
+        if (args.Contains("--solution")) return SolutionProbe.Run();
+
+        // 옛 자리(데이터셋·프레임 저장·스크립트)를 첫 솔루션으로 옮긴다. --apply 가 없으면 보여 주기만 한다.
+        if (args.Contains("--migrate")) return MigrateProbe.Run(args);
+
         // 스크립트 화면(VS 모양)을 화면 밖 창에 띄워 바인딩 오류를 모으고 PNG 로 찍는다. 커서는 안 가져간다.
         if (args.Contains("--script-screen")) return ScriptScreenProbe.Run(args);
+
+        // 라벨링 화면을 화면 밖 창에 띄워 아래 학습 패널 높이가 내용에 맞는지 재고 PNG 로 찍는다.
+        if (args.Contains("--labeling-screen")) return LabelingScreenProbe.Run(args);
+
+        // 라벨링 화면의 YOLO 학습 길을 화면 없이 돌린다. 들이기까지 하므로 --root 로 시험 폴더를 준다(GPU 를 쓴다).
+        if (args.Contains("--yolo-train")) return YoloTrainProbe.Run(args);
 
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.
         if (args.Contains("--canvas-drag")) return CanvasDragProbe.Run();
@@ -68,7 +88,7 @@ internal static partial class Program
         // libtorch(4GB)와 학습한 모델이 있어야 도는 것이라 평소 검증에는 안 낀다.
         if (args.Contains("--detect-bench")) return DetectBench.Run();
 
-        // 학습한 모델이 라벨을 찍은 그림에서 그 사각형을 되찾는지 센다. 같은 조건이라 평소 검증 밖.
+        // 학습한 모델이 라벨을 찍은 그림에서 그 사각형을 다시 찾는지 센다. 같은 조건이라 평소 검증 밖.
         if (args.Contains("--detect-check"))
         {
             var score = ArgValue(args, "--score=") is { } s ? float.Parse(s, CultureInfo.InvariantCulture) : DetectCheck.DefaultMinimumScore;
@@ -90,7 +110,7 @@ internal static partial class Program
             return ScaleCheck.Run(ArgValue(args, "--scale-check="), side);
         }
 
-        // 지정한 폴더로 학습하고 곧바로 되찾는지 센다. 조건을 바꿔 가며 여러 번 돌릴 때.
+        // 지정한 폴더로 학습하고 곧바로 다시 찾는지 센다. 조건을 바꿔 가며 여러 번 돌릴 때.
         // --train-check=<폴더> [--epochs=20] [--size=320x180]
         if (ArgValue(args, "--train-check=") is { } trainRoot)
         {

@@ -69,7 +69,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
 
     public InputAutomationViewModel()
     {
-        Caption = "입력 자동화";
+        Caption = "입력 테스트";
         CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/hardwarenetwork/16x16/keyboard.png");
 
         DoRunOnceCommand = new DelegateCommand(DoRunOnce, () => IsIdle, false);

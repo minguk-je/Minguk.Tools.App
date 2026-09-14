@@ -19,7 +19,7 @@ namespace Minguk.Tools.Tests;
 /// </summary>
 /// <remarks>
 /// <b>왜 눈으로도 보나</b> - 좌표를 되돌리는 계산(레터박스 여백 빼기)이 틀려도 숫자는 그럴듯하게 나온다.
-/// 사각형을 그려 원본 위에 얹으면 어긋남이 한눈에 보인다. 그린 그림은 모델 옆에 <c>-검출.png</c> 로 남긴다.
+/// 사각형을 그려 원본 위에 얹으면 어긋남이 한눈에 보인다. 그린 그림은 임시 폴더(minguk-onnx-detect)나 <c>--out=</c> 에 남긴다.
 /// </remarks>
 internal static class OnnxDetect
 {
@@ -69,7 +69,11 @@ internal static class OnnxDetect
                               $"가운데({box.CenterX:0.000}, {box.CenterY:0.000})  크기({box.Width:0.000} x {box.Height:0.000})");
         }
 
-        var outputPath = Path.ChangeExtension(imagePath, null) + "-검출.png";
+        // 원본 옆에 두지 않는다 - 데이터셋 images 폴더의 그림을 넣으면 "-검출.png" 가 그 폴더에 생겨 라벨링 목록에
+        // 라벨 없는 그림으로 끼어든다(실측 2026-09-14). --out= 이 없으면 임시 폴더다.
+        var outputPath = Program.ArgValue(args, "--out=")
+                         ?? Path.Combine(Path.GetTempPath(), "minguk-onnx-detect", Path.GetFileNameWithoutExtension(imagePath) + "-검출.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
         Draw(imagePath, found, outputPath);
 
         Console.WriteLine();

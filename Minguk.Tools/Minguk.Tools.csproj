@@ -143,6 +143,20 @@
 	  <None Include="..\Libs\Minguk.Image.dll" Link="Libs\Minguk.Image.dll" />
 	</ItemGroup>
 
+	<!--
+	  YOLO 학습 스크립트. 라벨링 화면에서 "쓰는 모델" 을 YOLO 로 고르고 학습을 누르면 앱이 이것을 파이썬(yolo-venv)으로 돌린다.
+	  원본은 저장소의 도구 폴더다 - 앱 출력의 Tools 아래로 복사해, 저장소가 없는 자리에서 돌아도 찾게 한다(YoloTrainer.ScriptPath).
+	-->
+	<ItemGroup>
+	  <Content Include="..\도구\yolo-학습.py" Link="Tools\yolo-학습.py">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <!-- D-FINE 학습 끝에 돌린다. 빼먹으면 DirectML 이 답을 틀리게 내 한 마리도 못 찾는다(DFineTrainer). -->
+	  <Content Include="..\도구\onnx-DirectML-고치기.py" Link="Tools\onnx-DirectML-고치기.py">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
 	<!-- DirectML 네이티브. 출력 루트로 복사하고, 트리에는 Libs 아래로 보이게 한다. -->
 	<ItemGroup>
 	  <Content Include="..\Libs\DirectML\x64\DirectML.dll" Link="Libs\DirectML\x64\DirectML.dll" TargetPath="DirectML.dll">
@@ -200,6 +214,10 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Minguk.Base\Minguk.Base.csproj" />
+		<!-- 셸과 기능 모듈이 함께 보는 가운데 조각. 화면 바탕·메뉴 항목·모듈 계약이 여기 있다. -->
+		<ProjectReference Include="..\Minguk.Tools.Core\Minguk.Tools.Core.csproj" />
+		<!-- 기능 모듈. 늘어나면 여기에 한 줄, App.xaml.cs 의 ToolModules.Use 에 한 줄이다. -->
+		<ProjectReference Include="..\Minguk.Tools.Training\Minguk.Tools.Training.csproj" />
 	</ItemGroup>
 	<!--
 	  DevExpress 한국어 리소스(위성 어셈블리).

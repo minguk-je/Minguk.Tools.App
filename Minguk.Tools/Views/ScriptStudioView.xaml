@@ -966,6 +966,7 @@
                                           Caption="영역">
                             <dxlc:LayoutControl Orientation="Vertical">
                                 <dxe:ButtonEdit VerticalAlignment="Top"
+                                                AllowDefaultButton="False"
                                                 EditValue="{Binding SelectedRegionName, UpdateSourceTrigger=LostFocus}"
                                                 IsEnabled="{Binding SelectedRegion, Converter={dxmvvm:ObjectToBooleanConverter}}"
                                                 NullText="미리보기에서 끌어 자리를 만들면 여기 이름이 뜨고, 고치면 바뀐다">

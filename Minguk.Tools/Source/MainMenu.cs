@@ -44,22 +44,25 @@ public class MainMenu : ObservableCollection<MenuItemModel>
 
         menuItemList.Add(rootItem);
 
-        // ── 샘플 화면 1 : 대시보드 ────────────────────────────────────────
-        rootItem.AddChildren(MenuItemModel.Create(
-            menu_cd: "1100",
-            menu_nm: "대시보드",
-            dll_nm: "Minguk.Tools.dll",
-            class_nm: "Minguk.Tools.Views.DashboardView",
-            is_enable: true,
-            isExpanded: true,
-            showInCollapsedMode: false,
-            canSelect: true,
-            icon: FreeImage.Instance?.CacheByteArray("axialis/business/16x16/business_report.png")));
+        // ── 샘플 화면 1 : 대시보드 - 메뉴에서 뺐다(2026-09-14, 지금 안 쓴다) ───────────────
+        // 화면(DashboardView·DashboardViewModel)은 ViewModel 작성의 최소 예시로 그대로 두고, DI 등록도 남겨 둔다.
+        // 다시 보이려면 아래 주석을 풀면 된다.
+        //
+        // rootItem.AddChildren(MenuItemModel.Create(
+        //     menu_cd: "1100",
+        //     menu_nm: "대시보드",
+        //     dll_nm: "Minguk.Tools.dll",
+        //     class_nm: "Minguk.Tools.Views.DashboardView",
+        //     is_enable: true,
+        //     isExpanded: true,
+        //     showInCollapsedMode: false,
+        //     canSelect: true,
+        //     icon: FreeImage.Instance?.CacheByteArray("axialis/business/16x16/business_report.png")));
 
         // ── 캡처 : 순수하게 잡고 담는다 ───────────────────────────────────
         rootItem.AddChildren(MenuItemModel.Create(
             menu_cd: "1200",
-            menu_nm: "캡처",
+            menu_nm: "화면캡처",
             dll_nm: "Minguk.Tools.dll",
             class_nm: "Minguk.Tools.Views.CaptureMonitorView",
             is_enable: true,
@@ -108,7 +111,7 @@ public class MainMenu : ObservableCollection<MenuItemModel>
         // ── 입력 자동화 ───────────────────────────────────────────────────
         rootItem.AddChildren(MenuItemModel.Create(
             menu_cd: "1300",
-            menu_nm: "입력 자동화",
+            menu_nm: "입력 테스트",
             dll_nm: "Minguk.Tools.dll",
             class_nm: "Minguk.Tools.Views.InputAutomationView",
             is_enable: true,
@@ -116,6 +119,13 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             showInCollapsedMode: false,
             canSelect: true,
             icon: FreeImage.Instance?.CacheByteArray("axialis/hardwarenetwork/16x16/keyboard.png")));
+
+        // 모듈이 들고 온 항목. 셸은 무엇이 붙는지 모른다 - 순서는 menu_cd 로 모듈이 정한다(2000번대).
+        foreach (var module in Modules.ToolModules.All)
+        {
+            foreach (var item in module.CreateMenuItems())
+                rootItem.AddChildren(item);
+        }
 
         return menuItemList;
     }

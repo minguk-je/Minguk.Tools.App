@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using DevExpress.Mvvm;
 
@@ -20,7 +21,17 @@ public class MainViewLocator : LocatorBase, IViewLocator
 {
     private ServiceProvider ServiceProvider { get; }
 
-    protected override IEnumerable<Assembly> Assemblies => new[] { typeof(App).Assembly };
+    /// <summary>
+    /// 셸 어셈블리 + 붙어 있는 모듈 어셈블리.
+    /// </summary>
+    /// <remarks>
+    /// 셸만 뒤지면 모듈 화면의 <c>CLASS_NM</c> 을 못 찾아 메뉴를 눌러도 아무 일이 안 난다.
+    /// 모듈이 늘어도 여기는 안 고친다 - <c>ToolModules.All</c> 을 따라간다.
+    /// </remarks>
+    protected override IEnumerable<Assembly> Assemblies =>
+        new[] { typeof(App).Assembly }
+            .Concat(Modules.ToolModules.All.Select(module => module.GetType().Assembly))
+            .Distinct();
 
     public MainViewLocator(ServiceProvider serviceProvider) => ServiceProvider = serviceProvider;
 

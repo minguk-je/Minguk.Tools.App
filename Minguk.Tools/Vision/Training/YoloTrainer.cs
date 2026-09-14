@@ -1,0 +1,168 @@
+using System;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+
+using Minguk.Tools.Vision.Labeling;
+
+namespace Minguk.Tools.Vision.Training;
+
+/// <summary>
+/// YOLO(Ultralytics) 를 파이썬으로 학습해 ONNX 로 내보내고 데이터셋에 들인다. 라벨링 화면에서 "쓰는 모델" 이 YOLO 일 때 학습 버튼이 부른다.
+/// </summary>
+/// <remarks>
+/// <b>왜 파이썬을 띄우나</b> - Ultralytics 는 파이썬뿐이다. 학습은 앱 밖 프로세스로 돌리고, 앱은 바퀴마다 줄을 읽어 진행 막대·loss 를 움직인다.
+/// 환경은 학습 폴더의 <c>yolo-venv</c>(torch cu126 + ultralytics) 를 쓴다. 없으면 만들지 않고 알린다 - 2.5GB 를 버튼 한 번에
+/// 받게 하면 안 된다. 처음 한 번은 <c>도구\학습-환경-준비.ps1</c> 이 만든다.
+///
+/// <b>내 PC 시험용이다</b> - Ultralytics 는 AGPL 이라 학습한 가중치까지 그 조건이다. 배포 모델은 D-FINE-N 이다(CLAUDE.md "모델 정책").
+///
+/// <b>진행 읽기</b> - 진행 막대는 <c>\r</c> 로 줄을 덮어써 줄 단위로 읽으면 바퀴 끝에만 한 줄이 온다. 그 줄(<c>3/60 1.31G 1.95 2.26 1.34 … 100%</c>)의
+/// 앞 두 수가 바퀴, 다음 수가 box loss 다. 98장이면 바퀴가 5초라 그만큼이면 충분하다.
+/// </remarks>
+public static class YoloTrainer
+{
+    private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+
+    /// <summary>파이썬 환경 자리. 학습 폴더 하나에 다 모여 있다(<see cref="TrainingPaths"/>).</summary>
+    public static string VenvPython => TrainingPaths.YoloPython;
+
+    /// <summary>학습 결과를 두는 자리.</summary>
+    public static string RunsRoot => TrainingPaths.Runs;
+
+    /// <summary>앱 출력의 스크립트 자리(csproj 가 도구\yolo-학습.py 를 Tools 아래로 복사한다).</summary>
+    public static string ScriptPath => Path.Combine(AppContext.BaseDirectory, "Tools", "yolo-학습.py");
+
+    /// <summary>학습할 수 있는가. 못 하면 사람에게 할 말을 돌려준다.</summary>
+    public static string? WhyUnavailable()
+    {
+        if (!File.Exists(VenvPython))
+            return $"YOLO 학습용 파이썬 환경이 없습니다: {Path.GetDirectoryName(Path.GetDirectoryName(VenvPython))}. " +
+                   "저장소의 도구\\학습-환경-준비.ps1 을 한 번 돌리면 만들어집니다(약 2.5GB).";
+
+        if (!File.Exists(ScriptPath))
+            return $"학습 스크립트가 없습니다: {ScriptPath}. 앱을 다시 빌드하세요.";
+
+        return null;
+    }
+
+    /// <summary>
+    /// "YOLO11n" 같은 모델 이름에서 Ultralytics 가중치 이름("yolo11n")을 뽑는다. YOLO 가 아니면 null.
+    /// </summary>
+    public static string? WeightsFor(string? modelName)
+    {
+        if (string.IsNullOrWhiteSpace(modelName)) return null;
+
+        var match = Regex.Match(modelName.Trim(), @"^yolo(v?\d+[nsmlx])$", RegexOptions.IgnoreCase);
+
+        return match.Success ? "yolo" + match.Groups[1].Value.ToLowerInvariant() : null;
+    }
+
+    /// <summary>학습 → ONNX 내보내기 → 데이터셋에 들이기 → 보관본 갱신. 돌려주는 것은 들인 detector.onnx 자리.</summary>
+    /// <param name="modelName">화면에 뜨는 이름("YOLO11n"). 가중치 이름은 여기서 뽑는다.</param>
+    /// <param name="device">GPU 번호.</param>
+    public static async Task<(string ModelPath, TimeSpan Elapsed)> TrainAsync(LabelDataset dataset, string modelName, int epochs, int device,
+                                                                           IProgress<string> status, IProgress<TrainingStep> steps,
+                                                                           CancellationToken token)
+    {
+        if (WhyUnavailable() is { } why) throw new InvalidOperationException(why);
+
+        var weights = WeightsFor(modelName) ?? throw new InvalidOperationException($"YOLO 모델 이름이 아니다: {modelName}");
+
+        // 3GB 카드에서 n 은 batch 8 이 1.3GB, s 는 batch 4 로 맞았다(실측). 그 위(m·l·x)는 이 카드로 안 돈다고 보고 4 로 둔다.
+        var batch = weights.EndsWith('n') ? 8 : 4;
+
+        Directory.CreateDirectory(RunsRoot);
+
+        var start = new ProcessStartInfo(VenvPython)
+        {
+            WorkingDirectory = RunsRoot,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+
+        foreach (var arg in new[] { "-X", "utf8", "-u", ScriptPath, "--root", dataset.Root, "--runs", RunsRoot,
+                                     "--model", weights, "--epochs", epochs.ToString(CultureInfo.InvariantCulture),
+                                     "--batch", batch.ToString(CultureInfo.InvariantCulture), "--device", device.ToString(CultureInfo.InvariantCulture) })
+            start.ArgumentList.Add(arg);
+
+        start.Environment["PYTHONUTF8"] = "1";
+
+        var log = Path.Combine(RunsRoot, weights + ".log");
+        string? onnx = null;
+        string? lastError = null;
+        var watch = Stopwatch.StartNew();
+
+        using var writer = new StreamWriter(log, append: false, new UTF8Encoding(false)) { AutoFlush = true };
+        using var process = new Process { StartInfo = start, EnableRaisingEvents = true };
+
+        void OnLine(string? raw)
+        {
+            if (raw is null) return;
+
+            lock (writer) writer.WriteLine(raw);
+
+            // 진행 막대가 \r 로 덮어쓴 조각들 중 마지막이 그 줄의 최종 모습이다. 줄 앞의 터미널 제어 문자(ESC[K)는 뗀다 -
+            // 붙은 채로는 "^\s*1/2" 가 안 맞아 바퀴 진행이 한 번도 안 왔다(실측).
+            var line = Regex.Replace(raw.Split('\r')[^1], @"\x1B\[[0-9;?]*[A-Za-z]", string.Empty);
+
+            if (line.StartsWith("ONNX ", StringComparison.Ordinal)) onnx = line[5..].Trim();
+            else if (line.Contains("Traceback", StringComparison.Ordinal) || line.Contains("Error", StringComparison.Ordinal)) lastError = line.Trim();
+
+            var epoch = Regex.Match(line, @"^\s*(\d+)/(\d+)\s+\S+G\s+([\d.]+)\s+([\d.]+)\s+([\d.]+).*100%");
+            if (epoch.Success)
+            {
+                var done = int.Parse(epoch.Groups[1].Value, CultureInfo.InvariantCulture);
+                var total = int.Parse(epoch.Groups[2].Value, CultureInfo.InvariantCulture);
+                var boxLoss = double.Parse(epoch.Groups[3].Value, CultureInfo.InvariantCulture);
+
+                steps.Report(new TrainingStep(done, total, boxLoss));
+                status.Report($"YOLO 학습 중 - {done}/{total} 바퀴 · box loss {boxLoss:0.000} · {watch.Elapsed:mm\\:ss}");
+            }
+            else if (line.StartsWith("TRAIN_SECONDS", StringComparison.Ordinal))
+            {
+                status.Report("학습이 끝났습니다. ONNX 로 내보내는 중...");
+            }
+        }
+
+        process.OutputDataReceived += (_, e) => OnLine(e.Data);
+        process.ErrorDataReceived += (_, e) => OnLine(e.Data);
+
+        status.Report($"YOLO 학습을 시작합니다 ({weights} · {epochs}바퀴 · batch {batch} · GPU {device})...");
+        Logger.Info($"YOLO 학습 시작: {weights} {epochs}바퀴 batch {batch} GPU {device} · 로그 {log}");
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        // 멈추기를 누르면 파이썬과 그 자식(데이터 로더 작업자)까지 끈다. 안 그러면 GPU 를 물고 남는다.
+        await using (token.Register(() => { try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } }))
+        {
+            await process.WaitForExitAsync(CancellationToken.None);
+        }
+
+        token.ThrowIfCancellationRequested();
+
+        if (process.ExitCode != 0 || onnx is null || !File.Exists(onnx))
+            throw new InvalidOperationException($"YOLO 학습이 실패했습니다(종료 {process.ExitCode}). {lastError ?? string.Empty} 로그: {log}");
+
+        status.Report("새 모델을 들이는 중...");
+
+        // 들이기: Ultralytics 는 비율을 지켜 여백을 넣는다(레터박스). 이름이 곧 콤보 항목이라 보관본도 갈아 끼운다.
+        var target = DetectorFiles.ImportOnnx(dataset, onnx, 640, 640, letterbox: true, modelName);
+        File.SetLastWriteTimeUtc(target, DateTime.UtcNow); // 켜 둔 몹 찾기가 시각으로 새 모델을 알아챈다
+        DetectorFiles.KeepAsChoice(dataset, modelName);
+
+        Logger.Info($"YOLO 학습 끝: {watch.Elapsed:mm\\:ss} · {onnx} → {target}");
+
+        return (target, watch.Elapsed);
+    }
+}

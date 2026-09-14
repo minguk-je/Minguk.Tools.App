@@ -128,6 +128,13 @@ public partial class App : Application
             builder.Services.AddTransient<InputAutomationView>();
             builder.Services.AddTransient<LabelingView>();
 
+            // 기능 모듈. 셸은 목록만 알고, 화면 등록·메뉴·설정 페이지는 모듈이 제가 들고 온다.
+            // 기능 프로젝트를 하나 더 만들면 여기에 한 줄 더하면 된다 - 본보기는 Minguk.Tools.Training 이다.
+            Modules.ToolModules.Use(new Tools.Training.TrainingModule());
+
+            foreach (var module in Modules.ToolModules.All)
+                module.RegisterServices(builder.Services);
+
             StartupTrace.Mark("  DI 구성");
 
             var host = builder.Build();

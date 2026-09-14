@@ -67,26 +67,26 @@
                     <ScaleTransform ScaleX="{Binding PreviewZoom}"
                                     ScaleY="{Binding PreviewZoom}" />
                 </Grid.LayoutTransform>
-            <!--
-                Stretch=Uniform 이라 원본 비율을 지킨다. 축소해서 보여 주는 용도이므로
-                BitmapScalingMode 는 LowQuality(선형 보간)로 둔다 — 60fps 로 갱신할 때
-                HighQuality 로 두면 축소 비용이 UI 스레드를 잡아먹는다.
-            -->
-            <Image RenderOptions.BitmapScalingMode="LowQuality"
-                   Source="{Binding PreviewImage}"
-                   Stretch="Uniform">
+                <!--
+                    Stretch=Uniform 이라 원본 비율을 지킨다. 축소해서 보여 주는 용도이므로
+                    BitmapScalingMode 는 LowQuality(선형 보간)로 둔다 — 60fps 로 갱신할 때
+                    HighQuality 로 두면 축소 비용이 UI 스레드를 잡아먹는다.
+                -->
+                <Image RenderOptions.BitmapScalingMode="LowQuality"
+                       Source="{Binding PreviewImage}"
+                       Stretch="Uniform">
 
-                <dxmvvm:Interaction.Behaviors>
-                    <dxmvvm:UIObjectService x:Name="PreviewImageObjectService" />
-                </dxmvvm:Interaction.Behaviors>
-            </Image>
+                    <dxmvvm:Interaction.Behaviors>
+                        <dxmvvm:UIObjectService x:Name="PreviewImageObjectService" />
+                    </dxmvvm:Interaction.Behaviors>
+                </Image>
 
-            <!-- 화면이 얹는 겹그림(찾은 몹 점선 등). 없으면 비어 있다. 마우스는 통과시킨다. -->
-            <ContentPresenter Content="{Binding Overlay, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}"
-                              IsHitTestVisible="False" />
+                <!-- 화면이 얹는 겹그림(찾은 몹 점선 등). 없으면 비어 있다. 마우스는 통과시킨다. -->
+                <ContentPresenter Content="{Binding Overlay, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}"
+                                  IsHitTestVisible="False" />
 
-            <!-- 화면이 얹는 편집기(영역 손잡이). 마우스를 받을지는 그 안이 정한다 - 편집 중이 아니면 스스로 빠진다. -->
-            <ContentPresenter Content="{Binding Editor, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}" />
+                <!-- 화면이 얹는 편집기(영역 손잡이). 마우스를 받을지는 그 안이 정한다 - 편집 중이 아니면 스스로 빠진다. -->
+                <ContentPresenter Content="{Binding Editor, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}" />
             </Grid>
         </ScrollViewer>
     </Border>

@@ -15,7 +15,7 @@ namespace Minguk.Tools.ViewModels;
 ///
 /// ── 열릴 때 ─────────────────────────────────────────────────────────────
 ///   ① View 의 Loaded  → OnInitializedCommand
-///   ② 부모 주입       → OnParentViewModelChanged (MainViewModel 이 들어온다)
+///   ② 부모 주입       → OnParentViewModelChanged (셸이 들어온다)
 ///   ①②가 모두 도착하면 한 번만:
 ///        InitializeControls()   컨트롤 참조 확보  (UIObjectService)
 ///      → InitializeObservable() 이벤트 구독       (Disposables 에 등록)
@@ -65,7 +65,7 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
     protected CompositeDisposable Disposables { get; } = new();
 
     /// <summary>셸. 문서로 열렸을 때만 들어온다.</summary>
-    protected MainViewModel? MainViewModel { get; private set; }
+    protected Modules.IMainShell? Shell { get; private set; }
 
     /// <summary>false 로 두면 부모 주입을 기다리지 않고 View 의 Loaded 만으로 초기화한다.</summary>
     protected virtual bool RequiresParentViewModel => true;
@@ -122,7 +122,7 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
 
         Guard(() =>
         {
-            MainViewModel = parentViewModel as MainViewModel;
+            Shell = parentViewModel as Modules.IMainShell;
             _parentAttached = true;
         });
 

@@ -27,7 +27,7 @@
                 <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!--  고른 단계가 쓰지 않는 칸은 아예 접는다. IsEnabled 로 흐리게만 두면 자리를 계속 차지한다.  -->
+            <!-- 고른 단계가 쓰지 않는 칸은 아예 접는다. IsEnabled 로 흐리게만 두면 자리를 계속 차지한다. -->
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         </ResourceDictionary>
     </UserControl.Resources>
@@ -43,10 +43,10 @@
         -->
         <dxmvvm:DispatcherService />
 
-        <!--  드라이버 설치 뒤 "재시작이 필요합니다" 를 띄운다. 없으면 조용히 안 뜬다.  -->
+        <!-- 드라이버 설치 뒤 "재시작이 필요합니다" 를 띄운다. 없으면 조용히 안 뜬다. -->
         <dx:DXMessageBoxService />
 
-        <!--  스크립트를 파일로 열고 저장한다.  -->
+        <!-- 스크립트를 파일로 열고 저장한다. -->
         <dxmvvm:OpenFileDialogService />
         <dxmvvm:SaveFileDialogService />
     </dxmvvm:Interaction.Behaviors>
@@ -54,17 +54,17 @@
     <!--
         AllowItemSizing="False" 로 사용자가 런타임에 칸 크기를 바꾸지 못하게 막는다.
         (WinForms 의 AllowCustomization 에 해당하는 것은 WPF 에 없다.
-         드래그로 항목을 재배치하는 customization 모드는 IsCustomization 이 기본 False 라
-         코드에서 켜지 않는 한 애초에 들어갈 수 없다.)
+        드래그로 항목을 재배치하는 customization 모드는 IsCustomization 이 기본 False 라
+        코드에서 켜지 않는 한 애초에 들어갈 수 없다.)
     -->
     <dxlc:LayoutControl Padding="8"
                         AllowItemSizing="False"
                         Orientation="Vertical"
                         ScrollBars="Auto">
 
-        <!--  도는 동안에는 설정을 잠근다. 중간에 바뀌면 엉뚱한 것이 나간다.  -->
-        <dxlc:LayoutGroup Header="보내는 경로"
-                          VerticalAlignment="Top"
+        <!-- 도는 동안에는 설정을 잠근다. 중간에 바뀌면 엉뚱한 것이 나간다. -->
+        <dxlc:LayoutGroup VerticalAlignment="Top"
+                          Header="보내는 경로"
                           IsEnabled="{Binding IsIdle}"
                           Orientation="Horizontal"
                           View="GroupBox">
@@ -92,12 +92,12 @@
             <dxlc:LayoutItem Label="드라이버"
                              Visibility="{Binding HasDriverNotice, Converter={StaticResource BoolToVisibility}}">
                 <dxlc:LayoutGroup Orientation="Horizontal">
-                    <dxe:TextEdit AcceptsReturn="True"
-                                  EditValue="{Binding DriverNotice}"
+                    <dxe:TextEdit VerticalContentAlignment="Top"
                                   Foreground="#BF6A02"
+                                  AcceptsReturn="True"
+                                  EditValue="{Binding DriverNotice}"
                                   IsReadOnly="True"
-                                  TextWrapping="Wrap"
-                                  VerticalContentAlignment="Top" />
+                                  TextWrapping="Wrap" />
 
                     <dx:SimpleButton Width="120"
                                      Command="{Binding DoInstallDriverCommand}"
@@ -113,8 +113,8 @@
             "포커스를 가진 창" 에 기댈 수 없고, 어느 창에 넣을지 정해 줘야 한다.
             다른 경로에서는 줄을 아예 접는다 - 안 쓰는 칸이 늘 떠 있으면 뭘 채워야 하는지 흐려진다.
         -->
-        <dxlc:LayoutGroup Header="대상 창"
-                          VerticalAlignment="Top"
+        <dxlc:LayoutGroup VerticalAlignment="Top"
+                          Header="대상 창"
                           IsEnabled="{Binding IsIdle}"
                           Orientation="Horizontal"
                           View="GroupBox"
@@ -139,15 +139,15 @@
             예전에는 체크박스로 켜고 껐는데, 그러면 순서가 코드에 박혀서(글자 → 클릭 → 이동 → 휠)
             "이동한 다음 클릭" 같은 흔한 것도 짤 수 없었다.
         -->
-        <dxlc:LayoutGroup Header="보낼 것"
-                          VerticalAlignment="Top"
+        <dxlc:LayoutGroup VerticalAlignment="Top"
+                          Header="보낼 것"
                           IsEnabled="{Binding IsIdle}"
                           Orientation="Vertical"
                           View="GroupBox">
 
             <dxlc:LayoutGroup HorizontalAlignment="Left"
-                              Orientation="Horizontal"
-                              VerticalAlignment="Top">
+                              VerticalAlignment="Top"
+                              Orientation="Horizontal">
                 <dxlc:LayoutItem Label="언어">
                     <dxe:ComboBoxEdit Width="140"
                                       IsTextEditable="False"
@@ -155,7 +155,7 @@
                                       SelectedItem="{Binding Script.SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </dxlc:LayoutItem>
 
-                <!--  파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다.  -->
+                <!-- 파이썬은 처음 고를 때 11MB 를 받아 온다. 멈춘 것처럼 보이지 않게 적는다. -->
                 <dxlc:LayoutItem Width="330"
                                  Label="엔진">
                     <dxe:TextEdit EditValue="{Binding Script.EngineStatus, Mode=OneWay}"
@@ -175,8 +175,8 @@
             </dxlc:LayoutGroup>
 
             <dxlc:LayoutGroup HorizontalAlignment="Left"
-                              Orientation="Horizontal"
-                              VerticalAlignment="Top">
+                              VerticalAlignment="Top"
+                              Orientation="Horizontal">
                 <dx:SimpleButton Width="80"
                                  Command="{Binding Script.NewCommand}"
                                  Content="새로"
@@ -193,10 +193,10 @@
                                  Content="다른 이름으로" />
             </dxlc:LayoutGroup>
 
-            <!--  본보기 줄을 캐럿이 있는 줄 아래에 끼운다. 형식을 외우지 않아도 되게.  -->
+            <!-- 본보기 줄을 캐럿이 있는 줄 아래에 끼운다. 형식을 외우지 않아도 되게. -->
             <dxlc:LayoutGroup HorizontalAlignment="Left"
-                              Orientation="Horizontal"
-                              VerticalAlignment="Top">
+                              VerticalAlignment="Top"
+                              Orientation="Horizontal">
                 <dx:SimpleButton Width="72"
                                  Command="{Binding DoAddStepCommand}"
                                  CommandParameter="{x:Static sequencing:SequenceStepKind.Type}"
@@ -237,41 +237,41 @@
                 TextEditor 를 바로 쓰지 않고 markup:ScriptEditor 로 감싼 이유는 그쪽에 적어 두었다
                 (그냥 얹으면 창 전체의 UI 자동화 트리가 빈다).
                 Text 가 의존 속성이 아니어서 markup:AvalonEditText.Text 로 양방향을 잇는다.
-
+                
                 DevExpress 경량 테마는 표준 WPF 컨트롤을 손대지 않으므로 색을 직접 준다 -
                 안 그러면 어두운 테마에서 이 편집기만 흰 판으로 남는다.
             -->
             <Border BorderBrush="{Binding Script.EditorBorder}"
                     BorderThickness="1">
                 <markup:ScriptEditor Height="200"
-                                       Background="{Binding Script.EditorBackground}"
-                                       FontFamily="D2Coding, Consolas, Courier New"
-                                       FontSize="13"
-                                       Foreground="{Binding Script.EditorForeground}"
-                                       LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
-                                       ShowLineNumbers="True"
-                                       SyntaxHighlighting="{Binding Script.Highlighting}"
-                                       WordWrap="False"
-                                       markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
+                                     Background="{Binding Script.EditorBackground}"
+                                     Foreground="{Binding Script.EditorForeground}"
+                                     FontFamily="D2Coding, Consolas, Courier New"
+                                     FontSize="13"
+                                     markup:AvalonEditText.Text="{Binding Script.Text, Mode=TwoWay}"
                                      CompletionSource="{Binding Script.CompletionSource, Mode=OneWay}"
-                                         Errors="{Binding Script.Errors, Mode=OneWay}">
+                                     Errors="{Binding Script.Errors, Mode=OneWay}"
+                                     LineNumbersForeground="{Binding Script.EditorLineNumberForeground}"
+                                     ShowLineNumbers="True"
+                                     SyntaxHighlighting="{Binding Script.Highlighting}"
+                                     WordWrap="False">
                     <dxmvvm:Interaction.Behaviors>
-                        <!--  ViewModel 이 캐럿 자리에 줄을 끼우려면 편집기를 직접 잡아야 한다.  -->
+                        <!-- ViewModel 이 캐럿 자리에 줄을 끼우려면 편집기를 직접 잡아야 한다. -->
                         <dxmvvm:UIObjectService x:Name="EditorObjectService" />
                     </dxmvvm:Interaction.Behaviors>
                 </markup:ScriptEditor>
             </Border>
 
-            <!--  틀린 줄이 있을 때만 뜬다. 늘 자리를 차지하면 멀쩡할 때도 눈이 간다.  -->
-            <!--  여러 줄이 될 수 있다. 한 줄에 이어 붙이면 뒤가 잘려서 정작 중요한 말이 안 보인다.  -->
+            <!-- 틀린 줄이 있을 때만 뜬다. 늘 자리를 차지하면 멀쩡할 때도 눈이 간다. -->
+            <!-- 여러 줄이 될 수 있다. 한 줄에 이어 붙이면 뒤가 잘려서 정작 중요한 말이 안 보인다. -->
             <dxlc:LayoutItem Label="고칠 줄"
                              Visibility="{Binding Script.HasError, Converter={StaticResource BoolToVisibility}}">
-                <dxe:TextEdit AcceptsReturn="True"
-                              EditValue="{Binding Script.ErrorText, Mode=OneWay}"
+                <dxe:TextEdit VerticalContentAlignment="Top"
                               Foreground="#D1242F"
+                              AcceptsReturn="True"
+                              EditValue="{Binding Script.ErrorText, Mode=OneWay}"
                               IsReadOnly="True"
-                              TextWrapping="Wrap"
-                              VerticalContentAlignment="Top" />
+                              TextWrapping="Wrap" />
             </dxlc:LayoutItem>
 
             <!--
@@ -281,17 +281,17 @@
             -->
             <dxlc:LayoutItem Label="이 경로에서는"
                              Visibility="{Binding HasPathWarning, Converter={StaticResource BoolToVisibility}}">
-                <dxe:TextEdit AcceptsReturn="True"
-                              EditValue="{Binding PathWarning}"
+                <dxe:TextEdit VerticalContentAlignment="Top"
                               Foreground="#BF6A02"
+                              AcceptsReturn="True"
+                              EditValue="{Binding PathWarning}"
                               IsReadOnly="True"
-                              TextWrapping="Wrap"
-                              VerticalContentAlignment="Top" />
+                              TextWrapping="Wrap" />
             </dxlc:LayoutItem>
         </dxlc:LayoutGroup>
 
-        <dxlc:LayoutGroup Header="타이밍"
-                          VerticalAlignment="Top"
+        <dxlc:LayoutGroup VerticalAlignment="Top"
+                          Header="타이밍"
                           IsEnabled="{Binding IsIdle}"
                           Orientation="Horizontal"
                           View="GroupBox">
@@ -330,8 +330,8 @@
             </dxlc:LayoutItem>
         </dxlc:LayoutGroup>
 
-        <dxlc:LayoutGroup Header="실행"
-                          VerticalAlignment="Top"
+        <dxlc:LayoutGroup VerticalAlignment="Top"
+                          Header="실행"
                           Orientation="Vertical"
                           View="GroupBox">
 
@@ -346,8 +346,8 @@
                               IsReadOnly="True" />
             </dxlc:LayoutItem>
 
-            <dxlc:LayoutGroup Orientation="Horizontal"
-                              VerticalAlignment="Top">
+            <dxlc:LayoutGroup VerticalAlignment="Top"
+                              Orientation="Horizontal">
                 <dxlc:LayoutItem Label="진행">
                     <dxe:TextEdit EditValue="{Binding CurrentStep}"
                                   IsReadOnly="True" />
@@ -360,8 +360,8 @@
             </dxlc:LayoutGroup>
 
             <dxlc:LayoutGroup HorizontalAlignment="Left"
-                              Orientation="Horizontal"
-                              VerticalAlignment="Top">
+                              VerticalAlignment="Top"
+                              Orientation="Horizontal">
                 <dx:SimpleButton Width="120"
                                  Height="28"
                                  Command="{Binding DoRunOnceCommand}"
@@ -390,7 +390,7 @@
 
         <!--
             시험 입력란. 남는 자리를 채우므로 VerticalAlignment 를 Top 으로 두지 않는다.
-
+            
             도는 동안에도 잠그지 않는다 - 잠그면 입력을 받을 수 없어 있으나 마나다.
             이 앱이 앞에 있고 여기에 포커스가 있으면 보낸 입력이 여기로 온다.
         -->
@@ -399,12 +399,12 @@
                           View="GroupBox">
 
             <dxlc:LayoutGroup HorizontalAlignment="Left"
-                              Orientation="Horizontal"
-                              VerticalAlignment="Top">
+                              VerticalAlignment="Top"
+                              Orientation="Horizontal">
                 <dx:SimpleButton Width="80"
                                  Command="{Binding DoClearTestPadCommand}"
                                  Content="지우기" />
-                <!--  테마 색을 그대로 물려받고 흐리게만 한다. 테마 키를 짚으면 버전마다 이름이 달라진다.  -->
+                <!-- 테마 색을 그대로 물려받고 흐리게만 한다. 테마 키를 짚으면 버전마다 이름이 달라진다. -->
                 <TextBlock Margin="12,0,0,0"
                            VerticalAlignment="Center"
                            Opacity="0.65"
@@ -416,13 +416,13 @@
                 한 줄 상자에 드롭다운이 달린 모양으로 뜬다 - 여기서 필요한 것은 늘 펼쳐진 판이다.
                 TextEdit 이 AcceptsReturn·TextWrapping·스크롤을 그대로 갖고 있다.
             -->
-            <dxe:TextEdit AcceptsReturn="True"
+            <dxe:TextEdit MinHeight="140"
+                          VerticalContentAlignment="Top"
                           FontFamily="D2Coding, Consolas, Courier New"
-                          MinHeight="140"
+                          AcceptsReturn="True"
                           NullText="여기로 입력이 들어온다"
                           Text="{Binding TestPadText, UpdateSourceTrigger=PropertyChanged}"
                           TextWrapping="Wrap"
-                          VerticalContentAlignment="Top"
                           VerticalScrollBarVisibility="Auto" />
         </dxlc:LayoutGroup>
     </dxlc:LayoutControl>

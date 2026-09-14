@@ -65,7 +65,7 @@ public partial class CaptureMonitorViewModel : CaptureViewModelBase
 
     public CaptureMonitorViewModel()
     {
-        Caption = "캡처";
+        Caption = "화면캡처";
         CaptionImage = FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/screen.png");
 
         DoClearCommand = new DelegateCommand(() => Rows.Clear(), false);

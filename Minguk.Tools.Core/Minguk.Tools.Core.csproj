@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		셸과 기능 모듈이 함께 보는 가운데 조각.
+
+		셸(Minguk.Tools)이 모듈을 참조하고, 모듈이 화면 바탕(DocumentViewModelBase)과 메뉴 항목(MenuItemModel)을
+		써야 하므로 그 둘을 셸에 두면 순환 참조가 된다. 그래서 여기로 내렸다.
+
+		넣는 기준: 셸도 쓰고 모듈도 쓰는 것. 기능 코드는 넣지 않는다.
+	-->
+
+	<PropertyGroup>
+		<Platforms>x64</Platforms>
+		<Platform Condition="'$(Platform)' == 'AnyCPU'">x64</Platform>
+		<TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+		<SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<Nullable>enable</Nullable>
+		<!-- 네임스페이스는 Minguk.Tools 그대로다 - 파일을 옮겨도 기존 using 을 한 줄도 안 고치려고. -->
+		<RootNamespace>Minguk.Tools</RootNamespace>
+		<AssemblyName>Minguk.Tools.Core</AssemblyName>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="DevExpress.Mvvm" Version="26.1.3" />
+		<PackageReference Include="DevExpress.Wpf" Version="26.1.3" />
+		<PackageReference Include="DevExpress.Wpf.Core" Version="26.1.3" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="NLog" Version="6.2.0" />
+		<PackageReference Include="System.Reactive" Version="7.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Minguk.Base\Minguk.Base.csproj" />
+	</ItemGroup>
+
+</Project>
