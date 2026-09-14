@@ -122,7 +122,8 @@
         <dxdo:DockLayoutManager Margin="0"
                                 Padding="0"
                                 AllowCustomization="False">
-            <dxdo:LayoutGroup Margin="0,1,0,0" Padding="0">
+            <dxdo:LayoutGroup Margin="0,1,0,0"
+                              Padding="0">
                 <dxdo:DocumentGroup x:Name="AutomationDocumentGroup"
                                     Margin="0"
                                     Padding="0"

@@ -63,13 +63,13 @@
             </dxlc:LayoutGroup.GroupBoxStyle>
 
             <dxlc:LayoutItem AddColonToLabel="False"
-                             Label="학습경로">
+                             Label="작업공간">
                 <dxe:ButtonEdit AllowDefaultButton="False"
-                                EditValue="{Binding TrainingRoot, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                NullText="(설치 폴더\학습)"
-                                ToolTip="파이썬 환경(YOLO·D-FINE) · D-FINE 저장소 · 사전학습 가중치 · 학습 결과가 이 폴더 아래 있습니다.&#10;가상환경은 복사해 옮길 수 없습니다 - 새 자리에는 도구\학습-환경-준비.ps1 로 다시 만드세요.">
+                                EditValue="{Binding ProjectsRoot, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                NullText="(설치 폴더\작업공간)"
+                                ToolTip="솔루션들이 든 폴더입니다(작업공간/오버워치/사격장). 사진 · 라벨 · 모델 · 스크립트가 이 아래 있어 백업할 것은 이쪽입니다.&#10;솔루션 폴더 하나를 고르는 칸이 아닙니다 - 그 위 폴더를 고르세요. 여기를 바꿔도 이미 있는 폴더는 따라 옮겨지지 않습니다.">
                     <dxe:ButtonEdit.Buttons>
-                        <dxe:ButtonInfo Command="{Binding DoChooseTrainingRootCommand}"
+                        <dxe:ButtonInfo Command="{Binding DoChooseProjectsRootCommand}"
                                         GlyphKind="User"
                                         ToolTip="폴더를 고릅니다.">
                             <Image Width="16"
@@ -81,13 +81,13 @@
             </dxlc:LayoutItem>
 
             <dxlc:LayoutItem AddColonToLabel="False"
-                             Label="작업공간">
+                             Label="학습경로">
                 <dxe:ButtonEdit AllowDefaultButton="False"
-                                EditValue="{Binding ProjectsRoot, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                NullText="(설치 폴더\작업공간)"
-                                ToolTip="솔루션들이 든 폴더입니다(작업공간/오버워치/사격장). 사진 · 라벨 · 모델 · 스크립트가 이 아래 있어 백업할 것은 이쪽입니다.&#10;솔루션 폴더 하나를 고르는 칸이 아닙니다 - 그 위 폴더를 고르세요. 여기를 바꿔도 이미 있는 폴더는 따라 옮겨지지 않습니다.">
+                                EditValue="{Binding TrainingRoot, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                NullText="(설치 폴더\학습)"
+                                ToolTip="파이썬 환경(YOLO·D-FINE) · D-FINE 저장소 · 사전학습 가중치 · 학습 결과가 이 폴더 아래 있습니다.&#10;가상환경은 복사해 옮길 수 없습니다 - 새 자리에는 도구\학습-환경-준비.ps1 로 다시 만드세요.">
                     <dxe:ButtonEdit.Buttons>
-                        <dxe:ButtonInfo Command="{Binding DoChooseProjectsRootCommand}"
+                        <dxe:ButtonInfo Command="{Binding DoChooseTrainingRootCommand}"
                                         GlyphKind="User"
                                         ToolTip="폴더를 고릅니다.">
                             <Image Width="16"
@@ -108,15 +108,15 @@
                              Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
                              GlyphHeight="16"
                              GlyphWidth="16" />
-            <dx:SimpleButton MinWidth="110"
-                             Command="{Binding DoOpenTrainingRootCommand}"
-                             Content="학습폴더 열기"
-                             Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder.png'}"
-                             GlyphHeight="16"
-                             GlyphWidth="16" />
             <dx:SimpleButton MinWidth="130"
                              Command="{Binding DoOpenProjectsRootCommand}"
                              Content="작업공간 열기"
+                             Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder.png'}"
+                             GlyphHeight="16"
+                             GlyphWidth="16" />
+            <dx:SimpleButton MinWidth="110"
+                             Command="{Binding DoOpenTrainingRootCommand}"
+                             Content="학습폴더 열기"
                              Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder.png'}"
                              GlyphHeight="16"
                              GlyphWidth="16" />

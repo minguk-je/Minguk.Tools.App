@@ -61,8 +61,8 @@
                 </Style>
             </dxlc:LayoutGroup.GroupBoxStyle>
 
-            <dxlc:LayoutItem AddColonToLabel="False"
-                             VerticalAlignment="Stretch"
+            <dxlc:LayoutItem VerticalAlignment="Stretch"
+                             AddColonToLabel="False"
                              Label="">
                 <controls:BaseGridControl AutoGenerateColumns="None"
                                           ItemsSource="{Binding Recent}"
@@ -117,22 +117,24 @@
             <!-- 고르는 중 -->
             <dxlc:LayoutGroup Orientation="Vertical"
                               Visibility="{Binding IsCreating, Converter={StaticResource Not}, ConverterParameter=Visibility}">
-                <dxlc:LayoutItem AddColonToLabel="False" Label="">
+                <dxlc:LayoutItem AddColonToLabel="False"
+                                 Label="">
                     <dx:SimpleButton Width="150"
                                      HorizontalAlignment="Left"
                                      Command="{Binding DoBrowseCommand}"
                                      Content="솔루션 열기..." />
                 </dxlc:LayoutItem>
 
-                <dxlc:LayoutItem AddColonToLabel="False" Label="">
+                <dxlc:LayoutItem AddColonToLabel="False"
+                                 Label="">
                     <dx:SimpleButton Width="150"
                                      HorizontalAlignment="Left"
                                      Command="{Binding DoBeginCreateCommand}"
                                      Content="새 솔루션 만들기..." />
                 </dxlc:LayoutItem>
 
-                <dxlc:LayoutItem AddColonToLabel="False"
-                                 VerticalAlignment="Bottom"
+                <dxlc:LayoutItem VerticalAlignment="Bottom"
+                                 AddColonToLabel="False"
                                  Label="">
                     <TextBlock MaxWidth="150"
                                Margin="2,12,2,2"
@@ -146,19 +148,22 @@
             <!-- 만드는 중 -->
             <dxlc:LayoutGroup Orientation="Vertical"
                               Visibility="{Binding IsCreating, Converter={StaticResource BooleanToVisibility}}">
-                <dxlc:LayoutItem AddColonToLabel="False" Label="게임 이름">
+                <dxlc:LayoutItem AddColonToLabel="False"
+                                 Label="게임 이름">
                     <dxe:TextEdit Width="150"
                                   EditValue="{Binding NewSolutionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   NullText="오버워치" />
                 </dxlc:LayoutItem>
 
-                <dxlc:LayoutItem AddColonToLabel="False" Label="첫 프로젝트">
+                <dxlc:LayoutItem AddColonToLabel="False"
+                                 Label="첫 프로젝트">
                     <dxe:TextEdit Width="150"
                                   EditValue="{Binding NewProjectName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   NullText="사격장" />
                 </dxlc:LayoutItem>
 
-                <dxlc:LayoutItem AddColonToLabel="False" Label="">
+                <dxlc:LayoutItem AddColonToLabel="False"
+                                 Label="">
                     <TextBlock MaxWidth="230"
                                Margin="2,4,2,4"
                                HorizontalAlignment="Left"
