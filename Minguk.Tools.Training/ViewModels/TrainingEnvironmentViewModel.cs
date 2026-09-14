@@ -148,13 +148,13 @@ public class TrainingEnvironmentViewModel : DocumentViewModelBase
     {
         Items.Clear();
 
-        Add("학습 경로", TrainingPaths.Root, Directory.Exists(TrainingPaths.Root), "위 칸에서 자리를 정합니다.");
+        Add("학습경로", TrainingPaths.Root, Directory.Exists(TrainingPaths.Root), "위 칸에서 자리를 정합니다.");
+        Add("작업공간", ProjectPaths.Root, Directory.Exists(ProjectPaths.Root), "위 칸에서 자리를 정합니다.");
         Add("YOLO 파이썬", TrainingPaths.YoloPython, File.Exists(TrainingPaths.YoloPython), @"도구\학습-환경-준비.ps1 -What yolo");
         Add("D-FINE 파이썬", TrainingPaths.DFinePython, File.Exists(TrainingPaths.DFinePython), @"도구\학습-환경-준비.ps1 -What dfine");
         Add("D-FINE 저장소", TrainingPaths.DFineRepository, Directory.Exists(TrainingPaths.DFineRepository), @"도구\학습-환경-준비.ps1 -What dfine");
         Add("D-FINE 가중치", TrainingPaths.DFineWeights, File.Exists(TrainingPaths.DFineWeights), @"도구\학습-환경-준비.ps1 -What dfine");
         Add("학습 결과", TrainingPaths.Runs, Directory.Exists(TrainingPaths.Runs), "처음 학습할 때 만들어집니다.");
-        Add("작업공간", ProjectPaths.Root, Directory.Exists(ProjectPaths.Root), "위 칸에서 자리를 정합니다.");
 
         var missing = 0;
 
