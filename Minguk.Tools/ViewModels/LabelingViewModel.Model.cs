@@ -181,6 +181,36 @@ public partial class LabelingViewModel
         set => SetProperty(() => TrainEpochs, value);
     }
 
+    /// <summary>고를 수 있는 YOLO 학습 크기(480·640·960·1280).</summary>
+    public int[] YoloImageSizes { get; } = Vision.Training.YoloTrainer.ImageSizes;
+
+    /// <summary>
+    /// 다음 YOLO 학습의 크기. 저장한다(<c>YoloImageSize</c>). 지금 쓰는 모델의 크기는 옆 줄 요약("960x960")에 뜬다 - 바꾸면 다시 학습해야 먹는다.
+    /// </summary>
+    /// <remarks>
+    /// 작은 몹(멀리 있는 봇)을 잘 찾게 960·1280 까지 넓혔다(사용자, 2026-09-15 - 학습·찾기가 느려져도 그래픽 카드는 나중에 바꾼다).
+    /// D-FINE 은 640 고정이라 YOLO 가 골라져 있을 때만 켜진다.
+    /// </remarks>
+    public int SelectedYoloImageSize
+    {
+        get => GetProperty(() => SelectedYoloImageSize);
+        set => SetProperty(() => SelectedYoloImageSize, value);
+    }
+
+    /// <summary>학습 크기 콤보를 켤지 - YOLO 가 골라져 있고 학습 중이 아닐 때.</summary>
+    public bool CanChooseYoloImageSize => !IsTraining && Vision.Training.YoloTrainer.WeightsFor(SelectedModelChoice?.Name) is not null;
+
+    /// <summary>학습 크기 칸 툴팁.</summary>
+    public string ImageSizeHelp { get; } =
+        "모델이 그림을 이 크기(정사각, 한 변 px)로 줄여서 봅니다. 게임 화면 1920×1080 은 비율을 지키고 위아래에 여백을 넣어 맞춥니다.\n" +
+        "\n" +
+        "• 키우면 작은 몹(멀리 있는 봇)을 더 잘 찾습니다. 640 에서는 1920 화면이 3분의 1로 줄어 60px 봇이 20px 이 됩니다 - 1280 이면 40px.\n" +
+        "• 대신 학습과 몹 찾기가 느려집니다. 픽셀 수에 비례해 960 은 640 의 약 2.3배, 1280 은 약 4배 일을 합니다.\n" +
+        "• 그래픽 카드 메모리에 맞게 한 번에 넣는 그림 수를 알아서 줄입니다(YOLO11n: 480 → 14장 · 640 → 8장 · 960 → 4장 · 1280 → 2장).\n" +
+        "\n" +
+        "YOLO11n 98장 60바퀴, GTX 1060 3GB: 640 은 약 5분(실측). 960·1280 은 픽셀 수로 어림하면 약 12분·20분입니다(아직 안 재 봤습니다).\n" +
+        "바꾸면 다시 학습해야 먹습니다. D-FINE 은 640 고정입니다.";
+
     /// <summary>바퀴 칸 툴팁 - 왜 여러 바퀴를 돌리는지(사용자 요청, 2026-09-15).</summary>
     public string EpochHelp { get; } =
         "바퀴(epoch) = 학습 그림을 전부 한 번씩 보는 것입니다. 98장이면 한 바퀴에 98장(묶음 8장씩 13묶음)을 봅니다.\n" +
@@ -201,6 +231,7 @@ public partial class LabelingViewModel
             DoTrainCommand.RaiseCanExecuteChanged();
             DoCancelTrainCommand.RaiseCanExecuteChanged();
             RaisePropertyChanged(nameof(IsTrainingBatchVisible));
+            RaisePropertyChanged(nameof(CanChooseYoloImageSize));
         });
     }
 

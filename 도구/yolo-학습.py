@@ -166,6 +166,8 @@ def main() -> None:
     parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--device", default="0")
     parser.add_argument("--colors", default=None, help="몹 번호 순서의 색 RRGGBB 를 쉼표로(묶음 그림 상자 색)")
+    parser.add_argument("--imgsz", type=int, default=640,
+                        help="학습·내보내기 크기(정사각, 32 의 배수). 키우면 작은 몹을 더 찾고 학습·찾기가 느려진다(480·640·960·1280)")
     args = parser.parse_args()
 
     root, runs = Path(args.root), Path(args.runs)
@@ -186,12 +188,13 @@ def main() -> None:
     model = YOLO(f"{args.model}.pt")
     report_progress(model, runs / args.model)
     model.train(
-        data=str(data), imgsz=640, epochs=args.epochs, batch=args.batch, device=args.device, workers=2,
+        data=str(data), imgsz=args.imgsz, epochs=args.epochs, batch=args.batch, device=args.device, workers=2,
         project=str(runs), name=args.model, exist_ok=True, plots=False, verbose=False)
     print(f"TRAIN_SECONDS {round(time.time() - started)}", flush=True)
 
+    # 내보내기도 학습한 크기로 - ONNX 입력이 이 크기로 박히고, 앱의 몹 찾기는 그 크기를 읽어 그대로 넣는다(OnnxDetector).
     best = runs / args.model / "weights" / "best.pt"
-    exported = YOLO(str(best)).export(format="onnx", imgsz=640, opset=17, simplify=True, dynamic=False)
+    exported = YOLO(str(best)).export(format="onnx", imgsz=args.imgsz, opset=17, simplify=True, dynamic=False)
     print(f"ONNX {exported}", flush=True)
 
 

@@ -30,6 +30,7 @@ internal static class YoloTrainProbe
 
         var epochs = int.TryParse(Program.ArgValue(args, "--epochs="), NumberStyles.Integer, CultureInfo.InvariantCulture, out var e) ? e : 2;
         var name = Program.ArgValue(args, "--name=") ?? "YOLO11n";
+        var imageSize = int.TryParse(Program.ArgValue(args, "--imgsz="), NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) ? s : YoloTrainer.DefaultImageSize;
         var dataset = new LabelDataset(root);
 
         if (YoloTrainer.WhyUnavailable() is { } why)
@@ -66,7 +67,7 @@ internal static class YoloTrainProbe
             Console.WriteLine($"  묶음 그림: {path} ({size:N0}바이트)");
         });
 
-        var (modelPath, elapsed) = YoloTrainer.TrainAsync(dataset, name, epochs, 0, status, steps, CancellationToken.None, preview).GetAwaiter().GetResult();
+        var (modelPath, elapsed) = YoloTrainer.TrainAsync(dataset, name, epochs, 0, status, steps, CancellationToken.None, preview, imageSize).GetAwaiter().GetResult();
 
         var manifest = DetectorManifest.Load(modelPath);
         var choice = DetectorFiles.CurrentChoice(dataset, DetectorFiles.ListChoices(dataset));
@@ -88,6 +89,15 @@ internal static class YoloTrainProbe
 
         if (manifest is not { Engine: DetectorEngine.Onnx, Letterbox: true } || manifest.ModelName != name) { Console.WriteLine("[FAIL] 들인 쪽지가 ONNX·레터박스·이름이 아니다"); failures++; }
         else Console.WriteLine("[PASS] ONNX · 비율 · 이름으로 들였다");
+
+        // 학습 크기 - 쪽지와 ONNX 에 박힌 입력이 고른 크기다(몹 찾기는 ONNX 쪽을 읽는다).
+        int onnxWidth, onnxHeight;
+        using (var detector = new Minguk.Tools.Vision.Inference.Onnx.OnnxDetector(modelPath, manifest))
+            (onnxWidth, onnxHeight) = (detector.InputSpec.Width, detector.InputSpec.Height);
+
+        if (manifest.InputWidth != imageSize || manifest.InputHeight != imageSize || onnxWidth != imageSize || onnxHeight != imageSize)
+        { Console.WriteLine($"[FAIL] 학습 크기 {imageSize} 가 아니다 - 쪽지 {manifest.InputWidth}x{manifest.InputHeight} · ONNX {onnxWidth}x{onnxHeight}"); failures++; }
+        else Console.WriteLine($"[PASS] 학습 크기 {imageSize} 로 학습·내보냈다 (쪽지·ONNX 입력 {onnxWidth}x{onnxHeight}, 묶음 {YoloTrainer.BatchFor(YoloTrainer.WeightsFor(name)!, imageSize)}장)");
 
         if (choice is null || choice.Name != name) { Console.WriteLine("[FAIL] 콤보 보관본이 새 모델을 가리키지 않는다"); failures++; }
         else Console.WriteLine($"[PASS] 콤보 보관본이 새 모델이다: {Path.GetFileName(choice.Path)}");

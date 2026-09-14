@@ -487,6 +487,17 @@
                                                   MinValue="1"
                                                   ToolTip="{Binding EpochHelp}" />
                                 </dxlc:LayoutItem>
+                                <!-- 학습 크기(YOLO) - 작은 몹을 잘 찾게 960·1280 까지(2026-09-15). D-FINE 은 640 고정이라 YOLO 일 때만 켜진다. -->
+                                <dxlc:LayoutItem Width="150"
+                                                 Label="학습 크기"
+                                                 ToolTip="{Binding ImageSizeHelp}">
+                                    <dxe:ComboBoxEdit DisplayFormatString="{}{0} px"
+                                                      IsEnabled="{Binding CanChooseYoloImageSize}"
+                                                      IsTextEditable="False"
+                                                      ItemsSource="{Binding YoloImageSizes}"
+                                                      SelectedItem="{Binding SelectedYoloImageSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      ToolTip="{Binding ImageSizeHelp}" />
+                                </dxlc:LayoutItem>
                                 <!-- 아래 '쓰는 모델' 콤보에 고른 모델로 학습한다(TrainButtonText). YOLO 는 yolo-venv, D-FINE 은 제 저장소를 돌린다. -->
                                 <dx:SimpleButton Width="131"
                                                  HorizontalAlignment="Left"

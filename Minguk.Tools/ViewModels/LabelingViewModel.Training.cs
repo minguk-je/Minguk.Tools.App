@@ -106,7 +106,8 @@ public partial class LabelingViewModel
                 {
                     (modelPath, elapsed) = DFineTrainer.Handles(choice.Name)
                         ? await DFineTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token)
-                        : await YoloTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token, previews);
+                        : await YoloTrainer.TrainAsync(dataset, choice.Name, TrainEpochs, device, status, steps, token, previews,
+                                                             SelectedYoloImageSize > 0 ? SelectedYoloImageSize : YoloTrainer.DefaultImageSize);
                 }
 
                 TrainEpochsDone = TrainEpochsTotal;
@@ -309,6 +310,7 @@ public partial class LabelingViewModel
     private void OnSelectedModelChoiceChanged() => Guard(() =>
     {
         DoTrainCommand.RaiseCanExecuteChanged();
+        RaisePropertyChanged(nameof(CanChooseYoloImageSize));
 
         if (_isRefreshingModels || SelectedModelChoice is not { } choice) return;
 
