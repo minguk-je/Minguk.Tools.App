@@ -2,1408 +2,207 @@ DevExpress WPF 컨트롤, WPF 개발자
 
 ## 이 프로젝트
 
-TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 기준 스타일(Minguk.Base)을
-그대로 가져온 새 프로젝트. 도메인 코드(TAMS · Redis · XPO · MCP)는 들어 있지 않다.
+TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 기준 스타일(Minguk.Base)을 가져온 게임 자동화 도구.
+화면캡처 → 라벨링 → 학습(ONNX) → 스크립트(몹 찾기·조준·글자 읽기) → 빌드(.mtsx) → 플레이.
+
+자세한 규칙·실측은 docs 에 나눠 둔다 - 그 영역을 고칠 때 먼저 읽는다.
+
+| 문서 | 무엇 |
+|---|---|
+| `docs/프로젝트-설계.md` | 솔루션·프로젝트·작업공간, 폴더 모양, 솔루션 탭·셸 |
+| `docs/몹-검출.md` | 라벨 형식, ONNX 모델·DirectML 함정, 학습, 실시간 몹 찾기, OCR·이름 붙인 자리, 라벨링 화면 |
+| `docs/실시간-스크립트.md` | 실시간 API·안전장치, 목표·조준, 입력 경로, 전역 단축키, 디버그 |
+| `docs/스크립트-프로젝트-설계.md` · `docs/스크립트-설계.md` | 스크립트 화면(VS 모양)·프로젝트 파일 |
+| `docs/ONNX-모델-학습.md` · `docs/몹-찾기-속도-설계.md` | 학습 절차 · 추론 속도 |
+
+## 짜임
+
+```
+Minguk Tools (틀)
+├ 자동화                      ← 그룹
+│  ├ 환경설정                 ← 모듈(Minguk.Tools.Training). 작업공간·학습 경로를 정한다
+│  ├ 솔루션                   ← AutomationMainView. 솔루션이 없으면 시작 창
+│  │    위 : 작업공간 → [솔루션 ▾] → [프로젝트 ▾]  [새 프로젝트][새 공유 프로젝트][새 솔루션]
+│  │    아래 탭 : 화면캡처 · 라벨링 · 스크립트   ← 고른 프로젝트를 따라간다
+│  └ 플레이                   ← bin 의 완성품(.mtsx)을 돌린다
+└ 입력 테스트                 ← 입력 경로 점검(계획 모드)
+제목 표시줄 : [▶ 시작 프로젝트] [중지] · 최상위 · 테마      창 제목 : 사격장 - 오버워치 - Minguk Tools
+```
+
+- 게임 하나 = **솔루션**(`.mtsln`), 모드·스테이지·런 = **프로젝트**(`.mtsproj`). VS 2026 과 같은 말이다. 사진·라벨·모델·영역·스크립트는 **프로젝트마다 제 것**.
+- 솔루션들이 든 폴더를 화면에서 **작업공간** 이라 부른다(설정 키 `Vision.ProjectsRoot`·`ProjectPaths` 이름은 저장값 때문에 그대로). 작업공간은 솔루션 폴더의 **위** 폴더다.
+- **화면들이 고른 프로젝트를 본다** - 기준은 `SolutionWorkspace.StartupDirectory` 하나: 데이터셋·모델·영역(`LabelDataset.ConfiguredRoot`), 스크립트 자리(`ScriptFiles.DefaultDirectory`),
+  프레임 저장(`ProjectPaths.Captures`), 스크립트 화면이 여는 `.mtsproj`. 솔루션이 없을 때만 옛 자리(`LegacyRoot`)를 본다.
+  이름 주의: `Minguk.Tools.Input.Scripting` 안에서 `Projects.` 는 `Input.Scripting.Projects` 로 잡혀 `global::Minguk.Tools.Projects` 로 적는다.
+- 자세한 것(솔루션 탭 문서·프로젝트 바꾸기·공유 프로젝트·솔루션 탐색기·▶ 실행)은 `docs/프로젝트-설계.md`.
 
 ## 화면 하나 추가하는 법
 
+**새 기능은 모듈 프로젝트로 만든다**(아래). 셸 안에 화면을 더할 때는:
+
 1. `Views/XxxView.xaml` + `.xaml.cs` (UserControl)
-2. `ViewModels/XxxViewModel.cs` — `DocumentViewModelBase` 상속, `Create()` 팩터리, 생성자에서 `Caption`/`CaptionImage` 지정
-3. `App.xaml.cs` 의 `builder.Services.AddTransient<XxxView>()` 에 등록
-4. `Source/MainMenu.cs` 에 `MenuItemModel.Create(...)` 추가 (`class_nm` 은 View 의 전체 타입 이름)
+2. `ViewModels/XxxViewModel.cs` — `DocumentViewModelBase` 상속, `Create()` 팩터리, 생성자에서 `Caption`/`CaptionImage`(탭 캡션 = 메뉴 이름)
+3. `App.xaml.cs` 의 `builder.Services.AddTransient<XxxView>()` - 빠뜨리면 메뉴는 보이는데 탭이 비어서 열린다(`MainViewLocator` 가 DI 에서 꺼낸다)
+4. `Source/MainMenu.cs` 에 `MenuItemModel.Create(...)`(`class_nm` = View 전체 타입 이름). 솔루션 탭 아래 화면이면 `Source/AutomationScreens.cs`.
 
-3번을 빠뜨리면 메뉴는 보이지만 탭이 비어서 열린다 — `MainViewLocator` 가 DI 에서 뷰를 꺼내기 때문이다.
+대시보드(`DashboardView`)는 메뉴에서 빼고 ViewModel 최소 예시로 남겨 두었다.
 
-**새 기능은 이제 모듈 프로젝트로 만든다**(아래 「기능 모듈」). 위 네 단계는 셸에 이미 있는 화면들 이야기다.
-
-메뉴 이름(2026-09-14): 화면캡처 · 라벨링 · 스크립트 · 플레이 · 입력 테스트. 대시보드는 메뉴에서 뺐다(주석 처리, 화면과 DI 등록은 그대로 -
-ViewModel 최소 예시로 남긴다). 탭 캡션(`Caption`)도 메뉴 이름과 같게 둔다.
-
-## 솔루션과 프로젝트 (만드는 중)
-
-게임 하나 = **솔루션**(`.mtsln`), 그 안의 모드·스테이지·런 = **프로젝트**(`.mtsproj`). VS 2026 구조를 그대로 따른다.
-사진·라벨·몹 이름·모델·영역·스크립트는 **프로젝트마다 제 것**이고, 실행은 **시작 프로젝트** 하나가 돈다.
-정한 것·폴더 모양·만들 순서는 전부 **`docs/프로젝트-설계.md`** 에 있다.
-
-**짜임(사용자, 2026-09-14)** - Minguk.Tools 는 틀(와꾸)이고, 왼쪽 메뉴는 `Office Automation`(그룹) → **`Automation`(누르는 항목)** 하나다.
-누르면 솔루션이 없을 때 시작 창(`StartWindow`, `SolutionGate`)이 뜨고 **Automation 화면**(`AutomationMainView`)이 최상위 탭 하나로 열린다.
-**TamsTools 의 StreamMode 화면과 같은 짜임**이다("Depth 로 내려간다") - 위에서 **솔루션 → 프로젝트** 콤보를 고르면, 아래 탭(화면캡처·라벨링·
-스크립트·플레이·입력 테스트·학습환경, `AutomationScreens` - 모듈 화면 포함)이 그 프로젝트를 따라간다. 지금 만드는 작업은 전부 Automation 안이다.
-(프로젝트마다 바깥 탭을 여는 방식을 한 번 만들었다가 이것으로 바꿨다.)
-
-- **아래 탭은 진짜 문서다** - 안쪽에 `DocumentGroup` + **이름 붙인** `TabbedDocumentUIService`(`AutomationDocumentManagerService`)를 둔다.
-  그래서 부모 넣기·닫기·파기를 DevExpress 가 한다. `DXTabControl` 에 넣으면 그 신호를 손으로 넘겨야 하고 틀리면 캡처 세션이 게임 창을
-  붙잡는다. 이름으로 꺼내는 이유는 셸(MainView)에도 같은 서비스가 있어서다. 닫기 버튼 없음, **`CacheTabsOnSelecting`** -
-  `CacheAllTabs` 로 두었더니 여는 순간 여섯 화면이 다 초기화됐다(실측: Roslyn 예열 3번·F5 쥐기 3번). 그래서 안 연 탭이 생기므로
-  **바탕(`DocumentViewModelBase`)은 초기화 안 된 화면의 `SaveSettings` 를 건너뛴다** - 안 그러면 안 연 탭을 닫기만 해도 기본값이 저장값을 덮는다.
-- Automation 탭이 닫히면 아래 문서를 전부 `Close()` 한다(`DestroyOnClose`) - 각 화면의 OnClose → OnDestroy. 앱 종료 때는 셸이
-  Automation 탭만 알아서 `SaveSettings` 가 아래 화면들에 `SaveSettingsNow` 를 넘긴다. 탭 활성화도 아래로 넘긴다(전역 단축키).
-- **프로젝트를 바꾸면 아래 화면을 닫고 다시 연다.** 화면들이 자리(데이터셋·스크립트·프레임 저장)를 열 때 읽고 들고 있어서다.
-  닫기를 막는 화면이 있으면 바꾸지 않고 콤보를 되돌린다.
-- Automation 화면과 예전 최상위 화면 탭은 배치 복원에서 되살리지 않는다 - 되살리면 시작 창을 안 거친다(`OldDocumentNames`).
-- **화면들이 고른 프로젝트를 따라간다** - 기준은 `SolutionWorkspace.StartupDirectory` 하나다(Automation 위 칸에서 고르면 시작 프로젝트가 된다).
-  **데이터셋·모델·영역**은 `LabelDataset.ConfiguredRoot`(읽을 때 고른 프로젝트를 본다 - 예전의 앱 전체 키 `Vision.DatasetRoot` 를 Automation 이
-  고쳐 쓰던 다리는 걷었다, 그 키는 이제 솔루션이 없을 때의 `LegacyRoot` 다), **스크립트 자리**는 `ScriptFiles.DefaultDirectory`(플레이 목록·열기/저장 대화 상자),
-  **프레임 저장**은 `ProjectPaths.Captures`(`<프로젝트>\captures`), **스크립트 화면**은 그 프로젝트의 `.mtsproj` 를 연다(`ScriptWorkbench.RestoreProject` -
-  지난번 것이 그 폴더 안이면 탭까지 되살린다). 프로젝트가 없을 때만 옛 자리를 본다. 이주는 `ProjectPaths.LegacyCaptures` 를 본다.
-  플레이 목록은 폴더 자체가 프로젝트 폴더면 낱개 `.csx` 를 뺀다(그 프로젝트의 조각이다). 이것이 없어 이주 뒤 플레이 목록이 비었고 새 그림이 프로젝트 밖으로 갔다.
-  검사는 `--solution` 의 `CheckScreensFollowProject` - `SolutionWorkspace.Use(…, remember: false)` 로 사용자 최근 목록을 안 더럽힌다.
-  이름 주의: `Minguk.Tools.Input.Scripting` 안에서는 `Projects.` 가 `Input.Scripting.Projects` 로 먼저 잡혀 `global::Minguk.Tools.Projects` 로 적는다.
-- **메뉴**(사용자, 2026-09-14): `자동화`(뿌리 그룹, 옛 Office Automation) → **`환경`**(맨 위, 모듈 메뉴 - 학습 도구·작업공간, 옛 학습환경) ·
-  **`빌더`**(만드는 쪽 - 아래 탭 화면캡처·라벨링·스크립트, 옛 Automation·Automation Builder, 코드 이름은 `AutomationMain*` 그대로) ·
-  **`플레이`**(돌리는 쪽) · **`입력 테스트`**(점검 도구). "전체 환경이 있고 그 안에 빌더와 플레이어가 있다" - 환경·플레이·입력 테스트는 빌더 탭에서 빼 최상위로 돌렸다.
-  환경을 뺀 이유: 거기서 작업공간을 정하는데 빌더는 그 작업공간에서 솔루션을 고른다 - 빌더 안에 두면 솔루션부터 골라야 작업공간을 바꿀 수 있었다.
-  환경은 모듈이 들고 오는 메뉴라 `MainMenu` 가 뿌리 바로 아래 맨 앞에 붙인다(`ToolModules`).
-- **완성품은 프로젝트 폴더의 `bin`** 이다(사용자 결정 2026-09-14 - "파일 하나면 빌더 폴더 밑에 놔둬도 상관없다"): `작업공간/오버워치/사격장/bin/사격장.mtsx`.
-  모델·영역·리소스가 이미 프로젝트 폴더에 있어 따로 복사할 것이 없다. `bin` 인 이유는 솔루션 탐색기가 `bin` 을 안 봐서 `.mtsx` 가 프로젝트 파일 목록에 안 끼어들어서다.
-  한때 `작업공간/Builder`·`작업공간/Player`, 그다음 `솔루션/Player` 로 모았다가(빌드가 모델·영역을 복사) 되돌렸다.
-  플레이는 **고른 완성품의 프로젝트 폴더에서** 모델·영역을 읽는다(`RecognizingCaptureViewModelBase.RecognitionRoot` 가상 - `PlayViewModel` 이 `bin` 의 위 폴더로 덮는다).
-  플레이 목록은 `작업공간/솔루션/프로젝트/bin/*.mtsx` 를 훑어 `오버워치 / 사격장` 으로 보인다(`PlayViewModel.ListBuilds`) - 소스는 안 나오고, 고치는 동안의 시험은 스크립트 탭 F5.
-  **모델 다시 읽기는 파일 경로도 본다**(`_detectorPath`) - 다른 완성품을 고르면 기다리지 않고 곧바로 그 프로젝트의 모델을 읽는다.
-  빌드는 **소스(.csx 여러 개)를 IL 하나로 합친다**. 리소스는 옆에 복사한다. **스크립트가 참조한 바깥 DLL(#r·참조 항목)은 합치지 않고 `bin` 에 복사한다**
-  (`CompiledScriptBuilder.CopyReferences`, 앱 폴더·.NET 런타임 폴더의 것은 뺀다). 플레이는 도는 동안 `AppDomain.AssemblyResolve` 를 걸어 `.mtsx` 옆에서
-  `<어셈블리 이름>.dll` 을 찾는다(`CompiledScriptRunner`) - 형식은 JIT 때 올라오므로 로드 직후가 아니라 실행이 끝날 때 푼다. 못 찾으면 "참조한 DLL 'X' 를 찾지 못했습니다 -
-  .mtsx 옆에 두세요" 로 멈춘다. 그 DLL 이 또 무는 DLL 은 자동으로 안 따라온다 - 그것도 참조 항목으로 넣으면 같이 복사된다.
-  `.mtsx` 는 `LiveScriptApi` 를 상속하므로 Minguk.Tools 안에서만 돈다. 검사: `--vision` 의 바깥 DLL 네 줄(없을 때 문장·복사 뒤 42).
-- **솔루션들이 든 폴더는 화면에서 `작업공간`** 이라 부른다(사용자, 2026-09-14 - 프로젝트 경로 → Workspace → 작업공간). "프로젝트" 가 솔루션 안의
-  모드·스테이지를 뜻하게 되어 "프로젝트 경로" 가 헷갈렸다. 환경 메뉴의 칸·표·버튼, 빌더 위 칸이 작업공간이다.
-  **설정 키 `Vision.ProjectsRoot` 와 `ProjectPaths` 이름은 그대로** - 저장값을 잃지 않으려고. 기본 폴더도 `설치 폴더/작업공간` 인데 옛 기본(`설치 폴더/프로젝트`)에 이미 있으면 그것을 쓴다.
-  **작업공간은 솔루션 폴더 하나가 아니라 그 위 폴더다** - 오버워치 폴더를 고르면 솔루션·완성품을 한 겹 잘못된 곳에서 찾는다(한 번 그렇게 골랐었다).
-- **위 칸은 작업공간부터 내려간다**(사용자, 2026-09-14): `작업공간(보이기만) → [솔루션 ▾] → [프로젝트 ▾]`. 솔루션 콤보는 최근 목록이 아니라
-  작업공간 **바로 아래(한 겹)** 의 `.mtsln` 이다(`Solution.FindUnder`) - 최근 목록이면 폴더에 넣어 둔 솔루션이 한 번 열기 전엔 안 보인다.
-  열기로 경로 밖에서 연 솔루션은 콤보가 비지 않게 같이 넣는다. 경로를 바꾸는 곳은 학습환경 탭이다.
-- **새 프로젝트 · 새 솔루션**은 Automation 화면 위쪽, 프로젝트 콤보 옆 버튼이다. 새 프로젝트는 이름 창(`NameInputWindow`, Enter·Esc,
-  같은 이름 폴더면 창 안에서 막음) → `<솔루션>\<이름>\` 에 `.mtsproj`·`main.csx`·`images\`·`labels\` → 솔루션에 넣고 시작 프로젝트로 → 넘어간다.
-  새 솔루션은 시작 창을 만들기 칸이 펴진 채 띄운다(`StartWindow.ForCreate`). **이름을 먼저 묻고 만든 뒤에 넘어간다** - 아래 화면을 먼저 닫으면
-  취소했을 때 캡처만 끊긴다. 만든 뒤 닫기를 막는 화면이 있으면 넘어가지 않는다(새 솔루션이면 앞 솔루션으로 되돌려 위 칸과 아래 화면이 안 어긋나게).
-
-**버튼을 숨긴 설정은 저장값을 믿지 않는다**(실측 2026-09-14). 화면캡처의 `미리보기` 버튼이 `IsVisible=False` 인데 `ShowPreview` 는 저장값을 읽어서,
-한 번 `False` 로 남으니 켤 길이 없어 캡처를 시작해도 화면이 비었다(이 화면만 False, 버튼이 보이는 스크립트·플레이는 True). 그래서 화면캡처는
-`RestoreSettings` 에서 늘 켠다 - 같은 화면의 열 자동 너비도 같은 방식이다. **설정 화면의 `초기화`는 모든 화면 설정(대상 창·미리보기·열 너비·확대)을
-지운다** - 증상을 고치지 않고 이런 증상을 만든다. 그리드 배치를 복원하면 열 너비가 저장된 픽셀로 써지므로 캡처 화면도 **복원 뒤에 자동 너비를
-다시 건다**(라벨링과 같다) - 안 그러면 한 번 망가진 너비(크기 0 인 탭에서 잰 33px 등)가 영영 남는다.
-
-됐다: 1단계 모델(`Solution`·`SolutionWorkspace`, `--solution`) · 2단계 이주(`SolutionMigration`, `--migrate [--apply]`,
-이 PC 는 `D:\Minguk.Tools.프로젝트\오버워치\사격장` 으로 옮겼다) · 3단계 시작 창 · 6단계 공유 프로젝트. 남은 것: 셸 도구 모음(시작 프로젝트)·화면 넷 연결.
-
-**공유 프로젝트**(2026-09-14): 빌더 위 칸 `새 공유 프로젝트` → `<솔루션>\<이름>\<이름>.mtsproj` + `<이름>.csx`(시작 파일 없음), 솔루션에 `Shared`.
-물리는 것은 스크립트 화면 솔루션 탐색기 추가 > `공유 프로젝트 참조`(프로젝트 메뉴에도) - VS 처럼 만든다고 저절로 물리지 않는다.
-`.mtsproj` 항목 `ProjectReference`(경로는 `../공용/공용.mtsproj` - 파일은 폴더 밖을 못 가리키지만 프로젝트 참조는 된다). `ToUnit` 이 참조의 참조까지
-한 번씩(고리 안전) 읽어 **그 프로젝트의 소스(시작 파일 빼고)·DLL 참조를 앞에** 합친다 - 실행·검사·완성·빌드가 다 `ScriptUnit` 을 보므로 따로 고칠 곳이 없었다.
-탐색기에는 `이름 (공유)` 줄 아래 그 소스가 **전체 경로 Id**(`IsExternal`)로 달린다 - 열어 고치고 완성도 붙지만(`UnitFor` 가 한 벌의 Sources 로 가린다)
-이름 바꾸기·삭제·제외·시작 파일은 막는다(다른 런이 영문 모르게 깨진다). 참조 줄은 삭제가 아니라 제외(참조 빼기)만. 폴더 감시는 참조를 없어졌다고 빼지 않는다.
-검사: `--solution` 의 `CheckSharedProject`(참조 전 빌드 실패 → 참조 뒤 성공, 고리, 탐색기 잠금).
-
-## 기능 모듈 - 셸은 뼈대로 두고 기능은 프로젝트로 붙인다
-
-2026-09-14, 사용자 결정. "또 다른 기능을 하는 프로젝트를 만들어 추가할 수도 있으니" 셸(`Minguk.Tools`)은 뼈대로 두고
-기능은 프로젝트를 따로 만들어 붙인다. 첫 모듈이 **`Minguk.Tools.Training`**(학습 환경)이고, 그것이 본보기다.
+## 기능 모듈 - 셸은 뼈대, 기능은 프로젝트
 
 ```
-Minguk.Tools.Core        ← 셸과 모듈이 함께 보는 가운데 조각
+Minguk.Tools.Core        ← 셸과 모듈이 함께 보는 가운데 조각 (기능 코드는 넣지 않는다)
    ↑              ↑
-Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 제 설정 페이지를 들고 온다
-  (뼈대)
+Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 온다
 ```
 
-**왜 가운데 프로젝트가 있나** - 모듈이 화면 바탕(`DocumentViewModelBase`)과 메뉴 항목(`MenuItemModel`)을 써야 하는데
-그것이 셸에 있으면 순환 참조가 된다. 그래서 Core 로 내렸다. **네임스페이스는 `Minguk.Tools.*` 그대로**라(어셈블리 이름만 다르다)
-옮기면서 고친 `using` 이 한 줄도 없다. Core 에 든 것: `MenuItemModel` · `DocumentViewModelBase`(3파일) ·
-`IToolModule`/`IMainShell` · `ToolModules` · 솔루션 모델(`Projects/Solution`·`SolutionWorkspace`) · 경로 도우미(`InstallPaths`·`UserDataPaths`·
-`TrainingPaths`·`ProjectPaths`). **기능 코드는 넣지 않는다.**
+- Core 에 든 것: `MenuItemModel` · `DocumentViewModelBase` · `IToolModule`/`IMainShell` · `ToolModules` · 솔루션 모델(`Solution`·`SolutionWorkspace`) · 경로 도우미(`InstallPaths`·`UserDataPaths`·`TrainingPaths`·`ProjectPaths`).
+  네임스페이스는 `Minguk.Tools.*` 그대로다(어셈블리 이름만 다르다).
+- **모듈 추가**: ① `Minguk.Base`·`Minguk.Tools.Core` 만 참조(셸 참조 금지 - 순환, 아이콘은 `Libs\Minguk.Image.dll` 을 HintPath 로) ② `IToolModule` 구현(`RegisterServices`·`CreateMenuItems`)
+  ③ 셸 `App.xaml.cs` 의 `ToolModules.Use(...)` + 셸 csproj `ProjectReference` ④ 하네스 `Program.cs` 의 `ToolModules.Use(...)`(안 넣으면 `--views` 가 안 본다).
+- 메뉴 번호는 셸 1000번대, 모듈 2000번대. **리플렉션으로 DLL 을 훑지 않는다.** `MainViewLocator.Assemblies` 가 모듈 어셈블리도 봐야 메뉴가 열린다.
+- 모듈 설정은 모듈 화면이 든다(설정 화면에 끼우지 않는다 - 바꾼 결과를 그 자리에서 보게).
 
-`DocumentViewModelBase` 가 부모를 `MainViewModel` 로 들고 있던 것은 `IMainShell`(아래 바 두 줄)로 바꿨다 -
-파생 화면에서 쓰는 곳이 **한 군데도 없어서**(실측) 값이 쌌다. 이름도 `Shell` 로 바뀌었다.
-
-**모듈을 하나 더 만들려면**
-
-1. 프로젝트를 만들고 `Minguk.Base` · `Minguk.Tools.Core` 만 참조한다(**셸은 참조하지 않는다** - 순환).
-   아이콘을 쓰면 `Libs\Minguk.Image.dll` 을 `Reference` + `HintPath` 로 문다.
-2. `IToolModule` 구현을 하나 둔다 - `RegisterServices`(View 를 `AddTransient`) · `CreateMenuItems` · `CreateSettingsPages`.
-3. 셸 `App.xaml.cs` 의 `ToolModules.Use(...)` 에 한 줄, 셸 csproj 에 `ProjectReference` 한 줄.
-4. 하네스 `Program.cs` 의 `ToolModules.Use(...)` 에도 같은 줄 - 안 넣으면 `--views` 가 그 모듈을 안 본다.
-
-메뉴 번호(`menu_cd`)는 셸이 1000번대라 모듈은 2000번대부터 쓴다. **리플렉션으로 DLL 을 훑지 않는다** - 어느 모듈이
-붙어 있는지는 코드에 적혀 있어야 빌드가 알려 준다.
-
-- `MainViewLocator.Assemblies` 가 셸 + 모듈 어셈블리를 본다. 셸만 보면 모듈 화면의 `CLASS_NM` 을 못 찾아
-  **메뉴를 눌러도 아무 일이 안 난다.**
-- **모듈 설정은 모듈 화면이 든다.** 한동안 설정 화면(ConfigView)에 모듈 페이지를 끼우는 장치(`ISettingsPage` 등)를 뒀다가 걷었다 -
-  폴더를 바꾼 뒤 결과를 볼 화면이 따로 있어 오가야 했다(사용자). 학습 경로·프로젝트 경로는 학습환경 화면에서 고르고 그 자리에서 표가 다시 그려진다.
-- 검증: `--views` 의 `CheckModules` 가 붙어 있는 모듈을 **이름을 적지 않고** 돈다 - 메뉴 항목의 타입·아이콘, 화면을 실제로
-  만들어 보기, 설정 페이지 `Load`+`CreateView`. 모듈이 늘어도 하네스는 안 고친다.
-
-**dxlc 에는 `ItemHeight`·`ShowLabel` 이 없다**(실측 MC3072). `ItemHeight` 는 도킹(`dxdo:LayoutPanel`) 것이고,
-라벨을 비우려면 `AddColonToLabel="False" Label=""` 로 적는다 - 이 코드베이스가 쓰는 방식이다.
-
-## 화면 셋: 캡처 · 스크립트 · 플레이
-
-창을 잡는 화면이 셋이다(2026-09-11 에 캡처 모니터 하나를 나눴다). 한 화면에 담기·검출·OCR·스크립트를
-전부 얹으니 도구 줄이 넘쳤고, 플레이만 하는 PC 에 편집기·담기가 딸려 갔다.
+## 화면: 화면캡처 · 스크립트 · 플레이
 
 | 화면 | ViewModel | 하는 일 |
 |---|---|---|
-| 캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 순수 캡처. 대상·fps·미리보기·프레임 저장·데이터셋에 담기(F8)·통계 표 |
-| 스크립트 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | 몹 찾기·추적·글자 영역·글자 읽기·이름표 읽기를 보면서 스크립트를 쓰고 한 번씩 돌린다. 담기(F8)도 된다 - 찾은 것이 라벨로 들어간다 |
-| 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 게임 연결, 미리보기 켜고 끄기, Scripts 폴더의 스크립트나 **프로젝트(.mtsproj)** 를 골라 1회(F5)·반복(F6). 편집 없음 |
+| 화면캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 대상·fps·미리보기·프레임 저장·담기(F8)·통계 |
+| 스크립트 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | VS 모양 편집기. 몹 찾기·추적·글자 읽기를 보며 쓰고 돌린다, 빌드, 담기(F8) |
+| 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 완성품(.mtsx)을 골라 1회(F5)·반복(F6). 편집 없음. 모델·영역은 완성품의 프로젝트 폴더(`RecognitionRoot`) |
 
-- **바탕 둘.** `CaptureViewModelBase`(잡기·미리보기·입력 전달·저장·담기·1초 통계) 위에
-  `RecognizingCaptureViewModelBase`(`.Detect.cs` 찾기 · `.Ocr.cs` 글자). 캡처 화면은 첫 바탕만 쓴다 -
-  담기만 하는 화면에 68MB 모델과 libtorch GPU 메모리를 물릴 이유가 없다.
-- 바탕이 열어 둔 자리: `OnFramePixels(e)`(캡처 스레드, 기다리면 안 됨) · `TryInterceptPreviewMouseDown` ·
-  `OnPreviewMouseMove/Up` · `DetectionsForLabels` · `SupportsCollecting` · `OnStatisticsRow` · `OnRunningStateChanged`.
-  파생 화면은 `RestoreSettings/SaveSettings/ReleaseResources` 에서 반드시 `base` 를 부른다.
-- 바탕 이름은 `...Base` 로 끝난다. `DocumentViewModelBase` 가 로거·뷰 이름을 "ViewModel 로 끝나는 첫 타입" 에서
-  구하므로, 바탕 이름이 `ViewModel` 로 끝나면 세 화면이 한 이름으로 찍힌다.
-- **설정 키는 파생 화면 이름으로** 저장된다(`AppSettingUtility` 가 실제 타입을 쓴다). 그래서 캡처와 플레이가
-  대상 창·fps 를 각자 기억한다. 나누기 전 값(`CaptureMonitorViewModel.*`)은 `GetSettingOrLegacy` 가 처음 한 번
-  물려준다 - 대상 창·문턱·추적·글자 영역·OCR 언어.
-- **미리보기 판과 입력 전달 도구 줄은 `Views/Parts` 의 UserControl** 이다(`CapturePreviewPanel` · `PreviewForwardBar`).
-  DataContext 를 물려받아 바탕의 커맨드에 묶이고, `UIObjectService` 이름(`PreviewImageObjectService` 등)도 그 안에
-  있다. 겹그림(`DetectionOverlay`)은 판의 `Overlay` 에 화면이 얹는다 - 캡처 화면은 없는 프로퍼티에 묶이지 않게.
-- **스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`.** 스크립트·플레이·입력 자동화 셋이 같이 쓴다.
-  입력 자동화 화면에 남은 스크립트 코드는 본보기 줄 끼우기(`DoAddStep`)뿐이다.
-  스크립트 입력은 미리보기 입력 전달과 **같은 어댑터**(`_inputRouter.InputAdapter`)로 나가고, 보내기 직전에
-  `TryFocusTargetWindow` 로 대상 창을 앞으로 가져온다.
-- 전역 단축키 소유: F8 담기 = 캡처·편집(`SupportsCollecting`), F5/F6 = 플레이와 입력 자동화(같이 열면 나중 것이 실패,
-  상태에 적힌다). 두 화면이 같은 키를 쥐면 안 되는 이유가 이것이다.
-- **캡처 세션은 허브에서 나눠 쓴다**(`Capture/ICaptureSessionHub` · `SharedCaptureHub` · `CaptureSessionHubFactory.Default`).
-  화면은 `Acquire(target, readback)` 로 손잡이(`IScreenCaptureAdapter`)를 받아 예전처럼 Start·Stop·Dispose 한다.
-  같은 창을 잡는 화면이 여럿이면 실제 WGC 세션은 하나고 프레임을 손잡이마다 나눠 준다(실측: 캡처·스크립트 화면이
-  같은 게임 창을 잡을 때 "캡처 시작" 로그 한 줄, 상태 줄에 "화면 2개가 세션 하나를 나눠 씀"). 실제 세션은 첫 손잡이가
-  Start 할 때 만들고 마지막 손잡이가 Stop 하면 놓는다. 리드백은 손잡이 중 하나라도 원하면 켜는데, 세션을 만들 때
-  정해지므로 없는 세션에 원하는 손잡이가 오면 세션을 새로 만들고 다른 손잡이에 알린다. fps 는 큰 값.
-  콜백은 잠금 없이 손잡이 배열 스냅샷을 돈다 - 콜백에서 잠금을 잡으면 UI 의 Stop 과 맞물려 프레임이 밀린다.
-  `--vision` 이 가짜 세션 공장으로 나눔·프레임 분배·리드백 갈아 끼움·놓기를 본다.
-- **스크립트 화면은 VS 2026 모양이다**(2026-09-13, `docs/스크립트-프로젝트-설계.md`). 메뉴·도구 모음(`BarContainerControl`)·상태 표시줄은
-  BarManager, 가운데는 **화면 안에 둔 DockLayoutManager**(MainView 의 문서 탭 안에 한 겹 더 - 중첩). 미리보기·솔루션 탐색기·오류 목록·출력·
-  호출·변수·영역·중단점이 도구 창이고, 프로젝트 파일은 `DocumentGroup.ItemsSource = Script.Project.Documents` 로 탭이 된다.
-  프로젝트가 없으면 한 파일짜리 편집기 탭이 대신 뜬다. 배치는 설정 `DockLayout`(+`DockLayoutVersion`, 형식이 바뀌면 올린다)에 저장.
-  - 탭 편집기의 데이터 문맥은 **문서**다. 공용 설정(색·완성·오류·잠금)은 문서가 들고 온 `Settings`(워크벤치)로 묶는다 -
-    조상(UserControl)으로 찾으면 떼어 낸 떠 있는 창에서 끊긴다.
-  - **탭 활성화는 한 방향으로만 기다린다**(`ScriptDocumentsBehavior._requested`). 도킹의 `DockItemActivated` 는 한 박자 늦게 와서,
-    코드가 새 탭을 앞으로 가져오는 동안 옛 탭의 알림이 활성 문서를 되돌리고 그것이 다시 탭을 가져오는 핑퐁이 났다(실측: 각 66,280번, 화면 멈춤).
-  - **기본 배치(사용자가 잡은 것, 2026-09-13)**: 솔루션 탐색기 왼쪽 | 미리보기 | 스크립트, 아래에 오류 목록 탭, 도구 모음은 세 줄
-    (표준·디버그·입력 / 캡처 / 인식, `BarDockInfo.Row`). `DockLayoutVersion` 3.
-  - **미리보기 | 문서는 VS XAML 디자이너처럼 나눈다**. 기본은 **좌우**(`DesignSplitGroup`, 안에는 미리보기와 문서 그룹 둘뿐 - 솔루션 탐색기는
-    밖이다, 안에 두면 바꾸기에 딸려 간다). 미리보기 판 아래 띠의 `위아래`·`좌우`·`바꾸기` 와 보기 > 미리보기 나누기 로 바꾼다
-    (`SetSplit`·`SwapPanes` - 그룹의 `Orientation` 과 `Items` 순서). 방향·순서는 도킹 배치에 같이 저장된다. 기본을 바꾸면 `DockLayoutVersion` 을
-    올린다 - 옛 배치가 살아나면 새 기본이 안 보인다.
-  - **도구 모음은 `BarManager.Bars` 에 있다**(`dxb:Bar` + `BarDockInfo ContainerName=ToolbarContainer` - `ContainerType=Top` 만 주면 BarManager
-    제 위쪽 자리, 즉 메뉴 위에 붙는다(실측)), 화면은 `dxb:BarManager` 로 감싼다. 끌어 옮긴 자리는
-    `BarLayout` 설정에 저장·복원한다(`SaveLayoutToStream`/`RestoreLayoutFromStream`, 도구 모음마다 `x:Name` 필요). 독립 `ToolBarControl` 을
-    `BarContainerControl` 에 넣어 두면 관리자의 `Bars` 가 비어 배치 XML 이 빈 껍데기다(실측) - 그래서 옮겼다. 메뉴·상태 표시줄은 독립 컨트롤 그대로.
-    "창 레이아웃 다시 설정" 은 도구 모음 배치도 지운다(다시 열 때 처음대로).
-  - 솔루션 탐색기(`ProjectTreeBehavior`): 더블 클릭·Enter 열기, F2 이름(칸은 F2·새 항목일 때만 열린다), Delete 휴지통, 윈도우 탐색기에서 끌어다 놓기.
-  - 검증 `--script-screen [--out=png]`: 화면 밖 창에 띄워 임시 프로젝트를 열고 **바인딩 오류를 모아** PNG 로 찍는다. 앞 탭 편집기에 문서 글이
-    들어갔는지도 본다(화면 밖이라 PNG 에는 편집기 글이 안 그려진다). 하네스도 앱처럼 `DataControlBase.AllowInfiniteGridSize = true` 를 켜야 한다 -
-    안 켜면 크기 없는 칸의 그리드가 배치를 끝없이 다시 잰다(실측: CPU 600초). 멈추면 60초 뒤 UI 스레드에 쌓인 작업을 종류별로 찍고 끝난다.
-- 검증: `--views` 가 세 화면을 만들고 메뉴 아이콘을 본다. 실시간은 `screens.ps1`(세 화면 차례로)·`live-game.ps1`(스크립트 화면에서 몹 찾기).
+- 바탕 둘: `CaptureViewModelBase`(잡기·미리보기·입력 전달·저장·담기·통계) 위에 `RecognizingCaptureViewModelBase`(`.Detect.cs`·`.Ocr.cs`·`.Regions.cs`). 캡처는 첫 바탕만 - 모델 메모리를 물리지 않는다.
+  파생 화면은 `RestoreSettings/SaveSettings/ReleaseResources` 에서 반드시 `base` 를 부른다. 바탕 이름은 `...Base` 로 끝낸다(`ViewModel` 로 끝나면 로거 이름이 겹친다).
+- 설정 키는 **파생 화면 이름**으로 저장된다 - 캡처와 플레이가 대상 창을 각자 기억한다.
+- 미리보기 판·입력 전달 도구 줄은 `Views/Parts`(`CapturePreviewPanel`·`PreviewForwardBar`). 겹그림은 판의 `Overlay`, 영역 편집기는 `Editor` 자리.
+- 스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`. 스크립트 입력은 미리보기와 **같은 어댑터**로 나가고 보내기 직전 대상 창을 앞으로.
+- **캡처 세션은 허브에서 나눠 쓴다**(`SharedCaptureHub`) - 같은 창을 잡는 화면이 여럿이어도 WGC 세션은 하나. 리드백은 누구라도 원하면 켜고, 세션을 만들 때 정해져 필요하면 새로 만든다.
+  콜백은 잠금 없이 손잡이 배열 스냅샷을 돈다.
+- **스크립트 화면**(`docs/스크립트-프로젝트-설계.md`): BarManager(메뉴·도구 모음 `Bars` 에 `x:Name`·상태 줄) + 화면 안 DockLayoutManager(미리보기·솔루션 탐색기·오류 목록·출력·호출·변수·영역·중단점).
+  - 탭 편집기의 데이터 문맥은 **문서** - 공용 설정은 문서가 든 `Settings`(워크벤치)로 묶는다(떠 있는 창에서 조상 찾기가 끊긴다).
+  - 탭 활성화는 한 방향으로만 기다린다(`ScriptDocumentsBehavior._requested`) - 늦게 오는 `DockItemActivated` 와 핑퐁이 났다.
+  - 기본 배치를 바꾸면 `DockLayoutVersion` 을 올린다. 도구 모음 자리는 `BarLayout` 설정. 미리보기 | 문서 나누기는 `DesignSplitGroup`(`SetSplit`·`SwapPanes`).
+- **버튼을 숨긴 설정은 저장값을 믿지 않는다** - 화면캡처 `미리보기` 는 `RestoreSettings` 에서 늘 켠다(숨긴 채 False 로 저장되면 켤 길이 없다). 그리드 배치를 복원한 뒤 자동 너비를 다시 건다.
+- **서비스를 View 에 선언하지 않으면 `Guard` 가 예외를 삼켜 아무 일도 안 일어난 것처럼 보인다** - 새 서비스를 쓰면 View 의 `Interaction.Behaviors` 부터 본다.
 
 ## ViewModel 작성 규칙
 
-`DocumentViewModelBase` 가 생명주기·서비스·예외를 다 들고 있다. 화면은 필요한 단계만 채운다.
-(`ViewModels/DashboardViewModel.cs` 가 최소 예시다.)
-
-### 파일 분리
+`DocumentViewModelBase` 가 생명주기·서비스·예외를 든다. 화면은 필요한 단계만 채운다(`DashboardViewModel` 이 최소 예시).
 
 | 파일 | 담는 것 |
 |---|---|
 | `XxxViewModel.cs` | 생명주기 — `Create()` / 생성자 / `Initialize*` / `Save*` / `Release*` |
 | `XxxViewModel.Model.cs` | 상태 — 바인딩 프로퍼티, 커맨드 선언, 컨트롤 참조 |
-| `XxxViewModel.Code.cs` | 동작 — 커맨드가 실제로 하는 일 (길어질 때만 만든다) |
+| `XxxViewModel.Code.cs` | 동작 — 커맨드가 하는 일 (길어질 때만) |
 
-### 초기화 순서
+View 의 `Loaded` 와 부모 주입이 **모두** 오면 한 번 돈다:
+`InitializeControls()`(컨트롤 참조) → `InitializeObservable()`(구독, `Disposables` 에) → `RestoreSettings()` → `OnLoaded()`.
+닫힐 때 `OnClose` → `OnDestroy` → `SaveSettings` → `ReleaseResources` → 구독·메신저 해제. 초기화 안 된 화면(안 연 탭)의 `SaveSettings` 는 바탕이 건너뛴다.
 
-View 의 `Loaded` 와 부모(MainViewModel) 주입이 **모두** 도착하면 한 번만 돈다.
-
-```
-InitializeControls()   컨트롤 참조 확보  (FindControl<T>("...ObjectService"))
-InitializeObservable() 이벤트 구독       (만든 구독은 Disposables 에 넣는다)
-RestoreSettings()      저장값 복구       (GetSetting)
-OnLoaded()             실제 진입 작업    (데이터 조회 등)
-```
-
-닫힐 때는 `OnClose(e)` → `OnDestroy()` → `SaveSettings()` → `ReleaseResources()` → 구독/메신저 해제.
-
-- 생성자에는 **XAML 이 바인딩할 대상만** 만든다(커맨드·컬렉션·Caption). 화면이 떠 있어야 되는 일은 전부 `Initialize*` 단계로.
-- `OnInitializedCommand` / `OnClosingCommand` / `DoCloseCommand` 는 베이스가 준다. 화면에서 다시 선언하지 않는다.
-- 화면 안에서 `NLog.LogManager.GetCurrentClassLogger()` 를 새로 만들지 않는다. 베이스의 `Logger` 를 쓴다 (POCO 프록시가 아니라 실제 ViewModel 이름으로 찍힌다).
-
-### 예외
-
-`try/catch` 를 직접 쓰지 말고 `Guard(...)` 로 감싼다. NLog 기록 + `ExceptionViewer` 표시까지 한 번에 된다.
-
-```csharp
-private void DoRefresh() => Guard(() => { ... });
-```
-
-복구 동작이 필요한 곳(실패 시 세션을 되돌리는 등)만 `try/catch` 를 직접 쓴다.
+- 생성자에는 XAML 이 바인딩할 것만(커맨드·컬렉션·Caption). `OnInitializedCommand`·`OnClosingCommand`·`DoCloseCommand` 는 바탕 것.
+- 로거는 바탕의 `Logger`(새로 만들지 않는다). 메신저는 `OnMessenger` 를 override - **화면이 뜬 뒤에야** 받는다(방금 연 화면에 보낼 요청은 들고 있다가 `OnLoaded` 에서 가져간다).
+- 예외는 `Guard(() => ...)` - NLog + `ExceptionViewer`. 복구가 필요한 곳만 `try/catch`.
+- **정적 이벤트**(`SolutionWorkspace.Changed`·`LightweightThemeManager.CurrentThemeChanged` 등)는 닫힐 때 반드시 푼다.
 
 ## 외부와 닿는 것은 어댑터로
 
-OS·하드웨어·외부 라이브러리에 닿는 코드는 **인터페이스 + 구현 + 팩터리** 세 조각으로 나눈다.
-화면과 ViewModel 은 인터페이스만 알고, 구현이 바뀌어도 손댈 것이 없게 한다.
-
-지금 있는 것:
+OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터리**. 구현이 하나여도 인터페이스를 만들고, 새 구현은 팩터리만 고치고, 인터페이스에 `Name` 을 둔다.
 
 | 인터페이스 | 구현 | 고르는 곳 |
 |---|---|---|
-| `IScreenCaptureAdapter` | `WgcCaptureSession` | `ScreenCaptureAdapterFactory` |
+| `IScreenCaptureAdapter` | `WgcCaptureSession` | `ScreenCaptureAdapterFactory` · `SharedCaptureHub` |
 | `IInputAdapter` | `SendInputAdapter` · `WindowMessageInputAdapter` · `InterceptionInputAdapter` | `InputAdapterFactory` |
 | `IUiAutomationAdapter` | `WindowsUiAutomationAdapter` | `UiAutomationAdapterFactory` |
-| `IGlobalHotkeyAdapter` | `GlobalHotkeyAdapter` | `GlobalHotkeyAdapterFactory` |
+| `IGlobalHotkeyAdapter` | `GlobalHotkeyAdapter` | `GlobalHotkeyAdapterFactory` · `SharedHotkeysFactory` |
 | `IWindowTargetAdapter` | `Win32WindowTargetAdapter` | `WindowTargetAdapterFactory` |
-
-입력 어댑터는 `Input/` 에 있다. `Capture/Input/` 에는 미리보기 좌표 계산만 남는다
-(`PreviewInputRouter`, `PreviewInputMapper`, `CaptureTargetBounds`, `InputForwardResult`).
-입력은 캡처 전용이 아니라서 나눠 두었다.
-
-능력이 경로마다 다른 것은 **능력별 인터페이스**로 뺀다. 부르는 쪽이 `adapter is IXxx` 로 물어보고,
-아니면 못 한다고 말한다. 못 하는 것을 늘 false 만 돌려주는 빈 메서드로 두면 부르는 쪽이
-되는 줄 알고 쓰기 때문이다.
-
-| 인터페이스 | 있는 경로 | 무엇 |
-|---|---|---|
-| `IScanCodeInput` | SendInput · Interception | 스캔코드 |
-| `ICharacterInput` | PostMessage · SendMessage | `WM_CHAR`. 글자를 그대로 넣는다 |
-| `IImeControl` | PostMessage · SendMessage | `WM_IME_CONTROL`. 대상 IME 의 한/영 을 직접 바꾼다 |
-
-**창 메시지 경로는 영문·숫자·문장부호·Enter·한글을 다 넣고, 한/영 전환도 한다.**
-글자는 IME 를 거치지 않고 완성된 음절을 그대로 주고(`WM_CHAR`), 한/영 은 대상 창의 기본 IME
-윈도우에 `WM_IME_CONTROL` 을 보내 바꾼다. 키를 흉내 내는 것이 아니라 IME 에게 직접 말한다.
-못 하는 것은 진짜 커서를 움직이는 것과, 창 메시지를 안 보는 대상(WPF·WinUI 의 마우스 입력 등)이다.
-
-`WM_INPUTLANGCHANGE` 와 헷갈리지 않는다. 그쪽은 **입력 언어**(자판)를 바꾸는 것이고,
-한/영 은 그 언어 안에서의 **변환 모드**다.
-
-창 메시지를 넣는 경로는 **두 가지로 돈다.** `WindowMessageInputAdapter` 하나가 `PostMessage`
-(부치고 곧바로 돌아온다)와 `SendMessage`(`SendMessageTimeout` 으로 처리될 때까지 기다린다)를
-겸한다. 넣는 메시지가 같고 건네는 방식만 다르므로 구현을 나누지 않았다.
-맨 `SendMessage` 는 쓰지 않는다 — 대상이 멈춰 있으면 부르는 쪽이 영영 굳는다.
-
-그 경로에서 글자는 반드시 `WM_CHAR` 로 넣고, 두 가지를 지킨다.
-
-- 키로 보내면 안 된다 — 부친 `VK_SHIFT` 는 대상 스레드의 키 상태를 바꾸지 못해서
-  `abC!` 가 `abc1` 로 들어간다(실측).
-- **`PostMessageW`** 여야 한다. 이름만 `PostMessage` 로 P/Invoke 하면 ANSI 판이 잡혀
-  한글이 `?` 로 뭉개진다(실측). 창 메시지를 부르는 P/Invoke 는 전부 W 판을 명시한다.
-
-스캔코드로 키를 넣는 것은 `IScanCodeInput` 으로 따로 뺐다. PostMessage 경로는 그것을
-제대로 할 수 없고(대상 IME 가 그렇게 온 한/영 전환을 받지 않는다), 못 하는 것을 늘 false 만
-돌려주는 빈 메서드로 두면 부르는 쪽이 되는 줄 알고 쓰기 때문이다.
-필요한 쪽은 `adapter is IScanCodeInput` 으로 물어보고, 아니면 못 한다고 말한다.
-
-`PostMessage` 는 **게임에는 안 먹는다.** 오버워치 창으로 `WM_MOUSEMOVE → WM_LBUTTONDOWN →
-WM_LBUTTONUP` 이 좌표 변환까지 맞게 나갔고 오류도 없었는데(로그 12:13) 게임은 꿈쩍도 안 했다.
-DirectX 게임은 마우스를 창 메시지가 아니라 Raw Input(`WM_INPUT`)·DirectInput 으로 읽는다.
-포커스를 안 뺏는 장점은 메모장·브라우저 같은 보통 프로그램에서만 산다. 게임은 `SendInput`
-(포커스 필요, 대상이 관리자면 이 앱도 관리자)이나 Interception 드라이버(커널) 경로다.
-
-`PostMessage` 는 **보낼 창을 알아야 한다.** 진짜 커서를 안 움직이므로 "포커스를 가진 창" 에
-기댈 수 없다. 안 정해 주면 `WindowFromPoint` 로 마지막 좌표 아래 창에 보내는데, 나가긴
-나가지만 어디로 갔는지 알 수 없다 - 그래서 `IWindowTargetAdapter` 로 고르게 한다.
-
-`InputAdapterFactory.CreateWithFallback` 은 고른 경로를 못 쓸 때 다른 경로로 내려앉되
-`FellBackFrom` · `Reason` 을 함께 돌려준다. 조용히 다른 길로 보내면 안 된다 - 화면에 적는다.
-
-지키는 것:
-
-- 구현이 하나뿐이어도 인터페이스를 만든다. 둘째가 필요해질 때 부르는 쪽을 안 고치려는 것이다.
-- 새 구현을 넣을 때 **팩터리만** 고친다. 부르는 쪽이 구체 타입을 알면 어댑터로 나눈 뜻이 없다.
-- 인터페이스에 `Name` 을 둔다. 지금 어느 경로로 도는지 로그·화면에 보여 줄 수 있어야 한다.
-- 돌아가는 중에 갈아끼울 수 있으면 그렇게 만든다 (`PreviewInputRouter.InputAdapter` 처럼).
-
-## 입력 시퀀스
-
-세 겹이다. 겹마다 사는 이유가 다르다.
-
-| 겹 | 무엇 | 왜 |
-|---|---|---|
-| `SequenceScript` | 사람이 읽고 쓰는 **글** | 복사·되돌리기·찾아 바꾸기가 편집기에서 공짜로 온다 |
-| `SequencePlan` · `SequenceStepDefinition` | 저장·편집되는 **데이터** | 경로를 고르기 전에도 적어 둘 수 있다 |
-| `InputSequence` · `InputStep` | 실제로 도는 **델리게이트** | 서비스를 물고 있어 저장할 수 없다 |
-
-화면이 들고 있는 원본은 **글**이다. 글이 바뀔 때마다 계획으로 읽고, 돌릴 때
-`plan.Build(service, holdMs)` 로 시퀀스를 만든다. 경로를 바꿔도 글과 계획은 그대로다.
-
-- `SequenceStepKind` 는 **늘리기만** 한다. 이름을 바꾸거나 빼면 예전에 적어 둔 것을 못 읽는다
-  (JSON 으로 저장할 때도 숫자가 아니라 **이름**으로 적는다 - 열거형 순서를 바꿔도 뜻이 안 변하게).
-- 명령 이름을 늘리면 `Resource/SequenceScript.*.xshd` 두 파일의 강조 규칙도 같이 고친다.
-- 틀린 줄을 만나도 파싱을 멈추지 않는다. 첫 오류에서 그만두면 열 줄 틀렸을 때 열 번을 돌아야 한다.
-  틀린 줄만 빼고 나머지는 계획에 담되, **실행은 막는다** - 반쪽짜리 시퀀스가 나가는 것이 더 나쁘다.
-
-시퀀스를 굳히는 시점은 **시작할 때 한 번**이다. 도는 중에 글을 고쳐도 그 바퀴는 영향받지 않는다.
-전송은 `Task.Run` 으로 UI 스레드에서 떼어 낸다.
-
-### 스크립트 엔진
-
-무엇을 보낼지는 **스크립트**로 쓴다. 언어는 세 가지고, `IScriptEngine` + 구현 + 팩터리다.
-
-| 언어 | 구현 | 받아 오는 것 |
-|---|---|---|
-| C# (기본) | `RoslynScriptEngine` | 없음 |
-| JavaScript | `JavaScriptEngine` (Jint) | 없음 — 순수 .NET |
-| Python | `PythonScriptEngine` (Python.NET) | 첫 선택 때 임베더블 CPython 11MB |
-
-**스크립트를 돌려도 입력은 나가지 않는다.** 부르는 것은 `SequenceScriptApi` 고, 그것은 단계를
-적어 둘 뿐이다(**녹화 방식**). 그래서 순서 미리보기·시작 전 대기·반복·중지가 그대로 살아 있고,
-언어를 바꿔도 그 뒤는 손댈 것이 없다. `for` 문은 단계로 풀려 나온다.
-
-못 하는 것: 실행 **도중**에 반응하는 것("화면에 X 가 보이면"). 화면을 읽는 단계 자체가 아직
-없어서 지금은 잃는 것이 없다. 필요해지면 그때 갈래를 하나 더 둔다.
-
-- API 를 늘리면 **네 곳**을 같이 고친다 — `SequenceScriptApi`, `PythonScriptEngine.BoundNames`,
-  `JavaScriptEngine.Bind`, 그리고 구문 강조 `Resource/SequenceScript.*.xshd`.
-- 이름은 영문·한글 둘 다 연다(`Type` / `글자`). 세 언어가 **같은 이름·같은 인자**를 쓴다 -
-  문법만 다르고 되는 일이 같아야 오갈 수 있다.
-- **Roslyn 은 컴파일할 때마다 어셈블리를 만들고 그것은 언로드되지 않는다.** 글자마다 컴파일하면
-  쌓이기만 하므로 타이핑을 500ms 묶었다가 한 번만 돌리고, 같은 글이면 캐시를 쓴다.
-  컴파일한 것은 10분간 붙들고 있다가 안 쓰이면 놓는다(`RoslynScriptEngine.KeepAlive`).
-  "GC 를 막는" 것이 아니라 참조를 들고 있는 것이다 — `GC.TryStartNoGCRegion` 은 여기 쓸 물건이 아니다.
-- **파이썬은 한 프로세스에 한 번만 켠다.** `PythonEngine.Shutdown()` 뒤 재초기화가 깨지므로
-  화면을 닫아도, 언어를 바꿔도 켜 둔 채로 둔다. 파이썬 객체를 만지는 곳은 전부 `Py.GIL()` 안이다.
-- pythonnet 에 열거형을 열 때 `typeof(T).ToPython()` 은 안 된다. 파이썬 쪽에서 `RuntimeType` 으로
-  보여 멤버가 안 잡힌다. 값을 하나씩 심고 묶는 껍데기를 파이썬에서 만든다.
-
-### 빌드해서 IL 로 (스크립트 화면 → .mtsx → 플레이)
-
-프로젝트를 **.NET DLL(IL)** 로 빌드해 소스를 감춘다(2026-09-13). 남에게 넘겨도 텍스트 편집기로는 못 보고, 플레이어에서 **실행만**
-한다. 작정하면 디컴파일러로는 본다 - 사용자가 그걸로 족하다고 했다("보고자 하면 보는거고 일반 사람들은 실행만").
-
-- **왜 스크립팅 emit 이 아닌가** - `CSharpScript` 를 emit 해 돌리려면 Roslyn 내부 제출 factory(`<Factory>`)를 리플렉션으로
-  불러야 하는데 그건 공개 API 가 아니라, Roslyn 을 올리면 **예전에 빌드해 둔 파일이 안 돌 수 있다.** 그래서 안 쓴다.
-- **진입점을 우리가 쥔다**(`Input/Scripting/CompiledScriptBuilder`). 프로젝트 글을 `public class __Compiled : LiveScriptApi` 의
-  `__Run()` 메서드 몸으로 감싸 **일반 C# 컴파일**(스크립팅 아님)로 emit 한다. `목표()`·`출력()` 같은 public 이름이 상속으로
-  그대로 스코프에 들어와 스크립팅 전역과 똑같다. 타입·메서드·생성자 이름이 다 우리 것이라 **Roslyn 을 올려도 안 깨진다.**
-  그래서 `LiveScriptApi` 는 `sealed` 가 아니다.
-- **조립**(`Assemble`): 각 소스를 스크립트로 파싱해 `using` 은 파일 위로 모으고(중복 제거), 최상위 문장·지역 함수는 `__Run` 몸으로,
-  타입·대리자 선언은 `__Compiled` 의 중첩 멤버로 옮긴다. `#load`·`#r`·주석은 노드의 `ToString()` 이 앞뒤 트리비아를 떼어 자연히
-  빠진다 - 프로젝트 소스는 `ScriptUnit.Sources` 로 다 들어오니 **손으로 적은 `#load` 는 쓰지 않는다**. 손으로 적은 `#r "x.dll"` 은
-  정규식으로 긁어 참조에 더한다. 참조는 **지금 프로세스에 올라온 어셈블리를 다 준다**(일반 컴파일은 참조를 손으로 다 줘야 한다).
-  `async` 인데 `await` 없는 스크립트는 흔해 `CS1998` 은 끈다.
-- **실행**(`CompiledScriptRunner.RunAsync`): `Assembly.Load(bytes)` → `__Compiled`(=`LiveScriptApi` 파생) 인스턴스 →
-  `__Run()` 호출. 그 인스턴스가 곧 api 라 `Outcome`·`ReleaseAll` 이 그대로 있고, `onCreated` 로 화면이 잡아 비상 정지에 넘긴다.
-  엔진·언어와 무관하다(컴파일은 끝났으니). `Assembly.Load(byte[])` 한 것은 언로드 안 되지만 플레이는 드무니 감수한다.
-- **빌드**(스크립트 화면, 프로젝트 > 빌드 · 디버그 도구 줄 · **Ctrl+Shift+B**, `ScriptStudioViewModel.DoBuild`): `Project.ToUnit()` 를
-  빌드해 `<프로젝트폴더>\bin\<이름>.mtsx` 로 쓴다. **리소스(`Resources\`)는 소스가 아니라 파일이라 IL 에 못 넣는다** - 옆에 같이
-  복사하고 "같이 옮기세요" 라 적는다. 리소스가 없으면 `.mtsx` 한 파일이면 된다.
-- **플레이**(`PlayViewModel`): 목록에 `.mtsx` 가 맨 앞에 뜬다(`ScriptFileItem.IsCompiled`, "이름 (빌드됨)"). 고르면
-  `Script.LoadCompiled(path)` 가 바이트를 읽어 `ScriptWorkbench.Compiled`(`CompiledPlayable`)에 든다. `LiveScriptSession.Resolve` 가
-  `script.Compiled` 를 맨 먼저 보고 `ResolveCompiled` 로 IL 을 돌린다 - host·비상 정지·끝맺음(`BuildHost`·`MakeBeforeRun`·`Finish`·
-  `Cleanup`)은 소스 경로와 **똑같이 나눠 쓴다**. 리소스 폴더는 `.mtsx` 가 든 폴더다.
-- **`.mtsx` 는 편집 못 한다** - 스크립트 화면에서 열려 하면(`LoadFile`) 막고 "원본 프로젝트를 여세요" 라 한다. 소스를 열거나 프로젝트를
-  열면 `Compiled` 를 잊는다.
-- 검증(`--vision` `TestCompiledScript`): 두 파일짜리(조각 함수·타입 섞음)를 IL 로 빌드→PE 확인→로드해 돌려 조각 함수·타입·입력이 다
-  사는지, `.mtsx` 로 써서 파일로 알아보고 다시 로드해도 그대로 도는지. 입력은 가짜 어댑터라 실제로 안 나간다.
-
-### 스크립트 파일
-
-글은 **설정에도 남고 파일로도 남는다.** 둘은 서로를 대신하지 않는다 — 설정에 남는 것은
-"지난번에 쓰던 것"이라 앱을 껐다 켜도 그대로 나오고, 파일은 여러 개를 두고 갈아 끼우는 것이다.
-그래서 저장하지 않고 닫아도 잃는 것이 없다. 파일 이름 옆의 `*` 는 "잃는다"는 경고가 아니라
-**파일과 지금 글이 다르다**는 표시다.
-
-`Input/Scripting/ScriptFiles` 가 확장자·필터·기본 폴더를 든다.
-
-| 언어 | 확장자 | 또 여는 것 |
-|---|---|---|
-| C# | `.csx` | `.cs` |
-| Python | `.py` | `.pyw` |
-| JavaScript | `.js` | `.mjs` |
-
-- **`.cs` 가 아니라 `.csx` 다.** 여기 든 것은 클래스가 아니라 곧바로 도는 문장들이라
-  컴파일러가 보는 것이 다르다. Roslyn 스크립팅의 관례를 따른다.
-- **확장자마다 언어를 나누는 이유**는 파일만 보고 무엇인지 알기 위해서다. 하나로 쓰면
-  열 때마다 사람이 언어를 다시 골라야 하고, 잘못 고르면 문법 오류만 잔뜩 뜬다.
-- 열 때는 **언어를 먼저 바꾸고 글을 넣는다.** 순서가 반대면 새 글을 예전 언어로 한 번 돌려
-  헛된 오류가 화면에 스쳤다 사라진다.
-- 모르는 확장자면 언어를 **그대로 둔다**. 아무거나 고르면 사용자는 글이 틀린 줄 알지
-  언어가 어긋난 줄은 모른다.
-- **언어를 바꿔도 쓰던 글은 그대로 둔다.** 잘못 골랐을 때 되돌릴 방법이 없어지면 안 된다.
-  새 언어로 안 되는 글이면 "고칠 줄" 에 그대로 뜬다.
-  다만 **아직 손대지 않은 본보기**는 지울 것이 없으므로 새 언어 본보기로 갈아 끼운다 -
-  안 그러면 파이썬을 골라 놓고 C# 본보기를 보게 되고, 그대로 저장하면 C# 이 든 .py 가 나온다.
-  갈아 끼우는 조건은 **열어 둔 파일이 없고** "지금 글 == 예전 언어의 본보기" 일 때뿐이다.
-  파일을 열어 둔 채면 그 글은 본보기가 아니라 그 파일의 것이다.
-- 파일 이름 옆의 `*` 는 **열어 둔 파일이 있을 때만** 붙는다. 견줄 파일이 없는데
-  "다르다" 고 할 수 없다.
-- **밖에서 고치면 다시 읽는다**(`ScriptWorkbench.WatchFile`, `FileSystemWatcher`). 편집기는 한 번 저장에 알림을
-  여러 번 내거나 임시 파일 + 이름 바꾸기로 저장하므로 300ms 묶고, 잠겨 있으면 다섯 번까지 다시 해 본다.
-  여기서 고친 것이 있으면(`IsDirty`) **덮어쓰지 않고** 아래 바에 알린다. 도는 중(`IsLocked`)이면 끝난 뒤에 읽는다.
-  앱이 꺼져 있는 동안 고친 것은 `ScriptDirty.<언어>` 가 False 일 때만 복원 시 파일을 믿는다 - 표시가 없는 옛 설정은
-  고친 채 닫았는지 모르므로 설정의 글을 그대로 둔다.
-- 쓸 때는 **UTF-8(BOM 없이)**. 한글 이름을 열어 두고 ANSI 로 쓰면 다른 PC 에서 깨진다.
-- 대화 상자는 `dxmvvm:OpenFileDialogService` / `SaveFileDialogService` 를 화면에 두고
-  ViewModel 에서 `OpenFileDialogService` · `SaveFileDialogService` 로 받는다.
-- **읽기 전용 속성을 `EditValue` 에 묶을 때는 `Mode=OneWay` 를 적는다.** `EditValue` 는
-  기본이 TwoWay 라 세터 없는 속성이면 화면이 만들어질 때 `XamlParseException` 으로 터진다
-  (`ScriptFileLabel` 로 겪었다). 화면 생성 하네스(`--views`)가 이것을 잡아낸다.
-
-**스크립트는 언어별로 따로 기억한다** (`Script.CSharp` · `Script.Python` · `Script.JavaScript`).
-하나만 들고 있으면 파이썬으로 바꿔 놓고 C# 글을 보게 되고, 그 상태로 저장하면 C# 이 든 .py 가
-나온다 - 실제로 "파이썬 골랐더니 스크립트는 C#" 이었다. 언어를 바꾸면 쓰던 글을 제 언어 칸에
-넣고(`StashShownScript`) 새 언어의 글을 꺼낸다. 손대지 않은 본보기는 안 넣는다 - 넣어 두면
-본보기가 바뀌어도 옛 본보기가 되살아난다. 옛 키(`Script`)는 언어별 키가 없을 때만 읽는다.
-
-### 편집기
-
-`AvalonEdit`(`ICSharpCode.AvalonEdit`)을 쓴다. **AvaloniaEdit 이 아니다** - 그쪽은 Avalonia 용
-포팅이라 WPF 에 올라가지 않는다.
-
-- `TextEditor.Text` 는 의존 속성이 아니다. `Markup/AvalonEditText` 붙임 속성으로 양방향을 잇는다.
-- 순수 WPF 컨트롤이라 **경량 테마가 손대지 않는다.** 배경·글자색을 직접 주지 않으면
-  테마를 바꿔도 이 편집기만 그대로 남는다. `Helper/SequenceScriptHighlighting` 이 색을 든다.
-- **밝은지 어두운지는 경량 테마 팔레트에서 읽는다** — `LightweightThemeManager.CurrentTheme.Palette` 의
-  `Brush.Editor.Background` 밝기. 칠하는 바탕·본문색은 VS 편집기 값(어두운 #1E1E1E/#DCDCDC, 밝은 #FFFFFF/#000000)이다 -
-  팔레트의 입력 칸 바탕은 어두운 테마에서 회색이라 VS 와 달라 보였다. 테두리(`Brush.Border`)만 팔레트 그대로. (TamsTools 의
-  `SearchTermTheme.Brush` 가 같은 길을 쓴다.) 줄 번호는 팔레트에 없어 본문과 바탕을 섞어 만든다.
-- **테마 이름으로 가르지 않는다.** 팔레트로 만든 테마(VS2019Blue)는 이름에 Dark 도 Black 도
-  없어 밝은 쪽으로 잘못 본다. XAML 에서 테마 **키**를 짚는 것도 아니다 — 키 이름이 판마다
-  달라진다(`LayoutControlThemeKey` 를 짚었다가 MC3072/MC3074 로 막힌 적이 있다).
-  강조 벌(낱말·글자 색)만은 팔레트에 없으므로 **팔레트에서 읽은 바탕색의 밝기**로 고른다.
-- 팔레트를 못 읽을 때만 이름(`Dark`·`Black`)과 레지스트리(`AppsUseLightTheme`)로 어림한다.
-- **낱말 색은 이 PC 의 Visual Studio 2026 화면과 같다**(2026-09-13). VS 의 C# 은 **ReSharper 가 칠한다** -
-  VS 설정 파일(`CurrentSettings.vssettings` 의 글꼴 및 색: 제어 키워드 굵게 · 메서드 #74531F · 지역 #1F377F)을
-  옮겼더니 VS 화면과 달랐다. 밝은 벌은 ReSharper 라이트(키워드 #0000FF · 메서드 #008B8B · 필드·속성 #800080 ·
-  지역 변수 검정 · 형식 #2B91AF, **아직 화면에서 재지 않았다**), 어두운 벌은 **VS 다크 화면을 캡처해 글자 픽셀에서 잰 값**
-  (바탕 #1E1E1E · 키워드 #569CD6 · 제어 키워드 #D8A0DF · 주석 #608B4E · 메서드 #00FFFF · 필드·속성 #EE82EE ·
-  형식 #ADD8E6 · 지역 변수 본문색 #DCDCDC · 줄 번호 #8A8A8A). 메서드·속성·형식은 ReSharper, 키워드·제어·주석은 VS 가 칠한다 -
-  ReSharper 기본값(설치 폴더 `JetBrains.ReSharper.Daemon.dll` 의 `DarkForegroundColor`)만 믿고 제어 키워드를 파랑으로 뒀다가 틀렸다.
-  재는 법: `CopyFromScreen` 으로 VS 창을 잡고(관리자 VS 는 `PrintWindow` 가 검게 나온다) 낱말 자리의 바탕과 먼 픽셀 중
-  가장 많은 색을 본다. ClearType 가장자리가 파랗게·붉게 번지므로 한두 픽셀짜리 색은 믿지 않고 크게 잘라 눈으로도 본다. 정규식이라 종류를 어림한다 - 이름 뒤 `(` 면 메서드,
-  점 뒤면 멤버(본문색), 나머지 이름은 지역 변수. 같은 자리에서는 먼저 적힌 규칙이 이기므로 키워드가 이름 규칙보다 앞이다.
-  바꾸고 나면 AvalonEdit 의 `DocumentHighlighter.HighlightLine` 으로 줄마다 색 이름을 찍어 본다.
-- **참조 표시(CodeLens)** - 형식·메서드(스크립트 안 함수)·속성·필드·이벤트·스크립트 최상위 변수 선언 위에 "참조 N개"(`IScriptReferenceFinder`).
-  - 세는 법: 프로젝트 소스를 **시작 파일까지** `#load` 로 이은 컴파일의 **모든 구문 트리**에서 이름마다 `GetSymbolInfo` 로 견준다.
-    `SymbolFinder` 는 작업 공간의 문서만 뒤져 `#load` 한 파일을 못 본다.
-  - 그리는 법(`Markup/CodeLensGenerator`): AvalonEdit 에 줄 위 여백이 없어, 선언 줄의 들여쓰기 뒤에 **폭 0·문서 길이 0**, 키가
-    "참조 한 줄 + 글자 높이" 인 요소를 끼운다 - 그 줄만 높아지고 코드는 요소 밑선에 앉는다(실측 17px → 32px). 자리는 `TextAnchor` 로 문서에 맨다.
-  - 분류가 끝난 뒤 센다(색이 먼저). 누르면 참조 창(GridControl, 파일별 묶음, "줄 : 코드" 에 낱말 칠함, 모두 축소), 더블 클릭은 같은 파일이면
-    편집기가 가고 다른 파일이면 `NavigateCommand`(워크벤치)가 탭을 연다.
-- **C# 은 컴파일러 분류로 덧칠한다**(`IScriptClassifier` · `RoslynCompletionSource.ClassifyAsync` · `Markup/SemanticColorizer`).
-  xshd 정규식은 이름 종류를 몰라 점 없는 필드·스크립트 안 함수·형식을 틀리게 칠했다. Roslyn `Classifier.GetClassifiedSpansAsync` 가
-  VS 와 같은 분류 이름(`method name`·`keyword - control`…)을 주고, 그것을 `ScriptTokenKind` 로 옮긴다 - **이름이 곧 xshd 의 Color name** 이라
-  색표는 xshd 한 곳뿐이다. 완성과 같은 제출 프로젝트를 쓴다(작업 공간을 또 만들면 MEF 구성에 몇 초).
-  - 능력별 인터페이스라 편집기가 `CompletionSource is IScriptClassifier` 로 묻는다. 파이썬·JS 는 xshd 색만.
-  - 치는 동안은 xshd 색으로 버티고 입력이 250ms 멎으면 분류한다. 토막은 `TextSegmentCollection` 으로 문서에 매어 뒤 글이 밀려도 따라간다.
-    돌아온 결과의 글 판(`ITextSourceVersion`)이 지금과 다르면 버린다.
-  - 스크립트 **최상위 변수는 제출 클래스의 필드**라 멤버 색(보라)이다. 함수 안 변수만 지역 변수 색이다 - 틀린 게 아니라 컴파일러가 보는 그대로다.
-  - 검증: `--vision` 이 낱말 16개의 종류를, `--views` 가 편집기에서 점 없는 필드가 멤버 색으로 그려지는지 본다.
-- 테마가 바뀌면 `LightweightThemeManager.CurrentThemeChanged` 로 다시 읽는다.
-  **정적 이벤트라 화면이 닫힐 때 반드시 푼다.**
-- 전환 자체는 검증 하네스로 못 잰다. `LightweightThemeManager` 는 화면 없이 도는 곳에서
-  테마 변경을 안 따라오고(이름을 바꿔도 `CurrentTheme` 이 그대로다) `CurrentTheme` 세터도
-  공개가 아니다. 하네스는 "색이 팔레트에서 나오는지"까지만 보고, 전환은 앱에서 눈으로 본다.
-- 테마를 바꾸는 곳은 **오른쪽 위 핀 옆의 테마 갤러리**다
-  (`MainWindow.xaml` 의 `BarSplitItemThemeSelectorBehavior`). 왼쪽 위 툴바가 아니다 —
-  거기는 메뉴·설정·전체화면·재시작·종료다.
-- **`TextEditor` 를 바로 얹으면 창 전체의 UI 자동화 트리가 빈다.** 실측으로 갈렸다 -
-  같은 화면의 버튼이 그리드 시절 37개에서 편집기를 넣은 뒤 0개가 됐다. 편집기만이 아니라
-  창에 있는 모든 것이 안 보인다(스크린 리더에도 그렇다). AvalonEdit 이 만드는 자동화 피어가
-  원인이라, `Markup/ScriptEditor` 로 감싸 평범한 `FrameworkElementAutomationPeer` 를 준다.
-  **AvalonEdit 을 다른 화면에 또 쓸 일이 생기면 `ScriptEditor` 를 쓴다.**
-- 그래도 편집기 안의 **글**은 UIAutomation 으로 읽고 쓸 수 없다 - 밖에서 검증하려면
-  좌표로 클릭해 포커스를 준 뒤 키를 보내야 한다.
-
-**빨간 밑줄과 코드 완성** (`Markup/ScriptEditor`)
-
-- 엔진이 준 `ScriptError`(줄 번호)를 `Errors` 로 받아 그 줄 아래에 물결선을 긋는다. 배경 렌더러
-  (`IBackgroundRenderer`, Selection 층)라 글을 가리지 않는다. 마우스를 올리면 문장이 풍선으로 뜬다.
-  XAML 은 `Errors="{Binding Script.Errors}"`.
-- 완성 목록은 두 갈래다. **C# 은 Roslyn**(`RoslynCompletionSource`, `IScriptCompletionSource`) - 전역 API·한글 이름·
-  지역 변수의 멤버·키워드까지 실제 컴파일러가 준다. 계획 모드는 전역 타입이 `SequenceScriptApi`, 실시간은
-  `LiveScriptApi` 라 실시간 전용 이름이 계획 모드 완성에는 안 나온다. **파이썬·자바스크립트는 API 표**
-  (`ScriptApiCatalog`)만 - 정적 분석기는 무겁고 얻는 것이 적어 안 얹는다. 편집기는 `CompletionSource` 가 있으면
-  그것을(비동기), 없거나 빈 목록이면 표를 쓴다. 낱말 첫 글자를 치면 열리고 Ctrl+Space 로도 연다. 고르면 **이름만**
-  넣는다 - 괄호까지 넣으면 이미 친 괄호와 겹친다.
-- Roslyn 완성은 `Microsoft.CodeAnalysis.CSharp.Features`(Scripting 과 같은 5.9.0) 가 필요하다. 어셈블리 약 20MB.
-  첫 호출 1.4초(MEF 구성 + 참조 읽기)라 워크벤치가 언어를 C# 으로 놓을 때 미리 한 번 부른다(`WarmUpAsync`); 그 뒤는
-  50ms. 문서는 `SourceCodeKind.Script` 인 **제출(submission) 프로젝트**에 `hostObjectType` 을 실어야 전역이 나오고,
-  `DocumentInfo` 도 따로 Script 로 만들어야 한다 - 기본(Regular)이면 "스크립트 코드만 제출할 수 있다" 로 터진다(실측).
-  참조는 이미 올라온 어셈블리 중 스크립트 엔진과 같은 것들(System.Runtime·Linq·Minguk.Tools 등)만 준다.
-- 파이썬 엔진이 심는 이름은 이 표에서 나온다. 자바스크립트 엔진은 인자 형이 붙은 대리자라 제 손으로 적되,
-  `--views` 가 표의 이름을 전부 불러 어긋남을 잡는다. 구문 강조(xshd)는 아직 손으로 맞춘다.
-- **오프스크린에서 TextView 의 층은 안 그려진다.** 편집기를 통째로 `RenderTargetBitmap` 에 그려도 밑줄이
-  없었다 - 층은 디스패처의 렌더 패스에서만 그려진다. 검사는 렌더러의 `Draw` 를 직접 불러 그 그림만 본다.
-  줄 자리(VisualLines)도 편집기가 **진짜 창에 붙어야** 나온다(Measure/Arrange 만으로는 비어 있었다).
-  그래서 검사는 화면 밖(-5000,-5000)의 보이지 않는 창에 담아 돌린다. 완성 창도 같은 이유로 그렇게 본다.
-- 투명 바탕의 Pbgra32 는 색이 알파로 곱해져 있다. 1.2px 선은 가장자리가 반투명이라 색을 그대로 견주면
-  못 찾는다 - 알파로 되돌린 뒤 "붉은가" 만 본다.
-
-### 실시간 모드 (스크립트·플레이 화면)
-
-스크립트·플레이 화면의 스크립트는 **실시간 모드**로 돈다 - 부르면 곧바로 나가고, 화면을 읽을 수 있다.
-입력 자동화 화면은 계획 모드(적어 두었다 나중에 보냄) 그대로다. 두 모드는 같은 이름을 쓴다(`ScriptApiCatalog`).
-
-- **실체는 둘**: 계획 `SequenceScriptApi`, 실시간 `Input/Scripting/Live/LiveScriptApi`. 표(`ScriptApiCatalog`)의
-  `Mode` 가 어느 쪽에 있는지 말하고, `--vision` 이 리플렉션으로 두 클래스에 표의 이름이 다 있는지 센다.
-  실시간 전용: 조준·상대이동·버튼누르기·버튼떼기·끌기·상대끌기·걷기·몹들·가장가까운몹·목표·목표풀기·몹기다리기·읽기·숫자읽기·키·누르기·떼기·중지되었나·출력·보기·끝.
-- **한 마리를 잡을 때까지 그 몹만 본다**(`목표()` · `목표풀기()`). `가장가까운몹()` 은 부를 때마다 그 순간 가까운
-  것을 고르는데, 몹이 둘이면 A 로 돌다 A 를 지나치는 순간 B 가 가까워져 B 로 돌고 다시 A 로 돈다 - 화면이 좌우로
-  휙휙 왕복만 하고 아무것도 못 잡는다(실측: 거리 837 → -598 → 835 → -409 → 837 반복).
-  **같은 몹인지 가리는 것이 어렵다** - 겨누면 화면이 돌아 몹의 화면 좌표가 크게 움직이므로, 자리가 비슷한 것을
-  찾으면 정작 크게 돌았을 때 놓친다. 그래서 **보낸 카운트 ÷ 배율 만큼 옮겨 놓고** 찾는다(배율이 틀려도 방향은 맞다).
-  못 찾으면 400ms 는 null 을 주고 기다린다 - 잠깐 가려진 것과 죽은 것을 구별할 길이 없다. 그 뒤 새로 고른다.
-
-- **조준은 일부러 85% 만 보낸다**(`AimDamping`). 지나치면 반대편에서 다시 꺾어야 해 왕복한다. 모자라면 다음
-  화면(0.08초)에서 마저 당기면 된다 - 사람이 잘 겨눌 때도 살짝 못 미치게 꺾고 마지막을 다듬는다.
-
-- **배율은 40~400px 짜리 조준으로만 배운다**(`MinLearnOffsetPx` · `MaxLearnOffsetPx`). 실측(오버워치 1920x1080)에서
-  잰 값이 이렇게 갈렸다: 40~400px 은 3.10·3.24·4.00·4.17·4.20 으로 일관되는데, **21px 은 1.83**(검출 사각형이
-  프레임마다 몇 px 씩 흔들려 잰 값이 통째로 뒤집힌다), **831px 은 1.33**(상한 1,200 에 잘리고, 화면 가장자리는
-  px 이 각도보다 빨리 늘어 가운데 근처와 다른 값이 나온다). 저 둘이 섞여 배율이 2.4 ↔ 3.6 으로 흔들렸다.
-
-- **배율은 아홉 번 잰 것의 가운뎃값으로 고친다**(`AimSamples`). 한 값씩 반영하면 안 된다 - **잡음이 한쪽으로만
-  튀기 때문이다.** 몹이 스스로 움직이거나 화면이 덜 돌면 "보낸 것보다 덜 움직였다" 가 되어 잰 값이 커지는데,
-  반대쪽("더 움직였다")은 거부 규칙에 걸러진다. 그래서 위로만 떠밀린다 - 실측에서 3.6 으로 시작해 734번 배우는
-  동안 상한 20 까지 올라가 붙었고(잰 값에 16.50·6.79 가 섞였다), 그러자 모든 조준이 상한(1,200)에 잘려 화면이
-  제대로 돌지 못했고 그게 다시 "덜 움직였다" 로 읽혀 서로를 키웠다.
-  **상한에 잘린 조준으로는 안 배운다** - 보내려던 것을 다 못 보낸 것이라 덜 움직인 이유를 가릴 수 없다.
-  이 둘이 그 되먹임 고리를 끊는다.
-
-- **배율 배우기는 "지나침" 도 배워야 한다.** 예전에는 줄어든 비율이 1을 넘으면(가운데를 지나쳐 반대편에 떨어짐)
-  버렸는데, 그러면 **배율이 모자랄 때는 올라가도 과할 때는 영영 못 내린다.** 실측에서 334% 가 그대로 굳어
-  화면이 왕복만 했다. 기준은 "비율이 1 이하인가" 가 아니라 **"결국 가까워졌는가"** 다(2.0 까지 허용).
-  그리고 **상한으로 자른 뒤의 값**을 보낸 양으로 적어야 한다 - 2,796 을 적고 1,200 을 보내면 배율이 더 올라간다.
-
-- **게임에서는 이동() 이 안 먹는다** - 커서를 붙잡는 창(오버워치)은 절대 좌표 이동을 무시하고 Raw Input 의
-  "움직인 양" 만 본다(실측: 이동() 이 아무 일도 안 했다). 그래서 `IInputAdapter.MoveMouseBy(dx, dy)` 가 있고
-  스크립트는 `조준(x, y)` 를 쓴다 - 창 가운데(조준점)에서 목표까지의 거리 × 조준 배율(%, `ScriptPlayer.AimScalePercent`)
-  만큼 상대 이동. 배율은 게임 감도마다 달라 사람이 맞춘다. 한 번에 안 맞으면 반복문에서 다시 찾아 다시 조준한다.
-  **같은 화면으로 두 번 겨누지 않는다**: 검출은 0.5~1초에 한 번, 반복문은 0.1초 - 같은 자리로 예닐곱 번 겨눠 여섯 배를
-  돌아 흔들렸다(실측). 스냅샷의 `FrameTicks`(검출이 본 프레임 시각)가 마지막 조준보다 앞이면 `조준` 은 건너뛰고 false.
-  **조준은 "맞았나" 를 돌려준다**: 새 화면에서 가운데 8px 안이면 true(누를 때), 멀어서 움직였거나 새 화면 전이면 false.
-  겨눈 뒤 80ms 안에 들어온 프레임도 겨누기 전 화면으로 본다. 판단은 **스크립트가 본 화면**(`몹들`·`가장가까운몹` 이
-  읽은 스냅샷)으로 한다 - 허브 최신값으로 보면 찾은 뒤 조준 전에 새 화면이 올라온 찰나에 옛 자리로 두 번 겨눴다.
-  옛 화면이면 **새 화면을 1.5초까지 기다렸다가** 움직이지 않고 false - 쉬기 없는 반복문이 초당 수천 번 불러 로그가
-  1분에 10MB, 화면 스레드가 밀려 몹 찾기가 0.7→1.8초가 됐다(실측). 출력 칸(`ScriptConsole`)도 칸마다 화면 갱신을
-  하나만 걸고, 파일 로그는 같은 호출·같은 결과를 건너뛰고 센다. **배율은 스스로 맞춘다**(`ScriptPlayer.IsAimScaleAuto`,
-  기본 켬): 100% 로 겨누니 한 번에 거리의 29% 만 줄었다(실측) - 보낸 카운트 ÷ 줄어든 px 로 배워 반씩 따라가고,
-  칸(`AimScalePercent`)을 고쳐 저장한다. **가까워졌고 가운데를 지나치지 않았을 때만**(줄어든 비율 0.2~1.0) 배우고,
-  한 번에 1.5배 넘게 바꾸지 않는다 - 노트북 실측에서 목표가 다른 몹으로 바뀐 값이 섞여 배율이 0.97→2.69→5.78 로
-  튀었고 한 번에 2,000 카운트가 나가 시야가 돌았다. 한 번에 보내는 양도 1,200 카운트로 자른다(모자란 만큼은 다음 화면에서).
-  **이동은 사람이 겨누듯 나눈다**(`SendRelative`) - 한 번에 수백을 넣으면 OS 커서가 창 밖으로 나가 이어진 클릭이
-  바탕 화면을 눌렀다(앞 창이 "Program Manager"). `Click` 은 커서가 대상 창 밖이면 100ms 기다려 보고 그래도 밖이면
-  안 누른다(가드). 예전에는 30카운트씩 **최대 6걸음**이라 멀리 겨눌 때 한 걸음이 200카운트였고 시야가 뚝뚝 끊겼다
-  ("팍팍 이동"). 지금은 셋을 흉내 낸다.
-  (1) **천천히 떼고 천천히 멈춘다** - 가운데가 가장 빠른 S자(smoothstep). 등속이면 시작과 끝이 튄다.
-  (2) **잘게 자주** - 8ms(약 125Hz)마다. 걸리는 시간은 `70 + 6.5·√거리` ms, 상한 280ms·40걸음.
-  (3) **완전한 직선이 아니다** - 가는 동안만 옆으로 거리의 2%(최대 12카운트) 벗어났다가 끝에서 0 으로 돌아온다.
-  합은 정확히 delta 라 도착지는 그대로다. 실측(거리 108): 17걸음 `1,3,4,6,7,7,9,8,8,9,7,7,6,4,3,1`.
-
-  **윈도우 시계 눈금을 당기지 않으면 이 모든 것이 헛일이다**(`Input/Interop/PrecisionTimer`, winmm
-  `timeBeginPeriod(1)`). 기본 눈금이 15.6ms 라 8ms 를 부탁해도 15.6ms 를 쉰다 - 걸음이 절반으로 줄고 그만큼
-  굵어진다. 실측: `Sleep(1)` 20번이 **310ms → 30ms**. 시스템 전체에 걸리는 값이라 앱이 뜰 때 켜지 않고
-  **실제로 움직이는 동안만** 켠다(게임은 대개 이미 1ms 로 당겨 두어 게임 중에는 사실상 공짜다).
-  걸음 사이 기다림도 `WaitHandle` 대신 `WaitPrecise`(1.5ms 아래면 스핀)를 쓰되 중지 토큰은 계속 본다.
-  게임의 이동(걷기)은 W·A·S·D 를 누르고 있는 시간이다 - `걷기("W", 500)`. finally 로 반드시 뗀다.
-  `클릭(100)`·`클릭("Right", 100)`·`우클릭(100)` 도 같다(실시간만, 첫 인자가 숫자면 누르는 시간) - 누른 버튼은 적어 두어 비상 정지(`ReleaseAll`)가 뗀다.
-- **전역 단축키는 공용(`SharedHotkeysFactory.Default`)** - RegisterHotKey 는 한 조합을 한 창만 쥔다. 스크립트·플레이·
-  입력 자동화가 각자 F5 를 쥐면 같이 열린 화면은 등록에 실패해 게임에서 F5 가 안 먹었다(실측). 이제 화면은
-  `Claim` 으로 쥐고(`HotkeyClaim`), 탭이 활성화되면(`DocumentViewModelBase.OnActivated`) 제 차례를 당긴다 -
-  마지막에 본 화면이 받는다. 마지막 화면이 놓으면 시스템 등록도 푼다. `--vision` 이 가짜 어댑터로 본다.
-- **대상이 관리자 권한이면 이 앱도 관리자여야 한다** (`ProcessElevation`) - 낮은 무결성에서 높은 쪽으로는 SendInput 도
-  RegisterHotKey 의 전역 단축키(F5·Pause)도 못 간다(UIPI). 캡처 시작·입력 경로 변경 때 `RefreshElevationNote` 가 견줘
-  `ElevationNote` 를 채우고, 화면은 "관리자로 다시 시작" 버튼(`RestartAsAdmin`, runas)을 보인다. 드라이버(Interception)는
-  입력은 넣지만 단축키는 여전히 안 온다. VS(관리자)에서 띄우면 앱도 관리자라 해당 없음.
-- **Interception 은 사람이 쓰는 그 장치 자리로 보낸다** - 드라이버는 자리(1~10 키보드, 11~20 마우스)로 보낸다. 늘 첫 자리로
-  보냈더니 마우스가 둘 붙은 PC(무선 콤보의 마우스 인터페이스가 11, 실제 마우스가 12)에서 오버워치가 조준·걷기를
-  무시했다(실측: SendInput 은 됐다, 몹 자리가 40번 넘게 1px 도 안 변함). `RawInputDeviceTracker` 가 Raw Input 을 뒤에서
-  받아 사람이 마지막으로 쓴 장치를 기억하고, `InterceptionInputAdapter.Resolve` 가 하드웨어 ID 와 VID·PID·MI 로 맞춰
-  그 자리를 고른다. 모르면 붙은 첫 자리(빈 자리는 건너뜀). 자리가 바뀌면 로그에 남는다. `--interception-probe` 는
-  자리 목록을 적고 3px 옮겨 본다(실제 입력 - 묶음에 안 넣음).
-- **OS 커서는 보낸 카운트보다 많이 움직인다** - 실측(기본 모드 `상대 이동` 검사): 60 카운트를 보내면 커서가 135px,
-  즉 **2.25배**다(포인터 속도·정밀도 향상). 게임은 Raw Input 으로 카운트를 그대로 보므로 조준 배율과 이 값을 섞지 말 것.
-  큰 상대 이동을 걸음으로 나누는 이유도 이것이다 - 커서가 2배 넘게 튀어 창 밖으로 나간다.
-- **스크립트 화면 단축키**: F5 실행/계속 · F6 중지(대기 중에도) · F10 한 줄 · Pause 비상 정지(도는 동안만). F9 는 VS 처럼 중단점으로 비워 둔다(2026-09-13). 호출 로그
-  (`ScriptConsole.Trace`)는 파일 로그에도 Debug 로 남긴다 - 게임에서 돌린 뒤 무엇을 불렀는지 나중에 본다.
-- **스크립트 실행은 소리로 알린다** (`ScriptPlayer.Chime`) - 게임이 앞에 있으면 화면 글자를 못 본다. 받음 한 번 ·
-  시작 두 번 · 끝 높게 · 실패 낮게 길게. 단축키 눌림(`SharedHotkeys.Fire`)·시작 무시 이유·끝 상태는 로그에 남긴다.
-- **앞 창 판정은 같은 프로세스면 통과** (`ForegroundWindow.IsInFront`) - 게임은 잡은 창 말고 IME·오버레이를 앞에
-  두기도 해 핸들만 비교하면 게임이 앞에 있어도 막혔다. 막히면 앞 창이 무엇인지 메시지에 적는다.
-- **SendInput 키에는 스캔코드를 같이 싣는다** - wScan 이 0 이면 Raw Input 을 받는 게임에는 MakeCode 0 인 키가
-  들어가 W·A·S·D 가 안 먹는다(`SendInputAdapter.NativeMethods.KeyInput`). 확장 키는 `VirtualKeys.IsExtendedKey`.
-- **엔진마다 두 길**: `RunAsync`(계획: 돌려서 계획을 받음) 와 `CheckLiveAsync`(실시간: 컴파일·문법만) ·
-  `RunLiveAsync`(실시간: 끝까지 돌림). 실시간 검사는 돌리면 입력이 나가므로 부작용이 없어야 한다.
-  C# 은 전역 타입이 다르므로 캐시도 따로. 파이썬은 `name = api.name` 으로, 자바스크립트는
-  `function name(){ return api.name.apply(api, arguments); }` 로 표의 이름을 심는다 - 대리자를 하나씩 안 적는다.
-- **끝난 이유는 `LiveScriptApi.Outcome`** 으로 가른다. 중지·비상 정지·끝() 은 오류가 아니라 빈 목록, 안전장치가 막은
-  것은 `GuardMessage`, 그 밖은 스크립트 오류. 예외 타입으로 가르면 안 된다 - 파이썬을 거치면 전부
-  PythonException 이 된다.
-- **안전장치는 전부 `LiveScriptApi` 안에**: 대상 창이 앞에 없으면 입력을 보내지 않고 멈춤(SendInput·Interception 만),
-  초당 입력 상한 30(넘으면 기다림), 모든 호출이 중지 토큰을 봄(`쉬기()` 도 토큰으로 기다린다), 눈이 없으면
-  `몹들()` 은 빈 목록이 아니라 멈추고 이유를 말함. 실행 시간 상한은 `ScriptPlayer.RunTimeLimitSeconds`(기본 600).
-- **비상 정지 Pause** 는 `EmergencyStop` 이 스크립트가 도는 동안만 쥔다. 누르면 중지 + 누르고 있던 키 전부 뗌.
-  늘 쥐면 다른 화면·프로그램의 Pause 를 빼앗는다. 원래 F9 였는데 VS 의 중단점 키와 겹쳐 옮겼다.
-- **인식 허브 `Vision/Perception/IPerceptionHub`**: 인식 베이스가 상태(잡는 중·찾는 중·대상)·검출·이름표를
-  올리고, 스크립트가 읽는다. 프레임 픽셀은 `WantsFrames` 일 때만(읽기() 를 부른 뒤) 0.25초마다 복사해 올린다.
-  앱에 하나(`PerceptionHubFactory.Default`), 하네스는 가짜 허브를 꽂는다.
-- 몹 자리는 **화면 픽셀**로 준다(`ScriptMob`). 비율↔픽셀은 부르는 순간의 대상 창 자리로 API 가 바꾼다.
-  **겨누는 곳은 `머리x`·`머리y`**(사각형 위에서 높이의 18%). 가운데는 사람으로 치면 배다 - 머리가 한 발의 값이
-  크고, 팔다리가 사각형을 넓혔다 좁혔다 하는 것은 아래쪽이라 머리가 덜 흔들린다. 꼭대기에 붙이지 않는 이유는
-  검출 사각형이 늘 조금 넉넉해서 머리 위 허공을 보기 때문이다. `중심x`·`중심y` 는 그대로 있다.
-- `LiveScriptSession`(ViewModels) 이 화면 둘이 같이 쓰는 묶음 - 출력 칸(`ScriptConsole`), 비상 정지, API 에 빌려 줄 것.
-  `ScriptPlayer` 는 한 바퀴를 `ScriptRunContext.RunOnce` 대리자로 받아 계획·실시간을 가리지 않는다.
-- 검증: `--vision` 의 실시간 검사는 **가짜 어댑터**(누른 것을 적기만)와 가짜 허브로 돈다. 입력은 절대 실제로 안 나간다.
-  MoveTo 는 부드럽게 여러 걸음이라 "마지막 걸음이 몹 자리" 로 본다.
-
-### 디버그 (스크립트 화면)
-
-- **호출 로그**: `LiveScriptApi` 가 API 를 부를 때마다 `ScriptCall`(시각·이름·인자·결과·걸린 시간)을 `LiveScriptHost.Trace` 로
-  넘기고 `ScriptConsole.CallsText` 에 쌓인다(최근 200개). C# 스크립트는 한 줄씩 밟을 수 없어 이것이 디버거 몫이다.
-  `쉬기()` 는 500ms 이상만 남긴다 - 반복문이 초당 수십 줄을 만든다.
-- **중단점·한 줄씩**은 `ScriptDebugSession` 이 든다. 화면(UI)은 `Breakpoints` 컬렉션을 고치고 계속(F5)·한 줄(F10)을 누르고,
-  엔진(스크립트 스레드)은 줄마다 `ShouldBreak` 를 묻고 `Pause` 에서 기다린다. 컬렉션은 UI 것이라 스레드용 집합을 따로
-  두고 바뀔 때 갈아 끼운다. 멈춘 채로 중지하면 토큰이 깨워 그 자리에서 끝난다.
-- **JavaScript** 는 Jint 디버거(`Options.Debugger.Enabled`, `InitialStepMode=Into`, `Debugger.Step` 이벤트). 사용자 글은
-  `Execute(source, "script")` 로 이름을 붙이고 `info.Location.SourceFile` 로 우리 껍데기 함수(shim)와 가른다 - 껍데기 안이면
-  `StepMode.Over`. 변수는 `CurrentScopeChain` 의 `BindingNames`/`GetBindingValue`, 우리가 심은 이름과 함수는 뺀다.
-- **Python** 은 `sys.settrace`. 사용자 글을 `PythonEngine.Compile(source, "<script>")` 로 이름 붙여 `Execute` 하고, 추적 함수가
-  `co_filename == '<script>'` 인 줄에서만 `__dbg.ShouldBreak/Pause`(`PythonDebugBridge`)를 부른다. 멈춘 동안 GIL 을 쥔 채
-  기다린다 - 파이썬 스레드가 하나뿐이라 괜찮다.
-- **C#** 은 `SupportsStepping=false`. Roslyn 스크립트 어셈블리에는 디버거를 붙일 자리가 없다. 한 줄(F10)을 누르면 상태 줄이 그렇게 말한다.
-- 편집기(`ScriptEditor`): 왼쪽 여백(`BreakpointMargin`, AbstractMargin)을 누르면 중단점, Ctrl+B 도 같다. `CurrentLine` 이 0 이
-  아니면 그 줄을 노랗게 칠하고 굴린다. 여백은 `OnRender` 에 투명 판을 깔아야 클릭이 온다 - 안 그린 자리는 히트 테스트에 안 걸린다.
-- 스크립트 화면 단축키: F5 실행/계속, F10 한 줄, Pause 비상 정지(도는 동안). 플레이·입력 자동화도 F5 를 쥐므로 같이 열면 나중 것이 실패한다.
-- 검증(`--vision`): 가짜 어댑터로 JS 중단점(2번 줄에서 멈춤·변수 `a=1`·계속하면 끝), 한 줄씩(1→2→3), 멈춘 채 중지, 호출 로그.
-
-## 몹 검출 (이미지 캡처 → 라벨링 → 학습 → 추론)
-
-화면에서 몹을 **찾는** 것이 목표다(사각형 + 이름). 무슨 몹인지만 맞히는 분류가 아니다 -
-자동화에 쓰려면 좌표가 있어야 클릭할 수 있다.
-
-```
-캡처 모니터  ──담기──▶  데이터셋  ──찍기──▶  라벨  ──학습──▶  detector.zip ──▶ 찾아보기
- (WgcCaptureSession)      images/           labels/     (TorchSharp)              (DetectorModel)
-```
-
-**네 토막이 다 이어져 있다.** 앱에서 한 바퀴 밟아 확인했다(아래 "끝까지 밟아 본 것").
-다만 검출 모델이 ONNX 로 안 나와 `Inference/OnnxDmlEngine` · `FramePreprocessor` 는
-여전히 부르는 곳이 없다 - 남의 `.onnx` 를 돌릴 일이 생기면 그때 쓴다.
-
-### 라벨 형식
-
-널리 쓰는 **YOLO 형식 그대로**다. 우리끼리 쓸 형식을 새로 만들면 남이 만든 학습 코드에
-넣을 때마다 옮겨 적어야 하고, 라벨을 눈으로 볼 도구도 없어진다.
-
-```
-<데이터셋>/
-  images/      그림 (.png · .jpg)
-  labels/      라벨 (.txt) - 그림과 이름이 같다
-  classes.txt  몹 이름, 한 줄에 하나
-```
-
-라벨 한 줄은 `<몹 번호> <가운데 x> <가운데 y> <너비> <높이>` 이고 좌표는 모두 **0~1** 이다.
-
-- **0~1 로 담는다.** 픽셀로 담으면 그림 크기가 달라지는 순간 어긋나고, 학습할 때 어차피
-  다시 나눠야 한다.
-- **소수점을 `InvariantCulture` 로 못 박는다.** 지역이 유럽인 PC 에서 `0,5` 로 찍히면
-  빈칸으로 나눈 값의 **개수부터** 달라진다. 읽는 쪽도 같다. 검증은 실제로
-  `CurrentCulture` 를 `de-DE` 로 바꿔 놓고 본다 - 코드를 읽어서는 못 잡는다.
-- **사각형을 만들 때 파일과 같은 자릿수(6)로 반올림한다**(`LabelBox.Digits`).
-  안 그러면 `(0.2+0.6)/2` 가 `0.4000000000000001` 이라 저장하고 되읽은 사각형이 원래 것과
-  `==` 로 다르다. 눈에 안 보이는 차이지만 "고른 사각형" 을 못 찾는 식으로 샌다.
-- **라벨을 다 지우면 파일도 지운다.** 빈 파일을 남기면 학습 쪽 관습으로는 "배경 사진" 이라
-  사람이 의도하지 않은 것을 가르치게 된다.
-- **몹은 아무 라벨에도 안 쓰인 것만 지운다**(`LabelDataset.RemoveClass`, 2026-09-14). 라벨에는 이름이 아니라 번호가
-  들어 있어, 중간을 지우면 뒤가 당겨져 찍어 둔 것이 조용히 다른 몹을 가리킨다. 그래서 지울 때 뒤 번호가 든 라벨 파일과
-  색(class-colors.json)을 같이 당기고, 쓰인 몹은 어느 파일에 쓰였는지 말하고 거절한다(`FindLabelsUsing`) - 사각형을 먼저
-  지우게. 시험으로 넣은 몹처럼 안 찍은 것은 잃을 것이 없어서 열었다. 이름 바꾸기는 번호가 그대로라 안전하다.
-
-### 학습 (TorchSharp) - 실측해 둔 것
-
-학습은 **C# 으로 한다**(`Microsoft.ML.TorchSharp` 0.23.0 의 `ObjectDetectionTrainer`,
-AutoFormerV2). 스크래치 프로젝트에서 학습 → 저장 → 불러오기 → 추론까지 실제로 돌려 보고
-정한 것이라, 아래 숫자는 추측이 아니라 잰 값이다.
-
-- **.NET 10 x64 에서 돈다.** `Microsoft.ML.TorchSharp` 은 `netstandard2.0` 이지만 물린다.
-  `ObjectDetection(labelColumnName, boundingBoxColumnName, imageColumnName, maxEpoch)` 로 부른다
-  (`using Microsoft.ML.TorchSharp;` 가 있어야 확장 메서드가 보인다).
-- 데이터 모양: `MapValueToKey` 로 라벨을 키로, `LoadImages` 로 경로를 픽셀로 바꿔 넘긴다.
-  사각형은 **픽셀 좌표 (x1, y1, x2, y2)** 다 - 우리가 파일에 담는 0~1 과 다르므로 넘기기 전에
-  그림 크기를 곱해야 한다.
-- 모델은 ML.NET `model.zip` 으로 저장된다(약 69MB).
-
-**ONNX 로는 못 내보낸다.** `ObjectDetectionTransformer` 가 `ICanSaveOnnx` 를 구현하지 않고
-(ML.NET 의 TorchSharp 학습기는 하나도 구현하지 않는다), TorchSharp 어셈블리 안에 onnx 관련
-타입이 **하나도 없다**(`torch.onnx.export` 는 파이썬 전용). 그래서 **`Inference/OnnxDmlEngine`
-은 이 길에서 쓰지 않는다** - 추론도 TorchSharp 로 한다. 남의 `.onnx` 를 돌릴 일이 생기면
-그때 다시 꺼내면 된다.
-
-**CPU 로는 학습을 못 한다.** 같은 코드·같은 데이터(그림 8장, 1 epoch)로 쟀다.
-
-| | 걸린 시간 |
-|---|---|
-| CPU | **248.2초** |
-| CUDA (GTX 1060 3GB) | **8.6초** |
-
-29배다. 300장 × 20 epoch 이면 CPU 로는 수백 시간이라 아예 못 쓴다. **학습은 GPU 를 전제한다.**
-
-### 폴더 하나로 옮긴다 - %AppData%\Minguk.Tools
-
-학습에 얽힌 것은 전부 이 뿌리 아래 둔다. 다른 PC 로 갈 때 이 폴더만 복사하면 된다.
-
-```
-%AppData%\Minguk.Tools\
-├─ Datasets\몹\      images · labels · classes.txt · detector.zip · detector.json
-├─ libtorch\2.2.1\   받아 둔 libtorch (CUDA 4.2GB / CPU 186MB)
-├─ mlnet\            autoformer_11m_torchsharp.bin - 사전학습 가중치 보관본 (77MB)
-└─ AppSettings.User.config
-```
-
-사전학습 가중치는 ML.NET 이 `%TEMP%\mlnet\` 에서만 읽고 그 자리를 바꿀 수 없다(환경 변수
-없음 - DLL 문자열을 뒤져 확인). 그래서 `PretrainedWeights` 가 학습 뒤에 보관본을 챙기고,
-학습 전에 임시 폴더에 없으면 보관본으로 채운다. 임시 폴더는 청소 대상이라 원본으로 믿지 않는다.
-
-### GPU 두 장 - 한 프로세스에 한 장씩 나눈다
-
-ML.NET 검출 학습기는 장치를 고르는 API 가 없고 늘 첫 번째 CUDA 카드를 쓴다. 한 학습을 두 장에
-나누는 것(DataParallel)은 안 열려 있다. 그래서 **프로세스마다 보이는 카드를 좁힌다**
-(`LibTorchRuntime.SelectGpu` → `CUDA_VISIBLE_DEVICES`, libtorch 를 올리기 전에만 먹는다).
-
-- 하네스: `--train-check=… --gpu=0` 과 `--gpu=1` 을 창 둘에서 동시에. 3GB 카드 둘이라 각자
-  320·640 처럼 다른 실험을 맡기면 시간이 반으로 준다.
-- 앱: 라벨링 화면 "GPU" 선택(`Vision.GpuIndex`, -1 자동). `App.OnStartup` 이 가장 먼저 읽어
-  적용하므로 **바꾸면 다시 실행해야** 한다.
-- **자동은 모니터가 안 붙은 카드를 고른다**(`GpuProbe`, NVML). 게임과 바탕화면은 모니터가
-  붙은 카드에서 돌기 때문이다. 다 붙었거나 다 안 붙었으면 지금 사용률이 낮은 쪽. 한 장이면
-  그것. 하네스도 `--gpu=` 를 안 주면 같은 규칙이다. **고르는 순간은 libtorch 를 처음 올릴 때**
-  (첫 학습·몹 찾기)다 - 앱 시작 때 고르면 그때 게임이 안 떠 있어 사용률로 못 가른다.
-  이 PC 실측: 두 카드 다 모니터가 붙어 있어 사용률로 갈랐고, 게임이 도는 GPU 0(66%) 대신
-  GPU 1(5%) 을 골랐다.
-- 번호는 **PCI 버스 순서**로 고정한다(`CUDA_DEVICE_ORDER=PCI_BUS_ID`). 안 그러면 CUDA 가
-  "빠른 카드부터" 세어 nvidia-smi 와 어긋날 수 있다. 같은 카드 둘이면 이름으로 못 가른다.
-- **환경 변수는 C 런타임 표에도 써야 한다**(`_putenv_s`). `Environment.SetEnvironmentVariable`
-  만으로는 libtorch 의 `getenv` 가 못 본다 - 실제로 `--gpu=1` 을 주고도 0번이 돌았다.
-- 올린 뒤 로그에 "CUDA 장치 N개 보임: 0 = 이름 [PCI]" 를 적는다. Windows(WDDM)는 nvidia-smi 가
-  프로세스별 카드를 안 보여 줘, 정말 그 카드로 갔는지는 이 PCI 주소로 확인한다.
-
-**그림 캐시는 해 봤고 효과가 없었다.** 학습 전에 97장을 640x360 PNG 로 줄여 두고 학습기에
-그 경로를 넘겨 2바퀴를 쟀더니 캐시 없이 411초, 캐시로 440초였다(2026-09-11). 매 바퀴
-1080p 를 읽는 것이 병목일 거라는 진단이 틀렸다 - 코드는 되돌렸다(`git revert`). 학습 시간은
-모델 입력 크기에 비례하고(320 은 0.6초/장, 640 은 1.5초/장) 원본 크기와 무관하다. 병목은
-학습기 안의 CPU 쪽 일이다. 다시 이 길로 가지 않는다.
-
-**CPU 100% 는 libtorch 스레드 탓이다.** GPU 로 학습해도 CPU 조각(그림 읽기·텐서 변환)이 스텝마다
-끼고, 그때마다 논리 코어 수(16)만큼의 스레드가 깨어나 바쁘게 돈다. `Load` 뒤에
-`torch.set_num_threads(코어/4, 2~8)` 로 제한한다. **줄이는 쪽이 오히려 빠르다** - 97장 640 1바퀴
-(부대 시간 포함)가 4개 260초 · 8개 315초 · 16개 353초, CPU 는 4개 23~55% · 8개 79~100% 였다
-(게임과 같이 돌 때). 스레드가 많을수록 서로 다투고 게임과도 겹친다. 실험은 환경 변수
-`MINGUK_TORCH_THREADS` 로 한다.
-
-**OpenMP 스핀도 끈다**(`KMP_BLOCKTIME=0`, `OMP_WAIT_POLICY=PASSIVE`, libtorch 올리기 전). 스레드를
-4개로 줄여도 몹 찾기(640, 0.7초에 한 번)가 앱 프로세스만으로 CPU 28~30%(16코어 기준, 4.5코어)를
-썼다. 일이 끝난 스레드가 다음 일을 기다리며 코어를 붙들고 있어서다. 끄자 19~20% 로 내려갔고
-찾는 시간은 그대로(670~770ms)였다. 게임만 돌 때 바닥은 20~30%.
-
-### 학습률 - 기본값 1.0 으로는 실제 화면을 못 배운다
-
-ML.NET `ObjectDetectionTrainer` 의 기본 `InitLearningRate` 는 1.0(SGD) 이다. 확인용 단색 네모
-(24장)는 그 값으로 두 바퀴 만에 loss 88 → 0.35 로 떨어져 24/24 를 찾는다. 그래서 파이프라인이
-멀쩡하다고 믿고 있었는데, **실제 게임 화면 14장·27개는 320x180 20·100 바퀴, 640x360 40 바퀴
-전부 0개**였다. loss 를 흘려 보니 278 로 시작해 1.4~2.1 에서 20바퀴 내내 제자리 - 배우지를
-못하는 것이었다. 크기(320→640)도, 1080p 원본도, 몹 1종도 원인이 아니었다(각각 합성으로 갈라
-확인). **0.1 로 낮추자 같은 데이터 20바퀴에 18/27(67%)** 을 찾았다.
-
-- `DetectorTrainer.DefaultLearningRate = 0.1`. 하네스는 `--train-check=<폴더> --lr=` 로 바꿔 돌린다.
-- **loss 는 `LogEveryNStep = 1` 로 켜야 나온다.** 기본 50 이라 14장짜리에선 거의 안 찍힌다.
-  "Row: n, Loss: x" 와 "Starting/Finished epoch n" 을 progress 로 흘린다(2초에 한 줄).
-- 새 데이터로 학습해서 안 찾으면 **먼저 loss 가 내려가는지** 본다. 안 내려가면 데이터를 더
-  모아도 소용없다.
-- **지금 보는 그림**은 "Row: n" 의 n 으로 되짚는다(`samples[n-1]`). 학습기가 순서를 안 섞는
-  것을 실측으로 확인했다(1, 5, 9 … 로 늘고 바퀴마다 1로). 목록에 "◀ 학습 중" 이 따라다니고
-  진행 줄에 이름이 뜬다. **선택은 기본으로 안 옮긴다** - 사람이 학습 중에 다른 그림을 찍고
-  있을 수 있다. `따라가기` 를 켜면 가운데 그림도 따라간다(한 장 30~50ms, 초당 두세 장).
-  목록에는 그림마다 **마지막 loss** 를 적는다 - 혼자 높은 그림이 라벨이 틀렸거나 다시 찍을
-  장면이다. "이건 다시 찍어야겠다" 는 그림을 지켜보는 것보다 이 숫자로 고르는 것이 빠르다.
-- **쪽지(detector.json)에 사람이 물을 만한 것을 다 적는다** - 몇 번째 학습인지(지난 쪽지 +1),
-  언제, 크기, 장수·사각형·몹 종, 바퀴, 걸린 시간, GPU 여부, 학습률, 마지막 loss, 재현율 결과.
-  화면의 "모델" 줄(`ModelSummary`)이 이것을 한 줄로 보인다. 옛 쪽지는 있는 것만 적는다.
-- **학습이 끝나면 학습 그림을 다시 찾아 목록에 "2/2" 로 적는다** (`RunSelfCheckAsync`). loss 를
-  인식률로 읽는 일이 있어("인식률 맞지?") 개수로 따로 보인다. 계산은 하네스 `--detect-check`
-  와 같은 `DetectionMatch`(IoU 0.5, 라벨 하나에 검출 하나) 다 - 두 벌이면 숫자가 어긋난다.
-  학습에 쓴 그림이라 외운 것도 맞은 것으로 센다. 한 장 0.3초라 학습의 일부로 돈다.
-
-### libtorch 는 받아서 쓴다
-
-NuGet 의 `TorchSharp-cuda-windows` 를 참조하면 **빌드 출력이 3.6GB** 가 된다
-(`torch_cuda.dll` 863MB · `cudnn_cnn_infer64_8.dll` 578MB · `cublasLt64_12.dll` 514MB …).
-CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 때 받는다** - 파이썬을 처음
-고를 때 받는 것(`PythonRuntimeInstaller`)과 같은 방식이다. 라벨링까지만 쓰는 사람은 안 받는다.
-
-- csproj 에는 **관리 어셈블리인 `TorchSharp` 만** 넣는다. 여기에 딸려오는
-  `LibTorchSharp.dll`(1.9MB)이 우리 쪽 껍데기라 반드시 같이 나가야 한다.
-  `TorchSharp-cpu` · `TorchSharp-cuda-windows` 는 **넣지 않는다.**
-- 받는 곳은 pytorch.org 의 통짜 zip 이다. NuGet 판은 크기 제한 때문에 part1~part9 로
-  쪼개져 있어 런타임에 다시 붙이는 것이 번거롭다.
-
-| | 주소 | 크기 |
-|---|---|---|
-| CUDA 12.1 | `download.pytorch.org/libtorch/cu121/libtorch-win-shared-with-deps-2.2.1+cu121.zip` | 2294 MB |
-| CPU | `download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.2.1+cpu.zip` | 177 MB |
-
-판(2.2.1)은 TorchSharp 0.102.7 이 요구하는 것과 맞춰야 한다. 어긋나면 진입점을 못 찾는다.
-
-- 물리는 법은 **`NativeLibrary.Load` 로 전체 경로를 주어 `torch_cpu.dll` · `torch.dll` 을
-  먼저 올리는 것**뿐이다. 그 뒤 `torch.ones(...)` 가 그냥 된다.
-  `AddDllDirectory` 는 안 써도 된다(실제로 87 로 실패하는데도 로드는 됐다).
-- 받은 폴더를 안 주면 TorchSharp 가 제 진단문("Giving up, TorchSharp.dll does not appear to
-  have been loaded from package directories")과 함께 실패한다 - **NuGet 캐시를 주워 쓰지
-  않는다는 것을 이걸로 확인했다.**
-- 받는 자리는 실행 폴더가 아니라 `%AppData%` 밑이어야 한다. Velopack 이 업데이트 때
-  설치 폴더를 통째로 갈아 끼우므로 2GB 를 매번 다시 받게 된다(`Helper/UserDataPaths` 참고).
-
-### 추론
-
-학습해 둔 `detector.zip` 을 그대로 돌린다(`Vision/Inference/DetectorModel`).
-**`Inference/OnnxDmlEngine` 은 이 길에 쓰이지 않는다** - 이 모델은 ONNX 로 못 나온다.
-남이 만든 `.onnx` 를 돌릴 일이 생기면 그때 그쪽을 꺼내 쓰면 된다.
-
-- 모델은 **픽셀** 좌표를 내놓는다. 우리는 0~1 로 다루므로 받자마자 나눈다.
-- **찍은 사각형은 옮기고 크기를 바꿀 수 있다.** 계산은 `LabelBoxEdit`(순수, `--vision` 이
-  숫자로 본다)에 있고 캔버스는 마우스만 잇는다. 고른 것의 모서리·변 가운데 손잡이는 크기
-  조절, 안쪽은 옮기기(안 고른 것도 누르는 순간 고르고 끌린다), 빈 자리는 새로 그리기다.
-  손잡이는 **고른 것에서만** 잡힌다 - 안 고른 것의 모서리까지 잡으면 붙어 있는 사각형 사이에
-  새로 그리려다 엉뚱한 것이 늘어난다. 화살표는 1px, Shift+화살표는 10px 씩 민다.
-- 옮기기는 **시작 사각형에 변위를 더한다**. 직전 위치에 더하면 반올림이 쌓인다. 4px 안쪽의
-  떨림은 옮기기로 안 친다 - 고르려고 누를 때마다 사각형이 흘러 저장할 때마다 좌표가 바뀐다.
-  마우스로 실제로 끌리는지는 `--canvas-drag` 가 본다(커서를 가져가므로 `--views` 밖).
-- **손을 덜 타게 하는 세 가지.** 다 손으로 그리는 것은 "일일이 잡아줘야 하나" 였다.
-  (1) `앞 장 가져오기` - 앞에서 가장 가까운 라벨 있는 그림의 사각형을 더한다. 연달아 담은
-  그림은 몹이 몇 픽셀만 움직이니 가져와 끌어 맞춘다. (2) `점선 받기` - 모델이 찾은 점선을 전부
-  라벨로 굳히고 틀린 것을 지운다. 캔버스에서 점선을 누르면 그것 하나만 옮겨지고 바로 끌린다.
-  (3) 캡처 모니터에서 몹 찾기가 켜진 채 담으면 1초 안에 찾은 것을 라벨 파일로 같이 쓴다
-  (`FreshDetections`). 찾은 것이 없으면 라벨 파일을 안 만든다 - 빈 라벨은 "몹이 없다" 를
-  가르치는 것이라 사람이 봐야 한다.
-- 예측 이름을 **번호로 되돌려** 손으로 찍은 사각형과 같은 색이 되게 한다. 색까지 다르면
-  어느 몹을 찾았는지 알아보기 어렵다. 학습 파이프라인 끝에 `MapKeyToValue` 를 붙여
-  모델이 번호가 아니라 이름을 내놓게 해 두었다.
-- **세 배열(이름·사각형·점수)의 길이가 맞는지 본다.** 사각형은 넷씩 묶여 있어 개수가
-  어긋나면 엉뚱한 이름이 엉뚱한 자리에 붙는데, 화면에는 그럴싸하게 그려져 눈으로는 못 잡는다.
-- 열 이름(`PredictedLabel` · `PredictedBoundingBoxes` · `Score`)은 `DetectorTrainer` 의
-  상수를 양쪽이 같이 본다. 어긋나면 조용히 빈 배열이 와서 "못 찾았다" 로 보인다.
-- 모델은 한 번 읽고 들고 있는다(69MB). 파일 경로가 바뀌었으면(다시 학습) 버리고 새로 읽는다.
-- `PredictionEngine` 은 스레드 안전하지 않다. 프레임마다 부르게 되면 한 스레드로 몰아야 한다.
-
-화면에서는 **점선이 모델이 찾은 것, 실선이 사람이 찍은 것**이다. 섞어 그리면 무엇이 내가
-찍은 것인지 갈리지 않는다. 예측은 고를 수도 지울 수도 없다 - 고칠 것은 사람이 찍은 쪽뿐이다.
-
-### 확인용 데이터로 시험할 때
-
-확인용 씨앗을 심는 스크립트는 `images/` · `labels/` 를 **비우고** 시작한다. 사용자가
-게임에서 모은 그림이 그 자리에 있으면 통째로 날린다. **사용자가 모으기 시작한 뒤에는
-기본 데이터셋 폴더에 씨앗을 심지 않는다** - 시험은 Automation 의 `새 프로젝트` 로 시험용 프로젝트를 따로 만들어
-그리로 넘어가서 한다(데이터셋 자리는 고른 프로젝트다 - 라벨링의 폴더 고르기는 뺐다).
-
-### 끝까지 밟아 본 것
-
-2026-09-10 에 앱에서 한 바퀴 돌려 확인했다. 씨앗 그림 24장(빨간 네모=슬라임,
-초록 네모=버섯) · 사각형 48개 · 20 epoch.
-
-```
-학습 3.9분 (GPU, GTX 1060 3GB)  ->  detector.zip 68.9MB
-찾아보기                        ->  2마리 찾았습니다: 슬라임 100%, 버섯 99%
-```
-
-점선이 손으로 찍은 실선과 거의 정확히 겹쳤다. **이 숫자가 기준선이다** - 나중에 같은 데이터로
-훨씬 오래 걸리거나 못 찾으면 무언가 어긋난 것이다.
-
-### 모델이 보는 크기 - 파이프라인 안에서 맞춘다
-
-**AutoFormerV2 는 넣은 그림을 줄이지 않고 그대로 본다.** 그래서 크기를 안 맞추면 두 가지가
-한꺼번에 어긋난다.
-
-- 값이 픽셀 수에 비례한다. 1920x1080 한 장이 **4.7초**였다(320x200 은 220ms).
-  그 크기로 학습하면 몇십 배가 걸린다.
-- 담기는 원본 해상도로 저장하고 실시간 쪽은 320 으로 줄여 넣으므로, **학습한 크기와
-  추론하는 크기가 다르다.** 실측으로 그 어긋남은 검출을 망친다.
-
-그래서 `ResizeImages` 를 **모델 파이프라인 안에** 넣었다(`DetectorTrainer.InputWidth` ·
-`InputHeight` = 320x180). 저장된 모델이 그것을 들고 다니므로 추론 쪽은 아무것도 안 해도
-학습 때와 같은 것을 본다. 고친 뒤 실측:
-
-| 넣은 크기 | 고치기 전 | 고친 뒤 | 찾은 것(2개 중) |
-|---|---|---|---|
-| 160x90 | 121 ms | 240 ms | 1 → **2** |
-| 320x180 | 220 ms | 232 ms | 2 |
-| 480x270 | 439 ms | 230 ms | 2 |
-| 640x360 | 587 ms | 229 ms | 2 |
-| 960x540 | 1,064 ms | 230 ms | 2 |
-| **1920x1080** | **4,724 ms** | **236 ms** | 1 → **2** |
-
-넣는 크기와 상관없이 **~230ms (4.2~4.4 fps)** 로 같아지고, 모든 크기에서 둘 다 찾는다.
-`dotnet run --project Minguk.Tools.Tests -- --detect-bench` 로 잰다.
-
-- **`Fill`(늘려 채우기)로 맞춘다.** 그래야 0~1 라벨이 그대로 곱해져 맞는다 - 축마다 따로
-  늘어나기 때문이다. `IsoPad` 로 여백을 두면 라벨 쪽에서도 같은 여백을 계산해 줘야 해서
-  어긋나기 쉽다. 게임 화면이 대개 16:9 라 320x180 이면 찌그러짐도 거의 없다.
-- **사각형 픽셀 좌표는 원본이 아니라 이 크기로 만든다**(`TrainingSample.From`).
-  원본을 곱하면 사각형만 원본 자리에 남고 그림은 줄어들어 통째로 어긋나는데, 학습은 그대로
-  돌아가고 몇 시간 뒤에 아무것도 못 배운 모델이 나온다.
-- 추론이 돌려주는 좌표도 이 크기의 것이다. **파일 크기로 나누면 틀린다.**
-- **담아 두는 그림은 원본 크기 그대로 둔다.** 나중에 다른 크기로 다시 학습할 수 있고,
-  라벨은 0~1 이라 크기를 안 탄다.
-
-### 크기를 바꾸려면
-
-화면(라벨링 → 학습 칸)에서 **320x180 · 480x270 · 640x360 · 960x540** 중에 고른다. **기본은 640x360** 이다(2026-09-14,
-`LabelingViewModel.DefaultInputSize`) - 이 데이터셋에서 320·480 은 30% 대라 쓸 일이 없고, 목록에 남긴 것은 나중에 해상도가 낮은
-게임을 위해서다. 옛 설정의 값은 `InputSizeDefaultVersion` 으로 한 번 640 으로 되돌린다.
-1080p 화면에서 60px 짜리 몹은 320x180 으로 줄이면 10px 가 되어 잘 안 잡힌다 -
-**작은 몹을 놓칠 때만** 키운다. 대신 위 표만큼 느려지고 학습 시간도 같은 비율로 늘어난다.
-
-**바꾸면 반드시 다시 학습해야 한다.** 그리고 그 크기는 **설정이 아니라 모델과 함께** 남긴다
-(`detector.json`, `DetectorManifest`).
-
-설정에서 읽으면 320 으로 학습해 둔 모델을 640 설정으로 읽는 순간 **좌표가 조용히 어긋난다** -
-추론이 돌려주는 픽셀을 640 으로 나누게 되어 사각형이 절반 자리에 그려진다. 화면에는
-그럴싸한 사각형이 떠서 눈으로는 못 잡고, 사람은 모델이 못 배웠다고 여기고 데이터를 더
-모으러 간다. 쪽지로 남기면 설정을 아무리 바꿔도 이미 만들어진 모델은 제 크기로 정확히 돈다.
-
-쪽지가 없거나 망가졌으면 옛 값(320x180)으로 본다. 쪽지 하나 때문에 학습해 둔 모델을
-못 쓰게 되는 것이 더 나쁘다. 쪽지에는 학습한 시각·장수·바퀴 수·몹 이름도 같이 적어,
-데이터셋을 고친 뒤 다시 학습했는지 눈으로 가늠할 수 있게 해 둔다.
-
-**그래픽 카드별 추론 한 장** (640x360 모델, 실측):
-
-| | GTX 1060 3GB (데스크톱) | RTX 4070 Laptop |
-|---|---|---|
-| 몹 찾기 한 번 | 460~700 ms (게임이 같이 돌면 700) | **270~385 ms (보통 320)** |
-| 몹 찾기 주기 | 0.7~1.4초 | **0.35초** |
-| 640x360 20 바퀴 학습 | 46분 | 한 바퀴 85초(=28분) |
-
-카드를 바꾸면 추론이 2배쯤 빨라진다. 스크립트 한 바퀴가 그만큼 짧아진다 - 조준은 새 화면을 기다리므로
-반복문 속도가 곧 이 주기다. **넣는 그림 크기는 상관없다**: 480x270·640x360·960x540·1080p 를 넣어도
-660~713ms 로 같았고(1060), 커지면서 늘어나는 것은 파일 읽기뿐이다(0.7ms → 7ms).
-
-**몹 찾기 주기(`DetectIntervalMs`)는 추론 속도를 따라간다.** 250ms 는 한 장에 230ms 걸리던 시절의 값이다.
-ONNX 로 32ms 가 되자 그 값이 **조준을 붙잡는 쪽**이 됐다 - 조준은 새 화면을 기다렸다 다시 겨누므로 주기가 곧
-"한 번 더 겨누기까지" 다(실측 로그: 조준이 0.5초 간격으로 세 번 걸려 붙었다). 80ms 로 내렸다. 더 줄일 이유는
-없다 - 캡처가 10fps 면 100ms 에 한 장이라 같은 프레임을 다시 보게 된다. **빠르게 붙게 하려면 캡처 fps 를
-같이 올린다.**
-
-**ONNX Runtime 으로 바꾸면 18~110배다** (2026-09-12, GTX 1060 3GB · DirectML · FP32 · 사전학습 COCO 모델로 속도만):
-지금 AutoFormerV2 가 660ms 인데 RT-DETR-R18 37.3ms · D-FINE-N 29.8ms · YOLOX-Nano 5.8ms 였다.
-`--onnx-bench --model=<경로> [--size=640x640]` 으로 잰다. 설계와 다음 단계는 `docs/몹-찾기-속도-설계.md`.
-
-**우리 데이터로 학습해 갈아 끼웠다** (2026-09-13, D-FINE-N 97장 60바퀴 1시간 45분, GTX 1060):
-
-| | 옛 모델(우리 학습, 640x360) | 새 모델(D-FINE-N 640x640) |
-|---|---|---|
-| 재현율 | 135/192 (70%) | **191/192 (99%)** |
-| 헛것 | 5 | **0** |
-| 추론 한 장 | 606 ms | **32 ms** |
-| 모델 | 83 MB + libtorch 4.3GB | 15 MB, 받을 것 없음 |
-
-학습하는 법은 `docs/ONNX-모델-학습.md`.
-
-**YOLO11 도 시험했다** (2026-09-14, 같은 98장, `Vision/Inference/Onnx/YoloDecoder` - `output0` 을 풀고 몹별 겹침 제거 0.45):
-YOLO11n 은 학습 5분 · 재현율 194/194 · **추론 10.9ms**(D-FINE 28.5ms), YOLO11s 는 10분 · 194/194 · 23.5ms. DirectML 이 YOLO 는 맞게
-계산한다(MatMul 고칠 것 없음). 재현율은 D-FINE 과 같고 속도·학습 시간만 앞선다.
-
-**모델 정책(사용자, 2026-09-14): 이 프로젝트는 이력서 포트폴리오용이라 남에게 넘기지 않는다 - YOLO11n 을 평소 모델로 써도 된다.**
-한때 "시험은 YOLO11n, 배포는 D-FINE-N" 으로 정했다가 풀었다. YOLO(Ultralytics)는 AGPL-3.0 인데, 의무는 넘길 때(네트워크 서비스 포함) 생기고
-조건은 "알림" 이 아니라 "묶어 넘기는 프로그램 소스 전체를 AGPL 로 공개" 다. 포트폴리오로 **GitHub 에 올릴 때만** 짚는다 - 학습한 YOLO 모델을
-저장소에 넣으면 저장소를 AGPL-3.0 으로 두는 편이 안전하고(지금 모델은 프로젝트 경로라 저장소 밖), DevExpress 라이선스 키·DLL 은 올리지 않는다.
-- **라벨링 화면 "쓰는 모델" 콤보로 고른다**(2026-09-14). 목록은 데이터셋 폴더의 보관본 `detector.<이름>.onnx`(지금 `detector.yolo11n.onnx`·
-  `detector.d-fine-n.onnx`)과 이 화면의 학습 모델 `detector.zip`. 고르면 `DetectorFiles.Use` 가 보관본과 쪽지를 몹 찾기 자리(`detector.onnx`)에
-  복사하고 시각을 지금으로 찍는다 - 켜 둔 스크립트·플레이 화면은 시각이 바뀐 것을 보고 몇 초 안에 따라온다. 보관본은 지우지 않는다.
-- D-FINE-N 으로 바꾸려면 콤보에서 고른다. 줄에 "D-FINE-N (ONNX · 늘리기)" 가 뜨면 된 것이다. 모델은 설치 패키지(publish.ps1)가 아니라
-  데이터셋 폴더에 있다. 명령으로 하려면 `--import-onnx --model=<몹>\detector.d-fine-n.onnx --size=640x640 --fit=늘리기 --name=D-FINE-N`.
-- 모델 쪽지에 `modelName` 이 있다. `--import-onnx --name=` 으로 적고, 이름이 있으면 보관본(`KeepAsChoice`, 이름을 소문자·공백은 -)도 남긴다.
-  `--detect-check` 는 재현율을 지금 모델과 그 보관본 쪽지에 적는다 - 콤보 옆 줄이 그것을 읽는다.
-- 데이터를 늘려 다시 학습할 때는 YOLO11n(5분)이면 된다. D-FINE-N(1시간 45분)은 비교가 필요할 때만 - 절차는 `docs/ONNX-모델-학습.md`.
-- **자리는 둘로 나눈다**(사용자 결정 2026-09-14) - 도구와 내 것을 한 폴더에 두면 "학습 폴더를 다시 만들어라" 가 데이터를 지우라는 말이 된다.
-  - **학습 경로** `Vision.TrainingRoot`(`Vision/Training/TrainingPaths`) - 도구다. `yolo-venv`(파이썬 3.14 · torch cu126 · ultralytics) ·
-    `dfine-venv`(uv 파이썬 3.12 · torch cu124) · `D-FINE`(저장소 + 우리 설정) · `dfine_n_coco.pth` · `runs`(결과·로그). 지워도 `도구\학습-환경-준비.ps1`
-    로 다시 만들면 된다(둘 다 약 5.5GB, 이미 있으면 건너뛰고 옛 자리의 것은 옮긴다).
-  - **프로젝트 경로** `Vision.ProjectsRoot`(`Vision/ProjectPaths`) - 내 것이다. `Datasets\<게임>`(사진·라벨·모델·영역) · `captures`(프레임 저장).
-    다시 만들 수 없다 - 백업할 것은 이쪽이다. 솔루션을 쓰면서 그 아래가 `<솔루션>\<프로젝트>\` 가 됐다(`docs/프로젝트-설계.md`).
-  - 둘 다 **학습환경 화면(Automation 의 첫 탭) "폴더"** 에서 고른다(설정 화면에서 옮겨 왔다). 기본값은 **설치 루트 아래**(`Helper/InstallPaths` - 실행 폴더가 아니라 그 부모다.
-    Velopack 이 업데이트 때 `current` 를 통째로 갈아 끼우므로 그 안에 두면 사라진다). 설치 루트는 앱을 제거하면 같이 지워지니 오래 모을 사진은
-    설정에서 다른 드라이브로 옮긴다. 옛 자리(%AppData%)에 이미 있으면 그것을 계속 쓴다 - 말없이 빈 폴더를 보여 주지 않는다.
-  - **하네스도 `UserDataPaths.Initialize()` 를 부른다**(Program.Main 맨 앞) - 안 부르면 AppSettingUtility 가 하네스 bin 폴더를 봐서 두 경로가
-    기본값으로 떨어지고 "모델이 없다" 가 된다(실측).
-  - 앱은 환경을 안 받는다 - 없으면 무엇이 없는지 적고 그 스크립트를 가리킨다. **가상환경은 복사해 못 옮긴다**(pyvenv.cfg 에 그 PC 파이썬 경로가
-    박힌다) - 새 PC 에서는 다시 만든다. 자세한 표는 `docs/ONNX-모델-학습.md` 0.5 절.
-- **라벨링 화면 학습 버튼은 콤보에 고른 모델로 학습한다**(버튼 글 "YOLO11n 학습" 처럼 이름을 붙인다). YOLO 면 `Vision/Training/YoloTrainer` 가
-  `yolo-venv` 파이썬으로 앱 출력의 `Tools\yolo-학습.py`(csproj 가 `도구\` 에서 복사)를 띄워 바퀴마다 진행·box loss 를 읽고, 끝나면 ONNX 를 들여
-  보관본을 갈아 끼우고 재현율을 잰다. 멈추기는 파이썬 프로세스 트리를 끈다. D-FINE-N 이 골라져 있으면 버튼이 꺼진다("앱 밖에서 학습").
-  **옛 TorchSharp 학습(AutoFormerV2·detector.zip)은 화면에서 뺐다**(2026-09-14, "안 쓰는 건 없애줘 - 헷갈린다") - 크기 고르기·따라가기·그림별 loss·◀ 열·
-  libtorch 받기 안내가 같이 빠졌고 콤보에도 안 뜬다. 엔진(`DetectorTrainer`·`LibTorchRuntime`)은 하네스(`--train-check` 등)와 ONNX 가 없을 때의 대체 경로가 쓴다.
-  아래 「학습률」「모델이 보는 크기」 등 TorchSharp 절의 화면 이야기(따라가기·목록 loss·크기 콤보)는 그 시절 기록이다.
-  **D-FINE 이면 `Vision/Training/DFineTrainer`** 가 제 저장소를 돌린다(2026-09-14, 사용자 결정 "어느 모델로 할지는 사용자가 정할 문제") - 데이터셋을
-  COCO 로 내보내고(`DatasetExport.WriteCoco`) `mob_detection.yml` 의 사진 자리·몹 수를 지금 것으로 다시 쓴 뒤 `train.py -u epochs=N` →
-  `export_onnx.py` → `도구\onnx-DirectML-고치기.py` 를 이어 돌리고 **늘리기**로 들인다. 진행은 저쪽이 찍는 `Epoch: [3/60]` 줄로 읽는다.
-  환경이 없으면 만들지 않고 `도구\학습-환경-준비.ps1` 을 한 번 돌리라고 알린다. Ultralytics 진행 줄은 앞에 `ESC[K` 가 붙어 떼고 읽는다(실측).
-  `--yolo-train --root=<시험 폴더> [--epochs=2]` 가 같은 길을 화면 없이 돈다 - 들이기까지 하므로 **앱이 쓰는 폴더에는 돌리지 않는다**.
-- **YOLO11n 한 방 명령: `.\도구\yolo-학습.ps1`** - 환경 만들기(없으면) → 학습·ONNX 내보내기(`도구\yolo-학습.py`) → 하네스 빌드 → 들이기(`--fit=비율`)
-  → 재현율 → 속도. 앱을 닫고 돌린다(실행 파일 잠금). 실측 98장: 전부 약 7분, 195/195 · 헛것 0 · 10.3ms. 앱 안에서는 라벨링 화면 학습 버튼이 같은 일을 한다. 5.1 에서 돌게 짰다 - 삼항 연산자 없음, 한글 때문에 UTF-8 BOM, 파이썬 stderr 구간은 `Continue`.
-- 시험 폴더 `Datasets\몹-yolo`(11n)·`몹-yolo11s` 는 사진·라벨이 junction 이라 복사가 아니다.
-`--import-onnx` 는 `--root=` 가 없으면 앱 설정 폴더의 detector.onnx 를 **덮는다** - 다른 모델을 시험할 때는 꼭 준다.
-`--onnx-detect` 는 결과 그림을 임시 폴더에 남긴다 - 예전에는 원본 옆(데이터셋 images)에 써서 라벨링 목록에 끼어들었다.
-
-**DirectML 은 `MatMul(행렬, 1차원 벡터)` 을 틀리게 계산한다** (2026-09-13 실측, onnxruntime-directml
-1.24.4 / DirectML 1.15.4). 그 벡터를 아예 무시하고 행 합계를 돌려준다:
-`MatMul([[0,1,2],[3,4,5]], [1,10,100])` 이 CPU 는 `[210,543]`, DML 은 `[3,12]`.
-
-D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 되돌리는 integral). 그래서 **터지지도
-느려지지도 않고 답만 조용히 틀린다** - 점수가 0.9 에서 0.06 으로 내려앉아 192개 중 0개를 찾는데
-헛것도 0개라 "모델이 덜 배웠나" 로 보인다. 여기서 하루를 잃기 쉽다.
-
-- 고치기: `python 도구/onnx-DirectML-고치기.py <내보낸.onnx>` - 벡터를 [N,1] 로 바꿔 곱하고 축을 없앤다.
-  답은 CPU 와 소수점까지 같아진다.
-- 막기: `--import-onnx` 가 들이기 **전에** GPU·CPU 를 견주고 어긋나면 안 들인다(`--그래도` 로 넘길 수 있다).
-- 혼자 보기: `--onnx-agree --model= --image=` (둘이 같은 답인가) · `--onnx-raw --model= --image= [--cpu]` (날것 출력).
-- 잣대는 CPU 다. 같은 모델을 CPU 로 돌리면 105ms 로 느리지만 답은 맞다.
-
-**모델 쪽지에 "어떻게 넣어 학습했는지" 도 든다**(`letterbox`). D-FINE·RT-DETR 공식 설정은 변환이
-`Resize [640,640]` 하나뿐이라 **늘리기**고, YOLO 계열은 비율을 지켜 여백을 넣는다. 크기만 맞고 이것이
-다르면 역시 한 마리도 못 찾는다. `--import-onnx --fit=늘리기|비율` (기본 늘리기).
-
-**480x270 은 이 데이터셋에서 못 쓴다** (2026-09-12, 사진 97장·사각형 192개, `--train --size=480x270`):
-
-| | 640x360 (20 바퀴) | 480x270 (20 바퀴) | 480x270 (40 바퀴) |
-|---|---|---|---|
-| 추론 한 장 | ~700 ms | 453 ms | 486 ms |
-| 재현율 | 135/192 (70%) | 62/192 (32%) | 58/192 (30%) |
-| 헛것 | 5 | 40 | 20 |
-| 마지막 loss | 0.369 | 0.425 | 0.422 |
-
-바퀴를 두 배로 늘려도 loss 가 0.42 에서 안 내려갔다 - 덜 배운 것이 아니라 **그 크기로는 안 보이는 것**이다.
-놓친 것은 60~90px 짜리 작은 봇이다(1080p 원본 기준). 추론 250ms 를 아끼려고 절반을 놓칠 수는 없으니 640x360 으로 되돌렸다.
-쓰던 모델은 `detector.<크기>.zip` 으로 옆에 남겨 두면 갈아 끼우기만 하면 된다.
-
-**640x360 으로 실제로 학습해 본 것** (같은 씨앗 24장 · 20 epoch, GTX 1060):
-
-| | 320x180 | 640x360 |
-|---|---|---|
-| 학습 | 4.2분 | **10.5분** |
-| 추론 한 장 | ~230 ms | **~650~830 ms** |
-| fps | 4.3 | **1.2~1.5** |
-
-픽셀 4배에 학습 2.5배 · 추론 3배. 넣는 파일이 160x90 이든 1080p 든 값이 같았고 둘 다
-찾았다 - 추론이 파일 크기가 아니라 **쪽지의 640x360** 으로 좌표를 되돌린 것이다.
-**640 으로 올리면 0.25초에 한 번은 못 돌리고 0.8초에 한 번쯤 된다.** 작은 몹 때문에
-올릴 때 그것을 감수하는 것이다.
-- 파일을 읽는 값은 여전히 무시할 만하다(1080p 에서 6.4ms / 236ms).
-- GPU 는 쓰고 있다. 추론 중 `nvidia-smi` 로 1,424 MiB 를 물고 있었다.
-
-**캡처 프레임마다 돌리는 실시간 겹쳐 그리기는 여전히 안 된다.** 30fps 면 한 장에 33ms 인데
-230ms 다. 대신 0.25초에 한 번은 넉넉하다 - 아래 「캡처 화면에서 찾기」가 그 갈래다.
-
-### 스크립트 화면에서 찾기
-
-스크립트 화면(플레이 화면도 같다) 도구 줄의 **몹 찾기**를 켜면 프레임에서 몹을 찾아 미리보기 위에 점선으로
-겹쳐 그린다. 옆에 몇 마리를 몇 ms 에 찾았는지 같이 뜬다.
-
-- **프레임마다 안 돌린다.** 0.08초에 한 번이고(`DetectIntervalMs`), 앞의 것이 아직 돌고
-  있으면 그 프레임은 그냥 흘린다. 큐에 쌓으면 화면이 점점 뒤처진 결과를 보여 준다 -
-  실시간에서는 늦은 답이 틀린 답이다.
-- **캡처 스레드에서 기다리면 안 된다.** 220ms 를 잡고 있으면 프레임이 통째로 밀린다.
-  거기서는 줄여서 파일로 떨어뜨리기만 하고(픽셀은 콜백이 돌아가면 사라진다) 추론은
-  백그라운드로 보낸다.
-- 긴 변 **320** 으로 줄여 저장한다(`DetectLongestSide`). 크기를 맞추는 것은 모델이 하므로
-  정확도와는 무관하고, PNG 로 만드는 값을 아끼는 것뿐이다.
-- 켤 때 CPU 리드백이 꺼져 있으면 **알아서 켜고 그렇게 적는다.** 픽셀이 CPU 로 안 내려오면
-  넣을 것이 없는데, 그냥 "안 된다" 고만 하면 왜인지 알 수 없다.
-- 모델을 못 읽거나 추론이 터지면 **토글을 끈다.** 안 그러면 매 프레임 같은 오류를 쏟는다.
-- 겹쳐 그리는 것은 `Markup/DetectionOverlay` 다. `LabelCanvas` 와 달리 그림은 안 그린다 -
-  미리보기는 D3DImage 를 `Image` 요소가 60fps 로 그리는 빠른 길이라 주체를 바꾸지 않는다.
-  `Source` 로 원본 크기만 받아 `Stretch=Uniform` 레터박스를 스스로 계산하고,
-  마우스는 통과시킨다(미리보기는 클릭을 대상 창으로 넘기는 일을 하고 있다).
-- **프레임 간 추적**(`DetectionTracker`, 토글 `추적`, 기본 켬). 검출기는 프레임을 따로 봐서
-  30~50% 헛것이 한 프레임 튀고 몹이 반 프레임 가려지면 깜빡인다. 지난 사각형과 IoU 0.3 으로
-  이어, 두 번 연속 보인 것만 내놓고 두 번까지는 놓쳐도 잇는다(0.25초 주기라 각 0.5초).
-  자리는 새 값 0.6 비중으로 부드럽게. 겹침이 0 이어도 가운데가 사각형 크기의 1.5배 안이면
-  같은 몹으로 잇는다 - 640 모델(0.65초/장)은 시선을 돌리면 몹이 제 폭보다 더 옮겨 가,
-  겹침만 보면 옛 자리에 유령 사각형이 남았다(실측: 봇마다 오른쪽에 86% 짜리 하나씩).
-  누르기·자동 라벨도 추적 결과를 쓴다 - 보이는 것과 누르는 것이 달라선 안 된다. 순수 클래스라 `--vision` 이 시나리오로 본다. 모델을 새로
-  읽거나 끄면 잊는다.
-- **다시 학습하면 새 모델을 알아서 읽는다.** 모델 파일의 쓴 시각을 들고 있다가, 켤 때와
-  켜 둔 채 5초마다(캡처 스레드, `MaybeReloadDetector`) 비교해 다르면 옛것을 버리고 새로
-  읽는다(`LoadDetector`). 이게 없을 때는 화면을 닫았다 열어야 했다. **쓰는 도중에 읽지
-  않는다** - 69MB 를 쓰는 동안 시각이 계속 바뀌므로 같은 시각이 2초 유지된 뒤에 읽는다.
-  돌고 있는 추론이 옛 모델을 쓰는 중일 수 있어 필드를 먼저 비우고 끝나기를 기다렸다 놓는다.
-- **실시간 경로와 파일 경로는 같은 답을 낸다**(`--scale-check` 실측: 원본 62/64 · 평균 81%,
-  WPF 로 640 으로 줄인 PNG 60/64 · 80%. 차이는 가장 작은 봇 둘뿐). 실시간에서 흔들리면
-  경로가 아니라 **거리**(학습 범위 밖의 작은 봇)와 **움직임**(0.65초 사이 이동)을 본다.
-- **추론용 임시 PNG 는 모델이 보는 크기 이상으로 만든다**(`Math.Max(320, InputWidth)`). 320 으로
-  고정했더니 640x360 모델이 320 짜리를 도로 키워 봐서, 재현율 검사(원본)는 97% 인데 실시간은
-  작은 봇을 못 봤다. 상태 줄의 "(320x180, …ms)" 가 그 임시 그림 크기다.
-- 추론용 임시 PNG 는 프로세스마다 이름을 나눈다. 앱이 강제로 죽으면 정리가 안 돌아
-  실제로 두 개가 남았던 적이 있어, 켤 때 옛것을 치운다.
-- **프레임 저장·담기·몹 찾기는 CPU 리드백을 알아서 켠다**(`EnsureCpuReadback`). 리드백은 세션을 만들 때
-  정해져서 도는 중에 값만 바꾸면 헛것이다 - **껐다 켜는 것이 유일한 길**이고, 통계 몇 초
-  말고는 잃는 것이 없다. 버튼을 회색으로 두고 이유를 안 알려 주면 "몹을 모을 수가 없다"
-  가 된다. 실제로 그랬다.
-- **담긴 결과는 아래 바에 "N장째" 로 남긴다.** 통계 표의 비고 칸에만 적으면 사실상 안 보이고,
-  상태 줄은 1초마다 통계 갱신이 덮어쓴다. 아래 바(`SendMainMessage`)가 남는 자리다.
-  프레임 저장(`captures/`)도 같은 모양으로 알린다 - 한쪽만 조용하면 고장으로 보인다.
-- **담기는 F8 전역 단축키로도 된다.** 몹은 게임 안에서 보이는데 버튼은 이 앱이 앞에 있어야
-  눌린다. 매번 넘어왔다 돌아가면 그 사이 몹이 움직인다("왔다갔다 힘드네"). 입력 자동화가
-  F3~F6 을 쥐므로 겹치지 않는 키다 - 두 화면이 같이 열리면 겹친 쪽은 등록이 실패한다.
-  버튼과 단축키는 `RequestCollectFrame` 한 길로 온다.
-- **단축키로 담을 때는 소리로 답한다.** 누르는 순간 사용자는 게임을 보고 있어 상태 줄이
-  안 보인다. 담기면 알림음, 캡처가 안 돌거나 실패하면 거절음. 소리가 없으면 담겼는지 몰라
-  몇 번씩 누르고, 같은 장면이 여러 장 쌓인다. 버튼으로 담을 때는 글이 보이니 소리를 안 낸다.
-- **못 켜는 이유는 아래 상태 줄(`StatusText`)에 적는다.** 도구 줄의 정적 항목은 짧은
-  "2마리 (…ms)" 는 그리는데 긴 한글 안내는 값이 들어 있어도 안 그렸다(로그로 확인). 타이밍·
-  캡처 중 여부·`AutoSizeMode=Fill` 까지 갈라 봤지만 이유를 못 밝혔다. 그래서
-  `TurnOffDetection` 이 상태 줄에도 같이 적는다.
-- **끄면서 이유를 적을 때는 먼저 끄고 나서 적는다.** 토글을 끄면 콜백이 다시 돌아
-  안내를 지운다. 실제로 그래서 "몹 찾기를 눌러도 아무 일도 없는" 것처럼 보였다.
-- **UIA 로 확인할 때 `dxe:TextEdit` 는 Text 가 아니라 Edit 다.** 값은 `ValuePattern` 에 있다.
-  Text 만 훑고 "안 뜬다" 고 결론 내렸다가 한참 돌았다. 화면을 의심하기 전에 값이 들어
-  있는지 로그로 먼저 본다.
-
-**찾은 것 누르기** - 가장 자신 있는 몹의 가운데를 누른다. 찾기만 하면 자동화가 아니다.
-
-- **입력 전달이 켜져 있어야 나간다.** 찾는 것은 화면만 보는 일이라 대상에 아무 영향이
-  없지만, 누르는 것은 남의 프로그램에 실제로 들어간다. 그것을 켜는 일은 사람이 한 번 분명히
-  해야 한다 - 몹 찾기를 켠 것만으로 클릭이 나가면 안 된다. 실측: 꺼진 채로 누르면 0건,
-  켜고 누르면 1건이 찾은 사각형 안쪽에 떨어졌다.
-- 누르는 길은 미리보기를 손으로 누를 때와 **같은 것**(`SendClickAsync`)이고, 좌표 계산도
-  `PreviewInputMapper.MapRatioToScreen` 하나를 나눠 쓴다. 두 벌로 두면 한쪽만 고쳐져
-  손으로는 되는데 자동으로는 안 되는 일이 생긴다.
-- 검출은 0~1 이라 미리보기 컨트롤을 안 거친다. 미리보기가 꺼져 있어도 눌린다.
-- 되풀이해서 누르는 것은 아직 없다. 그것은 입력 자동화의 반복·중지·단축키가 이미
-  있으므로 그쪽(스크립트)에서 검출 결과를 받아 쓰는 갈래로 붙이는 것이 맞다.
-
-**앱에서 밟아 확인한 것**: 학습한 색 네모를 띄운 창을 잡아 켰더니 도구 줄에
-`2마리 (320x208, 257ms): 버섯 100%, 슬라임 100%` 가 뜨고 점선이 네모에 맞았다.
-그동안 캡처는 10fps 로 계속 돌았고 **지연 평균 0.00ms** 였다 - 추론이 캡처를 안 막는다.
-
-### 글자 읽기 (OCR)
-
-`Windows.Media.Ocr` 을 쓴다(`Vision/Ocr`, 인터페이스 `IOcrEngine` · 구현 `WindowsOcrEngine` · 팩터리
-`OcrEngineFactory`). 따로 받을 것이 없고 한글을 읽으며 단어마다 자리가 온다. 이 PC 에는 한국어
-팩(ko)만 있는데 그것으로 영문·숫자도 읽는다. 언어 팩이 없으면 팩터리가 "설정 > 시간 및 언어에서
-추가" 라고 말한다.
-
-- **영역을 정해서 읽는다.** 화면 전체는 느리고 엉뚱한 글이 섞인다. 캡처 모니터 `글자 영역` 을 켜고
-  미리보기에서 끌면 0~1 비율로 저장된다(`OcrRegion` 설정). 끄는 동안은 클릭이 게임으로 안 나간다.
-- 0.5초에 한 번, 검출과 같은 단일 실행 규칙. 프레임에서 그 영역만 복사한다(전체 복사 안 함).
-- **작은 글자는 키워서 넣는다**(높이 160 아래면 최대 4배). 게임 UI 글자(12~20px)는 안 키우면 놓친다.
-  자리는 비율이라 키운 것과 무관하다.
-- `--vision` 이 WPF 로 그린 "HP 1234" · 14px "LV 57" · 빈 그림을 읽어 확인한다.
-- **몹 이름표**(`이름표 읽기`)는 고정 영역이 아니라 검출 사각형마다 위쪽을 잘라 읽는다
-  (`NameplateRegion.Above`: 높이 45%, 너비 1.8배, 5% 겹침). 검출은 줄인 그림으로 하지만 글자는
-  12px 이라 원본이 필요해서, 검출 주기마다 프레임을 한 벌 복사해 둔다(`CopyFrameForNameplates`,
-  8MB/0.65초). 읽은 이름은 캡션에 「」 로 붙는다. 한 장 10~20ms 라 검출 뒤에 이어도 표가 안 난다.
-- **이름표는 그대로 넣으면 안 읽힌다.** 13px 빨간 글자가 회색 벽 위라 두 언어 모두 빈 글이었고, 6배로
-  키워도 마찬가지였다. `NameplateInk` 가 빨간 픽셀(R>150, G·B 보다 60 이상)만 검정으로 남기고 3배로
-  키운다. 실측(`--nameplate-check`): 8곳 중 6곳 「일반봇」, 2곳 「일반못」. 6배는 체력 바의 빨간 칸까지
-  글자로 착각해 쓰레기 줄이 붙어 3배로 정했다. 실시간에서도 「일반봇」이 붙는 것을 확인했다. 아군
-  파랑·다른 색 이름표는 `NameplateInk.IsInk` 만 바꾼다. 이름표는 **한국어 엔진**이어야 한다 -
-  en-US 는 한글을 못 읽어 `OIHY` 같은 것을 낸다.
-- **HUD 숫자(탄약·체력)는 흰 글자만 남겨 영문 엔진으로 읽는다**(`HudInk` · `HudRegions` · `탄약()`·`체력()`).
-  두 가지가 다 필요했다. (1) 흰 숫자가 **밝은 주황 바닥** 위로 오면 대비가 없어져 같은 자리·같은 크기인데도
-  빈 글이 나왔다(실측: 여섯 장 중 셋). 밝고 색기 없는 픽셀만 검정으로 남기면 읽힌다 - 이름표와 같은 수법에
-  고르는 색만 다르다. (2) **한국어 팩이 숫자를 망친다** - 225 를 `22512h5`, 193 을 `1亐3` 으로 냈다.
-  숫자는 `en-US`, 한글 이름표는 `ko` 다.
-  **자리는 넉넉하게 잡는다** - Windows OCR 은 글자가 그림 가장자리에 닿으면 빈 글을 낸다. 딱 맞게 자른
-  「17 24」 는 마스크가 또렷한데도 못 읽었고, 사방으로 조금 넓히자 읽혔다.
-  실측(사격장 14장): 탄약 14/14, 체력 14/14. 탄창이 30|40·36|40·24|24·17|24·13|24 로 서로 다른 무기였는데
-  **자리는 같았다** - 오버워치 HUD 는 영웅이 달라도 같은 비율 자리에 그린다.
-  **전처리 여부는 자리마다 다르다**(`HudSpot.Ink`) - 탄약·체력은 배경이 밝아질 수 있어 거쳐야 하고, 궁극기
-  고리 안은 늘 어두워 거치면 오히려 못 읽는다(마스크의 「35」 가 또렷한데도 빈 글, 그냥 6배로 키우니 읽혔다).
-  한 길이 빈 답이면 다른 길로 한 번 더 해 본다. 궁극기는 차는 중 35% → 「35」, 다 차면 빈 글(= 준비됨)이다.
-
-- **이름 붙인 자리**(`Vision/Regions/NamedRegion` · `RegionBook` · 스크립트 `읽기("이름")`·`숫자읽기("이름")`·
-  `글자있나("이름")`). 화면에서 끌어 만들고 스크립트는 이름으로 부른다 - `숫자읽기(0.895, 0.86, 0.095, 0.06)` 은
-  그 네 숫자가 무엇인지 스크립트만 봐서는 알 수 없고 게임이 바뀌면 스크립트를 다 고쳐야 한다. 이름이면 자리가
-  바뀌어도 스크립트는 그대로고, 고치는 일은 사각형 하나를 다시 끄는 것이 된다.
-  - **데이터셋 폴더의 `regions.json`** 에 둔다(앱 설정이 아니다). 자리는 그 게임 화면에 매인 것이라 사진·라벨·
-    모델과 같이 있어야 한다 - 게임을 바꾸면 데이터셋과 같이 바뀌고, 노트북으로 옮길 때도 따라간다.
-  - 만드는 곳은 **스크립트 화면**이다. 이름을 도구 줄 칸에 먼저 적고 `영역 지정` 을 켠 뒤 미리보기에서 끈다 -
-    끌고 나서 대화 상자로 물으면 그 창이 게임 화면을 가리고 그 사이 화면이 바뀐다. 비우면 `자리1` 처럼 붙는다.
-  - **`지금 읽기` 버튼이 없으면 자리를 못 맞춘다.** 끌어 놓고 맞는지 보려면 스크립트를 짜서 돌려야 하는데 한 번에
-    몇십 초다. 누르는 즉시 읽은 글이 상태 줄에 뜬다 - 비면 자리를 넓히거나 `전처리` 를 켜고 끈다.
-  - **`영역 지정` 을 켜 둔 동안 미리보기가 편집기다.** 빈 자리 끌기 = 새 자리(VM, `RegionDraft`), 자리 안 끌기 = 옮기기,
-    고른 자리의 모서리·변 가운데 손잡이 = 크기 조절(끄는 동안 너비·높이가 **원본 픽셀**로 뜬다). 휠 = 마우스 아래를 두고 확대,
-    오른쪽 끌기 = 화면 옮기기(`CaptureViewModelBase.IsPreviewEditing`). 새 자리를 만들어도 모드를 끄지 않는다 - 바로 손잡이로 다듬게.
-    옮기기·크기 조절은 **`Markup/Regions`(2026-09-13, `wpf_test_app.ResizeAdorner` 를 옮긴 것)** 가 한다 - `RegionCanvas` 가 자리마다
-    `RegionItem`(안쪽 전체가 `RegionMoveThumb`)을 놓고, 고른 것에 `RegionResizeAdorner`(마젠타 테두리 + `RegionResizeThumb` 8개)를 어도너 층에
-    얹으며, 크기를 바꾸는 동안만 `RegionSizeAdorner`(치수)가 붙는다. 계산은 `RegionGeometry`(순수, `--vision`). 결과는 `RegionEdit` 로
-    VM 의 `RegionEditCommand` 에 오고 놓을 때 저장한다. 미리보기 판의 `Editor` 자리에 얹는다(`Overlay` 는 히트 테스트가 꺼져 있다).
-    **클릭이 게임으로 새지 않는 것은 `IsEditing`** 이 지킨다 - 꺼지면 캔버스가 히트 테스트에서 빠지고 어도너도 진다. 그래서 어도너를
-    써도 된다(예전에 "Adorner·Thumb 을 얹지 않는다" 고 한 이유는 늘 얹어 두면 모드를 꺼도 그 자리의 클릭이 게임으로 안 가서였다).
-    어도너 층은 ScrollViewer 안이라 확대(`LayoutTransform`) 밖이지만 `Adorner` 가 붙은 요소의 변환을 따라가 자리는 맞는다 - 선·손잡이도
-    같이 커진다. 편집 중에는 `DetectionOverlay` 가 이름 붙인 자리를 안 그린다(`IsRegionEditing`) - 항목이 제 테두리·이름표를 그린다.
-    **자리·크기 수자 칸(가로·세로·너비·높이 %)은 뺐다** - 같은 일을 두 곳에서 하면 하나는 안 쓰인다. 목록은 열릴 때 첫 줄을 고른다.
-    **휠은 `PreviewMouseWheel` 로 받는다** - 그림 위의 ScrollViewer 가 버블 `MouseWheel` 을 늘 먹어(Handled) Border 까지 안 올라왔고,
-    그래서 휠 확대도 게임으로 보내는 휠도 다 죽어 있었다(실측, `--script-screen` 이 터널→버블 순서를 흉내 내 잡는다).
-  - 같은 끌기 손짓을 `글자 영역` 과 나눠 쓴다. 한쪽을 켜면 다른 쪽을 끈다 - 둘 다 켜져 있으면 끈 사각형이
-    어디로 갈지 알 수 없다.
-  - 이름은 대소문자를 안 가린다. 스크립트에서 글자 하나가 달라 못 찾으면 사람은 자리가 틀린 줄 안다.
-
-- **한 프레임짜리 헛것을 쫓지 않는다.** 0마리가 이어지다 한 프레임에 「일반 봇 78%」 가 창 오른쪽 위 구석에
-  떴고, 그 한 장으로 1200,-1200 을 보내 시야가 오른쪽 위로 튀었다(실측). 다음 프레임은 다시 0마리였다.
-  추적(`DetectionTracker`)이 한 프레임짜리를 거르지만 놓친 것을 두 프레임까지 이어 주기도 해서 이렇게 샌다.
-  그래서 `목표()` 는 **새로 고르는 목표가 300px 넘게 멀면 두 번 연속 같은 자리에 보여야** 준다. 가까운 것은
-  바로 준다 - 확인에 한 프레임(0.08초)을 쓰는데 코앞의 몹은 틀려도 조금 움직일 뿐이다.
-- `--ocr-crop --image=화면.png --region=x,y,w,h [--ink] [--lang=en-US] [--scale=]` 가 자리를 찾는 도구다.
-  읽은 글과 숫자를 찍고 오려낸 조각을 `-오려낸.png` 로 남긴다 - 안 읽히면 자리가 틀린 것인지 글자가 작은
-  것인지 눈으로 갈라야 한다. 게임을 켜고 스크립트를 돌려 가며 찾으면 한 번에 몇 분씩 걸린다.
-- `--nameplate-check [--root=] [--count=3] [--out=]` 가 데이터셋 라벨 위를 잘라 언어별로 원본·전처리
-  결과를 나란히 찍고 조각 그림을 `%TEMP%\minguk-nameplate` 에 남긴다. 전처리를 손보면 여기서 비교한다.
-
-### 화면
-
-- 데이터셋 자리는 **캡처 화면과 라벨링이 같이 본다**(`LabelDataset.ConfiguredRoot` = Automation 에서 고른 프로젝트 폴더).
-  화면마다 설정을 들면 한쪽에서만 폴더를 바꿔 놓고 담은 그림이 왜 안 보이는지 한참 찾게 된다. **라벨링 화면의 `폴더 고르기` 는 뺐다** -
-  위는 사격장인데 라벨링만 딴 폴더를 보는 어긋남이 생긴다. 폴더 칸은 보이기만 한다.
-- **그림을 넘길 때 자동으로 저장한다.** 수백 장을 찍는 일이라 장마다 저장을 누르게 하면
-  반드시 잊고, 잊은 것은 되돌릴 수 없다.
-- `Markup/LabelCanvas` 가 그림과 사각형을 **직접 그린다**(`OnRender`). Viewbox 로 늘리면
-  테두리와 글자까지 같이 늘어나 확대한 그림에서 경계가 안 보인다. 그림만 늘린다.
-  화면 좌표 ↔ 0~1 변환은 이 안 두 곳(`ToScreen`·`ToNormalized`)에서만 한다.
-- 캔버스는 컬렉션(`Boxes`)을 **직접 고친다**. 사각형 하나 그릴 때마다 커맨드로 올렸다
-  내리면 좌표를 두 번 옮겨 적게 되고 얻는 것이 없다. ViewModel 은 `CollectionChanged` 로 안다.
-- 몹 색은 **처음에는 번호에서 만들고**(황금각 137.5도, `LabelPalette.DefaultColor`) 사람이 몹 그리드의 색 칸에서 고르면
-  그것만 데이터셋 폴더의 `class-colors.json` 에 남는다(`LabelPalette`, 번호 순 배열, 안 고른 자리는 null). classes.txt 에
-  안 넣는 것은 그 파일이 YOLO 형식이라서다. 번호로 매어 이름을 바꿔도 따라오고 몹을 지우면 같이 당긴다. 캔버스는
-  `ClassColors` 로 받고, 없는 번호는 기본 색이다. 스크립트 화면의 겹그림(DetectionOverlay)은 여전히 기본 색이다.
-- 학습은 **라벨링 화면 아래 칸**에 있다. 바퀴 수를 정하고 누르면, libtorch 가 없으면
-  먼저 받고(물어본다) 이어서 학습한다. "받기" 버튼을 따로 두지 않는 것은, 그러면 사람이
-  그것을 먼저 눌러야 한다는 걸 알아야 하고 안 눌렀을 때 학습이 왜 안 되는지도 설명해야 해서다.
-- **그리드 검색 창은 XAML 의 `ShowSearchPanelMode="Never"` 만으로 안 꺼진다.** 저장된 그리드 배치
-  (`LayoutSerializationService`)에 `ActualShowSearchPanel=true` 가 들어 있어 복원이 다시 펼친다.
-  복원 뒤 `ShowSearchPanelMode=Never` 를 다시 놓고 `HideSearchPanel()` 을 불러도, `DXSerializer.AllowProperty`
-  로 막아도 안 접혔다. 캡처 모니터는 복원 전에 그 항목을 배치 글에서 지운다(`RestoreGridLayout`).
-  `BaseTableView` 기본은 Always 라 다른 화면은 그대로 검색 창이 있다.
-- **서비스를 View 에 선언하지 않으면 `Guard` 가 예외를 삼켜 아무 일도 안 일어난 것처럼 보인다.**
-  실제로 그랬다 - `DXMessageBoxService` 를 빼먹어 학습 시작을 눌러도 화면이 그대로였고,
-  로그에도 안 남았다. 새 서비스를 쓸 때는 View 의 `Interaction.Behaviors` 부터 본다.
-- **목록의 줄은 `LabelingRow` 로 감싼다.** `LabelItem` 은 값이고 `HasLabel` 은 그때그때
-  `File.Exists` 를 보므로, 그대로 얹으면 화면이 한 번 읽고 그만이라 **방금 저장했는데도
-  표시가 안 켜진다**(실제로 그랬다). 컬렉션의 줄을 갈아 끼워 다시 그리게 하는 방법은
-  고른 줄이 풀리면서 `SelectedItem` 이 null 로 떨어져 찍던 사각형이 지워진다.
-- **라벨링 화면 뼈대는 캡처 화면과 같다**(2026-09-14): 위 도구 줄(데이터셋), 가운데 `dxdo:DockLayoutManager`
-  (세로 그룹: 위에 그림 0.22* | 라벨 0.58* | 몹 0.2* 가로 그룹, 아래 학습 패널. 캡션 없음, 끌기·띄우기·닫기·숨기기 막음 -
-  배치를 저장하지 않는다), 맨 아래 상태 줄. 학습 칸은 `dxlc:LayoutControl`(폼 칸 규칙). 도킹 패널은 Auto 높이가 없어 학습 패널은
-  **내용(LayoutControl)의 ActualHeight 를 픽셀 ItemHeight 로 묶는다**(`Markup/PixelsToGridLengthConverter`) - 190px 로 못 박았더니
-  모델 줄 아래가 비었다. 내용은 ScrollViewer 안에 `VerticalAlignment=Top` 으로 둔다 - 안 붙이면 ScrollViewer 가 내용을 뷰포트
-  높이로 늘려 "패널 = 내용 + 10" 이 배치마다 자라는 되먹임이 된다(실측). 안내 줄이 생기면 같이 자라고, 스플리터를 끌면 그 뒤로는
-  손으로 잡은 높이다(지역값이 바인딩을 덮는다). **`--labeling-screen [--out=png]`** 이 화면 밖 창에 띄워 패널·내용 높이·가장 아래
-  요소 밑선을 재고(자라는지·잘리는지·40px 넘게 비는지), 바인딩 오류를 모으고, PNG 로 찍는다(실측 139px 패널 / 129px 내용).
-  - **그림 목록의 열은 내용 너비(Auto)고 패널은 열 합만큼 넓다.** `ApplyColumnAutoWidth` 는 ViewModel 의 `InitializeControls` 에서
-    직접 부른다 - XAML 첨부 속성은 콜백이 GridControl 에서만 돌고 그때는 열이 없어 헛일이다(실측: 전부 Pixel). 패널 너비는 그리드의
-    `LayoutUpdated` 마다 보이는 열 `ActualWidth` 합 + 행 번호 칸 + 24(스크롤 막대·테두리)를 `ImagesPanelWidth` 로 되돌려 `ItemWidth`
-    에 묶는다(`PixelsToGridLengthConverter`, 0 이면 `FallbackValue` 0.22*). 열이 내용 너비라 그리드 너비와 무관해 되먹임이 없다.
-  - **배치 저장**: 두 그리드의 정렬·열 순서(`LayoutSerializationService`, `ImagesGridLayout`·`ClassGridLayout`, `GridLayoutVersion`)와
-    몹 패널 너비(`ClassesPanelWidth`)만 남긴다. 그림 패널 너비·학습 패널 높이는 내용에서 매번 재고, 도킹 배치 전체는 끌기·띄우기를
-    막아 둬 바뀔 것이 없다. 복원은 ContextIdle 에 얹고 그 뒤 그림 그리드를 다시 Auto 로 놓는다(복원이 열을 Pixel 로 써 넣는다).
-    `ActualShowSearchPanel` 은 복원 글에서 지운다(캡처 화면과 같은 이유).
-  - **그림·몹 목록은 GridControl** 이다. 그림은 loss 열로 정렬해 혼자 높은 그림을 찾고, 몹은 이름·색 칸을 그리드 안에서 고친다
-    (`LabelClassRow`, `PropertyChanged` → `OnClassRowChanged` 가 classes.txt · class-colors.json 에 쓴다. 빈 이름·겹치는 이름은
-    되돌린다). 번호 열은 없고 두 그리드 다 행 번호 인디케이터다(`IsRowNumber` + `IndicatorWidth` 되돌리기). **처음에는 어느 칸도
-    안 열리고 더블 클릭한 칸(이름·색)과 더하기 직후의 이름 칸만 열린다**(`ShowingEditor` 에서 막고 `_allowClassEdit` 로 연다, VS
-    솔루션 탐색기와 같은 수법) - 한 번 누를 때마다 열리면 줄을 고르려다 편집이 된다. 색은 `PopupColorEditSettings`. 더하기는
-    임시 이름("몹 3")으로 넣고 바로 이름 칸을 연다(`BeginRename`) - 이름 칸이 따로 없고 이름 바꾸기 버튼도 없다. 지우기는 그리드에서
-    고른 줄을 전부(`SelectedItems`), 뒤 번호부터 지운다 - 앞을 먼저 지우면 뒤 번호가 당겨져 다른 몹을 지운다. 몹 그리드는 정렬을
-    막는다 - 줄의 자리가 곧 번호다. 그리드 선택(`SelectedClass`)과 번호(`SelectedClassIndex`)는 서로 맞추되 목록을 다시 채울 때
-    잠깐 null 이 되는 순간에는 번호를 안 잃는다.
-  - **그림 판 확대·옮기기는 `LabelCanvas` 안에서 한다**(`Zoom`, 휠 = 마우스 아래를 두고, 오른쪽 끌기 = 옮기기, 도구 줄 확대 콤보·맞춤).
-    캡처 미리보기처럼 LayoutTransform 으로 키우면 테두리·글자까지 굵어져 경계가 안 보인다 - 그래서 `ComputeImageRect` 가 그림 자리에만
-    배율을 곱하고 좌표 변환은 여전히 `ToScreen`·`ToNormalized` 둘뿐이다. 그림을 넘겨도 배율·자리는 그대로다(연달아 담은 그림은 몹이
-    같은 자리). 배율은 `LabelZoom` 설정에 남는다.
-
-## 검증
-
-`Minguk.Tools.Tests` 는 단위 테스트가 아니라 **실행형 하네스**다. 실제 커서와 살아 있는 창을
-확인하므로 목으로는 대신할 수 없다. 자세한 것은 `Minguk.Tools.Tests/README.md`.
-
-```
-dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 경로별 전체
-dotnet run --project Minguk.Tools.Tests -c Debug -- --views               # 화면 생성만 (안전)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --labeling-screen     # 라벨링 화면을 화면 밖에 띄워 학습 패널 높이·바인딩 오류·PNG (안전)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --vision              # 라벨·학습 준비·추론 변환 (안전, 2초)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --solution            # 솔루션·프로젝트 모델 (안전, 임시 폴더만)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --canvas-drag         # 라벨 캔버스를 실제 마우스로 끌기 (커서 3초)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --fallback            # 드라이버 없는 상황
-dotnet run --project Minguk.Tools.Tests -c Debug -- --calibrate           # 정규화 규칙 실측
-dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-bench        # 추론 속도 (libtorch 필요)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 학습한 모델이 라벨을 다시 찾는지 (libtorch 필요)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --scale-check         # 실시간 경로(WPF 축소 PNG)와 파일 경로가 같은 답인지
-```
-
-- `--views` · `--vision` · `--detect-bench` 외에는 **커서와 키보드를 가져간다.** 돌리는 동안 손을 떼야 한다.
-- **라벨·학습·추론만 고쳤으면 `--vision` 이면 된다.** 이것들을 `--backend=` 안에 얹어 두면
-  라벨 하나 고치고 확인하려 해도 상관없는 입력 어댑터 검증이 통째로 딸려 오고, 그동안
-  커서를 못 쓴다. `--backend=` 로 도는 전체 검증에도 그대로 끼므로 한 번에 다 볼 수도 있다.
-- `--detect-bench` 는 libtorch(4GB)와 학습한 `detector.zip` 이 있어야 돈다. 없으면 그렇게 말하고 끝난다.
-- **학습이 끝나면 `--detect-check` 로 본다.** "끝났습니다" 는 모델이 만들어졌다는 뜻이지 찾는다는
-  뜻이 아니다. 라벨 찍은 그림마다 검출을 돌려 IoU 0.5 이상으로 다시 찾은 개수와 헛것을 센다.
-  문턱 기본은 앱과 같은 50% (`--score=` 로 바꾼다). 실측(14장·60바퀴): 50% 에서 17/27 · 헛것 9,
-  30% 에서 23/27 · 헛것 70.
-  학습에 쓴 그림이라 외운 것도 맞은 것이 된다 - 여기서 못 찾으면 확실히 문제고, 다 찾아도
-  새 장면은 캡처 화면의 몹 찾기로 따로 봐야 한다.
-- 화면을 고쳤으면 `--views` 를 돌린다. XAML 은 빌드를 통과하고 런타임에만 터진다.
-- 입력 쪽을 고쳤으면 **세 경로 모두** 돌린다. 한 경로만 통과하는 변경이 흔하다.
-- 한글 쪽을 고쳤으면 하네스만으로 부족하다. 대상이 WPF 라 최상위 창과 포커스 창이 같아서,
-  Win32 대상에서만 드러나는 IME 문제를 못 잡는다. 메모장으로도 한 번 쳐 볼 것.
+| `IOcrEngine` | `WindowsOcrEngine` | `OcrEngineFactory` |
+
+- **능력이 경로마다 다르면 능력별 인터페이스**(`IScanCodeInput` SendInput·Interception / `ICharacterInput`·`IImeControl` PostMessage·SendMessage). 부르는 쪽이 `adapter is IXxx` 로 묻는다 -
+  늘 false 인 빈 메서드는 되는 줄 알고 쓰게 만든다.
+- `CreateWithFallback` 은 다른 경로로 내려앉되 `FellBackFrom`·`Reason` 을 돌려준다 - 조용히 다른 길로 보내지 않는다.
+- **창 메시지 경로**(`WindowMessageInputAdapter` = PostMessage + `SendMessageTimeout`, 맨 `SendMessage` 금지):
+  - 글자는 반드시 `WM_CHAR` - 키로 보내면 부친 Shift 가 안 먹어 `abC!` → `abc1`.
+  - P/Invoke 는 **W 판을 명시**(`PostMessageW`) - ANSI 판이 잡히면 한글이 `?`.
+  - 한/영 은 `WM_IME_CONTROL`(변환 모드). `WM_INPUTLANGCHANGE`(자판)와 다르다.
+  - **게임에는 안 먹는다**(Raw Input·DirectInput) - 게임은 SendInput 이나 Interception. 보낼 창은 `IWindowTargetAdapter` 로 고른다.
+- 입력 어댑터는 `Input/`, `Capture/Input/` 에는 미리보기 좌표 계산만(`PreviewInputRouter` 등). 게임 입력 함정은 `docs/실시간-스크립트.md`.
+
+## 스크립트
+
+- 엔진: C#(`RoslynScriptEngine`, 기본) · JavaScript(`JavaScriptEngine`, Jint) · Python(`PythonScriptEngine`, 첫 선택 때 CPython 11MB). 실시간 모드·조준·디버그는 `docs/실시간-스크립트.md`.
+- **입력 테스트의 계획 모드**는 세 겹: 글(`SequenceScript`) → 데이터(`SequencePlan`) → 델리게이트(`InputSequence`). 시작할 때 한 번 굳힌다.
+  `SequenceStepKind` 는 **늘리기만**(JSON 에 이름으로). 틀린 줄이 있어도 파싱은 끝까지, 실행은 막는다.
+- Roslyn 컴파일 어셈블리는 언로드되지 않는다 - 타이핑 500ms 묶기 + 같은 글 캐시 + 10분 붙들기(`KeepAlive`).
+- 파이썬은 한 프로세스에 한 번만 켠다(Shutdown 뒤 재초기화가 깨진다). 파이썬 객체는 `Py.GIL()` 안에서만. 열거형은 `typeof(T).ToPython()` 이 안 된다.
+- **프로젝트** `.mtsproj`(`ScriptProject`) - 목록에 있는 것만 프로젝트다. 파일은 폴더 밖을 못 가리키고, 공유는 `ProjectReference`(`../공용/공용.mtsproj`)로 한다.
+  `ToUnit` 이 참조한 프로젝트의 소스(시작 파일 빼고)·DLL 참조를 앞에 합친다 - 실행·검사·완성·빌드가 다 `ScriptUnit` 을 본다.
+
+### 빌드 - IL(.mtsx)
+
+- **진입점을 우리가 쥔다**(`CompiledScriptBuilder`): 프로젝트 글을 `public class __Compiled : LiveScriptApi` 의 `__Run()` 몸으로 감싸 **일반 C# 컴파일**. 스크립팅 emit 은 Roslyn 내부 factory 에 기대
+  Roslyn 을 올리면 옛 파일이 안 돈다. `EntryTypeName`·`EntryMethodName` 은 바꾸지 않는다. `LiveScriptApi` 는 그래서 `sealed` 가 아니다.
+- 조립: `using` 은 위로, 최상위 문장·지역 함수는 `__Run` 몸으로, 타입은 중첩 멤버로. 손으로 적은 `#load` 는 안 쓴다(소스는 `ScriptUnit.Sources` 로 온다), `#r` 은 긁어 참조에 더한다. `CS1998` 은 끈다.
+- 빌드(Ctrl+Shift+B) → `<프로젝트>\bin\<이름>.mtsx`. `Resources\` 는 옆에 복사. **바깥 DLL(#r·참조 항목)도 bin 에 복사**(`CopyReferences`, 앱·런타임 폴더 것은 뺀다).
+- 실행(`CompiledScriptRunner`): `Assembly.Load(bytes)` → `__Run()`. 도는 동안 `AssemblyResolve` 로 `.mtsx` 옆에서 DLL 을 찾고(형식은 JIT 때 올라온다), 못 찾으면 이름과 둘 자리를 말한다.
+  host·비상 정지·끝맺음은 소스 실행과 나눠 쓴다(`LiveScriptSession.ResolveCompiled`). `.mtsx` 는 편집 못 한다 - Minguk.Tools 안에서만 돈다.
+
+### 스크립트 파일 · 편집기
+
+- 확장자로 언어를 가른다(`.csx`·`.py`·`.js`, `ScriptFiles`). 열 때 **언어를 먼저 바꾸고** 글을 넣는다. 모르는 확장자면 언어를 그대로 둔다.
+- 언어별로 따로 기억한다(`Script.CSharp` 등). 언어를 바꿔도 쓰던 글은 안 버리고, **손대지 않은 본보기**만 새 언어 본보기로 갈아 끼운다.
+- 글은 설정에도 파일로도 남는다. `*` 는 열어 둔 파일과 다르다는 표시. 밖에서 고치면 다시 읽되(300ms 묶기, 잠김 재시도) 여기서 고친 것이 있으면 덮지 않고 알린다.
+- 파일은 **UTF-8(BOM 없이)**. 대화 상자는 `dxmvvm:OpenFileDialogService`/`SaveFileDialogService`.
+- 편집기는 **AvalonEdit**(AvaloniaEdit 아님)을 **`Markup/ScriptEditor` 로 감싸서** 쓴다 - 바로 얹으면 창 전체의 UI 자동화 트리가 빈다.
+  - `TextEditor.Text` 는 의존 속성이 아니다(`Markup/AvalonEditText`). 경량 테마가 안 칠하므로 색은 `Helper/SequenceScriptHighlighting` 이 든다.
+  - 밝기는 **경량 테마 팔레트의 `Brush.Editor.Background` 밝기**로 가른다(테마 이름·키로 가르지 않는다). 칠하는 색은 VS 편집기 값(어두움 #1E1E1E/#DCDCDC).
+  - 낱말 색은 이 PC 의 VS 2026 + ReSharper 화면에서 잰 값이다(색표는 `Resource/SequenceScript.*.xshd` 한 곳, 분류 이름 = Color name).
+    C# 은 Roslyn 분류로 덧칠한다(`IScriptClassifier`·`SemanticColorizer`, 250ms 멎으면). 최상위 변수는 제출 클래스의 필드라 멤버 색이 맞다.
+  - 완성: C# 은 Roslyn(`RoslynCompletionSource` - 제출 프로젝트 + `hostObjectType`, `DocumentInfo` 도 Script, 첫 호출 1.4초라 `WarmUpAsync`), 파이썬·JS 는 `ScriptApiCatalog`. 이름만 넣는다.
+  - 참조 표시(CodeLens, `IScriptReferenceFinder`·`CodeLensGenerator`) - `#load` 로 이은 컴파일의 모든 구문 트리에서 센다.
+  - 빨간 밑줄은 배경 렌더러. 오프스크린에서는 TextView 층이 안 그려진다 - 검사는 렌더러 `Draw` 를 직접 부르고 화면 밖 진짜 창에 담는다.
+- **읽기 전용 속성을 `EditValue` 에 묶을 때는 `Mode=OneWay`** - 기본 TwoWay 라 화면 생성 때 터진다(`--views` 가 잡는다).
 
 ## 규칙
 
-- 폰트·크기는 `BaseFontFamily` / `BaseFontSize` 리소스를 **DynamicResource** 로 참조한다. StaticResource 로 쓰면 설정 변경이 반영되지 않는다.
-- 경량 테마를 쓰므로(`UseLightweightThemes = true`) 표준 WPF 컨트롤에는 테마가 적용되지 않는다. 화면은 DevExpress 컨트롤로 짠다.
-- **화면 규칙(사용자, 2026-09-13)**
-  - **모든 것을 Visual Studio 2026 과 DevExpress WPF 기준으로 생각한다** - 배치·동작·컨트롤·메뉴·도구 모음·단축키.
-    **VS Code 가 아니다**(한 번 VSC 로 잘못 말했다가 바로잡았다). VS 에 같은 기능이 있으면 그 모양과 조작을 따르고 DevExpress 컨트롤로 만든다.
-  - 배치는 **LayoutControl**(`dxlc:LayoutControl`·`LayoutGroup`·`LayoutItem`). Grid·StackPanel 로 뼈대를 짜지 않는다.
-    단 **VS 같은 도킹 화면(스크립트 화면의 개발 부분)의 큰 틀은 DockLayoutManager** 고, 그 창 안의 폼 칸이 LayoutControl 이다.
-  - 메뉴·도구 모음·상태 표시줄은 BarManager, 단축키는 VS 2026 과 같게.
-  - **리스트성 데이터(목록·표·트리)는 GridControl**. 트리는 GridControl + `TreeListView`. ListBox·ListView 로 목록을 새로 만들지 않는다.
-  - 컨트롤도 **대부분 DevExpress WPF**. 표준 WPF 는 DevExpress 에 없는 것만(AvalonEdit 편집기 등).
-  - **한 줄에 놓인 컨트롤은 모두 세로 가운데 정렬**(사용자, 2026-09-14) - 도구 줄 글자·버튼·입력 칸, 폼 칸의 라벨과 칸.
-    글자를 담는 템플릿의 `TextBlock` 에는 `VerticalAlignment="Center"` 를 적는다. 도구 줄 항목의 글자 템플릿은 `Minguk.Base/Resource/Style.xaml`
-    (`BarStaticItem`·`BarButtonItem`·`BarCheckItem`·`BarEditItem` 의 `ContentTemplate`/`Content2Template`)이 들고 있다 - 거기 정렬이 없어
-    `ToolBarControl` 에 바로 둔 편집 항목(라벨링 화면 "폴더"·"진행"·"확대")의 글자가 칸보다 2.5px 떠 있었다(실측). 글자 상자는 칸 높이(22px)로
-    늘어나는데 글자는 그 상자의 맨 위에 그려져서, 상자 가운데끼리는 같아 보여도 글자만 뜬다.
-    검사: `--labeling-screen`·`--script-screen`·`--environment-screen` 의 `VerticalAlignmentCheck` - 실제 글자 줄 높이로 재어 1.5px 넘게 어긋나면 FAIL.
-    새 화면을 찍는 검사를 만들면 이 줄도 넣는다.
-- 그리드는 `Minguk.Base.Controls.BaseGridControl` / `BaseTableView` 를 쓴다. 기본값이 이미 잡혀 있다.
-  - 행 번호를 쓸 때(`GridControlDependency.IsRowNumber="True"`) **화면에서 `IndicatorWidth` 를 물려야 한다.**
-    `InitRowIndicatorWidth` 가 폭을 계산해 두지만 인디케이터 칸에 연결하는 쪽이 없으면 세 자리부터 앞이 잘린다.
-    그리드를 `Grid.IsSharedSizeScope="True"` 로 감싸고 `SharedSizeGroup="RowNumberGroup"` 열에 숨은 `Border` 를 둔 뒤
-    `IndicatorWidth="{Binding Path=(Border.ActualWidth), ElementName=..., Mode=OneWay}"` 로 되돌린다.
-    (`Views/CaptureMonitorView.xaml` 이 예시다)
-  - `GridControlDependency.IsColumnAutoWidth` 를 켜면 모든 열의 너비 단위가 `Auto`(내용에 맞춤)가 된다.
-    그 상태에서는 열 경계를 끌어도 값이 남지 않는다. 사용자가 너비를 직접 잡게 하려면 꺼야 한다.
-- `ItemsSource` 가 있는 콤보는 **`SelectedItem` 으로 묶는다.** `EditValue` 로 묶으면 고른 것이
-  콤보에는 보이는데 ViewModel 은 그대로여서, **화면과 실제 동작이 어긋난다** —
-  입력 자동화 화면에서 콤보는 PostMessage 라고 하는데 실제로는 SendInput 으로 나가고 있었다.
-  `Mode=TwoWay, UpdateSourceTrigger=PropertyChanged` 를 함께 적는다.
-- **칸 옆에 버튼을 두지 말고 `dxe:ButtonEdit` 안에 넣는다**(폴더 고르기·지금 읽기처럼). 그때 **`AllowDefaultButton="False"` 를 같이 적는다** -
-  `Buttons` 에 넣은 것은 기본 `…` 버튼 **옆에** 더해져 버튼이 둘이 되는데, 그 기본 버튼은 커맨드가 없어 눌러도 아무 일도 안 한다.
-  쓰는 곳은 설정 화면의 학습·프로젝트 경로와 스크립트 화면의 영역 이름 칸이다.
-- ViewModel 간 통신은 직접 참조 대신 `MessengerUtility` 를 쓴다.
-- 예외는 `ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName())` 로 보여 주고 NLog 로 남긴다.
-- `Libs/DirectML/x64/` 의 DirectML 네이티브는 NuGet 이 아니라 저장소에서 나간다.
-  `Microsoft.AI.DirectML` 패키지는 `ExcludeAssets="all"` 로 자기 복사를 꺼 두었다 —
-  안 끄면 같은 파일을 둘이 각각 복사해서, 어느 것이 출력에 남는지가 빌드 순서에 달린다.
-  - 버전을 올릴 때 패키지 버전만 바꾸면 안 된다. 새 패키지의 `bin/x64-win/` 에서 DLL 을 꺼내
-    `Libs/DirectML/x64/` 를 덮어쓰고 **같이 커밋한다**. `onnxruntime` 과 DirectML 은 짝이 맞아야 하고,
-    한쪽만 올리면 빌드는 통과하고 세션을 만들 때 터진다.
-  - 관리 어셈블리(`Microsoft.ML.OnnxRuntime.dll`)는 그대로 NuGet 이 맡는다.
-    `System.Numerics.Tensors` 를 물고 있어서 손으로 따라가면 놓치기 쉽다.
-  - `DirectML.Debug.dll` 은 Debug 구성에만 들어간다. 패키지의 targets 는 구성을 보지 않으므로
-    (`Microsoft_AI_DirectML_SkipDebugLayerCopy` 로만 가른다) csproj 에서 직접 나눈다.
-  - `.pdb` 는 저장소에 두지 않는다. 남의 네이티브 라이브러리 안으로 들어갈 일이 없다.
-- **Interception 드라이버**는 `Input/Adapters/InterceptionDriver` 가 살피고 설치한다.
-  - 상태를 `keyboard` · `mouse` **서비스**로 읽는다. 어댑터의 `IsAvailable` 은 "쓸 수 있는지" 만
-    말하고 **왜** 못 쓰는지는 모른다 - 설치가 안 된 것과 재부팅을 안 한 것은 사용자가 할 일이 다르다.
-  - 설치는 **별도 프로세스를 `runas` 로** 띄운다. 앱 전체를 관리자로 올리면 안 된다 —
-    관리자 창에는 탐색기에서 파일을 끌어다 놓을 수 없고(UIPI) 늘 UAC 를 거쳐 켜야 한다.
-  - 설치 뒤에는 **반드시 재부팅**이다. 키보드·마우스 장치 스택 사이에 끼어드는 필터 드라이버라
-    이미 올라온 장치에는 다음 부팅에야 붙는다. 안내 줄만으로는 지나치기 쉬워 대화 상자로도 알린다.
-  - `install-interception.exe` 는 `Native/x64/` 에 함께 둔다. **`interception.dll` 과 같은
-    릴리스(v1.0.1)여야 한다** - 넣을 때 릴리스 안의 dll 이 우리 것과 바이트 단위로 같은지 확인했다.
-    설치 프로그램 껍데기는 코드 서명이 없어 SmartScreen 경고가 뜰 수 있다(드라이버 .sys 는 서명됨).
-- `interception.dll` 은 `Minguk.Tools/Native/x64/` 에 있다. 이 프로젝트만 쓰므로 `Libs/` 가 아니다.
-  `DllImport` 가 실행 파일 옆에서 찾으므로 `TargetPath` 로 출력 루트에 떨어뜨린다.
-  x86 빌드를 잘못 넣으면 컴파일은 통과하고 실행할 때 `BadImageFormatException` 으로 터진다.
-- `Minguk.Image` 는 솔루션에 없다. `Libs/Minguk.Image.dll` 을 `Reference` + `HintPath` 로 무는, DirectML 같은 외부 바이너리 취급이다. csproj 에 `<Resource Include>` 가 4만 개라 소스로 두면 빌드마다 그 csproj 평가에 시간을 버리기 때문이다. 아이콘을 바꿔야 하면 `Minguk.Image/Minguk.Image.csproj` 를 단독으로 Release|x64 빌드해서 나온 DLL 로 `Libs/Minguk.Image.dll` 을 덮어쓰고 커밋한다.
+- **화면 규칙(사용자)**
+  - **모든 것을 Visual Studio 2026 과 DevExpress WPF 기준으로**(VS Code 아님) - 배치·동작·메뉴·도구 모음·단축키.
+  - 배치는 **LayoutControl**(`dxlc:`). Grid·StackPanel 로 뼈대를 짜지 않는다. VS 같은 도킹 화면의 큰 틀만 DockLayoutManager.
+  - 메뉴·도구 모음·상태 표시줄은 BarManager. **목록·표·트리는 GridControl**(트리는 `TreeListView`). 컨트롤은 대부분 DevExpress(없는 것만 표준 WPF).
+  - **한 줄에 놓인 컨트롤은 모두 세로 가운데 정렬** - 글자 템플릿의 `TextBlock` 에 `VerticalAlignment="Center"`. 도구 줄 글자 템플릿은 `Minguk.Base/Resource/Style.xaml`
+    (`BarStaticItem`·`BarButtonItem`·`BarCheckItem`·`BarEditItem`). 글자 상자가 칸 높이로 늘어나면 글자는 상자 위에 붙어 뜬다.
+    검사 `VerticalAlignmentCheck`(`--labeling-screen`·`--script-screen`·`--environment-screen`) - 화면을 찍는 검사를 새로 만들면 넣는다.
+  - 칸 옆 버튼은 `dxe:ButtonEdit` 안에 넣고 `AllowDefaultButton="False"` 를 같이 적는다(안 적으면 빈 `…` 버튼이 하나 더 붙는다). 그림 버튼은 `GlyphKind="User"` + `Image`(가운데 정렬).
+  - `dxlc` 에는 `ItemHeight`·`ShowLabel` 이 없다 - 라벨을 비우려면 `AddColonToLabel="False" Label=""`.
+- 폰트·크기는 `BaseFontFamily`/`BaseFontSize` 를 **DynamicResource** 로. 경량 테마(`UseLightweightThemes`)라 표준 WPF 컨트롤은 테마를 안 탄다.
+- 그리드는 `BaseGridControl`/`BaseTableView`.
+  - 행 번호(`IsRowNumber`)를 쓰면 `IndicatorWidth` 를 숨은 `Border`(`SharedSizeGroup="RowNumberGroup"`)의 폭으로 되돌린다(`CaptureMonitorView.xaml` 예시) - 안 하면 세 자리부터 잘린다.
+  - `IsColumnAutoWidth` 를 켜면 열 너비가 Auto 라 사용자가 끈 너비가 안 남는다.
+  - 저장된 배치의 `ActualShowSearchPanel` 은 복원 전에 지운다. 하네스도 `DataControlBase.AllowInfiniteGridSize = true`.
+- `ItemsSource` 가 있는 콤보는 **`SelectedItem`**(`Mode=TwoWay, UpdateSourceTrigger=PropertyChanged`)으로 묶는다 - `EditValue` 면 화면과 실제 동작이 어긋난다.
+- DevExpress 내장 SVG(`dx:DXImage`)는 없는 경로면 런타임에 터진다 - 아이콘은 확인된 Axialis(`image:FreeImage`)를 쓴다.
+- ViewModel 사이는 `MessengerUtility`. 예외 표시는 `ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName())`.
+- **DirectML 네이티브**는 `Libs/DirectML/x64/` 에서 나간다(패키지는 `ExcludeAssets="all"`). 올릴 때 새 패키지의 DLL 로 덮고 같이 커밋 - onnxruntime 과 짝이 안 맞으면 세션 만들 때 터진다.
+  `DirectML.Debug.dll` 은 Debug 구성만(csproj 에서 나눈다). `.pdb` 는 저장소에 안 둔다.
+- **Interception**: `interception.dll`·`install-interception.exe`(같은 v1.0.1)는 `Minguk.Tools/Native/x64/`(x86 이면 `BadImageFormatException`).
+  상태는 `keyboard`·`mouse` 서비스로 읽고, 설치는 별도 프로세스 `runas`(앱 전체를 관리자로 올리지 않는다), 설치 뒤 **재부팅**.
+- `Minguk.Image` 는 솔루션에 없다 - `Libs/Minguk.Image.dll` 을 HintPath 로 문다(리소스 4만 개). 아이콘을 바꾸면 그 프로젝트를 Release|x64 로 따로 빌드해 덮고 커밋.
+
+## 검증
+
+`Minguk.Tools.Tests` 는 단위 테스트가 아니라 **실행형 하네스**다(`Minguk.Tools.Tests/README.md`). 앱이 켜져 있으면 출력 복사가 잠겨 빌드가 실패한다(컴파일 오류와 구별).
+
+```
+dotnet run --project Minguk.Tools.Tests -c Debug -- --views               # 화면·모듈 생성 (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --vision              # 라벨·검출·OCR·스크립트·빌드·조준(가짜 어댑터) (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --solution            # 솔루션·공유 프로젝트·탐색기·▶ 찾기 (안전, 임시 폴더)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --script-screen       # 스크립트 화면 화면 밖 띄우기·바인딩 오류·정렬·PNG (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --labeling-screen     # 라벨링 화면 패널 높이·정렬·PNG (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --environment-screen  # 환경설정 화면 두 칸·아이콘·정렬·PNG (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 모델이 라벨을 다시 찾는지(재현율)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 입력 경로 전체 (커서·키보드를 가져간다)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --canvas-drag         # 라벨 캔버스 실제 마우스 끌기 (커서)
+```
+
+- 화면(XAML)을 고쳤으면 `--views` - XAML 은 빌드를 통과하고 런타임에 터진다. 그 화면을 찍는 검사가 있으면 그것도.
+- 라벨·검출·스크립트만 고쳤으면 `--vision`. 솔루션·프로젝트·작업 공간이면 `--solution`.
+- 입력 쪽을 고쳤으면 **세 경로 모두**(`--backend=`). 한글은 메모장으로도 쳐 본다(하네스 대상이 WPF 라 IME 문제를 못 잡는다).
+- 창(MainWindow)은 하네스가 안 만든다 - 제목 표시줄을 고쳤으면 앱을 잠깐 띄워 본다.

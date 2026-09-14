@@ -72,15 +72,25 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         AddFolderCommand = new DelegateCommand(() => AddFolder(TargetFolderId()), () => IsOpen, false);
         AddExistingCommand = new DelegateCommand(DoAddExisting, () => IsOpen, false);
         AddProjectReferenceCommand = new DelegateCommand(DoAddProjectReference, () => IsOpen, false);
-        RenameCommand = new DelegateCommand(() => { if (SelectedNode is { } node) EditNodeRequested?.Invoke(this, node); }, () => SelectedNode is { Kind: not (ScriptNodeKind.Project or ScriptNodeKind.ProjectReference), IsExternal: false }, false);
-        DeleteCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Delete(node); }, () => SelectedNode is { Kind: not (ScriptNodeKind.Project or ScriptNodeKind.ProjectReference), IsExternal: false }, false);
+        RenameCommand = new DelegateCommand(() => { if (SelectedNode is { } node) EditNodeRequested?.Invoke(this, node); }, () => SelectedNode is { Kind: not (ScriptNodeKind.Project or ScriptNodeKind.ProjectReference or ScriptNodeKind.Solution), IsExternal: false }, false);
+        DeleteCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Delete(node); }, () => SelectedNode is { Kind: not (ScriptNodeKind.Project or ScriptNodeKind.ProjectReference or ScriptNodeKind.Solution), IsExternal: false }, false);
         // 참조 줄의 "제외" 는 참조 빼기다(VS 의 참조 제거) - 그 프로젝트 파일은 건드리지 않는다.
-        ExcludeCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Exclude(node); }, () => SelectedNode is { Kind: not ScriptNodeKind.Project, IsExternal: false }, false);
+        ExcludeCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Exclude(node); }, () => SelectedNode is { Kind: not (ScriptNodeKind.Project or ScriptNodeKind.Solution), IsExternal: false }, false);
         SetEntryCommand = new DelegateCommand(() => { if (SelectedNode is { } node) SetEntry(node); }, () => SelectedNode is { Kind: ScriptNodeKind.Source, IsExternal: false }, false);
         OpenNodeCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Open(node); }, () => SelectedNode is not null, false);
+        EditProjectCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Try(() => EditProject(node)); }, () => SelectedNode is { Kind: ScriptNodeKind.Project, IsExternal: true, IsMissing: false }, false);
         CloseDocumentCommand = new DelegateCommand<ScriptDocument?>(doc => CloseDocument(doc ?? ActiveDocument), _ => ActiveDocument is not null, false);
         OpenFolderInExplorerCommand = new DelegateCommand(DoOpenFolderInExplorer, () => IsOpen, false);
+
+        // 시작 프로젝트를 솔루션 탭에서 바꾸면 굵은 줄이 따라가야 한다. 정적 이벤트라 Dispose 에서 푼다.
+        Minguk.Tools.Projects.SolutionWorkspace.Changed += OnSolutionChanged;
     }
+
+    private void OnSolutionChanged(object? sender, EventArgs e) => _host.OnUi(() =>
+    {
+        RebuildNodes();
+        RaisePropertyChanged(nameof(Title));
+    });
 
     // ── 알림 ─────────────────────────────────────────────────────────────
 
@@ -109,8 +119,12 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
     public bool IsOpen => Project is not null;
 
-    /// <summary>솔루션 탐색기 머리. VS 의 "솔루션 '이름'".</summary>
-    public string Title => Project is null ? "열린 프로젝트 없음" : $"프로젝트 '{Project.Name}'";
+    /// <summary>솔루션 탐색기 머리. VS 의 "솔루션 '이름'" - 솔루션에 든 프로젝트면 솔루션 이름, 따로 연 프로젝트면 프로젝트 이름.</summary>
+    public string Title => Project is null
+        ? "열린 프로젝트 없음"
+        : SolutionOf(Project) is { } solution
+            ? $"솔루션 '{solution.Name}' · 편집 중 '{Project.Name}'"
+            : $"프로젝트 '{Project.Name}'";
 
     public ObservableCollection<ScriptProjectNode> Nodes { get; } = [];
 
@@ -147,12 +161,16 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     public DelegateCommand ExcludeCommand { get; }
     public DelegateCommand SetEntryCommand { get; }
     public DelegateCommand OpenNodeCommand { get; }
+
+    /// <summary>솔루션의 다른 프로젝트 줄에서 - 그 프로젝트로 넘어가 편집한다.</summary>
+    public DelegateCommand EditProjectCommand { get; }
+
     public DelegateCommand<ScriptDocument?> CloseDocumentCommand { get; }
     public DelegateCommand OpenFolderInExplorerCommand { get; }
 
     private void RaiseCommands()
     {
-        foreach (var command in new DelegateCommand[] { CloseProjectCommand, SaveCommand, SaveAllCommand, AddNewFileCommand, AddFolderCommand, AddExistingCommand, AddProjectReferenceCommand, RenameCommand, DeleteCommand, ExcludeCommand, SetEntryCommand, OpenNodeCommand, OpenFolderInExplorerCommand })
+        foreach (var command in new DelegateCommand[] { CloseProjectCommand, SaveCommand, SaveAllCommand, AddNewFileCommand, AddFolderCommand, AddExistingCommand, AddProjectReferenceCommand, RenameCommand, DeleteCommand, ExcludeCommand, SetEntryCommand, OpenNodeCommand, EditProjectCommand, OpenFolderInExplorerCommand })
             command.RaiseCanExecuteChanged();
 
         CloseDocumentCommand.RaiseCanExecuteChanged();
@@ -515,7 +533,18 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
         if (Project is not { } project) return;
 
-        Nodes.Add(new ScriptProjectNode(RootId, NoParent, project.Name, ScriptNodeKind.Project, null));
+        // 이 프로젝트가 지금 솔루션에 들어 있으면 VS 처럼 솔루션이 뿌리고 그 아래 프로젝트들이다. 아니면(따로 연 프로젝트) 예전처럼 프로젝트가 뿌리.
+        var solution = SolutionOf(project);
+        var startup = solution?.Startup() is { } startupEntry ? solution.FullPath(startupEntry.Path) : null;
+
+        if (solution is not null)
+            Nodes.Add(new ScriptProjectNode(SolutionId, NoParent, $"솔루션 '{solution.Name}' ({solution.Projects.Count}개 프로젝트)", ScriptNodeKind.Solution, null));
+
+        // 시작 프로젝트는 굵게(VS 와 같다).
+        Nodes.Add(new ScriptProjectNode(RootId, solution is null ? NoParent : SolutionId, project.Name, ScriptNodeKind.Project, null)
+        {
+            IsEntry = string.Equals(startup, project.FilePath, StringComparison.OrdinalIgnoreCase)
+        });
 
         foreach (var folder in project.Folders.OrderBy(f => f, StringComparer.CurrentCultureIgnoreCase))
             Nodes.Add(new ScriptProjectNode(folder, ParentOf(folder), Path.GetFileName(folder), ScriptNodeKind.Folder, TryRename)
@@ -530,17 +559,120 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
                 IsMissing = !File.Exists(project.FullPath(item.Path))
             });
 
-        AddReferenceNodes(project);
+        AddReferenceNodes(project, solution);
 
-        SelectedNode = Nodes.FirstOrDefault(n => n.Id == selected) ?? Nodes.FirstOrDefault();
+        if (solution is not null) AddSolutionProjectNodes(project, solution, startup);
+
+        SelectedNode = Nodes.FirstOrDefault(n => n.Id == selected) ?? Nodes.FirstOrDefault(n => n.Id == RootId) ?? Nodes.FirstOrDefault();
+    }
+
+    /// <summary>솔루션 줄의 Id. 경로와 안 겹치게 꺾쇠를 쓴다.</summary>
+    public const string SolutionId = "<솔루션>";
+
+    /// <summary>솔루션 안의 다른 프로젝트 줄 Id 앞머리 - 뒤는 .mtsproj 전체 경로.</summary>
+    public const string OtherProjectPrefix = "<프로젝트>";
+
+    /// <summary>지금 열린 솔루션이 이 프로젝트를 담고 있으면 그 솔루션. 아니면 null.</summary>
+    private static Minguk.Tools.Projects.Solution? SolutionOf(ScriptProject project)
+    {
+        if (Minguk.Tools.Projects.SolutionWorkspace.Current is not { } solution) return null;
+
+        return solution.Projects.Any(entry => string.Equals(solution.FullPath(entry.Path), project.FilePath, StringComparison.OrdinalIgnoreCase))
+            ? solution
+            : null;
+    }
+
+    /// <summary>
+    /// 솔루션의 다른 프로젝트들 - 열어 둔 프로젝트 말고. 폴더·항목을 전체 경로 Id 로 달고 <see cref="ScriptProjectNode.IsExternal"/> 로 둔다.
+    /// </summary>
+    /// <remarks>
+    /// 파일은 열어 고칠 수 있다. 더하기·지우기·이름 바꾸기는 그 프로젝트 목록을 고치는 일이라 "이 프로젝트 편집"(<see cref="EditProjectCommand"/>)으로
+    /// 그 프로젝트로 넘어가서 한다 - 이 작업 공간의 명령은 모두 열린 프로젝트 하나를 기준으로 짜여 있다.
+    /// 없어진 프로젝트는 빼지 않고 "찾을 수 없음" 으로 흐리게 남긴다(docs/프로젝트-설계.md).
+    /// </remarks>
+    private void AddSolutionProjectNodes(ScriptProject project, Minguk.Tools.Projects.Solution solution, string? startup)
+    {
+        foreach (var entry in solution.Projects.OrderBy(e => Minguk.Tools.Projects.Solution.NameOf(e), StringComparer.CurrentCultureIgnoreCase))
+        {
+            var filePath = solution.FullPath(entry.Path);
+
+            if (string.Equals(filePath, project.FilePath, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var shared = entry.Kind == Minguk.Tools.Projects.SolutionProjectKind.Shared;
+            var projectId = OtherProjectPrefix + filePath;
+            ScriptProject? other = null;
+
+            try { if (File.Exists(filePath)) other = ScriptProject.Load(filePath); }
+            catch (Exception ex) { Logger.Warn(ex, $"솔루션의 프로젝트를 못 읽었다: {filePath}"); }
+
+            var name = Minguk.Tools.Projects.Solution.NameOf(entry) + (shared ? " (공유)" : string.Empty) + (other is null ? " (찾을 수 없음)" : string.Empty);
+
+            Nodes.Add(new ScriptProjectNode(projectId, SolutionId, name, ScriptNodeKind.Project, null)
+            {
+                IsExternal = true,
+                IsMissing = other is null,
+                IsEntry = string.Equals(startup, filePath, StringComparison.OrdinalIgnoreCase)
+            });
+
+            if (other is null) continue;
+
+            string ParentIdOf(string relative)
+            {
+                var index = relative.LastIndexOf('/');
+                return index < 0 ? projectId : other.FullPath(relative[..index]);
+            }
+
+            foreach (var folder in other.Folders.OrderBy(f => f, StringComparer.CurrentCultureIgnoreCase))
+                Nodes.Add(new ScriptProjectNode(other.FullPath(folder), ParentIdOf(folder), Path.GetFileName(folder), ScriptNodeKind.Folder, null)
+                {
+                    IsExternal = true,
+                    IsMissing = !Directory.Exists(other.FullPath(folder))
+                });
+
+            foreach (var item in other.Items.Where(i => i.Kind != ScriptItemKind.ProjectReference).OrderBy(i => Path.GetFileName(i.Path), StringComparer.CurrentCultureIgnoreCase))
+            {
+                var full = other.FullPath(item.Path);
+
+                // 같은 파일이 두 번 달리면 트리 Id 가 겹친다(참조 줄 아래에 이미 단 것 등).
+                if (Nodes.Any(n => string.Equals(n.Id, full, StringComparison.OrdinalIgnoreCase))) continue;
+
+                Nodes.Add(new ScriptProjectNode(full, ParentIdOf(item.Path), Path.GetFileName(item.Path), ScriptProjectNode.KindOf(item.Kind), null)
+                {
+                    IsExternal = true,
+                    IsEntry = string.Equals(item.Path, other.Entry, StringComparison.OrdinalIgnoreCase),
+                    IsMissing = !File.Exists(full)
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// 솔루션의 다른 프로젝트로 넘어가 편집한다(열린 탭은 저장할지 묻고 닫는다). 그 프로젝트의 파일 더하기·지우기·이름 바꾸기가 된다.
+    /// </summary>
+    public bool EditProject(ScriptProjectNode node)
+    {
+        if (node is not { Kind: ScriptNodeKind.Project, IsExternal: true } || !node.Id.StartsWith(OtherProjectPrefix, StringComparison.Ordinal)) return false;
+
+        var path = node.Id[OtherProjectPrefix.Length..];
+
+        if (!File.Exists(path))
+        {
+            _host.Notify?.Invoke($"프로젝트 파일이 없습니다: {path}");
+            return false;
+        }
+
+        return OpenProject(path);
     }
 
     /// <summary>
     /// 물고 있는 프로젝트 줄과 그 아래 소스 줄. 참조 줄 Id 는 적힌 상대 경로(<c>../공용/공용.mtsproj</c>), 소스 줄 Id 는 전체 경로다 -
     /// <see cref="ScriptProject.FullPath"/> 가 전체 경로를 그대로 돌려주므로 열기가 따로 갈래를 안 탄다.
     /// </summary>
-    /// <remarks>폴더 겹은 안 그린다 - 공유 프로젝트는 대개 몇 파일이고, 고치는 곳은 그 프로젝트다.</remarks>
-    private void AddReferenceNodes(ScriptProject project)
+    /// <remarks>
+    /// 폴더 겹은 안 그린다 - 공유 프로젝트는 대개 몇 파일이고, 고치는 곳은 그 프로젝트다.
+    /// 참조한 프로젝트가 같은 솔루션에 있으면 소스는 솔루션 아래 그 프로젝트 줄에 달리므로 여기서는 참조 줄만 둔다(같은 파일이 두 번 뜨지 않게, VS 의 참조 노드와 같다).
+    /// </remarks>
+    private void AddReferenceNodes(ScriptProject project, Minguk.Tools.Projects.Solution? solution)
     {
         foreach (var item in project.Items.Where(i => i.Kind == ScriptItemKind.ProjectReference).OrderBy(i => i.Path, StringComparer.CurrentCultureIgnoreCase))
         {
@@ -555,6 +687,9 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
             Nodes.Add(new ScriptProjectNode(item.Path, RootId, $"{name} (공유)", ScriptNodeKind.ProjectReference, null) { IsMissing = referenced is null });
 
             if (referenced is null) continue;
+
+            if (solution is not null && solution.Projects.Any(entry => string.Equals(solution.FullPath(entry.Path), referenced.FilePath, StringComparison.OrdinalIgnoreCase)))
+                continue;
 
             foreach (var source in referenced.Items.Where(i => i.Kind == ScriptItemKind.Source).OrderBy(i => Path.GetFileName(i.Path), StringComparer.CurrentCultureIgnoreCase))
             {
@@ -615,7 +750,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     {
         null => RootId,
         // 참조 줄·그 아래 파일에는 새 항목을 못 넣는다 - 그 목록은 이 프로젝트 것이 아니다.
-        { Kind: ScriptNodeKind.ProjectReference } or { IsExternal: true } => RootId,
+        { Kind: ScriptNodeKind.ProjectReference or ScriptNodeKind.Solution } or { IsExternal: true } => RootId,
         { IsFolder: true } node => node.Id,
         { } node => node.ParentId
     };
@@ -1070,7 +1205,16 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     {
         if (Project is null) return;
 
-        var path = SelectedNode is { } node && node.Kind != ScriptNodeKind.Project ? Project.FullPath(node.Id) : Project.Directory;
+        var path = SelectedNode switch
+        {
+            // 솔루션 줄 - 솔루션 폴더(열린 프로젝트의 한 겹 위일 때가 많다).
+            { Kind: ScriptNodeKind.Solution } => SolutionOf(Project)?.Directory ?? Project.Directory,
+            // 솔루션의 다른 프로젝트 줄 - 그 프로젝트 폴더.
+            { Kind: ScriptNodeKind.Project, IsExternal: true } other when other.Id.StartsWith(OtherProjectPrefix, StringComparison.Ordinal)
+                => Path.GetDirectoryName(other.Id[OtherProjectPrefix.Length..]) ?? Project.Directory,
+            { Kind: not ScriptNodeKind.Project } node => Project.FullPath(node.Id),
+            _ => Project.Directory
+        };
         var arguments = File.Exists(path) ? $"/select,\"{path}\"" : $"\"{(Directory.Exists(path) ? path : Project.Directory)}\"";
 
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", arguments) { UseShellExecute = true });
@@ -1095,6 +1239,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        Minguk.Tools.Projects.SolutionWorkspace.Changed -= OnSolutionChanged;
+
         StopWatchingFolder();
 
         foreach (var doc in Documents) Detach(doc);

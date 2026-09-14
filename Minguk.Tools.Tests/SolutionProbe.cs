@@ -208,6 +208,20 @@ public static class SolutionProbe
             Report(capturesOk, "프레임 저장이 고른 프로젝트의 captures", captures);
             failures += capturesOk ? 0 : 1;
 
+            // 셸 ▶ 가 찾는 완성품 - 없으면 빌드하라는 이유, 있으면 bin\<프로젝트>.mtsx.
+            var (missing, reason) = Minguk.Tools.ViewModels.PlayViewModel.FindStartupBuild();
+            var missingOk = missing is null && reason is not null && reason.Contains("빌드");
+            Report(missingOk, "셸 ▶ - 완성품이 없으면 빌드하라고 말한다", reason ?? "(이유 없음)");
+            failures += missingOk ? 0 : 1;
+
+            var build = Path.Combine(folder, "bin", "사격장" + Minguk.Tools.Input.Scripting.ScriptFiles.CompiledExtension);
+            Directory.CreateDirectory(Path.GetDirectoryName(build)!);
+            File.WriteAllBytes(build, [0x4D, 0x5A]);
+
+            var (found, _) = Minguk.Tools.ViewModels.PlayViewModel.FindStartupBuild();
+            var foundOk = string.Equals(found, build, StringComparison.OrdinalIgnoreCase);
+            Report(foundOk, "셸 ▶ - 시작 프로젝트의 bin 완성품을 찾는다", found ?? "(못 찾음)");
+            failures += foundOk ? 0 : 1;
         }
         finally
         {
@@ -358,6 +372,44 @@ public static class SolutionProbe
         {
             workspace.CloseProject();
             workspace.Dispose();
+        }
+
+        // 솔루션 탐색기를 솔루션 전체로 - 뿌리가 솔루션, 그 아래 열린 프로젝트(시작 프로젝트면 굵게)와 다른 프로젝트들.
+        // 사용자 최근 목록은 안 건드린다(remember: false), 끝나면 솔루션을 닫는다.
+        SolutionWorkspace.Use(solution, remember: false);
+        var solutionWorkspace = new Minguk.Tools.ViewModels.ScriptProjectWorkspace(new Minguk.Tools.ViewModels.ScriptProjectWorkspaceHost { OnUi = action => action() });
+
+        try
+        {
+            solutionWorkspace.OpenProject(run.FilePath);
+
+            var nodes = solutionWorkspace.Nodes;
+            var solutionNode = nodes.FirstOrDefault(n => n.Kind == Minguk.Tools.ViewModels.ScriptNodeKind.Solution);
+            var opened = nodes.FirstOrDefault(n => n.Id == Minguk.Tools.ViewModels.ScriptProjectWorkspace.RootId);
+            var other = nodes.FirstOrDefault(n => n.Kind == Minguk.Tools.ViewModels.ScriptNodeKind.Project && n.IsExternal);
+            var otherFile = other is null ? null : nodes.FirstOrDefault(n => n.ParentId == other.Id);
+
+            Expect(solutionNode is not null && opened?.ParentId == solutionNode.Id && opened.IsEntry && other?.ParentId == solutionNode.Id && other.Name == "공용 (공유)" && otherFile?.Name == "공용.csx",
+                   "솔루션 탐색기 뿌리가 솔루션 - 열린 프로젝트(시작이면 굵게)와 다른 프로젝트·그 파일이 달린다",
+                   string.Join(" · ", nodes.Select(n => $"{n.Name}({n.Kind}{(n.IsExternal ? ",밖" : "")}{(n.IsEntry ? ",굵게" : "")})")));
+
+            if (other is not null)
+            {
+                solutionWorkspace.SelectedNode = other;
+
+                var canEdit = solutionWorkspace.EditProjectCommand.CanExecute(null);
+                var locked = !solutionWorkspace.DeleteCommand.CanExecute(null) && !solutionWorkspace.RenameCommand.CanExecute(null);
+                var switched = solutionWorkspace.EditProject(other) && string.Equals(solutionWorkspace.Project?.FilePath, shared.FilePath, StringComparison.OrdinalIgnoreCase);
+
+                Expect(canEdit && locked && switched, "다른 프로젝트 줄은 지우기·이름 바꾸기가 막히고 '이 프로젝트 편집' 으로 그리로 넘어간다",
+                       $"편집 켜짐 {canEdit} · 막힘 {locked} · 넘어감 {switched} ({solutionWorkspace.Project?.Name})");
+            }
+        }
+        finally
+        {
+            solutionWorkspace.CloseProject();
+            solutionWorkspace.Dispose();
+            SolutionWorkspace.Close();
         }
 
         return failures;

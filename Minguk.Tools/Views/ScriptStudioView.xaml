@@ -715,6 +715,9 @@
                                                 <dxg:TreeListView.RowCellMenuCustomizations>
                                                     <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.OpenNodeCommand}"
                                                                        Content="열기(_O)" />
+                                                    <!-- 솔루션의 다른 프로젝트 줄에서만 켜진다 - 그 프로젝트로 넘어가 파일을 더하고 지운다. -->
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.EditProjectCommand}"
+                                                                       Content="이 프로젝트 편집(_E)" />
                                                     <dxb:BarItemSeparator />
                                                     <dxb:BarSubItem Content="추가(_D)">
                                                         <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.AddNewFileCommand}"

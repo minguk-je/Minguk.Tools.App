@@ -176,6 +176,22 @@
                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                             TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
+            <!--
+                VS 2026 의 "▶ 프로젝트" - 시작 프로젝트의 완성품(bin\*.mtsx)을 플레이 화면에서 한 번 돌린다. 이름은 솔루션 탭에서 고른 시작 프로젝트.
+                여기서 고르지는 않는다(드롭다운 없음) - 솔루션 탭 위 칸과 어긋나지 않게. 단축키(F5·F6·Pause)는 화면들이 그대로 쥔다.
+            -->
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoRunStartupCommand}"
+                               Content="{Binding StartupName}"
+                               Glyph="{image:FreeImage ResourceName='axialis/multimedia/16x16/button_green_play.png'}"
+                               ToolTip="시작 프로젝트의 완성품을 플레이 화면에서 한 번 돌립니다. 완성품은 스크립트 화면에서 빌드(Ctrl+Shift+B)합니다." />
+            <dxb:BarButtonItem BarItemDisplayMode="Default"
+                               Command="{Binding DoStopCommand}"
+                               Content="중지"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
+                               ToolTip="플레이 화면의 실행을 멈춥니다." />
+            <dxb:BarItemSeparator />
+
             <dxb:BarCheckItem Padding="10,0,10,0"
                               BarItemDisplayMode="Default"
                               Content="최상위"

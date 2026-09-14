@@ -144,7 +144,7 @@ public sealed class ProjectTreeBehavior : Behavior<GridControl>
     {
         // F2·새 항목일 때만 열린다. 프로젝트 줄은 이름이 프로젝트 파일 이름이라 여기서 안 바꾼다.
         // 참조 줄·공유 프로젝트 파일도 여기서 안 바꾼다 - 그 목록은 이 프로젝트 것이 아니다.
-        e.Cancel = !_allowEdit || e.Node?.Content is ScriptProjectNode { Kind: ScriptNodeKind.Project or ScriptNodeKind.ProjectReference } or ScriptProjectNode { IsExternal: true };
+        e.Cancel = !_allowEdit || e.Node?.Content is ScriptProjectNode { Kind: ScriptNodeKind.Project or ScriptNodeKind.ProjectReference or ScriptNodeKind.Solution } or ScriptProjectNode { IsExternal: true };
     }
 
     private void OnHiddenEditor(object sender, TreeListEditorEventArgs e) => _allowEdit = false;

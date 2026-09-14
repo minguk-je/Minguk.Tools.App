@@ -266,6 +266,102 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         SelectedScript = item;
     });
 
+    // ── 셸의 ▶ 실행 ──────────────────────────────────────────────────────
+
+    private const string RunBuildAction = "Play.RunBuild";
+    private const string StopAction = "Play.Stop";
+
+    /// <summary>플레이 화면이 아직 안 떴을 때 받은 실행 요청. 화면이 뜨면(OnLoaded) 가져간다.</summary>
+    private static string? _pendingRunPath;
+
+    /// <summary>
+    /// 시작 프로젝트의 완성품 - <c>&lt;프로젝트&gt;\bin\&lt;이름&gt;.mtsx</c>. 이름이 같은 것이 없으면 bin 의 가장 최근 것. 없으면 null 과 이유.
+    /// </summary>
+    public static (string? Path, string? Reason) FindStartupBuild()
+    {
+        if (Projects.SolutionWorkspace.Current is not { } solution || solution.Startup() is not { } startup)
+            return (null, "솔루션·시작 프로젝트가 없습니다. 솔루션 메뉴에서 먼저 고르세요.");
+
+        var bin = Path.Combine(solution.DirectoryOf(startup), "bin");
+        var name = Projects.Solution.NameOf(startup);
+
+        if (Directory.Exists(bin))
+        {
+            var named = Path.Combine(bin, name + ScriptFiles.CompiledExtension);
+            if (File.Exists(named)) return (named, null);
+
+            var newest = new DirectoryInfo(bin).EnumerateFiles("*" + ScriptFiles.CompiledExtension).OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault();
+            if (newest is not null) return (newest.FullName, null);
+        }
+
+        return (null, $"'{name}' 완성품이 없습니다. 솔루션 탭의 스크립트 화면에서 빌드(Ctrl+Shift+B)하세요.");
+    }
+
+    /// <summary>
+    /// 셸의 ▶ 가 부른다 - 그 완성품을 골라 한 번 돌린다. 플레이 화면이 떠 있으면 곧바로, 아니면 뜨는 순간 돈다.
+    /// </summary>
+    /// <remarks>
+    /// 화면은 뜬 뒤(Loaded + 부모)에야 메신저를 받는다 - 방금 연 화면은 알림을 놓치므로 요청을 들고 있다가 <see cref="OnLoaded"/> 에서 가져간다.
+    /// </remarks>
+    public static void RequestRun(string buildPath)
+    {
+        _pendingRunPath = buildPath;
+        MessengerUtility.SendAction(typeof(PlayViewModel), RunBuildAction, string.Empty, buildPath);
+    }
+
+    /// <summary>셸의 ■ 가 부른다. 떠 있는 플레이 화면의 실행을 멈춘다.</summary>
+    public static void RequestStop()
+    {
+        _pendingRunPath = null;
+        MessengerUtility.SendAction(typeof(PlayViewModel), StopAction);
+    }
+
+    protected override void OnMessenger(MessengerUtility message)
+    {
+        base.OnMessenger(message);
+
+        if (message.MessageType != MessengerMessageType.Action) return;
+
+        if (message.Message == RunBuildAction && message.Value is string path) RunBuild(path);
+        else if (message.Message == StopAction) Guard(Player.Stop);
+    }
+
+    private void RunBuild(string path) => Guard(() =>
+    {
+        _pendingRunPath = null;
+
+        if (!Player.IsIdle)
+        {
+            MessengerUtility.SendMainMessage("플레이가 이미 돌고 있습니다. 멈춘 뒤 다시 누르세요.");
+            return;
+        }
+
+        if (!File.Exists(path))
+        {
+            MessengerUtility.SendMainMessage($"완성품이 없습니다: {path}");
+            return;
+        }
+
+        var item = Scripts.FirstOrDefault(s => string.Equals(s.Path, path, StringComparison.OrdinalIgnoreCase));
+
+        if (item is null)
+        {
+            RefreshScripts();
+            item = Scripts.FirstOrDefault(s => string.Equals(s.Path, path, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (item is null)
+        {
+            item = ScriptFileItem.From(path);
+            Scripts.Add(item);
+        }
+
+        SelectedScript = item;
+
+        Player.RunOnce();
+        MessengerUtility.SendMainMessage($"실행: {item.Name}");
+    });
+
     // ── 단축키 ───────────────────────────────────────────────────────────
 
     /// <summary>
@@ -347,6 +443,9 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         RegisterPlayHotkeys();
 
         _ = Script.PrepareAsync();
+
+        // 셸의 ▶ 로 열린 화면이면 들고 있던 요청을 돌린다.
+        if (_pendingRunPath is { } pending) RunBuild(pending);
     }
 
     protected override void ReleaseResources()

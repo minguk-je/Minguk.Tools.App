@@ -18,7 +18,10 @@ public enum ScriptNodeKind
     Reference,
 
     /// <summary>물고 있는 프로젝트(공유 프로젝트). 아래에 그 프로젝트의 소스가 달린다.</summary>
-    ProjectReference
+    ProjectReference,
+
+    /// <summary>솔루션 - 탐색기 뿌리. 아래에 솔루션의 프로젝트들이 달린다.</summary>
+    Solution
 }
 
 /// <summary>
@@ -50,7 +53,7 @@ public sealed class ScriptProjectNode : ViewModelBase
 
     public ScriptNodeKind Kind { get; }
 
-    public bool IsFolder => Kind is ScriptNodeKind.Folder or ScriptNodeKind.Project;
+    public bool IsFolder => Kind is ScriptNodeKind.Folder or ScriptNodeKind.Project or ScriptNodeKind.Solution;
 
     /// <summary>시작 파일. 굵게 그린다.</summary>
     public bool IsEntry
@@ -95,6 +98,7 @@ public sealed class ScriptProjectNode : ViewModelBase
     public ImageSource? Glyph => FreeImage.Instance?.CacheImageSource(Kind switch
     {
         ScriptNodeKind.Project or ScriptNodeKind.ProjectReference => "axialispureflat/development/16x16/project_csharp.png",
+        ScriptNodeKind.Solution => "axialis/basic/16x16/folder_open.png",
         ScriptNodeKind.Folder => "axialis/basic/16x16/folder.png",
         ScriptNodeKind.Source => "axialispureflat/development/16x16/file_csharp.png",
         ScriptNodeKind.Reference => "axialispureflat/development/16x16/dll.png",
