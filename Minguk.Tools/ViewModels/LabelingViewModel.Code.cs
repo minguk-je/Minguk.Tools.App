@@ -139,6 +139,10 @@ public partial class LabelingViewModel
             StatusText = $"{item.Name} - 읽을 수 없는 줄 {skipped}개를 건너뛰었습니다.";
 
         RaiseListCommands();
+
+        // 라벨이 없는 그림이면 자동 라벨을 알아서 - 목록을 다시 채우는 중의 선택 변경은 사람이 넘긴 것이 아니다.
+        if (!_isReloading && AutoDetectNewImages && Boxes.Count == 0)
+            _ = GuardAsync(() => AutoDetectSoonAsync(item));
     });
 
     /// <summary>

@@ -135,6 +135,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
         TrainEpochs = GetSetting(nameof(TrainEpochs), 20);
         ShowTrainingBatch = GetSetting(nameof(ShowTrainingBatch), false);
+        AutoDetectNewImages = GetSetting(nameof(AutoDetectNewImages), true);
 
         // 목록에 없는 값(손으로 고친 설정)이면 640.
         var size = GetSetting("YoloImageSize", Vision.Training.YoloTrainer.DefaultImageSize);
@@ -224,6 +225,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
     {
         SetSetting(nameof(TrainEpochs), TrainEpochs);
         SetSetting(nameof(ShowTrainingBatch), ShowTrainingBatch);
+        SetSetting(nameof(AutoDetectNewImages), AutoDetectNewImages);
         SetSetting("YoloImageSize", SelectedYoloImageSize);
         SetSetting(nameof(MinimumScore), MinimumScore);
         SetSetting(nameof(LabelZoom), LabelZoom);

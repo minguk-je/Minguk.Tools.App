@@ -423,6 +423,19 @@ public partial class LabelingViewModel
     }
 
     /// <summary>
+    /// 라벨이 하나도 없는 그림으로 넘어가면 자동 라벨을 알아서 돌린다(사용자, 2026-09-15). 저장한다, 기본 켬.
+    /// </summary>
+    /// <remarks>
+    /// 방향키로 휙휙 넘기는 동안은 안 돌린다 - 멈춘 뒤 0.25초. 찍어 둔 라벨이 있는 그림은 건드리지 않는다(점선이 실선 위에 겹쳐 헷갈린다).
+    /// 학습하는 동안은 쉰다 - 같은 카드에서 CUDA 학습과 DirectML 추론이 겹쳐 GPU 가 리셋된 적이 있다(TrainingActivity).
+    /// </remarks>
+    public bool AutoDetectNewImages
+    {
+        get => GetProperty(() => AutoDetectNewImages);
+        set => SetProperty(() => AutoDetectNewImages, value);
+    }
+
+    /// <summary>
     /// 이보다 신뢰도가 낮은 것은 안 보여 준다.
     /// </summary>
     /// <remarks>

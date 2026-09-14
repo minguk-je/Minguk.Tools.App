@@ -544,6 +544,11 @@
                                                  Command="{Binding DoClearPredictionsCommand}"
                                                  Content="자동 라벨 지우기"
                                                  ToolTip="확정하지 않은 자동 라벨(점선)만 지웁니다. 내가 찍어 둔 라벨(실선)은 그대로입니다." />
+                                <!-- 라벨 없는 그림으로 넘어가면 자동 라벨을 알아서(2026-09-15). 학습한 모델이 있어야 돈다. -->
+                                <dxe:CheckEdit VerticalAlignment="Center"
+                                               Content="새 그림은 자동으로"
+                                               IsChecked="{Binding AutoDetectNewImages, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                               ToolTip="라벨이 하나도 없는 그림으로 넘어가면 '자동 라벨' 을 알아서 누릅니다(멈춘 뒤 0.25초).&#10;학습한 모델이 있어야 합니다 - 몇십 장을 손으로 찍고 한 번 학습하면 그다음부터 점선이 뜹니다.&#10;찍어 둔 라벨이 있는 그림은 건드리지 않고, 학습하는 동안은 쉽니다. 맞으면 '라벨 확정' 을 누르세요." />
                                 <dxlc:LayoutItem Label="결과">
                                     <dxe:TextEdit EditValue="{Binding DetectStatus, Mode=OneWay}"
                                                   IsReadOnly="True"
