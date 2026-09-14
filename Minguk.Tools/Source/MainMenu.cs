@@ -72,7 +72,8 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             isExpanded: true,
             showInCollapsedMode: false,
             canSelect: true,
-            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/document-edit.png")).RequireSolution());
+            // 솔루션 → 프로젝트 계층(VS 솔루션 탐색기)을 떠올리게 나무 모양(사용자, 2026-09-15).
+            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/tree.png")).RequireSolution());
 
         // ── 플레이 : 돌리는 쪽 ──────────────────────────────────────────
         // 빌드한 완성품(Player 폴더)만 고른다 - 솔루션을 고를 필요가 없어 문을 안 거친다.
