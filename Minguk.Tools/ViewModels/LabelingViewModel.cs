@@ -59,6 +59,8 @@ public partial class LabelingViewModel : DocumentViewModelBase
         DoClearPredictionsCommand = new DelegateCommand(DoClearPredictions, () => Predictions.Count > 0, false);
         DoAdoptPredictionsCommand = new DelegateCommand(DoAdoptPredictions, () => Predictions.Count > 0, false);
         DoZoomResetCommand = new DelegateCommand(() => LabelZoom = 1, false);
+        InitializeVideoCommands();
+        ExtractInterval = "1초";
 
         // 0 이면 캔버스가 0.5 로 잘라 보이는데 콤보는 0% 라 어긋난다. 저장값은 RestoreSettings 가 덮는다.
         LabelZoom = 1;
@@ -136,6 +138,9 @@ public partial class LabelingViewModel : DocumentViewModelBase
         TrainEpochs = GetSetting(nameof(TrainEpochs), 20);
         ShowTrainingBatch = GetSetting(nameof(ShowTrainingBatch), false);
         AutoDetectNewImages = GetSetting(nameof(AutoDetectNewImages), true);
+
+        var extractInterval = GetSetting(nameof(ExtractInterval), "1초");
+        ExtractInterval = ExtractIntervalChoices.Contains(extractInterval) ? extractInterval : "1초";
 
         // 목록에 없는 값(손으로 고친 설정)이면 640.
         var size = GetSetting("YoloImageSize", Vision.Training.YoloTrainer.DefaultImageSize);
@@ -226,6 +231,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
         SetSetting(nameof(TrainEpochs), TrainEpochs);
         SetSetting(nameof(ShowTrainingBatch), ShowTrainingBatch);
         SetSetting(nameof(AutoDetectNewImages), AutoDetectNewImages);
+        SetSetting(nameof(ExtractInterval), ExtractInterval ?? "1초");
         SetSetting("YoloImageSize", SelectedYoloImageSize);
         SetSetting(nameof(MinimumScore), MinimumScore);
         SetSetting(nameof(LabelZoom), LabelZoom);

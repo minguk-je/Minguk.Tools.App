@@ -214,8 +214,8 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
         multithread.SetMultithreadProtected(true);
     }
 
-    /// <summary>RGB32 로 풀어 주는 리더. 오디오는 끈다(쌓이기만 한다).</summary>
-    private static IMFSourceReader CreateReader(string path)
+    /// <summary>RGB32 로 풀어 주는 리더. 오디오는 끈다(쌓이기만 한다). 영상에서 그림 뽑기(<see cref="Recording.MediaFoundationVideoFrameExtractor"/>)도 쓴다.</summary>
+    internal static IMFSourceReader CreateReader(string path)
     {
         using var attributes = MediaFactory.MFCreateAttributes(1);
         attributes.Set(SourceReaderAttributeKeys.EnableAdvancedVideoProcessing, 1u);
@@ -241,7 +241,7 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
         }
     }
 
-    private static (int Width, int Height) OutputSize(IMFSourceReader reader)
+    internal static (int Width, int Height) OutputSize(IMFSourceReader reader)
     {
         using var current = reader.GetCurrentMediaType(SourceReaderIndex.FirstVideoStream);
         var packed = current.GetUInt64(MediaTypeAttributeKeys.FrameSize);
@@ -346,7 +346,7 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
     }
 
     /// <summary>샘플을 위에서 아래로·알파 255 인 BGRA 로 옮긴다. 2D 버퍼면 줄 폭 부호(아래에서 위)를 따른다.</summary>
-    private static unsafe void CopyPixels(IMFSample sample, byte[] destination, int width, int height)
+    internal static unsafe void CopyPixels(IMFSample sample, byte[] destination, int width, int height)
     {
         using var buffer = sample.ConvertToContiguousBuffer();
         using var buffer2D = buffer.QueryInterfaceOrNull<IMF2DBuffer>();

@@ -60,6 +60,9 @@
             실제로 그랬다 - 학습 시작을 눌러도 화면이 그대로였다.
         -->
         <dx:DXMessageBoxService />
+
+        <!-- 영상에서 뽑기 - 영상을 고르는 대화 상자. 빠뜨리면 Guard 가 예외를 삼켜 버튼이 아무 일도 안 한다. -->
+        <dxmvvm:OpenFileDialogService />
     </dxmvvm:Interaction.Behaviors>
 
     <DockPanel LastChildFill="True">
@@ -94,6 +97,27 @@
                                Content="다시 읽기"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
                                ToolTip="캡처 화면에서 새로 담은 그림을 가져옵니다." />
+
+            <dxb:BarItemSeparator />
+
+            <!-- 영상에서 뽑기(2026-09-15) - 녹화 영상에서 간격마다 한 장씩 데이터셋에 넣는다. 새 그림은 자동 라벨이 돈다. -->
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoExtractVideoCommand}"
+                               Content="영상에서 뽑기"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_record.png'}"
+                               ToolTip="녹화한 영상(mp4)을 골라 옆 간격마다 한 장씩 뽑아 이 데이터셋에 넣습니다.&#10;앞 장과 거의 같은 장면(멈춘 화면)은 건너뛰고, 같은 영상을 다시 뽑으면 이미 넣은 장은 건너뜁니다.&#10;넣은 그림은 라벨이 없어 '새 그림은 자동으로' 가 켜져 있으면 자동 라벨이 돕니다 - 학습한 모델이 그 게임을 알 때만 점선이 뜹니다." />
+            <dxb:BarEditItem Content="간격"
+                             EditValue="{Binding ExtractInterval, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             EditWidth="64"
+                             ToolTip="영상 시각으로 몇 초마다 한 장씩 뽑을지. 짧을수록 비슷한 그림이 많아집니다.">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                              ItemsSource="{Binding ExtractIntervalChoices}" />
+                </dxb:BarEditItem.EditSettings>
+            </dxb:BarEditItem>
+            <dxb:BarButtonItem Command="{Binding DoCancelExtractVideoCommand}"
+                               Content="뽑기 중지"
+                               ToolTip="영상에서 뽑던 것을 멈춥니다. 그때까지 뽑은 그림은 남습니다." />
 
             <dxb:BarItemSeparator />
 

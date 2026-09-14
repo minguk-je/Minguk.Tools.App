@@ -211,6 +211,125 @@ internal static partial class Program
     }
 
     /// <summary>
+    /// 영상에서 뽑기 - 1초마다 한 장, 이름, 다시 뽑으면 건너뜀, 멈춘 화면은 건너뜀, 뽑은 그림이 바른 방향.
+    /// </summary>
+    private static void TestVideoFrameExtractor()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "minguk-extract-" + Guid.NewGuid().ToString("N")[..8]);
+        var images = Path.Combine(folder, "Images");
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            const int width = 640, height = 360, fps = 30;
+
+            // 매초 위 절반 색이 바뀌는 3.5초 영상(아래 절반은 늘 파랑) · 3.5초 내내 같은 화면.
+            var changing = Path.Combine(folder, "바뀜.mp4");
+            var still = Path.Combine(folder, "멈춤.mp4");
+            MakeSecondsVideo(changing, width, height, fps, 105, second => second switch { 0 => (255, 0, 0), 1 => (0, 200, 0), 2 => (255, 255, 0), _ => (255, 255, 255) });
+            MakeSecondsVideo(still, width, height, fps, 105, _ => (255, 0, 0));
+
+            var extractor = VideoFrameExtractorFactory.Create();
+            var clock = Stopwatch.StartNew();
+            var first = extractor.ExtractAsync(changing, images, TimeSpan.FromSeconds(1), null, CancellationToken.None).GetAwaiter().GetResult();
+            var elapsed = clock.Elapsed;
+
+            var names = first.SavedPaths.Select(Path.GetFileName).ToArray();
+            var expected = new[] { "바뀜-00000.0s.png", "바뀜-00001.0s.png", "바뀜-00002.0s.png", "바뀜-00003.0s.png" };
+
+            Check("영상에서 뽑기: 1초마다 한 장, 이름은 영상이름-초.png",
+                  names.SequenceEqual(expected) && first.SavedPaths.All(File.Exists) && first.SkippedSimilar == 0,
+                  $"{string.Join(", ", names)} · 비슷해 건너뜀 {first.SkippedSimilar} · 길이 {first.Duration.TotalSeconds:0.0}초 · {elapsed.TotalMilliseconds:0}ms");
+
+            // 뽑은 그림 - 크기, 위 절반이 그 초의 색, 아래 절반 파랑(뒤집히지 않았다).
+            var look = string.Empty;
+            var lookOk = first.SavedPaths.Count == 4;
+
+            if (lookOk)
+            {
+                var decoder = new System.Windows.Media.Imaging.PngBitmapDecoder(new Uri(first.SavedPaths[1]), System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                var frame = new System.Windows.Media.Imaging.FormatConvertedBitmap(decoder.Frames[0], System.Windows.Media.PixelFormats.Bgra32, null, 0);
+                var pixels = new byte[frame.PixelWidth * frame.PixelHeight * 4];
+                frame.CopyPixels(pixels, frame.PixelWidth * 4, 0);
+
+                byte[] At(int x, int y) => pixels.AsSpan((y * frame.PixelWidth + x) * 4, 4).ToArray();
+                var top = At(width / 2, height / 4);
+                var bottom = At(width / 2, height * 3 / 4);
+
+                lookOk = frame.PixelWidth == width && frame.PixelHeight == height && top[1] > 150 && top[2] < 60 && bottom[0] > 200 && bottom[2] < 60;
+                look = $"{frame.PixelWidth}x{frame.PixelHeight} · 1초 장 위 BGR({top[0]},{top[1]},{top[2]}) · 아래 BGR({bottom[0]},{bottom[1]},{bottom[2]})";
+            }
+
+            Check("영상에서 뽑기: 뽑은 그림이 바른 크기·방향·그 초의 장면이다", lookOk, look);
+
+            var again = extractor.ExtractAsync(changing, images, TimeSpan.FromSeconds(1), null, CancellationToken.None).GetAwaiter().GetResult();
+
+            Check("영상에서 뽑기: 같은 영상을 다시 뽑으면 이미 넣은 장은 덮지 않고 건너뛴다",
+                  again.SavedPaths.Count == 0 && again.SkippedExisting == 4 && Directory.GetFiles(images, "바뀜-*.png").Length == 4,
+                  $"새로 {again.SavedPaths.Count} · 이미 있음 {again.SkippedExisting}");
+
+            var stillResult = extractor.ExtractAsync(still, images, TimeSpan.FromSeconds(1), null, CancellationToken.None).GetAwaiter().GetResult();
+
+            Check("영상에서 뽑기: 멈춘 화면은 첫 장만 넣고 나머지는 건너뛴다",
+                  stillResult.SavedPaths.Count == 1 && stillResult.SkippedSimilar == 3,
+                  $"넣음 {stillResult.SavedPaths.Count} · 비슷해 건너뜀 {stillResult.SkippedSimilar}");
+
+            Check("영상에서 뽑기: 임시 파일(.tmp)이 남지 않는다", Directory.GetFiles(images, "*.tmp").Length == 0, $"{Directory.GetFiles(images, "*.tmp").Length}개");
+        }
+        finally
+        {
+            try { Directory.Delete(folder, true); } catch (Exception) { }
+        }
+    }
+
+    /// <summary>초마다 위 절반 색이 바뀌는 영상. 아래 절반은 늘 파랑.</summary>
+    private static void MakeSecondsVideo(string path, int width, int height, int fps, int frames, Func<int, (int R, int G, int B)> topColor)
+    {
+        var pitch = width * 4;
+        var buffer = new byte[pitch * height];
+        var pixels = Marshal.AllocHGlobal(buffer.Length);
+
+        try
+        {
+            using var recorder = new MediaFoundationVideoRecorder(path, fps);
+            var start = Stopwatch.GetTimestamp();
+
+            for (var i = 0; i < frames; i++)
+            {
+                var (r, g, b) = topColor(i / fps);
+
+                for (var y = 0; y < height; y++)
+                {
+                    var isTop = y < height / 2;
+
+                    for (var x = 0; x < width; x++)
+                    {
+                        var at = y * pitch + x * 4;
+                        buffer[at] = (byte)(isTop ? b : 255);
+                        buffer[at + 1] = (byte)(isTop ? g : 0);
+                        buffer[at + 2] = (byte)(isTop ? r : 0);
+                        buffer[at + 3] = 255;
+                    }
+                }
+
+                Marshal.Copy(buffer, 0, pixels, buffer.Length);
+
+                var timestamp = start + (long)(i * Stopwatch.Frequency / (double)fps);
+                var waited = Stopwatch.StartNew();
+
+                while (!recorder.TryAddFrame(pixels, pitch, width, height, timestamp) && recorder.Error is null && waited.ElapsedMilliseconds < 3000)
+                    Thread.Sleep(5);
+            }
+
+            recorder.Finish();
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(pixels);
+        }
+    }
+
+    /// <summary>
     /// fps 상한 - 흔들리는 원본(도착 간격이 ±4ms 흔들리는 60Hz·144Hz)을 상한으로 솎으면 상한 가까이 받는가.
     /// 예전 규칙(직전 도착 + 90%)은 실제 모니터에서 상한 60 에 31~58fps 였다(<c>--capture-fps</c>).
     /// </summary>

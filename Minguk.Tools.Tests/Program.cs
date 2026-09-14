@@ -83,6 +83,20 @@ internal static partial class Program
         // 라벨링 화면의 YOLO 학습 길을 화면 없이 돌린다. 들이기까지 하므로 --root 로 시험 폴더를 준다(GPU 를 쓴다).
         if (args.Contains("--yolo-train")) return YoloTrainProbe.Run(args);
 
+        // 영상에서 뽑기를 실제 녹화본으로 잰다(속도). --extract-video=<mp4> --out=<폴더> [--interval=1]
+        if (ArgValue(args, "--extract-video=") is { } extractVideo)
+        {
+            var output = ArgValue(args, "--out=") ?? System.IO.Path.Combine(System.IO.Path.GetTempPath(), "minguk-extract-probe");
+            var seconds = double.Parse(ArgValue(args, "--interval=") ?? "1", CultureInfo.InvariantCulture);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var result = Minguk.Tools.Capture.Recording.VideoFrameExtractorFactory.Create()
+                .ExtractAsync(extractVideo, output, TimeSpan.FromSeconds(seconds), null, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+
+            Console.WriteLine($"[INFO] 길이 {result.Duration.TotalSeconds:0.0}초 · 넣음 {result.SavedPaths.Count} · 비슷해 건너뜀 {result.SkippedSimilar} · 이미 있음 {result.SkippedExisting} · " +
+                              $"{watch.Elapsed.TotalSeconds:0.0}초 걸림 ({watch.Elapsed.TotalSeconds / Math.Max(1, result.Duration.TotalSeconds):0.00}초/영상 1초) · {output}");
+            return 0;
+        }
+
         // 모니터 캡처 fps 를 화면 내용 없이/있게 잰다. 화면에 창을 몇 초 띄운다. --capture-fps[=모니터 번호]
         if (args.Any(a => a.StartsWith("--capture-fps", StringComparison.OrdinalIgnoreCase))) return CaptureFpsProbe.Run(ArgValue(args, "--capture-fps="));
 
@@ -196,6 +210,7 @@ internal static partial class Program
         TestVideoRecorder();
         TestVideoCapture();
         TestFrameRateLimiter();
+        TestVideoFrameExtractor();
         TestScriptProject();
         TestScriptWorkspace();
     }
