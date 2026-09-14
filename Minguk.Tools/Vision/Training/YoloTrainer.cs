@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -95,6 +96,16 @@ public static class YoloTrainer
                                      "--model", weights, "--epochs", epochs.ToString(CultureInfo.InvariantCulture),
                                      "--batch", batch.ToString(CultureInfo.InvariantCulture), "--device", device.ToString(CultureInfo.InvariantCulture) })
             start.ArgumentList.Add(arg);
+
+        // 묶음 그림의 상자 색을 라벨링 화면의 몹 색으로 - 사람이 고른 색, 안 고른 번호는 화면과 같은 기본 색(황금각).
+        var classCount = dataset.LoadClasses().Count;
+        if (classCount > 0)
+        {
+            var palette = dataset.LoadPalette().Snapshot(classCount);
+
+            start.ArgumentList.Add("--colors");
+            start.ArgumentList.Add(string.Join(",", palette.Select(color => $"{color.R:X2}{color.G:X2}{color.B:X2}")));
+        }
 
         start.Environment["PYTHONUTF8"] = "1";
 

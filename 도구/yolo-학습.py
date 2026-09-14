@@ -80,6 +80,24 @@ def allow_capital_folders() -> None:
     dataset.img2label_paths = img2label_paths
 
 
+def use_class_colors(hexes: str | None) -> None:
+    """
+    묶음 그림의 상자 색을 라벨링 화면의 몹 색으로(사용자, 2026-09-15). `--colors FF0000,00A0FF` - 자리가 몹 번호.
+
+    plot_images 는 모듈 전역 `colors`(Ultralytics 기본 20색)로 번호 색을 고른다 - 그 팔레트를 우리 색으로 갈아 끼운다.
+    그림이 RGB(PIL)라 RGB 로 넣는다. 안 주면 Ultralytics 기본 색 그대로.
+    """
+    if not hexes:
+        return
+
+    import ultralytics.utils.plotting as plotting
+
+    palette = [tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) for h in hexes.split(",") if len(h) == 6]
+    if palette:
+        plotting.colors.palette = palette
+        plotting.colors.n = len(palette)
+
+
 def report_progress(model, runs: Path) -> None:
     """
     앱이 학습을 따라가게 두 가지를 찍는다(사용자, 2026-09-15 - 라벨링 화면에서 학습하는 모습을 보고 싶다).
@@ -147,6 +165,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--device", default="0")
+    parser.add_argument("--colors", default=None, help="몹 번호 순서의 색 RRGGBB 를 쉼표로(묶음 그림 상자 색)")
     args = parser.parse_args()
 
     root, runs = Path(args.root), Path(args.runs)
@@ -161,6 +180,7 @@ def main() -> None:
     from ultralytics import YOLO  # 무겁다(torch). 인자 오류는 이것을 읽기 전에 끝낸다.
 
     allow_capital_folders()
+    use_class_colors(args.colors)
 
     started = time.time()
     model = YOLO(f"{args.model}.pt")
