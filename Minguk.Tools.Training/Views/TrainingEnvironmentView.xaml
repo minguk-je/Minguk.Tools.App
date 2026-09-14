@@ -74,6 +74,9 @@
                                         ToolTip="폴더를 고릅니다.">
                             <Image Width="16"
                                    Height="16"
+                                   Margin="0,2,0,0"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
                                    Source="{image:FreeImage ResourceName='axialis/basic/16x16/folder_open.png'}" />
                         </dxe:ButtonInfo>
                     </dxe:ButtonEdit.Buttons>
@@ -92,6 +95,9 @@
                                         ToolTip="폴더를 고릅니다.">
                             <Image Width="16"
                                    Height="16"
+                                   Margin="0,2,0,0"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
                                    Source="{image:FreeImage ResourceName='axialis/basic/16x16/folder_open.png'}" />
                         </dxe:ButtonInfo>
                     </dxe:ButtonEdit.Buttons>

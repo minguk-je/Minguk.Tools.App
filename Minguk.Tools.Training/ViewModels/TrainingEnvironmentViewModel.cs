@@ -44,7 +44,7 @@ public class TrainingEnvironmentViewModel : DocumentViewModelBase
 
     protected TrainingEnvironmentViewModel()
     {
-        Caption = "환경";
+        Caption = "환경설정";
         CaptionImage = Minguk.Image.FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/gear.png");
 
         Items = [];

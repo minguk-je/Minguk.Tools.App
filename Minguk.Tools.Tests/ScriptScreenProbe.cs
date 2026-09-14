@@ -119,6 +119,7 @@ internal static class ScriptScreenProbe
                 failures += await CheckPreviewZoom(window, vm);
                 failures += await CheckRegionCanvas(window, vm);
                 failures += await CheckSplitAndBars(window, vm);
+                failures += VerticalAlignmentCheck.Report((FrameworkElement)window.Content, "스크립트 화면");
 
                 Render(window, output);
                 Console.WriteLine($"[INFO] 화면을 찍었다: {output}");

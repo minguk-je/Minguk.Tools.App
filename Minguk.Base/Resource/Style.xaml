@@ -220,7 +220,8 @@
         <Setter Property="ContentTemplate">
             <Setter.Value>
                 <DataTemplate>
-                    <TextBlock Text="{Binding}" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding}" />
                 </DataTemplate>
             </Setter.Value>
         </Setter>
@@ -230,7 +231,8 @@
         <Setter Property="ContentTemplate">
             <Setter.Value>
                 <DataTemplate>
-                    <TextBlock Text="{Binding}" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding}" />
                 </DataTemplate>
             </Setter.Value>
         </Setter>
@@ -240,7 +242,8 @@
         <Setter Property="ContentTemplate">
             <Setter.Value>
                 <DataTemplate>
-                    <TextBlock Text="{Binding}" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding}" />
                 </DataTemplate>
             </Setter.Value>
         </Setter>
@@ -250,7 +253,8 @@
         <Setter Property="ContentTemplate">
             <Setter.Value>
                 <DataTemplate>
-                    <TextBlock Text="{Binding}" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding}" />
                 </DataTemplate>
             </Setter.Value>
         </Setter>
@@ -258,7 +262,8 @@
         <Setter Property="Content2Template">
             <Setter.Value>
                 <DataTemplate>
-                    <TextBlock Text="{Binding}" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding}" />
                 </DataTemplate>
             </Setter.Value>
         </Setter>

@@ -98,6 +98,26 @@ public static class EnvironmentScreenProbe
                 }
                 else Console.WriteLine("[PASS] 환경 화면 바인딩 오류 없음");
 
+                failures += VerticalAlignmentCheck.Report((FrameworkElement)window.Content, "환경 화면");
+
+                // 폴더 칸 안의 폴더 그림 - 버튼 칸의 가로·세로 가운데에 있어야 한다(사용자 2026-09-14).
+                foreach (var image in Descendants<System.Windows.Controls.Image>(window).Where(i => i.IsVisible && i.ActualWidth > 0))
+                {
+                    FrameworkElement? button = null;
+                    for (DependencyObject? d = VisualTreeHelper.GetParent(image); d is not null; d = VisualTreeHelper.GetParent(d))
+                        if (d is System.Windows.Controls.Primitives.ButtonBase b) { button = b; break; }
+
+                    if (button is null) continue;
+
+                    var origin = image.TransformToAncestor(button).Transform(new Point(0, 0));
+                    var dx = origin.X + image.ActualWidth / 2 - button.ActualWidth / 2;
+                    var dy = origin.Y + image.ActualHeight / 2 - button.ActualHeight / 2;
+
+                    Console.WriteLine($"[INFO] 폴더 그림: 버튼 {button.ActualWidth:0}x{button.ActualHeight:0} · 가운데에서 가로 {dx:+0.0;-0.0}px 세로 {dy:+0.0;-0.0}px");
+
+                    if (Math.Abs(dx) > 1 || Math.Abs(dy) > 1) { Console.WriteLine("[FAIL] 폴더 그림이 버튼 가운데에 있지 않다"); failures++; }
+                }
+
                 Render(window, output);
                 Console.WriteLine($"[INFO] 화면을 찍었다: {output}");
             }

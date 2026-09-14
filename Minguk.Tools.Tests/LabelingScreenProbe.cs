@@ -146,6 +146,8 @@ public static class LabelingScreenProbe
                 }
                 else Console.WriteLine("[PASS] 라벨링 화면 바인딩 오류 없음");
 
+                failures += VerticalAlignmentCheck.Report((FrameworkElement)window.Content, "라벨링 화면");
+
                 Render(window, output);
                 Console.WriteLine($"[INFO] 화면을 찍었다: {output}");
             }

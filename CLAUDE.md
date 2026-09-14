@@ -1358,6 +1358,13 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --scale-check         # 실�
   - 메뉴·도구 모음·상태 표시줄은 BarManager, 단축키는 VS 2026 과 같게.
   - **리스트성 데이터(목록·표·트리)는 GridControl**. 트리는 GridControl + `TreeListView`. ListBox·ListView 로 목록을 새로 만들지 않는다.
   - 컨트롤도 **대부분 DevExpress WPF**. 표준 WPF 는 DevExpress 에 없는 것만(AvalonEdit 편집기 등).
+  - **한 줄에 놓인 컨트롤은 모두 세로 가운데 정렬**(사용자, 2026-09-14) - 도구 줄 글자·버튼·입력 칸, 폼 칸의 라벨과 칸.
+    글자를 담는 템플릿의 `TextBlock` 에는 `VerticalAlignment="Center"` 를 적는다. 도구 줄 항목의 글자 템플릿은 `Minguk.Base/Resource/Style.xaml`
+    (`BarStaticItem`·`BarButtonItem`·`BarCheckItem`·`BarEditItem` 의 `ContentTemplate`/`Content2Template`)이 들고 있다 - 거기 정렬이 없어
+    `ToolBarControl` 에 바로 둔 편집 항목(라벨링 화면 "폴더"·"진행"·"확대")의 글자가 칸보다 2.5px 떠 있었다(실측). 글자 상자는 칸 높이(22px)로
+    늘어나는데 글자는 그 상자의 맨 위에 그려져서, 상자 가운데끼리는 같아 보여도 글자만 뜬다.
+    검사: `--labeling-screen`·`--script-screen`·`--environment-screen` 의 `VerticalAlignmentCheck` - 실제 글자 줄 높이로 재어 1.5px 넘게 어긋나면 FAIL.
+    새 화면을 찍는 검사를 만들면 이 줄도 넣는다.
 - 그리드는 `Minguk.Base.Controls.BaseGridControl` / `BaseTableView` 를 쓴다. 기본값이 이미 잡혀 있다.
   - 행 번호를 쓸 때(`GridControlDependency.IsRowNumber="True"`) **화면에서 `IndicatorWidth` 를 물려야 한다.**
     `InitRowIndicatorWidth` 가 폭을 계산해 두지만 인디케이터 칸에 연결하는 쪽이 없으면 세 자리부터 앞이 잘린다.

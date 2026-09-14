@@ -65,7 +65,7 @@ public class MainMenu : ObservableCollection<MenuItemModel>
         // 플레이(돌리는 쪽)와 입력 테스트(점검 도구)는 역할이 달라 따로 뺐다 - 만드는 일과 섞이면 한 탭 줄에 셋이 뒤섞였다.
         rootItem.AddChildren(MenuItemModel.Create(
             menu_cd: "1100",
-            menu_nm: "빌더",
+            menu_nm: "솔루션",
             dll_nm: "Minguk.Tools.dll",
             class_nm: AutomationClassName,
             is_enable: true,
@@ -89,7 +89,7 @@ public class MainMenu : ObservableCollection<MenuItemModel>
 
         // ── 입력 테스트 : 점검 도구 ──────────────────────────────────────
         // 입력 경로(SendInput·PostMessage·Interception)가 대상에 먹는지 본다. 솔루션과 상관없다.
-        rootItem.AddChildren(MenuItemModel.Create(
+        menuItemList.Add(MenuItemModel.Create(
             menu_cd: "1300",
             menu_nm: "입력 테스트",
             dll_nm: "Minguk.Tools.dll",

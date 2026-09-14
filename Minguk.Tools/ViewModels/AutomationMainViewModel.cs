@@ -44,7 +44,7 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
 
     protected AutomationMainViewModel()
     {
-        Caption = "빌더";
+        Caption = "솔루션";
 
         Solutions = [];
         Projects = [];

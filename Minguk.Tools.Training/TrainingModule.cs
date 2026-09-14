@@ -36,7 +36,7 @@ public sealed class TrainingModule : IToolModule
     {
         yield return MenuItemModel.Create(
             menu_cd: "2100",
-            menu_nm: "환경",
+            menu_nm: "환경설정",
             dll_nm: "Minguk.Tools.Training.dll",
             class_nm: "Minguk.Tools.Training.Views.TrainingEnvironmentView",
             is_enable: true,

@@ -391,7 +391,7 @@
                                     <dxg:GridColumn Style="{StaticResource GridColumn.RowNumber.Style}" />
 
                                     <!-- 사각형 색. 처음에는 번호에서 만든 기본 색이고, 더블 클릭해 고르면 class-colors.json 에 남는다. -->
-                                    <dxg:GridColumn Width="37" AllowEditing="True" FieldName="Color" Header="색">
+                                    <dxg:GridColumn Width="40" AllowEditing="True" FieldName="Color" Header="색">
                                         <dxg:GridColumn.EditSettings>
                                             <dxe:PopupColorEditSettings DisplayMode="Color" />
                                         </dxg:GridColumn.EditSettings>
@@ -429,9 +429,33 @@
                                             VerticalAlignment="Top"
                                             Orientation="Vertical">
 
+                            <!--
+                                몹 찾기에 쓸 모델을 고른다(2026-09-14). 목록은 데이터셋 폴더의 보관본(detector.<이름>.onnx).
+                                고르면 그 모델이 몹 찾기 자리(detector.onnx)에 앉고 켜 둔 스크립트·플레이 화면도 따라온다. 옆 글은 그 모델의 쪽지 한 줄.
+                                시험은 YOLO11n, 넘겨줄 때는 D-FINE-N (YOLO 는 AGPL). 학습 중에는 못 바꾼다.
+                            -->
+                            <dxlc:LayoutItem Label="쓰는 모델">
+                                <DockPanel LastChildFill="True">
+                                    <dxe:ComboBoxEdit Width="280"
+                                                      Margin="0,0,8,0"
+                                                      DisplayMember="Name"
+                                                      DockPanel.Dock="Left"
+                                                      IsEnabled="{Binding IsTraining, Converter={StaticResource NotBool}}"
+                                                      IsTextEditable="False"
+                                                      ItemsSource="{Binding ModelChoices}"
+                                                      NullText="(목록에 없는 모델)"
+                                                      SelectedItem="{Binding SelectedModelChoice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      ToolTip="몹 찾기에 쓸 모델. 시험은 YOLO11n, 넘겨줄 때는 D-FINE-N 으로 고릅니다(YOLO 는 AGPL)." />
+                                    <TextBlock VerticalAlignment="Center"
+                                               Foreground="#666666"
+                                               Text="{Binding ModelSummary}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+                            </dxlc:LayoutItem>
+
                             <!-- 학습 -->
                             <dxlc:LayoutGroup Orientation="Horizontal">
-                                <dxlc:LayoutItem Width="170"
+                                <dxlc:LayoutItem Width="140"
                                                  Label="바퀴(epoch)">
                                     <dxe:SpinEdit EditValue="{Binding TrainEpochs, Mode=TwoWay}"
                                                   IsEnabled="{Binding IsTraining, Converter={StaticResource NotBool}}"
@@ -440,7 +464,8 @@
                                                   ToolTip="적으면 아무것도 못 배우고 많으면 외워 버립니다." />
                                 </dxlc:LayoutItem>
                                 <!-- 아래 '쓰는 모델' 콤보에 고른 모델로 학습한다(TrainButtonText). YOLO 는 yolo-venv, D-FINE 은 제 저장소를 돌린다. -->
-                                <dx:SimpleButton MinWidth="110"
+                                <dx:SimpleButton Width="131"
+                                                 HorizontalAlignment="Left"
                                                  Command="{Binding DoTrainCommand}"
                                                  Content="{Binding TrainButtonText}"
                                                  ToolTip="아래 &apos;쓰는 모델&apos; 콤보에 고른 모델로 학습합니다.&#10;YOLO11n - 파이썬(yolo-venv), 98장 60바퀴에 약 5분.&#10;D-FINE-N - D-FINE 저장소(학습 폴더), 같은 데이터로 약 1시간 45분. 끝에 DirectML 고치기까지 자동입니다.&#10;둘 다 끝나면 몹 찾기에 바로 들어갑니다. 넘겨줄 모델은 D-FINE-N 입니다(YOLO 는 AGPL)." />
@@ -459,7 +484,7 @@
                                 점선이 모델이 찾은 것, 실선이 사람이 찍은 것이다.
                             -->
                             <dxlc:LayoutGroup Orientation="Horizontal">
-                                <dxlc:LayoutItem Width="348"
+                                <dxlc:LayoutItem Width="255"
                                                  Label="신뢰도">
                                     <dxe:TrackBarEdit EditValue="{Binding MinimumScore, Mode=TwoWay}"
                                                       Maximum="0.95"
@@ -480,7 +505,7 @@
                                                  Content="라벨 확정"
                                                  ToolTip="자동 라벨(점선)을 전부 내 라벨로 굳힙니다. 틀린 것은 굳힌 뒤 골라서 지우세요. 하나만 확정하려면 그림에서 그 점선을 누르세요." />
                                 <!-- "라벨 지우기" 로 두면 옆의 "고른 것 지우기 · 모두 지우기" 와 헷갈린다 - 지우는 것이 점선뿐임을 이름에 담는다. -->
-                                <dx:SimpleButton Width="110"
+                                <dx:SimpleButton Width="120"
                                                  Command="{Binding DoClearPredictionsCommand}"
                                                  Content="자동 라벨 지우기"
                                                  ToolTip="확정하지 않은 자동 라벨(점선)만 지웁니다. 내가 찍어 둔 라벨(실선)은 그대로입니다." />
@@ -537,30 +562,6 @@
                                 <markup:LossSparkline Height="44"
                                                       ToolTip="학습 loss. 내려가면 배우는 중, 제자리면 학습률이나 데이터를 봐야 합니다. 로그 눈금입니다."
                                                       Values="{Binding LossHistory}" />
-                            </dxlc:LayoutItem>
-
-                            <!--
-                                몹 찾기에 쓸 모델을 고른다(2026-09-14). 목록은 데이터셋 폴더의 보관본(detector.<이름>.onnx).
-                                고르면 그 모델이 몹 찾기 자리(detector.onnx)에 앉고 켜 둔 스크립트·플레이 화면도 따라온다. 옆 글은 그 모델의 쪽지 한 줄.
-                                시험은 YOLO11n, 넘겨줄 때는 D-FINE-N (YOLO 는 AGPL). 학습 중에는 못 바꾼다.
-                            -->
-                            <dxlc:LayoutItem Label="쓰는 모델">
-                                <DockPanel LastChildFill="True">
-                                    <dxe:ComboBoxEdit Width="200"
-                                                      Margin="0,0,8,0"
-                                                      DisplayMember="Name"
-                                                      DockPanel.Dock="Left"
-                                                      IsEnabled="{Binding IsTraining, Converter={StaticResource NotBool}}"
-                                                      IsTextEditable="False"
-                                                      ItemsSource="{Binding ModelChoices}"
-                                                      NullText="(목록에 없는 모델)"
-                                                      SelectedItem="{Binding SelectedModelChoice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                      ToolTip="몹 찾기에 쓸 모델. 시험은 YOLO11n, 넘겨줄 때는 D-FINE-N 으로 고릅니다(YOLO 는 AGPL)." />
-                                    <TextBlock VerticalAlignment="Center"
-                                               Foreground="#666666"
-                                               Text="{Binding ModelSummary}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </DockPanel>
                             </dxlc:LayoutItem>
 
                         </dxlc:LayoutControl>

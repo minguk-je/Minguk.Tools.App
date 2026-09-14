@@ -52,7 +52,7 @@ public static class SolutionGate
                       + "옮길까요?";
 
         var answer = DevExpress.Xpf.Core.DXMessageBox.Show(
-            message, "빌더", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            message, "솔루션", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
 
         if (answer == MessageBoxResult.Cancel) return false;
         if (answer != MessageBoxResult.Yes) return true;
