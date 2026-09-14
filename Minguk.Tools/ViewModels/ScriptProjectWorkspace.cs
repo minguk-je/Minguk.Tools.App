@@ -71,10 +71,12 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         AddNewFileCommand = new DelegateCommand(() => AddNewFile(TargetFolderId()), () => IsOpen, false);
         AddFolderCommand = new DelegateCommand(() => AddFolder(TargetFolderId()), () => IsOpen, false);
         AddExistingCommand = new DelegateCommand(DoAddExisting, () => IsOpen, false);
-        RenameCommand = new DelegateCommand(() => { if (SelectedNode is { } node) EditNodeRequested?.Invoke(this, node); }, () => SelectedNode is { Kind: not ScriptNodeKind.Project }, false);
-        DeleteCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Delete(node); }, () => SelectedNode is { Kind: not ScriptNodeKind.Project }, false);
-        ExcludeCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Exclude(node); }, () => SelectedNode is { Kind: not ScriptNodeKind.Project }, false);
-        SetEntryCommand = new DelegateCommand(() => { if (SelectedNode is { } node) SetEntry(node); }, () => SelectedNode is { Kind: ScriptNodeKind.Source }, false);
+        AddProjectReferenceCommand = new DelegateCommand(DoAddProjectReference, () => IsOpen, false);
+        RenameCommand = new DelegateCommand(() => { if (SelectedNode is { } node) EditNodeRequested?.Invoke(this, node); }, () => SelectedNode is { Kind: not (ScriptNodeKind.Project or ScriptNodeKind.ProjectReference), IsExternal: false }, false);
+        DeleteCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Delete(node); }, () => SelectedNode is { Kind: not (ScriptNodeKind.Project or ScriptNodeKind.ProjectReference), IsExternal: false }, false);
+        // 참조 줄의 "제외" 는 참조 빼기다(VS 의 참조 제거) - 그 프로젝트 파일은 건드리지 않는다.
+        ExcludeCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Exclude(node); }, () => SelectedNode is { Kind: not ScriptNodeKind.Project, IsExternal: false }, false);
+        SetEntryCommand = new DelegateCommand(() => { if (SelectedNode is { } node) SetEntry(node); }, () => SelectedNode is { Kind: ScriptNodeKind.Source, IsExternal: false }, false);
         OpenNodeCommand = new DelegateCommand(() => { if (SelectedNode is { } node) Open(node); }, () => SelectedNode is not null, false);
         CloseDocumentCommand = new DelegateCommand<ScriptDocument?>(doc => CloseDocument(doc ?? ActiveDocument), _ => ActiveDocument is not null, false);
         OpenFolderInExplorerCommand = new DelegateCommand(DoOpenFolderInExplorer, () => IsOpen, false);
@@ -139,6 +141,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     public DelegateCommand AddNewFileCommand { get; }
     public DelegateCommand AddFolderCommand { get; }
     public DelegateCommand AddExistingCommand { get; }
+    public DelegateCommand AddProjectReferenceCommand { get; }
     public DelegateCommand RenameCommand { get; }
     public DelegateCommand DeleteCommand { get; }
     public DelegateCommand ExcludeCommand { get; }
@@ -149,7 +152,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
     private void RaiseCommands()
     {
-        foreach (var command in new DelegateCommand[] { CloseProjectCommand, SaveCommand, SaveAllCommand, AddNewFileCommand, AddFolderCommand, AddExistingCommand, RenameCommand, DeleteCommand, ExcludeCommand, SetEntryCommand, OpenNodeCommand, OpenFolderInExplorerCommand })
+        foreach (var command in new DelegateCommand[] { CloseProjectCommand, SaveCommand, SaveAllCommand, AddNewFileCommand, AddFolderCommand, AddExistingCommand, AddProjectReferenceCommand, RenameCommand, DeleteCommand, ExcludeCommand, SetEntryCommand, OpenNodeCommand, OpenFolderInExplorerCommand })
             command.RaiseCanExecuteChanged();
 
         CloseDocumentCommand.RaiseCanExecuteChanged();
@@ -419,7 +422,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     {
         var changed = false;
 
-        foreach (var item in project.Items.ToList())
+        // 참조한 프로젝트는 폴더 밖이라 이 감시로 판단하지 않는다 - 없어져도 "찾을 수 없음" 으로 남긴다.
+        foreach (var item in project.Items.Where(i => i.Kind != ScriptItemKind.ProjectReference).ToList())
             if (!File.Exists(project.FullPath(item.Path))) { project.Remove(item.Path); changed = true; }
 
         foreach (var folder in project.Folders.ToList())
@@ -519,15 +523,86 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
                 IsMissing = !Directory.Exists(project.FullPath(folder))
             });
 
-        foreach (var item in project.Items.OrderBy(i => Path.GetFileName(i.Path), StringComparer.CurrentCultureIgnoreCase))
+        foreach (var item in project.Items.Where(i => i.Kind != ScriptItemKind.ProjectReference).OrderBy(i => Path.GetFileName(i.Path), StringComparer.CurrentCultureIgnoreCase))
             Nodes.Add(new ScriptProjectNode(item.Path, ParentOf(item.Path), Path.GetFileName(item.Path), ScriptProjectNode.KindOf(item.Kind), TryRename)
             {
                 IsEntry = string.Equals(item.Path, project.Entry, StringComparison.OrdinalIgnoreCase),
                 IsMissing = !File.Exists(project.FullPath(item.Path))
             });
 
+        AddReferenceNodes(project);
+
         SelectedNode = Nodes.FirstOrDefault(n => n.Id == selected) ?? Nodes.FirstOrDefault();
     }
+
+    /// <summary>
+    /// 물고 있는 프로젝트 줄과 그 아래 소스 줄. 참조 줄 Id 는 적힌 상대 경로(<c>../공용/공용.mtsproj</c>), 소스 줄 Id 는 전체 경로다 -
+    /// <see cref="ScriptProject.FullPath"/> 가 전체 경로를 그대로 돌려주므로 열기가 따로 갈래를 안 탄다.
+    /// </summary>
+    /// <remarks>폴더 겹은 안 그린다 - 공유 프로젝트는 대개 몇 파일이고, 고치는 곳은 그 프로젝트다.</remarks>
+    private void AddReferenceNodes(ScriptProject project)
+    {
+        foreach (var item in project.Items.Where(i => i.Kind == ScriptItemKind.ProjectReference).OrderBy(i => i.Path, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var full = project.FullPath(item.Path);
+            ScriptProject? referenced = null;
+
+            try { if (File.Exists(full)) referenced = ScriptProject.Load(full); }
+            catch (Exception ex) { Logger.Warn(ex, $"참조한 프로젝트를 못 읽었다: {full}"); }
+
+            var name = referenced?.Name is { Length: > 0 } loadedName ? loadedName : Path.GetFileNameWithoutExtension(full);
+
+            Nodes.Add(new ScriptProjectNode(item.Path, RootId, $"{name} (공유)", ScriptNodeKind.ProjectReference, null) { IsMissing = referenced is null });
+
+            if (referenced is null) continue;
+
+            foreach (var source in referenced.Items.Where(i => i.Kind == ScriptItemKind.Source).OrderBy(i => Path.GetFileName(i.Path), StringComparer.CurrentCultureIgnoreCase))
+            {
+                var sourcePath = referenced.FullPath(source.Path);
+
+                // 같은 공유 프로젝트를 두 번 문 일은 없지만(AddProjectReference 가 막는다) 손으로 고친 파일이면 Id 가 겹칠 수 있다.
+                if (Nodes.Any(n => string.Equals(n.Id, sourcePath, StringComparison.OrdinalIgnoreCase))) continue;
+
+                Nodes.Add(new ScriptProjectNode(sourcePath, item.Path, Path.GetFileName(source.Path), ScriptNodeKind.Source, null)
+                {
+                    IsExternal = true,
+                    IsMissing = !File.Exists(sourcePath)
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// 다른 프로젝트(대개 같은 솔루션의 공유 프로젝트)를 참조로 넣는다. 그 소스가 이 프로젝트 컴파일·빌드에 합쳐진다.
+    /// </summary>
+    public ScriptProjectNode? AddProjectReference(string projectFilePath)
+    {
+        if (Project is not { } project) return null;
+
+        var item = project.AddProjectReference(projectFilePath);
+        project.Save();
+        RebuildNodes();
+
+        SelectedNode = Nodes.FirstOrDefault(n => string.Equals(n.Id, item.Path, StringComparison.OrdinalIgnoreCase));
+        Changed?.Invoke(this, EventArgs.Empty);
+
+        _host.Notify?.Invoke($"'{Path.GetFileNameWithoutExtension(projectFilePath)}' 을(를) 참조했습니다 - 그 소스가 이 프로젝트와 같이 컴파일됩니다.");
+        return SelectedNode;
+    }
+
+    private void DoAddProjectReference() => Try(() =>
+    {
+        if (_host.OpenDialog?.Invoke() is not { } dialog || Project is not { } project) return;
+
+        dialog.Filter = $"스크립트 프로젝트 (*{ScriptProject.Extension})|*{ScriptProject.Extension}";
+        dialog.Multiselect = false;
+        // 공유 프로젝트는 대개 같은 솔루션의 옆 폴더다 - 한 겹 위에서 시작한다.
+        dialog.InitialDirectory = Path.GetDirectoryName(project.Directory) ?? project.Directory;
+
+        if (!dialog.ShowDialog()) return;
+
+        AddProjectReference(dialog.File.GetFullName());
+    });
 
     private static string ParentOf(string relative)
     {
@@ -539,6 +614,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     public string TargetFolderId() => SelectedNode switch
     {
         null => RootId,
+        // 참조 줄·그 아래 파일에는 새 항목을 못 넣는다 - 그 목록은 이 프로젝트 것이 아니다.
+        { Kind: ScriptNodeKind.ProjectReference } or { IsExternal: true } => RootId,
         { IsFolder: true } node => node.Id,
         { } node => node.ParentId
     };
@@ -621,7 +698,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     /// <returns>못 바꿨으면 false - 칸이 옛 이름으로 돌아간다.</returns>
     public bool TryRename(ScriptProjectNode node, string newName)
     {
-        if (Project is not { } project || node.Kind == ScriptNodeKind.Project) return false;
+        if (Project is not { } project || node.Kind is ScriptNodeKind.Project or ScriptNodeKind.ProjectReference || node.IsExternal) return false;
 
         if (newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
@@ -673,11 +750,13 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     /// <summary>프로젝트에서 제외 - 목록에서만 뺀다(파일은 남는다). 열린 탭은 닫는다. VS 의 "프로젝트에서 제외".</summary>
     public bool Exclude(ScriptProjectNode node)
     {
-        if (Project is null || node.Kind == ScriptNodeKind.Project) return false;
+        if (Project is null || node.Kind == ScriptNodeKind.Project || node.IsExternal) return false;
 
-        var what = node.IsFolder ? $"폴더 '{node.Name}' 과(와) 그 안의 항목" : $"'{node.Name}'";
+        var question = node.Kind == ScriptNodeKind.ProjectReference
+            ? $"'{node.Name}' 참조를 뺄까요?\n그 프로젝트 파일은 지우지 않습니다. 그 소스의 함수를 부르던 곳은 컴파일 오류가 납니다."
+            : $"{(node.IsFolder ? $"폴더 '{node.Name}' 과(와) 그 안의 항목" : $"'{node.Name}'")}을(를) 프로젝트에서 제외할까요?\n파일은 지우지 않습니다.";
 
-        if (Ask($"{what}을(를) 프로젝트에서 제외할까요?\n파일은 지우지 않습니다.", MessageButton.OKCancel) is not (MessageResult.OK or MessageResult.Yes))
+        if (Ask(question, MessageButton.OKCancel) is not (MessageResult.OK or MessageResult.Yes))
             return false;
 
         return Unlist(node);
@@ -689,7 +768,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     /// <remarks>영구 삭제가 아니다(사용자 결정) - 잘못 눌러도 휴지통에서 되찾는다. 파일을 남기려면 <see cref="Exclude"/>.</remarks>
     public bool Delete(ScriptProjectNode node)
     {
-        if (Project is not { } project || node.Kind == ScriptNodeKind.Project) return false;
+        if (Project is not { } project || node.Kind is ScriptNodeKind.Project or ScriptNodeKind.ProjectReference || node.IsExternal) return false;
 
         var what = node.IsFolder ? $"폴더 '{node.Name}' 과(와) 그 안의 모든 파일" : $"'{node.Name}'";
 
@@ -752,6 +831,9 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     public IReadOnlyList<ScriptProjectNode> Drop(IEnumerable<string> paths, string folderId)
     {
         if (Project is not { } project) return [];
+
+        // 참조 줄·그 아래 파일에 놓으면 그 줄의 부모(참조 경로)가 온다 - 이 프로젝트의 폴더가 아니면 뿌리에 넣는다.
+        if (folderId.Length > 0 && !project.Folders.Contains(folderId, StringComparer.OrdinalIgnoreCase)) folderId = RootId;
 
         var added = new List<string>();
         var targetFull = folderId.Length == 0 ? project.Directory : project.FullPath(folderId);
@@ -821,7 +903,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
     public void SetEntry(ScriptProjectNode node)
     {
-        if (Project is not { } project || node.Kind != ScriptNodeKind.Source) return;
+        if (Project is not { } project || node.Kind != ScriptNodeKind.Source || node.IsExternal) return;
 
         project.Entry = node.Id;
         project.Save();
@@ -866,7 +948,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     /// <summary>줄을 연다. 글 파일은 탭(이미 열려 있으면 그 탭으로), 나머지는 윈도우 기본 프로그램.</summary>
     public ScriptDocument? Open(ScriptProjectNode node)
     {
-        if (Project is not { } project || node.IsFolder) return null;
+        // 참조 줄은 펼치기만 한다 - .mtsproj 를 기본 프로그램으로 열면 엉뚱한 편집기가 뜬다.
+        if (Project is not { } project || node.IsFolder || node.Kind == ScriptNodeKind.ProjectReference) return null;
 
         var full = project.FullPath(node.Id);
 
@@ -964,10 +1047,14 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     public ScriptUnit? UnitFor(string filePath)
     {
         var project = Project;
-        if (project is null || project.Find(filePath) is null) return null;
+        if (project is null) return null;
 
         // 탭 목록은 UI 스레드 것이다. 복사해 둔 것을 읽는다.
-        return project.ToUnit(_openTextsSnapshot);
+        if (project.Find(filePath) is not null) return project.ToUnit(_openTextsSnapshot);
+
+        // 물고 있는 공유 프로젝트의 파일을 열어 고칠 때도 완성·색이 나와야 한다 - 이 프로젝트 한 벌에 그 파일이 들어 있으면 그것으로 본다.
+        var unit = project.ToUnit(_openTextsSnapshot);
+        return unit.Sources.Contains(Path.GetFullPath(filePath), StringComparer.OrdinalIgnoreCase) ? unit : null;
     }
 
     private IReadOnlyDictionary<string, string> _openTextsSnapshot = new Dictionary<string, string>();

@@ -476,6 +476,9 @@
                     <dxb:BarButtonItem Command="{Binding Script.Project.AddFolderCommand}"
                                        Content="새 폴더(_D)"
                                        Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder.png'}" />
+                    <dxb:BarButtonItem Command="{Binding Script.Project.AddProjectReferenceCommand}"
+                                       Content="공유 프로젝트 참조 추가(_S)..."
+                                       Hint="같은 솔루션의 공유 프로젝트를 뭅니다. 그 소스가 이 프로젝트와 같이 컴파일·빌드됩니다." />
                     <dxb:BarItemSeparator />
                     <dxb:BarButtonItem Command="{Binding Script.Project.SetEntryCommand}"
                                        Content="시작 파일로 설정(_A)" />
@@ -722,6 +725,9 @@
                                                                            KeyGesture="Shift+Alt+A" />
                                                         <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.AddFolderCommand}"
                                                                            Content="새 폴더(_D)" />
+                                                        <dxb:BarItemSeparator />
+                                                        <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.AddProjectReferenceCommand}"
+                                                                           Content="공유 프로젝트 참조(_S)..." />
                                                     </dxb:BarSubItem>
                                                     <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.SetEntryCommand}"
                                                                        Content="시작 파일로 설정(_A)" />

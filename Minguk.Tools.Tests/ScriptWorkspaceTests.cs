@@ -223,18 +223,21 @@ internal static partial class Program
                 other.Dispose();
             }
 
-            // ── 플레이 화면 목록: 한 파일짜리와 프로젝트, 프로젝트 안의 .csx 는 안 섞는다 ──
+            // ── 플레이 목록: Workspace/솔루션/프로젝트/bin 의 완성품만, '솔루션 / 프로젝트' 이름으로 ──
             {
-                var scripts = Path.Combine(folder, "Scripts");
-                Directory.CreateDirectory(scripts);
-                File.WriteAllText(Path.Combine(scripts, "혼자.csx"), "출력(1);");
-                ScriptProject.Create(Path.Combine(scripts, "사냥"), "사냥", "출력(2);");
+                var workspaceRoot = Path.Combine(folder, "Workspace");
+                Directory.CreateDirectory(Path.Combine(workspaceRoot, "오버워치", "사격장", "bin"));
+                Directory.CreateDirectory(Path.Combine(workspaceRoot, "디아2", "카우방", "bin"));
+                File.WriteAllText(Path.Combine(workspaceRoot, "오버워치", "사격장", "bin", "사격장.mtsx"), "");
+                File.WriteAllText(Path.Combine(workspaceRoot, "디아2", "카우방", "bin", "카우방.mtsx"), "");
+                File.WriteAllText(Path.Combine(workspaceRoot, "오버워치", "사격장", "main.csx"), "");   // 원본 소스는 목록에 안 나와야 한다
 
-                var items = PlayViewModel.ListScripts(scripts).ToList();
+                var items = PlayViewModel.ListBuilds(workspaceRoot).ToList();
 
-                Check("플레이 목록: 프로젝트가 먼저 '(프로젝트)' 로, 한 파일짜리는 그대로, 프로젝트 안의 main.csx 는 안 나온다",
-                      items.Count == 2 && items[0] is { IsProject: true, Name: "사냥 (프로젝트)" } && items[1] is { IsProject: false, Name: "혼자.csx" },
-                      string.Join(", ", items.Select(i => $"{i.Name}{(i.IsProject ? "[P]" : "")}")));
+                Check("플레이 목록: 프로젝트마다 bin 의 완성품만 '솔루션 / 프로젝트' 로, 원본 소스(.csx)는 안 나온다",
+                      items.Count == 2 && items.All(i => i.IsCompiled)
+                      && items[0].Name == "디아2 / 카우방" && items[1].Name == "오버워치 / 사격장",
+                      string.Join(", ", items.Select(i => i.Name)));
             }
 
             // 진짜 휴지통(ShellFileRecycler)은 여기서 안 본다 - --vision 을 돌릴 때마다 사람의 휴지통에 파일이 쌓인다.

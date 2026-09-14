@@ -21,6 +21,9 @@ namespace Minguk.Tools.Source;
 /// </summary>
 public class MainMenu : ObservableCollection<MenuItemModel>
 {
+    /// <summary>Automation 항목이 여는 뷰. 위에서 솔루션·프로젝트를 고르고 아래 탭이 따라가는 화면이다(TamsTools StreamMode 와 같은 짜임).</summary>
+    public const string AutomationClassName = "Minguk.Tools.Views.AutomationMainView";
+
     private static ObservableCollection<MenuItemModel>? _instance;
 
     public static ObservableCollection<MenuItemModel> Instance => _instance ??= CreateAccordionViewMenu();
@@ -29,11 +32,13 @@ public class MainMenu : ObservableCollection<MenuItemModel>
     {
         var menuItemList = new ObservableCollection<MenuItemModel>();
 
-        // ── 루트 그룹 ────────────────────────────────────────────────────
+        // ── 루트 그룹 : Office Automation ────────────────────────────────
+        // 짜임(사용자, 2026-09-14): Minguk Tools(본 창) → Office Automation → Automation → 화면들.
+        // Office Automation 은 기능 여럿을 담는 뿌리고, 그 아래 Automation 이 지금 만드는 게임 자동화다.
         // canSelect: false → 폴더 자체는 선택되지 않는다(클릭하면 펼침/접힘만 한다).
         var rootItem = MenuItemModel.Create(
             menu_cd: "1000",
-            menu_nm: "Office Automation",
+            menu_nm: "자동화",
             dll_nm: string.Empty,
             class_nm: string.Empty,
             is_enable: true,
@@ -44,61 +49,35 @@ public class MainMenu : ObservableCollection<MenuItemModel>
 
         menuItemList.Add(rootItem);
 
-        // ── 샘플 화면 1 : 대시보드 - 메뉴에서 뺐다(2026-09-14, 지금 안 쓴다) ───────────────
-        // 화면(DashboardView·DashboardViewModel)은 ViewModel 작성의 최소 예시로 그대로 두고, DI 등록도 남겨 둔다.
-        // 다시 보이려면 아래 주석을 풀면 된다.
-        //
-        // rootItem.AddChildren(MenuItemModel.Create(
-        //     menu_cd: "1100",
-        //     menu_nm: "대시보드",
-        //     dll_nm: "Minguk.Tools.dll",
-        //     class_nm: "Minguk.Tools.Views.DashboardView",
-        //     is_enable: true,
-        //     isExpanded: true,
-        //     showInCollapsedMode: false,
-        //     canSelect: true,
-        //     icon: FreeImage.Instance?.CacheByteArray("axialis/business/16x16/business_report.png")));
+        // ── 환경 : 모듈이 들고 온 항목(맨 위) ────────────────────────────
+        // 전체 환경이 먼저고 그 안에서 빌더·플레이가 돈다(사용자, 2026-09-14). 학습 도구와 Workspace 를 여기서 정하는데 빌더는 그 Workspace 에서
+        // 솔루션을 고르므로 빌더 탭 안에 두면 솔루션부터 골라야 Workspace 를 바꿀 수 있었다. 솔루션과 상관없는 도구라 문을 안 거친다.
+        // 셸은 무엇이 붙는지 모른다 - 모듈이 제 항목을 들고 온다.
+        foreach (var module in Modules.ToolModules.All)
+        {
+            foreach (var item in module.CreateMenuItems())
+                rootItem.AddChildren(item);
+        }
 
-        // ── 캡처 : 순수하게 잡고 담는다 ───────────────────────────────────
+        // ── Automation Builder : 만드는 쪽 ───────────────────────────────
+        // 폴더가 아니라 누르는 항목이다(사용자, 2026-09-14). 누르면 솔루션이 없을 때 시작 창을 띄우고 Builder 화면을 연다.
+        // 학습환경·화면캡처·라벨링·스크립트는 메뉴 항목이 아니라 그 화면 아래의 탭이다(AutomationScreens).
+        // 플레이(돌리는 쪽)와 입력 테스트(점검 도구)는 역할이 달라 따로 뺐다 - 만드는 일과 섞이면 한 탭 줄에 셋이 뒤섞였다.
+        rootItem.AddChildren(MenuItemModel.Create(
+            menu_cd: "1100",
+            menu_nm: "빌더",
+            dll_nm: "Minguk.Tools.dll",
+            class_nm: AutomationClassName,
+            is_enable: true,
+            isExpanded: true,
+            showInCollapsedMode: false,
+            canSelect: true,
+            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/document-edit.png")).RequireSolution());
+
+        // ── 플레이 : 돌리는 쪽 ──────────────────────────────────────────
+        // 빌드한 완성품(Player 폴더)만 고른다 - 솔루션을 고를 필요가 없어 문을 안 거친다.
         rootItem.AddChildren(MenuItemModel.Create(
             menu_cd: "1200",
-            menu_nm: "화면캡처",
-            dll_nm: "Minguk.Tools.dll",
-            class_nm: "Minguk.Tools.Views.CaptureMonitorView",
-            is_enable: true,
-            isExpanded: true,
-            showInCollapsedMode: false,
-            canSelect: true,
-            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/screen.png")));
-
-        // ── 라벨링 ────────────────────────────────────────────────────────
-        rootItem.AddChildren(MenuItemModel.Create(
-            menu_cd: "1400",
-            menu_nm: "라벨링",
-            dll_nm: "Minguk.Tools.dll",
-            class_nm: "Minguk.Tools.Views.LabelingView",
-            is_enable: true,
-            isExpanded: true,
-            showInCollapsedMode: false,
-            canSelect: true,
-            // edit.png 는 없는 파일이었다 - 아이콘이 조용히 비었다. 스모크(--views)가 메뉴 아이콘을 검사한다.
-            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/picture-edit.png")));
-
-        // ── 스크립트 : 몹 찾기·글자 읽기를 보면서 스크립트를 쓴다 ─────────────
-        rootItem.AddChildren(MenuItemModel.Create(
-            menu_cd: "1500",
-            menu_nm: "스크립트",
-            dll_nm: "Minguk.Tools.dll",
-            class_nm: "Minguk.Tools.Views.ScriptStudioView",
-            is_enable: true,
-            isExpanded: true,
-            showInCollapsedMode: false,
-            canSelect: true,
-            icon: FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/document-edit.png")));
-
-        // ── 플레이 : 게임을 연결하고 저장된 스크립트를 돌린다 ─────────────
-        rootItem.AddChildren(MenuItemModel.Create(
-            menu_cd: "1600",
             menu_nm: "플레이",
             dll_nm: "Minguk.Tools.dll",
             class_nm: "Minguk.Tools.Views.PlayView",
@@ -108,7 +87,8 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             canSelect: true,
             icon: FreeImage.Instance?.CacheByteArray("axialis/multimedia/16x16/button_green_play.png")));
 
-        // ── 입력 자동화 ───────────────────────────────────────────────────
+        // ── 입력 테스트 : 점검 도구 ──────────────────────────────────────
+        // 입력 경로(SendInput·PostMessage·Interception)가 대상에 먹는지 본다. 솔루션과 상관없다.
         rootItem.AddChildren(MenuItemModel.Create(
             menu_cd: "1300",
             menu_nm: "입력 테스트",
@@ -120,12 +100,20 @@ public class MainMenu : ObservableCollection<MenuItemModel>
             canSelect: true,
             icon: FreeImage.Instance?.CacheByteArray("axialis/hardwarenetwork/16x16/keyboard.png")));
 
-        // 모듈이 들고 온 항목. 셸은 무엇이 붙는지 모른다 - 순서는 menu_cd 로 모듈이 정한다(2000번대).
-        foreach (var module in Modules.ToolModules.All)
-        {
-            foreach (var item in module.CreateMenuItems())
-                rootItem.AddChildren(item);
-        }
+        // ── 샘플 화면 : 대시보드 - 메뉴에서 뺐다(2026-09-14, 지금 안 쓴다) ───────────────
+        // 화면(DashboardView·DashboardViewModel)은 ViewModel 작성의 최소 예시로 그대로 두고, DI 등록도 남겨 둔다.
+        // 다시 보이려면 아래 주석을 풀면 된다.
+        //
+        // rootItem.AddChildren(MenuItemModel.Create(
+        //     menu_cd: "1900",
+        //     menu_nm: "대시보드",
+        //     dll_nm: "Minguk.Tools.dll",
+        //     class_nm: "Minguk.Tools.Views.DashboardView",
+        //     is_enable: true,
+        //     isExpanded: true,
+        //     showInCollapsedMode: false,
+        //     canSelect: true,
+        //     icon: FreeImage.Instance?.CacheByteArray("axialis/business/16x16/business_report.png")));
 
         return menuItemList;
     }

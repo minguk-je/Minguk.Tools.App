@@ -44,7 +44,6 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
         DoReloadCommand = new DelegateCommand(DoReload, false);
         DoOpenFolderCommand = new DelegateCommand(DoOpenFolder, false);
-        DoChooseFolderCommand = new DelegateCommand(DoChooseFolder, false);
         DoSaveCommand = new DelegateCommand(DoSave, () => HasImage, false);
         DoDeleteBoxCommand = new DelegateCommand(DoDeleteBox, () => SelectedBoxIndex >= 0, false);
         DoClearBoxesCommand = new DelegateCommand(DoClearBoxes, () => Boxes.Count > 0, false);
@@ -128,8 +127,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
     }
 
     /// <summary>
-    /// 데이터셋 자리는 캡처 화면과 <b>같이</b> 본다. 그래서 화면별 설정이 아니라
-    /// <see cref="LabelDataset.ConfiguredRoot"/> 를 쓴다.
+    /// 데이터셋 자리는 캡처 화면과 <b>같이</b> 본다 - Automation 에서 고른 프로젝트 폴더다(<see cref="LabelDataset.ConfiguredRoot"/>).
     /// </summary>
     protected override void RestoreSettings()
     {
@@ -219,8 +217,6 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
     protected override void SaveSettings()
     {
-        if (!string.IsNullOrWhiteSpace(DatasetRoot)) LabelDataset.ConfiguredRoot = DatasetRoot;
-
         SetSetting(nameof(TrainEpochs), TrainEpochs);
         SetSetting(nameof(MinimumScore), MinimumScore);
         SetSetting(nameof(LabelZoom), LabelZoom);

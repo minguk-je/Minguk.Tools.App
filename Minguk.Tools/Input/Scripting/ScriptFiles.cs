@@ -19,11 +19,20 @@ namespace Minguk.Tools.Input.Scripting;
 /// </remarks>
 public static class ScriptFiles
 {
-    /// <summary>스크립트를 두는 기본 자리. 없으면 만든다.</summary>
+    /// <summary>
+    /// 스크립트를 두는 기본 자리. Automation 에서 프로젝트를 골랐으면 <b>그 프로젝트 폴더</b>, 아니면 옛 자리(없으면 만든다).
+    /// </summary>
+    /// <remarks>
+    /// 플레이 목록·열기/저장 대화 상자가 다 이것을 본다. 옛 자리(<c>%AppData%\Scripts</c>)에 두면 솔루션으로 옮긴 뒤 플레이 목록이
+    /// 비었다(실측 2026-09-14 - 스크립트가 사격장 폴더로 옮겨 갔다).
+    /// </remarks>
     public static string DefaultDirectory
     {
         get
         {
+            if (global::Minguk.Tools.Projects.SolutionWorkspace.StartupDirectory is { } project && Directory.Exists(project))
+                return project;
+
             var path = Path.Combine(Helper.UserDataPaths.Root, "Scripts");
 
             try

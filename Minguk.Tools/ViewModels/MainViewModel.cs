@@ -276,6 +276,12 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout, Modules.IMain
 
         try
         {
+            // 솔루션이 있어야 여는 항목(Automation)은 문을 거친다. 없으면 시작 창을 먼저 띄우고, 그만두면 안 연다.
+            // 다른 기능 화면은 그냥 연다 - 셸은 여러 기능을 담는다.
+            if (MainMenu.FindMenuItem(viewName) is { REQUIRES_SOLUTION: true } &&
+                !Minguk.Tools.Projects.SolutionGate.EnsureOpen())
+                return;
+
             IDocument document = DocumentManagerService.FindDocument(viewName, this);
             if (document == null)
             {
@@ -339,13 +345,30 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout, Modules.IMain
             new Action(RestoreDocumentCore));
     }
 
+    /// <summary>배치에서 되살리지 않을 문서 이름(Id 에 들어가는 조각).</summary>
+    private static readonly string[] OldDocumentNames =
+    [
+        "AutomationMainView", "ProjectWorkspaceView", "DocId_Project_",
+        "CaptureMonitorView", "LabelingView", "ScriptStudioView"
+    ];
+
     private void RestoreDocumentCore()
     {
         try
         {
-            if (!string.IsNullOrEmpty(Minguk.Tools.Properties.Settings.Default.RootLayout))
-                LayoutSerializationService.Deserialize(
-                    StripWindowGeometry(Minguk.Tools.Properties.Settings.Default.RootLayout));
+            var saved = Minguk.Tools.Properties.Settings.Default.RootLayout;
+
+            // Automation 화면과 예전 최상위 화면 탭은 되살리지 않는다. 되살리면 시작 창(솔루션 고르기)을 안 거친 채 열리고,
+            // 예전 화면들은 이제 Automation 화면 아래 탭이다(2026-09-14).
+            if (!string.IsNullOrEmpty(saved) && OldDocumentNames.Any(name => saved.Contains(name, StringComparison.Ordinal)))
+            {
+                Logger.Info("저장된 배치에 프로젝트 탭이나 옛 화면 탭이 있어 버리고 기본 배치로 시작한다.");
+                DeleteLayout();
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(saved))
+                LayoutSerializationService.Deserialize(StripWindowGeometry(saved));
         }
         catch (Exception ex)
         {

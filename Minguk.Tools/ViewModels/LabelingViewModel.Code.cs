@@ -100,27 +100,6 @@ public partial class LabelingViewModel
         Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
     });
 
-    private void DoChooseFolder() => Guard(() =>
-    {
-        if (FolderBrowserDialogService is not { } dialog)
-        {
-            MessengerUtility.SendMainMessage("폴더 고르기 서비스를 찾지 못했습니다.");
-            return;
-        }
-
-        dialog.StartPath = Directory.Exists(DatasetRoot) ? DatasetRoot : LabelDataset.DefaultRoot;
-
-        if (!dialog.ShowDialog()) return;
-
-        DatasetRoot = dialog.ResultPath;
-
-        // 바로 저장한다. 캡처 화면이 이 값을 보고 담으므로, 화면을 닫을 때까지
-        // 미뤄 두면 그동안 담은 그림이 옛 폴더로 간다.
-        LabelDataset.ConfiguredRoot = DatasetRoot;
-
-        DoReload();
-    });
-
     // ── 그림 넘기기 ──────────────────────────────────────────────────────
 
     private void OnSelectedItemChanged() => Guard(() =>

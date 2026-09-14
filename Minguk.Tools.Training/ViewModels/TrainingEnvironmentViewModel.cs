@@ -44,7 +44,8 @@ public class TrainingEnvironmentViewModel : DocumentViewModelBase
 
     protected TrainingEnvironmentViewModel()
     {
-        Caption = "학습환경";
+        Caption = "환경";
+        CaptionImage = Minguk.Image.FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/gear.png");
 
         Items = [];
 
@@ -73,7 +74,7 @@ public class TrainingEnvironmentViewModel : DocumentViewModelBase
     }
 
     /// <summary>
-    /// 내가 만든 것이 쌓이는 자리 - 사진·라벨·모델·영역·프레임 저장.
+    /// 작업공간 - 솔루션들이 든 폴더(화면 이름). 내가 만든 것(사진·라벨·모델·스크립트)이 이 아래 쌓인다.
     /// </summary>
     /// <remarks>
     /// 학습 경로와 나눠 둔다(사용자 결정 2026-09-14). 학습 폴더는 도구라 지우고 다시 만들어도 되지만 여기는 다시 만들 수 없다.
@@ -153,7 +154,7 @@ public class TrainingEnvironmentViewModel : DocumentViewModelBase
         Add("D-FINE 저장소", TrainingPaths.DFineRepository, Directory.Exists(TrainingPaths.DFineRepository), @"도구\학습-환경-준비.ps1 -What dfine");
         Add("D-FINE 가중치", TrainingPaths.DFineWeights, File.Exists(TrainingPaths.DFineWeights), @"도구\학습-환경-준비.ps1 -What dfine");
         Add("학습 결과", TrainingPaths.Runs, Directory.Exists(TrainingPaths.Runs), "처음 학습할 때 만들어집니다.");
-        Add("프로젝트 경로", ProjectPaths.Root, Directory.Exists(ProjectPaths.Root), "위 칸에서 자리를 정합니다.");
+        Add("작업공간", ProjectPaths.Root, Directory.Exists(ProjectPaths.Root), "위 칸에서 자리를 정합니다.");
 
         var missing = 0;
 

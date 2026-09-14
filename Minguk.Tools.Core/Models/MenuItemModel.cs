@@ -60,6 +60,23 @@ public class MenuItemModel : ViewModelBase
 
     public bool IS_ENABLE { get; set; }
 
+    /// <summary>
+    /// 열기 전에 솔루션이 있어야 하는 화면인지. 없으면 셸이 시작 창을 먼저 띄운다.
+    /// </summary>
+    /// <remarks>
+    /// <b>앱 전체가 아니라 화면마다 정한다</b>(사용자 결정 2026-09-14) - Minguk Tools 는 기능 프로젝트를 여럿 담는 셸이라,
+    /// 게임 자동화(캡처·라벨링·스크립트·플레이)가 아닌 기능까지 솔루션을 고르게 할 이유가 없다. 켤 때 무조건 시작 창을
+    /// 띄웠더니 입력 테스트나 학습환경을 보려 해도 솔루션부터 골라야 했다.
+    /// </remarks>
+    public bool REQUIRES_SOLUTION { get; set; }
+
+    /// <summary>솔루션이 있어야 여는 화면으로 표시한다. 메뉴를 만드는 자리에서 이어 쓴다.</summary>
+    public MenuItemModel RequireSolution()
+    {
+        REQUIRES_SOLUTION = true;
+        return this;
+    }
+
     // ── AccordionControl Item 용 ─────────────────────────────────────────
     public virtual bool IsExpanded { get; set; }
     public virtual bool ShowInCollapsedMode { get; set; }

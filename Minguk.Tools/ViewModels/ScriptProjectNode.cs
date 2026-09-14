@@ -15,7 +15,10 @@ public enum ScriptNodeKind
     Folder,
     Source,
     Resource,
-    Reference
+    Reference,
+
+    /// <summary>물고 있는 프로젝트(공유 프로젝트). 아래에 그 프로젝트의 소스가 달린다.</summary>
+    ProjectReference
 }
 
 /// <summary>
@@ -56,6 +59,12 @@ public sealed class ScriptProjectNode : ViewModelBase
         set => SetProperty(() => IsEntry, value);
     }
 
+    /// <summary>
+    /// 물고 있는 프로젝트의 파일이다(<see cref="Id"/> 가 전체 경로). 열어 고칠 수는 있지만 이름 바꾸기·삭제·제외·시작 파일은 안 된다 -
+    /// 그 목록은 이 프로젝트 것이 아니라서, 여기서 고치면 그 프로젝트를 문 다른 프로젝트들이 영문 모르게 깨진다.
+    /// </summary>
+    public bool IsExternal { get; init; }
+
     /// <summary>목록에는 있는데 디스크에 없다. 흐리게 그린다.</summary>
     public bool IsMissing
     {
@@ -85,7 +94,7 @@ public sealed class ScriptProjectNode : ViewModelBase
 
     public ImageSource? Glyph => FreeImage.Instance?.CacheImageSource(Kind switch
     {
-        ScriptNodeKind.Project => "axialispureflat/development/16x16/project_csharp.png",
+        ScriptNodeKind.Project or ScriptNodeKind.ProjectReference => "axialispureflat/development/16x16/project_csharp.png",
         ScriptNodeKind.Folder => "axialis/basic/16x16/folder.png",
         ScriptNodeKind.Source => "axialispureflat/development/16x16/file_csharp.png",
         ScriptNodeKind.Reference => "axialispureflat/development/16x16/dll.png",
@@ -101,6 +110,7 @@ public sealed class ScriptProjectNode : ViewModelBase
     {
         ScriptItemKind.Source => ScriptNodeKind.Source,
         ScriptItemKind.Reference => ScriptNodeKind.Reference,
+        ScriptItemKind.ProjectReference => ScriptNodeKind.ProjectReference,
         _ => ScriptNodeKind.Resource
     };
 }

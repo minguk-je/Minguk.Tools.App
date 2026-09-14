@@ -33,6 +33,9 @@ namespace Minguk.Tools.Input.Scripting;
 /// <c>#load</c>·<c>#r</c>·주석은 노드의 <c>ToString()</c> 이 앞뒤 트리비아를 떼어 자연히 빠진다 -
 /// 프로젝트 소스는 이미 <see cref="ScriptUnit.Sources"/> 로 다 들어오므로 손으로 적은 <c>#load</c> 는 안 쓴다.
 /// 사람이 적은 <c>#r "x.dll"</c> 은 정규식으로 긁어 참조에 더한다.
+///
+/// <b>바깥 DLL 은 합치지 않는다</b> - IL 이 이름으로만 가리키므로 빌드가 결과물 옆에 복사하고(<see cref="CopyReferences"/>)
+/// 플레이어가 그 폴더에서 찾는다(<see cref="CompiledScriptRunner"/>).
 /// </remarks>
 public static class CompiledScriptBuilder
 {
@@ -196,6 +199,78 @@ public static class CompiledScriptBuilder
                 Add(ResolveReference(unit, match.Groups[1].Value));
 
         return references;
+    }
+
+    /// <summary>
+    /// 스크립트가 참조한 DLL 중 <b>이 앱에 딸려 오지 않는 것</b> - 프로젝트의 참조 항목과 손으로 적은 <c>#r</c>. 있는 파일만.
+    /// </summary>
+    /// <remarks>
+    /// 빌드한 IL 은 이 DLL 을 이름으로만 가리킨다. 옆에 없으면 플레이에서 로드하다 실패한다 - 그래서 빌드가 <see cref="CopyReferences"/> 로 옆에 둔다.
+    /// 앱 폴더·.NET 런타임 폴더에 있는 것(Minguk.Tools·System.*)은 뺀다 - 이미 올라와 있고, 복사하면 판이 다른 사본이 끼어든다.
+    /// </remarks>
+    public static IReadOnlyList<string> ExternalReferences(ScriptUnit unit)
+    {
+        var appFolder = Path.GetFullPath(AppContext.BaseDirectory);
+        var runtimeFolder = Path.GetDirectoryName(typeof(object).Assembly.Location);
+
+        bool Shipped(string path)
+        {
+            var folder = Path.GetDirectoryName(path) ?? string.Empty;
+
+            return folder.StartsWith(appFolder.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
+                   || (!string.IsNullOrEmpty(runtimeFolder) && string.Equals(folder, runtimeFolder, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var found = new List<string>();
+
+        void Add(string? path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+
+            var full = Path.GetFullPath(path);
+
+            if (Shipped(full) || found.Contains(full, StringComparer.OrdinalIgnoreCase)) return;
+
+            found.Add(full);
+        }
+
+        foreach (var reference in unit.References) Add(reference);
+
+        foreach (var (_, text) in OrderedSources(unit))
+            foreach (Match match in ReferenceDirective.Matches(text))
+                Add(ResolveReference(unit, match.Groups[1].Value));
+
+        return found;
+    }
+
+    /// <summary>
+    /// 바깥 DLL(<see cref="ExternalReferences"/>)을 빌드 결과물 폴더로 복사한다. 복사한 파일 이름들을 돌려준다.
+    /// </summary>
+    /// <remarks>
+    /// 파일 이름만으로 둔다 - 플레이어(<see cref="CompiledScriptRunner"/>)가 어셈블리 이름 + <c>.dll</c> 로 그 폴더에서 찾는다.
+    /// 이름이 같은 DLL 이 두 곳에서 오면 먼저 온 것만 둔다 - 한 폴더에 둘 다 둘 수 없고, 어느 쪽이 이겼는지 모르게 덮으면 안 된다.
+    /// </remarks>
+    public static IReadOnlyList<string> CopyReferences(ScriptUnit unit, string outputDirectory)
+    {
+        Directory.CreateDirectory(outputDirectory);
+
+        var copied = new List<string>();
+
+        foreach (var path in ExternalReferences(unit))
+        {
+            var name = Path.GetFileName(path);
+
+            if (copied.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
+
+            var destination = Path.Combine(outputDirectory, name);
+
+            if (!string.Equals(Path.GetFullPath(destination), path, StringComparison.OrdinalIgnoreCase))
+                File.Copy(path, destination, overwrite: true);
+
+            copied.Add(name);
+        }
+
+        return copied;
     }
 
     private static string ResolveReference(ScriptUnit unit, string reference)

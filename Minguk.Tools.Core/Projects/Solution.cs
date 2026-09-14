@@ -124,6 +124,22 @@ public sealed class Solution
         return solution;
     }
 
+    /// <summary>
+    /// 뿌리 폴더 바로 아래의 솔루션들 - <c>&lt;뿌리&gt;\&lt;이름&gt;\*.mtsln</c>. 이름순.
+    /// </summary>
+    /// <remarks>
+    /// Automation Builder 화면이 작업공간에서부터 솔루션을 고르게 한다(사용자, 2026-09-14 - "거기부터 오버워치 폴더를 선택"). 최근 목록만 보여 주면
+    /// 폴더를 넣어 둔 솔루션도 한 번 열기 전에는 안 보인다. 한 겹만 본다 - 솔루션 안의 프로젝트 폴더까지 뒤지면 느리고 헷갈린다.
+    /// </remarks>
+    public static IReadOnlyList<string> FindUnder(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !System.IO.Directory.Exists(root)) return [];
+
+        return [.. System.IO.Directory.EnumerateDirectories(root)
+            .SelectMany(folder => System.IO.Directory.EnumerateFiles(folder, "*" + Extension))
+            .OrderBy(path => System.IO.Path.GetFileNameWithoutExtension(path), StringComparer.OrdinalIgnoreCase)];
+    }
+
     // ── 자리 ─────────────────────────────────────────────────────────────
 
     /// <summary>상대 경로를 전체 경로로.</summary>

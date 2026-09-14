@@ -80,7 +80,7 @@ public static class SolutionMigration
         var steps = new List<MigrationStep>();
         var junctions = new List<(string Link, string Target)>();
 
-        var dataset = LabelDataset.ConfiguredRoot;
+        var dataset = LabelDataset.LegacyRoot;
 
         if (Directory.Exists(dataset) && !Same(dataset, projectDirectory))
         {
@@ -93,7 +93,7 @@ public static class SolutionMigration
             junctions.AddRange(FindJunctionsInto(dataset, projectDirectory));
         }
 
-        var captures = ProjectPaths.Captures;
+        var captures = ProjectPaths.LegacyCaptures;
 
         if (Directory.Exists(captures) && !Same(captures, Path.Combine(projectDirectory, "captures")))
         {
@@ -187,9 +187,7 @@ public static class SolutionMigration
             Say($"링크 다시 걸음: {link} → {target}");
         }
 
-        // 7. 설정. 데이터셋 자리도 새 프로젝트로 돌려 놓는다 - 화면들이 아직 이 키를 본다(5단계에서 없어진다).
-        LabelDataset.ConfiguredRoot = plan.ProjectDirectory;
-
+        // 7. 이 솔루션을 지금 것으로 건다. 데이터셋 자리는 고른 프로젝트에서 읽으므로 옛 키를 고칠 필요가 없다.
         SolutionWorkspace.Use(solution);
 
         Say("설정을 새 자리로 돌려놓았습니다.");

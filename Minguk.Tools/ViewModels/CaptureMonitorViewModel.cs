@@ -48,7 +48,11 @@ public partial class CaptureMonitorViewModel : CaptureViewModelBase
     /// 저장된 레이아웃은 그때의 열 구성을 담고 있어서, 열이 바뀐 뒤 그대로 되돌리면
     /// 새 열이 숨겨진 채로 나온다. 판이 다르면 저장본을 버리고 기본 배치로 시작한다.
     /// </summary>
-    private const int GridLayoutVersion = 2;
+    /// <summary>
+    /// 3 - 망가진 열 너비(시각 33px·Fps 27px)가 저장된 배치를 한 번 버린다(2026-09-14). 안 보이는 탭까지 불러오던 때(CacheAllTabs)
+    /// 크기 0 인 그리드에서 잰 너비가 그대로 저장됐다.
+    /// </summary>
+    private const int GridLayoutVersion = 3;
 
     /// <summary>열 너비를 내용에 맞춘다. 끄면 사용자가 조절한 너비가 유지된다.</summary>
     public bool IsColumnAutoWidth
@@ -81,6 +85,10 @@ public partial class CaptureMonitorViewModel : CaptureViewModelBase
     protected override void RestoreSettings()
     {
         base.RestoreSettings();
+
+        // 미리보기는 늘 켠다. 이 화면은 미리보기 버튼을 숨겼다(IsVisible=False) - 저장값이 한 번 False 로 남으면 켤 방법이 없어
+        // 캡처를 시작해도 화면이 비었다(실측 2026-09-14: 이 화면만 False, 버튼이 보이는 스크립트·플레이는 True). 저장값은 안 본다.
+        ShowPreview = true;
 
         // 자동 너비와 배치 복원은 반드시 이 순서로, 그리드가 자리를 잡은 뒤에 넣는다.
         //
@@ -181,6 +189,10 @@ public partial class CaptureMonitorViewModel : CaptureViewModelBase
             GridLayoutService.Deserialize(layout);
 
             var grid = FindControl<DevExpress.Xpf.Grid.GridControl>("GridObjectService");
+
+            // 복원이 열 너비를 저장된 픽셀로 써 넣는다 - 자동 너비를 다시 건다(라벨링 화면과 같다). 안 그러면 한 번 망가진 너비가
+            // 영영 남는다(실측: 시각 33px·Fps 27px 로 복원됐다). 정렬·열 순서는 복원한 것이 그대로 남는다.
+            Minguk.Base.Dependency.GridControlDependency.ApplyColumnAutoWidth(grid, true);
 
             var widths = grid is null
                 ? "(그리드 못 잡음)"

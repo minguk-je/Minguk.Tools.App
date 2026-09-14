@@ -119,11 +119,91 @@ internal static partial class Program
             var reErrors = CompiledScriptRunner.RunAsync(File.ReadAllBytes(mtsx), reHost, _ => { }, CancellationToken.None).GetAwaiter().GetResult();
             Check("파일에서 다시 로드해도 그대로 돈다", reErrors.Count == 0 && reprinted.Contains("안녕"), string.Join(", ", reprinted));
 
+            TestCompiledExternalReference(folder, monitor);
+
             engine.Dispose();
         }
         finally
         {
             try { Directory.Delete(folder, recursive: true); } catch (Exception) { }
         }
+    }
+
+    /// <summary>
+    /// 스크립트가 <c>#r</c> 로 문 바깥 DLL - 빌드가 옆에 복사하고, 플레이어가 그 폴더에서 찾는가. 없으면 무엇을 어디 두라고 말하는가.
+    /// </summary>
+    /// <remarks>
+    /// 이것이 없을 때는 빌드는 되는데 플레이에서 "파일을 찾을 수 없다" 로만 멈췄다. 못 찾는 경우를 먼저 본다 - 한 번 올라온 어셈블리는
+    /// 프로세스에 남아 뒤의 검사가 늘 찾게 된다.
+    /// </remarks>
+    private static void TestCompiledExternalReference(string folder, CaptureTarget monitor)
+    {
+        const string assemblyName = "MingukExternalProbe";
+
+        var libs = Path.Combine(folder, "Libs");
+        Directory.CreateDirectory(libs);
+
+        var dllPath = Path.Combine(libs, assemblyName + ".dll");
+        var library = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
+            assemblyName,
+            [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText("public static class ExternalProbe { public static int Value() => 42; }")],
+            [Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
+            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+
+        Microsoft.CodeAnalysis.Emit.EmitResult emitted;
+        using (var stream = File.Create(dllPath)) emitted = library.Emit(stream);
+
+        if (!emitted.Success)
+        {
+            Check("바깥 DLL 참조 (시험용 DLL 을 못 만듦)", false, string.Join(" / ", emitted.Diagnostics.Take(3)));
+            return;
+        }
+
+        var entryPath = Path.Combine(folder, "외부.csx");
+        var entry = $"#r \"Libs/{assemblyName}.dll\"\n출력(\"외부=\" + ExternalProbe.Value());\n";
+        File.WriteAllText(entryPath, entry);
+
+        var unit = new ScriptUnit(entryPath, entry, [], [], new Dictionary<string, string>(), folder);
+
+        var (bytes, errors) = CompiledScriptBuilder.Build(unit, "외부");
+        Check("#r 로 문 바깥 DLL 을 참조해 빌드된다", bytes is not null && errors.Count == 0, errors.Count > 0 ? errors[0].ToString() : $"{bytes?.Length:N0}바이트");
+        if (bytes is null) return;
+
+        var external = CompiledScriptBuilder.ExternalReferences(unit);
+        Check("바깥 DLL 로 잡히는 것은 그것 하나(앱·런타임 DLL 은 뺀다)",
+              external.Count == 1 && string.Equals(external[0], dllPath, StringComparison.OrdinalIgnoreCase),
+              string.Join(", ", external.Select(Path.GetFileName)));
+
+        LiveScriptHost HostAt(string root, List<string> printed) => new()
+        {
+            Service = new InputService(new RecordingAdapter()),
+            RequiresForeground = false,
+            Target = () => monitor,
+            Hub = new FakeHub(monitor),
+            Print = printed.Add,
+            Watch = (_, _) => { },
+            HoldTimeMs = 1,
+            ResourceRoot = root
+        };
+
+        // 옆에 DLL 이 없는 bin - 무엇을 못 찾았는지 이름을 대고 멈춰야 한다.
+        var emptyBin = Path.Combine(folder, "bin-빈");
+        Directory.CreateDirectory(emptyBin);
+
+        var missingErrors = CompiledScriptRunner.RunAsync(bytes, HostAt(emptyBin, []), _ => { }, CancellationToken.None).GetAwaiter().GetResult();
+        Check("옆에 DLL 이 없으면 그 DLL 이름과 둘 자리를 말한다",
+              missingErrors.Count == 1 && missingErrors[0].Message.Contains(assemblyName) && missingErrors[0].Message.Contains(emptyBin),
+              missingErrors.Count > 0 ? missingErrors[0].Message : "(오류 없음)");
+
+        // 빌드가 하는 복사 - 그 폴더에서 돌리면 찾는다.
+        var bin = Path.Combine(folder, "bin");
+        var copied = CompiledScriptBuilder.CopyReferences(unit, bin);
+
+        var printed = new List<string>();
+        var runErrors = CompiledScriptRunner.RunAsync(bytes, HostAt(bin, printed), _ => { }, CancellationToken.None).GetAwaiter().GetResult();
+
+        Check("빌드가 바깥 DLL 을 옆에 복사하고, 플레이어가 그 폴더에서 찾아 돈다",
+              copied.Count == 1 && File.Exists(Path.Combine(bin, assemblyName + ".dll")) && runErrors.Count == 0 && printed.Contains("외부=42"),
+              runErrors.Count > 0 ? runErrors[0].ToString() : $"복사 [{string.Join(", ", copied)}] · 출력 [{string.Join(", ", printed)}]");
     }
 }

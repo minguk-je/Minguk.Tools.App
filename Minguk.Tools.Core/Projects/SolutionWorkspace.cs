@@ -55,11 +55,13 @@ public static class SolutionWorkspace
     }
 
     /// <summary>이미 읽어 둔 솔루션을 그대로 건다(새로 만든 직후 등).</summary>
-    public static void Use(Solution solution)
+    /// <param name="solution">걸 솔루션.</param>
+    /// <param name="remember">최근 목록에 올릴지. 검사 하네스는 끈다 - 사용자 최근 목록에 임시 솔루션을 끼워 넣으면 안 된다.</param>
+    public static void Use(Solution solution, bool remember = true)
     {
         Current = solution ?? throw new ArgumentNullException(nameof(solution));
 
-        Remember(solution.FilePath);
+        if (remember) Remember(solution.FilePath);
         Changed?.Invoke(null, EventArgs.Empty);
     }
 

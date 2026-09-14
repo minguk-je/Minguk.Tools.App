@@ -45,18 +45,29 @@ internal static class ViewSmokeProbe
             failures += Check("PlayView 생성", () => new PlayView());
             failures += Check("ConfigView 생성", () => new ConfigView());
 
+            // 시작 창. Automation 을 처음 누를 때 뜬다 - 여기서 터지면 Automation 을 아예 못 연다.
+            failures += Check("StartWindow 생성", () => new Minguk.Tools.Views.StartWindow());
+
+            // 새 프로젝트 이름을 받는 창. Automation 화면의 "새 프로젝트" 가 띄운다.
+            failures += Check("NameInputWindow 생성", () => new Minguk.Tools.Views.NameInputWindow());
+
+            // Automation 화면. 위에서 솔루션·프로젝트를 고르고 아래 탭들이 따라간다.
+            failures += Check("AutomationMainView 생성", () => new Minguk.Tools.Views.AutomationMainView());
+
             // FindMenuItem 은 Instance 가 한 번 만들어진 뒤에만 찾는다. 앱에서는 메뉴가 먼저
             // 만들어지므로 문제가 없지만, 여기서는 직접 건드려 줘야 한다.
             _ = MainMenu.Instance;
 
-            failures += CheckMenu("Minguk.Tools.Views.InputAutomationView");
-            failures += CheckMenu("Minguk.Tools.Views.CaptureMonitorView");
-            failures += CheckMenu("Minguk.Tools.Views.ScriptStudioView");
+            // 왼쪽 메뉴: Automation Builder(만드는 쪽) · 플레이(돌리는 쪽) · 입력 테스트(점검 도구).
+            failures += CheckMenu(MainMenu.AutomationClassName);
             failures += CheckMenu("Minguk.Tools.Views.PlayView");
-            failures += CheckMenu("Minguk.Tools.Views.LabelingView");
+            failures += CheckMenu("Minguk.Tools.Views.InputAutomationView");
 
-            // 모듈이 들고 온 화면. 이름을 여기 적지 않는다 - 모듈이 늘어도 이 파일은 안 고친다.
-            failures += CheckModules();
+            // Automation 화면 아래 탭들. 이름을 여기 적지 않는다 - AutomationScreens 가 셸 화면과 모듈 화면을 다 준다.
+            failures += CheckAutomationScreens();
+
+            // 모듈이 들고 온 최상위 메뉴(환경 등). 이름을 여기 적지 않는다 - 모듈이 늘어도 이 파일은 안 고친다.
+            failures += CheckModuleMenus();
 
             failures += CheckPathWarning();
             failures += CheckEditorPalette();
@@ -354,26 +365,31 @@ internal static class ViewSmokeProbe
     /// 아이콘 경로도 마찬가지로 문자열이다 - 없으면 조용히 빈 아이콘이 된다.
     /// </remarks>
     /// <summary>
-    /// 붙어 있는 모듈이 제 화면·메뉴·설정 페이지를 제대로 들고 오는지.
+    /// Automation 화면 아래 탭들이 제대로 붙는지 - 타입·아이콘, 그리고 실제로 만들어 보기.
     /// </summary>
     /// <remarks>
-    /// 모듈은 둘을 스스로 들고 와야 한다 - 메뉴 항목(타입·아이콘)과 DI 에 등록한 View.
-    /// 빠지면 앱에서는 "메뉴를 눌렀는데 탭이 비었다" 처럼만 보여서 원인을 찾기 어렵다.
+    /// 셸 화면과 모듈이 들고 온 화면(학습환경 등)이 한 목록(<c>AutomationScreens</c>)에서 나온다. 여기서 이름을 적지 않으므로
+    /// 화면이나 모듈이 늘어도 이 파일은 안 고친다. 타입 이름은 문자열이라 오타가 나도 빌드는 통과하고,
+    /// 앱에서는 "탭을 눌렀는데 비어 있다" 로만 보여 원인을 찾기 어렵다.
     /// </remarks>
-    private static int CheckModules()
+    private static int CheckAutomationScreens()
     {
         var failures = 0;
 
-        foreach (var module in Minguk.Tools.Modules.ToolModules.All)
+        foreach (var screen in Minguk.Tools.Source.AutomationScreens.All())
         {
-            foreach (var item in module.CreateMenuItems())
-            {
-                failures += CheckMenu(item.CLASS_NM);
+            var type = ResolveViewType(screen.ViewName);
+            var hasIcon = screen.Icon is byte[] { Length: > 0 };
 
-                // 실제로 만들어 본다 - XAML 은 빌드를 통과하고 런타임에만 터진다.
-                if (ResolveViewType(item.CLASS_NM) is { } viewType)
-                    failures += Check($"{viewType.Name} 생성", () => (FrameworkElement)Activator.CreateInstance(viewType)!);
+            if (type is null)
+            {
+                Console.WriteLine($"[FAIL] 화면 탭 {screen.Title} — 그런 타입이 없다: {screen.ViewName}");
+                failures++;
+                continue;
             }
+
+            Console.WriteLine($"[{(hasIcon ? "PASS" : "FAIL")}] 화면 탭 {screen.Title} — 타입 확인, 아이콘 {(hasIcon ? "있음" : "없음")}");
+            if (!hasIcon) failures++;
 
         }
 
@@ -386,6 +402,25 @@ internal static class ViewSmokeProbe
            ?? Minguk.Tools.Modules.ToolModules.All
                .Select(module => module.GetType().Assembly.GetType(className))
                .FirstOrDefault(found => found is not null);
+
+    /// <summary>모듈이 들고 온 메뉴 항목이 메뉴에 붙고, 화면이 실제로 만들어지는지.</summary>
+    private static int CheckModuleMenus()
+    {
+        var failures = 0;
+
+        foreach (var module in Minguk.Tools.Modules.ToolModules.All)
+        {
+            foreach (var item in module.CreateMenuItems())
+            {
+                failures += CheckMenu(item.CLASS_NM);
+
+                if (ResolveViewType(item.CLASS_NM) is { } viewType)
+                    failures += Check($"{viewType.Name} 생성", () => (FrameworkElement)Activator.CreateInstance(viewType)!);
+            }
+        }
+
+        return failures;
+    }
 
     private static int CheckMenu(string className)
     {

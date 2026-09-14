@@ -19,7 +19,13 @@ public enum ScriptItemKind
     Resource,
 
     /// <summary>참조할 DLL.</summary>
-    Reference
+    Reference,
+
+    /// <summary>
+    /// 물고 있는 다른 프로젝트(대개 공유 프로젝트, VS 의 .shproj). 그 프로젝트의 소스·DLL 참조가 이 프로젝트 컴파일에 합쳐진다.
+    /// 경로는 이 프로젝트 폴더 기준 상대라 <c>../공용/공용.mtsproj</c> 처럼 밖을 가리킨다 - 파일은 밖을 못 가리키지만 프로젝트 참조는 된다(VS 와 같다).
+    /// </summary>
+    ProjectReference
 }
 
 /// <summary>프로젝트 파일에 적힌 항목 하나.</summary>
@@ -127,6 +133,30 @@ public sealed class ScriptProject
         return project;
     }
 
+    /// <summary>
+    /// 새 공유 프로젝트 - 폴더, 프로젝트 파일, 소스 하나(<c>&lt;이름&gt;.csx</c>). 시작 파일이 없다 - 혼자 돌지 않고 다른 프로젝트가 물어 쓴다.
+    /// </summary>
+    public static ScriptProject CreateShared(string folder, string name)
+    {
+        System.IO.Directory.CreateDirectory(folder);
+
+        var filePath = System.IO.Path.Combine(folder, name + Extension);
+
+        if (File.Exists(filePath))
+            throw new IOException($"같은 이름의 프로젝트가 이미 있습니다: {filePath}");
+
+        var project = new ScriptProject { Name = name, FilePath = System.IO.Path.GetFullPath(filePath) };
+        var source = name + ScriptFiles.Extension(ScriptLanguage.CSharp);
+
+        if (!File.Exists(project.FullPath(source)))
+            WriteText(project.FullPath(source), "// 공유 프로젝트입니다. 여기 둔 함수·클래스를 이 프로젝트를 참조한 프로젝트가 그대로 부릅니다.\n");
+
+        project.Items.Add(new ScriptProjectItem { Path = source, Kind = ScriptItemKind.Source });
+        project.Save();
+
+        return project;
+    }
+
     public void Save()
     {
         Normalize();
@@ -190,6 +220,67 @@ public sealed class ScriptProject
         ".dll" => ScriptItemKind.Reference,
         _ => ScriptItemKind.Resource
     };
+
+    /// <summary>
+    /// 다른 프로젝트를 참조로 넣는다. 파일과 달리 프로젝트 폴더 밖이어도 된다 - 상대 경로(<c>../공용/공용.mtsproj</c>)로 적어 솔루션째 옮겨도 열린다.
+    /// </summary>
+    /// <returns>넣은 항목. 이미 있으면 그것.</returns>
+    public ScriptProjectItem AddProjectReference(string projectFilePath)
+    {
+        var full = System.IO.Path.GetFullPath(projectFilePath);
+
+        if (string.Equals(full, FilePath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("자기 자신은 참조할 수 없습니다.");
+
+        if (!string.Equals(System.IO.Path.GetExtension(full), Extension, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"프로젝트 파일(*{Extension})만 참조할 수 있습니다: {full}");
+
+        var relative = System.IO.Path.GetRelativePath(Directory, full).Replace('\\', '/');
+
+        // 다른 드라이브면 상대로 못 적는다 - 옮기면 깨지는 참조를 조용히 만들지 않는다.
+        if (System.IO.Path.IsPathRooted(relative))
+            throw new InvalidOperationException($"다른 드라이브의 프로젝트는 참조할 수 없습니다 - 같은 솔루션 폴더에 두세요: {full}");
+
+        if (Items.FirstOrDefault(i => i.Kind == ScriptItemKind.ProjectReference && string.Equals(i.Path, relative, StringComparison.OrdinalIgnoreCase)) is { } existing)
+            return existing;
+
+        var item = new ScriptProjectItem { Path = relative, Kind = ScriptItemKind.ProjectReference };
+        Items.Add(item);
+
+        return item;
+    }
+
+    /// <summary>
+    /// 물고 있는 프로젝트들을 읽는다(참조의 참조까지, 한 번씩). 없거나 못 읽는 것은 건너뛴다 - 탐색기에 "찾을 수 없음" 으로 남는다.
+    /// </summary>
+    /// <remarks>서로 무는 고리(A→B→A)가 있어도 한 번씩만 돈다.</remarks>
+    public IReadOnlyList<ScriptProject> ReferencedProjects()
+    {
+        var result = new List<ScriptProject>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { FilePath };
+
+        void Walk(ScriptProject project)
+        {
+            foreach (var item in project.Items.Where(i => i.Kind == ScriptItemKind.ProjectReference))
+            {
+                var full = project.FullPath(item.Path);
+
+                if (!seen.Add(full) || !File.Exists(full)) continue;
+
+                ScriptProject loaded;
+
+                try { loaded = Load(full); }
+                catch (Exception) { continue; }
+
+                result.Add(loaded);
+                Walk(loaded);
+            }
+        }
+
+        Walk(this);
+
+        return result;
+    }
 
     public void AddFolder(string relative)
     {
@@ -301,12 +392,26 @@ public sealed class ScriptProject
             ? string.Empty
             : openTexts.TryGetValue(entry, out var open) ? open : File.Exists(entry) ? File.ReadAllText(entry) : string.Empty;
 
-        var sources = Items
-            .Where(i => i.Kind == ScriptItemKind.Source && !string.Equals(i.Path, Entry, StringComparison.OrdinalIgnoreCase))
-            .Select(i => FullPath(i.Path))
-            .ToList();
+        // 물고 있는 프로젝트의 소스가 먼저 온다 - 공용 함수를 이 프로젝트 조각이 불러도 된다. 그 프로젝트의 시작 파일은 안 넣는다
+        // (거기 최상위 문장이 이 프로젝트 실행에 섞여 돈다). 같은 파일이 두 길로 오면 한 번만.
+        var sources = new List<string>();
+        var references = new List<string>();
 
-        var references = Items.Where(i => i.Kind == ScriptItemKind.Reference).Select(i => FullPath(i.Path)).ToList();
+        foreach (var project in ReferencedProjects().Append(this))
+        {
+            foreach (var item in project.Items)
+            {
+                if (item.Kind == ScriptItemKind.Source && !string.Equals(item.Path, project.Entry, StringComparison.OrdinalIgnoreCase))
+                    AddOnce(sources, project.FullPath(item.Path));
+                else if (item.Kind == ScriptItemKind.Reference)
+                    AddOnce(references, project.FullPath(item.Path));
+            }
+        }
+
+        static void AddOnce(List<string> list, string path)
+        {
+            if (!list.Contains(path, StringComparer.OrdinalIgnoreCase)) list.Add(path);
+        }
 
         return new ScriptUnit(entry, entryText, sources, references, openTexts, Directory);
     }

@@ -52,8 +52,6 @@
         <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
                                EventName="Loaded" />
 
-        <!-- 폴더 고르기 · 알림 창. 선언하지 않으면 ViewModel 에서 부를 때 예외로 터진다. -->
-        <dxmvvm:FolderBrowserDialogService />
         <dxmvvm:DispatcherService />
 
         <!--
@@ -73,6 +71,10 @@
                             TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                             TextBlock.FontSize="{DynamicResource BaseFontSize}">
 
+            <!--
+                폴더는 보이기만 한다 - Automation 위 칸에서 고른 프로젝트 폴더다. 여기서 고르는 버튼은 뺐다(2026-09-14):
+                위는 사격장인데 라벨링만 딴 폴더를 보는 어긋남이 생긴다.
+            -->
             <dxb:BarEditItem Content="폴더"
                              EditValue="{Binding DatasetRoot, Mode=OneWay}"
                              EditWidth="420"
@@ -83,10 +85,6 @@
                 </dxb:BarEditItem.EditSettings>
             </dxb:BarEditItem>
 
-            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                               Command="{Binding DoChooseFolderCommand}"
-                               Content="폴더 고르기"
-                               Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/folder_open.png'}" />
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding DoOpenFolderCommand}"
                                Content="탐색기로"

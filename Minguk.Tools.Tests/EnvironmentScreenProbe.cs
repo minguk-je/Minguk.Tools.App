@@ -1,0 +1,179 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+
+using DevExpress.Xpf.Core;
+
+using Minguk.Tools.Helper;
+using Minguk.Tools.Training.Views;
+
+namespace Minguk.Tools.Tests;
+
+/// <summary>
+/// 환경 화면을 화면 밖 창에 띄워 바인딩 오류를 모으고 PNG 로 찍는다 - <c>--environment-screen [--out=경로.png]</c>.
+/// </summary>
+/// <remarks>
+/// 학습 경로·작업공간 두 칸이 붙어 있는지(사이 간격)를 재어 적는다 - 폼 칸 배치는 눈으로 봐야 알아서 찍는다.
+/// 폴더를 고르거나 설정을 쓰지 않는다. 커서는 안 가져간다.
+/// </remarks>
+public static class EnvironmentScreenProbe
+{
+    public static int Run(string[] args)
+    {
+        var output = Program.ArgValue(args, "--out=") ?? Path.Combine(Path.GetTempPath(), "minguk-environment-screen.png");
+        var failures = 0;
+        var bindingErrors = new List<string>();
+
+        CompatibilitySettings.UseLightweightThemes = true;
+        LightweightThemeManager.AllowStandardControlsTheming = false;
+        DevExpress.Xpf.Grid.DataControlBase.AllowInfiniteGridSize = true;
+
+        _ = new System.Threading.Timer(_ =>
+        {
+            Console.WriteLine("[FAIL] 환경 화면 - 60초 안에 끝나지 않았다.");
+            Environment.Exit(2);
+        }, null, 60_000, System.Threading.Timeout.Infinite);
+
+        UserPreferencesHelper.EnsureDefaults();
+        UserPreferencesHelper.ApplyTheme();
+
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+
+        PresentationTraceSources.Refresh();
+        PresentationTraceSources.DataBindingSource.Listeners.Add(new CollectingListener(bindingErrors));
+        PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
+
+        app.Dispatcher.BeginInvoke(DispatcherPriority.Background, async () =>
+        {
+            Window? window = null;
+
+            try
+            {
+                var view = new TrainingEnvironmentView();
+                window = new Window
+                {
+                    Width = 1000, Height = 600, Left = -20000, Top = -20000,
+                    ShowActivated = false, ShowInTaskbar = false, WindowStyle = WindowStyle.None,
+                    Content = view
+                };
+                window.Show();
+
+                await Pump(800);
+
+                if (view.DataContext is DevExpress.Mvvm.ISupportParentViewModel child) child.ParentViewModel = new object();
+
+                await Pump(1500);
+
+                var edits = Descendants<DevExpress.Xpf.Editors.ButtonEdit>(window).ToList();
+
+                if (edits.Count < 2)
+                {
+                    Console.WriteLine($"[FAIL] 폴더 칸 둘을 못 찾았다 ({edits.Count}개)");
+                    failures++;
+                }
+                else
+                {
+                    var first = edits[0].TransformToAncestor(view).Transform(new Point(0, edits[0].ActualHeight)).Y;
+                    var second = edits[1].TransformToAncestor(view).Transform(new Point(0, 0)).Y;
+                    var gap = second - first;
+
+                    Console.WriteLine($"[INFO] 학습 경로 칸 밑선 {first:0}px · 작업공간 칸 윗선 {second:0}px · 사이 {gap:0}px");
+
+                    if (gap > 1) { Console.WriteLine($"[FAIL] 두 칸 사이가 {gap:0}px 떠 있다"); failures++; }
+                    else Console.WriteLine($"[PASS] 두 칸이 붙어 있다 - 사이 {gap:0}px");
+                }
+
+                var mine = bindingErrors.Where(e => e.Contains("Training")).Distinct().ToList();
+                if (mine.Count > 0)
+                {
+                    Console.WriteLine($"[FAIL] 바인딩 오류 {mine.Count}건");
+                    foreach (var error in mine.Take(10)) Console.WriteLine("       " + error);
+                    failures++;
+                }
+                else Console.WriteLine("[PASS] 환경 화면 바인딩 오류 없음");
+
+                Render(window, output);
+                Console.WriteLine($"[INFO] 화면을 찍었다: {output}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[FAIL] 환경 화면 - {ex.GetType().Name}: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+                failures++;
+            }
+            finally
+            {
+                try { window?.Close(); } catch (Exception) { }
+                app.Shutdown();
+            }
+        });
+
+        app.Run();
+
+        return failures;
+    }
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match) yield return match;
+            foreach (var inner in Descendants<T>(child)) yield return inner;
+        }
+    }
+
+    private static async System.Threading.Tasks.Task Pump(int milliseconds)
+    {
+        var watch = Stopwatch.StartNew();
+
+        while (watch.ElapsedMilliseconds < milliseconds)
+            await Dispatcher.Yield(DispatcherPriority.Background);
+    }
+
+    private static void Render(Window window, string path)
+    {
+        var content = (FrameworkElement)window.Content;
+        var width = (int)Math.Ceiling(content.ActualWidth);
+        var height = (int)Math.Ceiling(content.ActualHeight);
+
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        var visual = new DrawingVisual();
+
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
+            context.DrawRectangle(new VisualBrush(content), null, new Rect(0, 0, width, height));
+        }
+
+        bitmap.Render(visual);
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        using var stream = File.Create(path);
+        encoder.Save(stream);
+    }
+
+    private sealed class CollectingListener(List<string> errors) : TraceListener
+    {
+        private string _pending = string.Empty;
+
+        public override void Write(string? message) => _pending += message;
+
+        public override void WriteLine(string? message)
+        {
+            errors.Add(_pending + message);
+            _pending = string.Empty;
+        }
+    }
+}

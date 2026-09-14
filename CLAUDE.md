@@ -25,8 +25,74 @@ ViewModel 최소 예시로 남긴다). 탭 캡션(`Caption`)도 메뉴 이름과
 사진·라벨·몹 이름·모델·영역·스크립트는 **프로젝트마다 제 것**이고, 실행은 **시작 프로젝트** 하나가 돈다.
 정한 것·폴더 모양·만들 순서는 전부 **`docs/프로젝트-설계.md`** 에 있다.
 
-1단계(모델)까지 됐다 - `Minguk.Tools.Core/Projects` 의 `Solution` · `SolutionWorkspace`, 검사는 `--solution`.
-아직 화면에는 안 붙어 있다.
+**짜임(사용자, 2026-09-14)** - Minguk.Tools 는 틀(와꾸)이고, 왼쪽 메뉴는 `Office Automation`(그룹) → **`Automation`(누르는 항목)** 하나다.
+누르면 솔루션이 없을 때 시작 창(`StartWindow`, `SolutionGate`)이 뜨고 **Automation 화면**(`AutomationMainView`)이 최상위 탭 하나로 열린다.
+**TamsTools 의 StreamMode 화면과 같은 짜임**이다("Depth 로 내려간다") - 위에서 **솔루션 → 프로젝트** 콤보를 고르면, 아래 탭(화면캡처·라벨링·
+스크립트·플레이·입력 테스트·학습환경, `AutomationScreens` - 모듈 화면 포함)이 그 프로젝트를 따라간다. 지금 만드는 작업은 전부 Automation 안이다.
+(프로젝트마다 바깥 탭을 여는 방식을 한 번 만들었다가 이것으로 바꿨다.)
+
+- **아래 탭은 진짜 문서다** - 안쪽에 `DocumentGroup` + **이름 붙인** `TabbedDocumentUIService`(`AutomationDocumentManagerService`)를 둔다.
+  그래서 부모 넣기·닫기·파기를 DevExpress 가 한다. `DXTabControl` 에 넣으면 그 신호를 손으로 넘겨야 하고 틀리면 캡처 세션이 게임 창을
+  붙잡는다. 이름으로 꺼내는 이유는 셸(MainView)에도 같은 서비스가 있어서다. 닫기 버튼 없음, **`CacheTabsOnSelecting`** -
+  `CacheAllTabs` 로 두었더니 여는 순간 여섯 화면이 다 초기화됐다(실측: Roslyn 예열 3번·F5 쥐기 3번). 그래서 안 연 탭이 생기므로
+  **바탕(`DocumentViewModelBase`)은 초기화 안 된 화면의 `SaveSettings` 를 건너뛴다** - 안 그러면 안 연 탭을 닫기만 해도 기본값이 저장값을 덮는다.
+- Automation 탭이 닫히면 아래 문서를 전부 `Close()` 한다(`DestroyOnClose`) - 각 화면의 OnClose → OnDestroy. 앱 종료 때는 셸이
+  Automation 탭만 알아서 `SaveSettings` 가 아래 화면들에 `SaveSettingsNow` 를 넘긴다. 탭 활성화도 아래로 넘긴다(전역 단축키).
+- **프로젝트를 바꾸면 아래 화면을 닫고 다시 연다.** 화면들이 자리(데이터셋·스크립트·프레임 저장)를 열 때 읽고 들고 있어서다.
+  닫기를 막는 화면이 있으면 바꾸지 않고 콤보를 되돌린다.
+- Automation 화면과 예전 최상위 화면 탭은 배치 복원에서 되살리지 않는다 - 되살리면 시작 창을 안 거친다(`OldDocumentNames`).
+- **화면들이 고른 프로젝트를 따라간다** - 기준은 `SolutionWorkspace.StartupDirectory` 하나다(Automation 위 칸에서 고르면 시작 프로젝트가 된다).
+  **데이터셋·모델·영역**은 `LabelDataset.ConfiguredRoot`(읽을 때 고른 프로젝트를 본다 - 예전의 앱 전체 키 `Vision.DatasetRoot` 를 Automation 이
+  고쳐 쓰던 다리는 걷었다, 그 키는 이제 솔루션이 없을 때의 `LegacyRoot` 다), **스크립트 자리**는 `ScriptFiles.DefaultDirectory`(플레이 목록·열기/저장 대화 상자),
+  **프레임 저장**은 `ProjectPaths.Captures`(`<프로젝트>\captures`), **스크립트 화면**은 그 프로젝트의 `.mtsproj` 를 연다(`ScriptWorkbench.RestoreProject` -
+  지난번 것이 그 폴더 안이면 탭까지 되살린다). 프로젝트가 없을 때만 옛 자리를 본다. 이주는 `ProjectPaths.LegacyCaptures` 를 본다.
+  플레이 목록은 폴더 자체가 프로젝트 폴더면 낱개 `.csx` 를 뺀다(그 프로젝트의 조각이다). 이것이 없어 이주 뒤 플레이 목록이 비었고 새 그림이 프로젝트 밖으로 갔다.
+  검사는 `--solution` 의 `CheckScreensFollowProject` - `SolutionWorkspace.Use(…, remember: false)` 로 사용자 최근 목록을 안 더럽힌다.
+  이름 주의: `Minguk.Tools.Input.Scripting` 안에서는 `Projects.` 가 `Input.Scripting.Projects` 로 먼저 잡혀 `global::Minguk.Tools.Projects` 로 적는다.
+- **메뉴**(사용자, 2026-09-14): `자동화`(뿌리 그룹, 옛 Office Automation) → **`환경`**(맨 위, 모듈 메뉴 - 학습 도구·작업공간, 옛 학습환경) ·
+  **`빌더`**(만드는 쪽 - 아래 탭 화면캡처·라벨링·스크립트, 옛 Automation·Automation Builder, 코드 이름은 `AutomationMain*` 그대로) ·
+  **`플레이`**(돌리는 쪽) · **`입력 테스트`**(점검 도구). "전체 환경이 있고 그 안에 빌더와 플레이어가 있다" - 환경·플레이·입력 테스트는 빌더 탭에서 빼 최상위로 돌렸다.
+  환경을 뺀 이유: 거기서 작업공간을 정하는데 빌더는 그 작업공간에서 솔루션을 고른다 - 빌더 안에 두면 솔루션부터 골라야 작업공간을 바꿀 수 있었다.
+  환경은 모듈이 들고 오는 메뉴라 `MainMenu` 가 뿌리 바로 아래 맨 앞에 붙인다(`ToolModules`).
+- **완성품은 프로젝트 폴더의 `bin`** 이다(사용자 결정 2026-09-14 - "파일 하나면 빌더 폴더 밑에 놔둬도 상관없다"): `작업공간/오버워치/사격장/bin/사격장.mtsx`.
+  모델·영역·리소스가 이미 프로젝트 폴더에 있어 따로 복사할 것이 없다. `bin` 인 이유는 솔루션 탐색기가 `bin` 을 안 봐서 `.mtsx` 가 프로젝트 파일 목록에 안 끼어들어서다.
+  한때 `작업공간/Builder`·`작업공간/Player`, 그다음 `솔루션/Player` 로 모았다가(빌드가 모델·영역을 복사) 되돌렸다.
+  플레이는 **고른 완성품의 프로젝트 폴더에서** 모델·영역을 읽는다(`RecognizingCaptureViewModelBase.RecognitionRoot` 가상 - `PlayViewModel` 이 `bin` 의 위 폴더로 덮는다).
+  플레이 목록은 `작업공간/솔루션/프로젝트/bin/*.mtsx` 를 훑어 `오버워치 / 사격장` 으로 보인다(`PlayViewModel.ListBuilds`) - 소스는 안 나오고, 고치는 동안의 시험은 스크립트 탭 F5.
+  **모델 다시 읽기는 파일 경로도 본다**(`_detectorPath`) - 다른 완성품을 고르면 기다리지 않고 곧바로 그 프로젝트의 모델을 읽는다.
+  빌드는 **소스(.csx 여러 개)를 IL 하나로 합친다**. 리소스는 옆에 복사한다. **스크립트가 참조한 바깥 DLL(#r·참조 항목)은 합치지 않고 `bin` 에 복사한다**
+  (`CompiledScriptBuilder.CopyReferences`, 앱 폴더·.NET 런타임 폴더의 것은 뺀다). 플레이는 도는 동안 `AppDomain.AssemblyResolve` 를 걸어 `.mtsx` 옆에서
+  `<어셈블리 이름>.dll` 을 찾는다(`CompiledScriptRunner`) - 형식은 JIT 때 올라오므로 로드 직후가 아니라 실행이 끝날 때 푼다. 못 찾으면 "참조한 DLL 'X' 를 찾지 못했습니다 -
+  .mtsx 옆에 두세요" 로 멈춘다. 그 DLL 이 또 무는 DLL 은 자동으로 안 따라온다 - 그것도 참조 항목으로 넣으면 같이 복사된다.
+  `.mtsx` 는 `LiveScriptApi` 를 상속하므로 Minguk.Tools 안에서만 돈다. 검사: `--vision` 의 바깥 DLL 네 줄(없을 때 문장·복사 뒤 42).
+- **솔루션들이 든 폴더는 화면에서 `작업공간`** 이라 부른다(사용자, 2026-09-14 - 프로젝트 경로 → Workspace → 작업공간). "프로젝트" 가 솔루션 안의
+  모드·스테이지를 뜻하게 되어 "프로젝트 경로" 가 헷갈렸다. 환경 메뉴의 칸·표·버튼, 빌더 위 칸이 작업공간이다.
+  **설정 키 `Vision.ProjectsRoot` 와 `ProjectPaths` 이름은 그대로** - 저장값을 잃지 않으려고. 기본 폴더도 `설치 폴더/작업공간` 인데 옛 기본(`설치 폴더/프로젝트`)에 이미 있으면 그것을 쓴다.
+  **작업공간은 솔루션 폴더 하나가 아니라 그 위 폴더다** - 오버워치 폴더를 고르면 솔루션·완성품을 한 겹 잘못된 곳에서 찾는다(한 번 그렇게 골랐었다).
+- **위 칸은 작업공간부터 내려간다**(사용자, 2026-09-14): `작업공간(보이기만) → [솔루션 ▾] → [프로젝트 ▾]`. 솔루션 콤보는 최근 목록이 아니라
+  작업공간 **바로 아래(한 겹)** 의 `.mtsln` 이다(`Solution.FindUnder`) - 최근 목록이면 폴더에 넣어 둔 솔루션이 한 번 열기 전엔 안 보인다.
+  열기로 경로 밖에서 연 솔루션은 콤보가 비지 않게 같이 넣는다. 경로를 바꾸는 곳은 학습환경 탭이다.
+- **새 프로젝트 · 새 솔루션**은 Automation 화면 위쪽, 프로젝트 콤보 옆 버튼이다. 새 프로젝트는 이름 창(`NameInputWindow`, Enter·Esc,
+  같은 이름 폴더면 창 안에서 막음) → `<솔루션>\<이름>\` 에 `.mtsproj`·`main.csx`·`images\`·`labels\` → 솔루션에 넣고 시작 프로젝트로 → 넘어간다.
+  새 솔루션은 시작 창을 만들기 칸이 펴진 채 띄운다(`StartWindow.ForCreate`). **이름을 먼저 묻고 만든 뒤에 넘어간다** - 아래 화면을 먼저 닫으면
+  취소했을 때 캡처만 끊긴다. 만든 뒤 닫기를 막는 화면이 있으면 넘어가지 않는다(새 솔루션이면 앞 솔루션으로 되돌려 위 칸과 아래 화면이 안 어긋나게).
+
+**버튼을 숨긴 설정은 저장값을 믿지 않는다**(실측 2026-09-14). 화면캡처의 `미리보기` 버튼이 `IsVisible=False` 인데 `ShowPreview` 는 저장값을 읽어서,
+한 번 `False` 로 남으니 켤 길이 없어 캡처를 시작해도 화면이 비었다(이 화면만 False, 버튼이 보이는 스크립트·플레이는 True). 그래서 화면캡처는
+`RestoreSettings` 에서 늘 켠다 - 같은 화면의 열 자동 너비도 같은 방식이다. **설정 화면의 `초기화`는 모든 화면 설정(대상 창·미리보기·열 너비·확대)을
+지운다** - 증상을 고치지 않고 이런 증상을 만든다. 그리드 배치를 복원하면 열 너비가 저장된 픽셀로 써지므로 캡처 화면도 **복원 뒤에 자동 너비를
+다시 건다**(라벨링과 같다) - 안 그러면 한 번 망가진 너비(크기 0 인 탭에서 잰 33px 등)가 영영 남는다.
+
+됐다: 1단계 모델(`Solution`·`SolutionWorkspace`, `--solution`) · 2단계 이주(`SolutionMigration`, `--migrate [--apply]`,
+이 PC 는 `D:\Minguk.Tools.프로젝트\오버워치\사격장` 으로 옮겼다) · 3단계 시작 창 · 6단계 공유 프로젝트. 남은 것: 셸 도구 모음(시작 프로젝트)·화면 넷 연결.
+
+**공유 프로젝트**(2026-09-14): 빌더 위 칸 `새 공유 프로젝트` → `<솔루션>\<이름>\<이름>.mtsproj` + `<이름>.csx`(시작 파일 없음), 솔루션에 `Shared`.
+물리는 것은 스크립트 화면 솔루션 탐색기 추가 > `공유 프로젝트 참조`(프로젝트 메뉴에도) - VS 처럼 만든다고 저절로 물리지 않는다.
+`.mtsproj` 항목 `ProjectReference`(경로는 `../공용/공용.mtsproj` - 파일은 폴더 밖을 못 가리키지만 프로젝트 참조는 된다). `ToUnit` 이 참조의 참조까지
+한 번씩(고리 안전) 읽어 **그 프로젝트의 소스(시작 파일 빼고)·DLL 참조를 앞에** 합친다 - 실행·검사·완성·빌드가 다 `ScriptUnit` 을 보므로 따로 고칠 곳이 없었다.
+탐색기에는 `이름 (공유)` 줄 아래 그 소스가 **전체 경로 Id**(`IsExternal`)로 달린다 - 열어 고치고 완성도 붙지만(`UnitFor` 가 한 벌의 Sources 로 가린다)
+이름 바꾸기·삭제·제외·시작 파일은 막는다(다른 런이 영문 모르게 깨진다). 참조 줄은 삭제가 아니라 제외(참조 빼기)만. 폴더 감시는 참조를 없어졌다고 빼지 않는다.
+검사: `--solution` 의 `CheckSharedProject`(참조 전 빌드 실패 → 참조 뒤 성공, 고리, 탐색기 잠금).
 
 ## 기능 모듈 - 셸은 뼈대로 두고 기능은 프로젝트로 붙인다
 
@@ -43,7 +109,7 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 제 설정 페이
 **왜 가운데 프로젝트가 있나** - 모듈이 화면 바탕(`DocumentViewModelBase`)과 메뉴 항목(`MenuItemModel`)을 써야 하는데
 그것이 셸에 있으면 순환 참조가 된다. 그래서 Core 로 내렸다. **네임스페이스는 `Minguk.Tools.*` 그대로**라(어셈블리 이름만 다르다)
 옮기면서 고친 `using` 이 한 줄도 없다. Core 에 든 것: `MenuItemModel` · `DocumentViewModelBase`(3파일) ·
-`IToolModule`/`ISettingsPage`/`IFolderPicking`/`IMainShell` · `ToolModules` · 경로 도우미(`InstallPaths`·`UserDataPaths`·
+`IToolModule`/`IMainShell` · `ToolModules` · 솔루션 모델(`Projects/Solution`·`SolutionWorkspace`) · 경로 도우미(`InstallPaths`·`UserDataPaths`·
 `TrainingPaths`·`ProjectPaths`). **기능 코드는 넣지 않는다.**
 
 `DocumentViewModelBase` 가 부모를 `MainViewModel` 로 들고 있던 것은 `IMainShell`(아래 바 두 줄)로 바꿨다 -
@@ -62,12 +128,8 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 제 설정 페이
 
 - `MainViewLocator.Assemblies` 가 셸 + 모듈 어셈블리를 본다. 셸만 보면 모듈 화면의 `CLASS_NM` 을 못 찾아
   **메뉴를 눌러도 아무 일이 안 난다.**
-- **설정도 모듈이 들고 온다**(`ISettingsPage`). 셸의 ConfigView 는 `ToolModules.SettingsPages()` 가 준 것을 범주(GroupBox)로
-  그리기만 하고 무엇이 들었는지 모른다. 학습 경로·프로젝트 경로가 ConfigView 에 박혀 있던 것을 이 방식으로 학습 모듈에
-  내렸다 - 기능이 늘 때마다 ConfigView 가 길어지지 않게. 페이지는 열 때 `Load`, **확인을 눌렀을 때만** `Save` 다.
-  폴더 고르기 대화 상자는 화면 쪽 물건이라 페이지가 직접 만들지 않고 `IFolderPicking` 으로 받는다(능력별 인터페이스).
-  칸(View)은 `SettingsPageHost` 가 **한 번만** 만들어 든다 - XAML 에서 `CreateView()` 를 바로 묶으면 배치를 다시 잴 때마다
-  새 칸이 생겨 치던 글이 사라진다.
+- **모듈 설정은 모듈 화면이 든다.** 한동안 설정 화면(ConfigView)에 모듈 페이지를 끼우는 장치(`ISettingsPage` 등)를 뒀다가 걷었다 -
+  폴더를 바꾼 뒤 결과를 볼 화면이 따로 있어 오가야 했다(사용자). 학습 경로·프로젝트 경로는 학습환경 화면에서 고르고 그 자리에서 표가 다시 그려진다.
 - 검증: `--views` 의 `CheckModules` 가 붙어 있는 모듈을 **이름을 적지 않고** 돈다 - 메뉴 항목의 타입·아이콘, 화면을 실제로
   만들어 보기, 설정 페이지 `Load`+`CreateView`. 모듈이 늘어도 하네스는 안 고친다.
 
@@ -831,8 +893,8 @@ CPU 판만 해도 274MB 다. 그래서 **참조하지 않고 학습을 누를 �
 
 확인용 씨앗을 심는 스크립트는 `images/` · `labels/` 를 **비우고** 시작한다. 사용자가
 게임에서 모은 그림이 그 자리에 있으면 통째로 날린다. **사용자가 모으기 시작한 뒤에는
-기본 데이터셋 폴더에 씨앗을 심지 않는다** - 시험은 다른 폴더를 만들어 `폴더 고르기` 로
-돌려 놓고 한다.
+기본 데이터셋 폴더에 씨앗을 심지 않는다** - 시험은 Automation 의 `새 프로젝트` 로 시험용 프로젝트를 따로 만들어
+그리로 넘어가서 한다(데이터셋 자리는 고른 프로젝트다 - 라벨링의 폴더 고르기는 뺐다).
 
 ### 끝까지 밟아 본 것
 
@@ -940,22 +1002,25 @@ ONNX 로 32ms 가 되자 그 값이 **조준을 붙잡는 쪽**이 됐다 - 조�
 YOLO11n 은 학습 5분 · 재현율 194/194 · **추론 10.9ms**(D-FINE 28.5ms), YOLO11s 는 10분 · 194/194 · 23.5ms. DirectML 이 YOLO 는 맞게
 계산한다(MatMul 고칠 것 없음). 재현율은 D-FINE 과 같고 속도·학습 시간만 앞선다.
 
-**모델 정책(사용자, 2026-09-14): 내 PC 시험은 YOLO11n, 배포는 D-FINE-N.** YOLO 는 AGPL 이라 남에게 넘기는 모델에 못 쓴다.
+**모델 정책(사용자, 2026-09-14): 이 프로젝트는 이력서 포트폴리오용이라 남에게 넘기지 않는다 - YOLO11n 을 평소 모델로 써도 된다.**
+한때 "시험은 YOLO11n, 배포는 D-FINE-N" 으로 정했다가 풀었다. YOLO(Ultralytics)는 AGPL-3.0 인데, 의무는 넘길 때(네트워크 서비스 포함) 생기고
+조건은 "알림" 이 아니라 "묶어 넘기는 프로그램 소스 전체를 AGPL 로 공개" 다. 포트폴리오로 **GitHub 에 올릴 때만** 짚는다 - 학습한 YOLO 모델을
+저장소에 넣으면 저장소를 AGPL-3.0 으로 두는 편이 안전하고(지금 모델은 프로젝트 경로라 저장소 밖), DevExpress 라이선스 키·DLL 은 올리지 않는다.
 - **라벨링 화면 "쓰는 모델" 콤보로 고른다**(2026-09-14). 목록은 데이터셋 폴더의 보관본 `detector.<이름>.onnx`(지금 `detector.yolo11n.onnx`·
   `detector.d-fine-n.onnx`)과 이 화면의 학습 모델 `detector.zip`. 고르면 `DetectorFiles.Use` 가 보관본과 쪽지를 몹 찾기 자리(`detector.onnx`)에
   복사하고 시각을 지금으로 찍는다 - 켜 둔 스크립트·플레이 화면은 시각이 바뀐 것을 보고 몇 초 안에 따라온다. 보관본은 지우지 않는다.
-- **배포 전에는 콤보에서 D-FINE-N 을 고른다.** 줄에 "D-FINE-N (ONNX · 늘리기)" 가 뜨면 된 것이다. 모델은 설치 패키지(publish.ps1)가 아니라
+- D-FINE-N 으로 바꾸려면 콤보에서 고른다. 줄에 "D-FINE-N (ONNX · 늘리기)" 가 뜨면 된 것이다. 모델은 설치 패키지(publish.ps1)가 아니라
   데이터셋 폴더에 있다. 명령으로 하려면 `--import-onnx --model=<몹>\detector.d-fine-n.onnx --size=640x640 --fit=늘리기 --name=D-FINE-N`.
 - 모델 쪽지에 `modelName` 이 있다. `--import-onnx --name=` 으로 적고, 이름이 있으면 보관본(`KeepAsChoice`, 이름을 소문자·공백은 -)도 남긴다.
   `--detect-check` 는 재현율을 지금 모델과 그 보관본 쪽지에 적는다 - 콤보 옆 줄이 그것을 읽는다.
-- 데이터를 늘려 다시 학습할 때도 둘 다: 빠른 확인은 YOLO11n(5분), 배포 모델은 D-FINE-N 을 다시 학습(1시간 45분) - 절차는 `docs/ONNX-모델-학습.md`.
+- 데이터를 늘려 다시 학습할 때는 YOLO11n(5분)이면 된다. D-FINE-N(1시간 45분)은 비교가 필요할 때만 - 절차는 `docs/ONNX-모델-학습.md`.
 - **자리는 둘로 나눈다**(사용자 결정 2026-09-14) - 도구와 내 것을 한 폴더에 두면 "학습 폴더를 다시 만들어라" 가 데이터를 지우라는 말이 된다.
   - **학습 경로** `Vision.TrainingRoot`(`Vision/Training/TrainingPaths`) - 도구다. `yolo-venv`(파이썬 3.14 · torch cu126 · ultralytics) ·
     `dfine-venv`(uv 파이썬 3.12 · torch cu124) · `D-FINE`(저장소 + 우리 설정) · `dfine_n_coco.pth` · `runs`(결과·로그). 지워도 `도구\학습-환경-준비.ps1`
     로 다시 만들면 된다(둘 다 약 5.5GB, 이미 있으면 건너뛰고 옛 자리의 것은 옮긴다).
   - **프로젝트 경로** `Vision.ProjectsRoot`(`Vision/ProjectPaths`) - 내 것이다. `Datasets\<게임>`(사진·라벨·모델·영역) · `captures`(프레임 저장).
-    다시 만들 수 없다 - 백업할 것은 이쪽이다. 데이터셋만 따로 두려면 라벨링 화면의 `폴더 고르기`(`Vision.DatasetRoot`)가 이긴다.
-  - 둘 다 **설정 화면(ConfigView) "폴더"** 에서 고른다. 기본값은 **설치 루트 아래**(`Helper/InstallPaths` - 실행 폴더가 아니라 그 부모다.
+    다시 만들 수 없다 - 백업할 것은 이쪽이다. 솔루션을 쓰면서 그 아래가 `<솔루션>\<프로젝트>\` 가 됐다(`docs/프로젝트-설계.md`).
+  - 둘 다 **학습환경 화면(Automation 의 첫 탭) "폴더"** 에서 고른다(설정 화면에서 옮겨 왔다). 기본값은 **설치 루트 아래**(`Helper/InstallPaths` - 실행 폴더가 아니라 그 부모다.
     Velopack 이 업데이트 때 `current` 를 통째로 갈아 끼우므로 그 안에 두면 사라진다). 설치 루트는 앱을 제거하면 같이 지워지니 오래 모을 사진은
     설정에서 다른 드라이브로 옮긴다. 옛 자리(%AppData%)에 이미 있으면 그것을 계속 쓴다 - 말없이 빈 폴더를 보여 주지 않는다.
   - **하네스도 `UserDataPaths.Initialize()` 를 부른다**(Program.Main 맨 앞) - 안 부르면 AppSettingUtility 가 하네스 bin 폴더를 봐서 두 경로가
@@ -1187,9 +1252,9 @@ D-FINE 디코더에 이 모양이 세 군데 있다(거리 분포를 거리로 �
 
 ### 화면
 
-- 데이터셋 자리는 **캡처 화면과 라벨링이 같이 본다**(`LabelDataset.ConfiguredRoot`,
-  앱 전체 키 `Vision.DatasetRoot`). 화면마다 설정을 들면 한쪽에서만 폴더를 바꿔 놓고
-  담은 그림이 왜 안 보이는지 한참 찾게 된다.
+- 데이터셋 자리는 **캡처 화면과 라벨링이 같이 본다**(`LabelDataset.ConfiguredRoot` = Automation 에서 고른 프로젝트 폴더).
+  화면마다 설정을 들면 한쪽에서만 폴더를 바꿔 놓고 담은 그림이 왜 안 보이는지 한참 찾게 된다. **라벨링 화면의 `폴더 고르기` 는 뺐다** -
+  위는 사격장인데 라벨링만 딴 폴더를 보는 어긋남이 생긴다. 폴더 칸은 보이기만 한다.
 - **그림을 넘길 때 자동으로 저장한다.** 수백 장을 찍는 일이라 장마다 저장을 누르게 하면
   반드시 잊고, 잊은 것은 되돌릴 수 없다.
 - `Markup/LabelCanvas` 가 그림과 사각형을 **직접 그린다**(`OnRender`). Viewbox 로 늘리면

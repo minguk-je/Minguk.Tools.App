@@ -459,7 +459,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             GetSetting(nameof(SelectedInputBackend), nameof(InputBackend.SendInput)), out var backend)
             ? backend
             : InputBackend.SendInput;
-        ShowPreview = GetSetting(nameof(ShowPreview), false);
+        // 기본은 켬(2026-09-14). 꺼짐이 기본이었더니 설정을 초기화한 뒤 캡처를 시작해도 화면이 비어 "미리보기가 안 나온다" 가 됐다 -
+        // 끄는 것은 필요한 사람이 하면 되지만, 켜야 보인다는 것은 알기 어렵다. GPU 경로라 한 장에 0.1ms 남짓이다(실측).
+        ShowPreview = GetSetting(nameof(ShowPreview), true);
 
         // 영역을 맞추려고 키워 둔 배율. 화면을 열 때마다 1 로 돌아가면 다시 키워야 한다.
         PreviewZoom = GetSetting(nameof(PreviewZoom), 1.0);

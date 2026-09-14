@@ -78,6 +78,7 @@ internal static partial class Program
 
         // 라벨링 화면을 화면 밖 창에 띄워 아래 학습 패널 높이가 내용에 맞는지 재고 PNG 로 찍는다.
         if (args.Contains("--labeling-screen")) return LabelingScreenProbe.Run(args);
+        if (args.Contains("--environment-screen")) return EnvironmentScreenProbe.Run(args);
 
         // 라벨링 화면의 YOLO 학습 길을 화면 없이 돌린다. 들이기까지 하므로 --root 로 시험 폴더를 준다(GPU 를 쓴다).
         if (args.Contains("--yolo-train")) return YoloTrainProbe.Run(args);

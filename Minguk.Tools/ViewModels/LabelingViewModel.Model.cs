@@ -19,7 +19,6 @@ public partial class LabelingViewModel
 
     public DelegateCommand DoOpenFolderCommand { get; private set; } = null!;
 
-    public DelegateCommand DoChooseFolderCommand { get; private set; } = null!;
 
     public DelegateCommand DoSaveCommand { get; private set; } = null!;
 

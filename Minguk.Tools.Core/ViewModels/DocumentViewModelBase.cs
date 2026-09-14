@@ -191,7 +191,10 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
 
         Logger.Trace(string.Empty);
 
-        Guard(SaveSettings);
+        // 한 번도 초기화 안 된 화면(아직 안 연 탭)은 저장하지 않는다. RestoreSettings 가 안 돈 채로 저장하면
+        // 기본값이 저장값을 덮어써서, 안 연 탭을 닫기만 해도 대상 창·스크립트 같은 설정이 날아간다.
+        if (_initialized) Guard(SaveSettings);
+
         Guard(ReleaseResources);
 
         Guard(() =>
@@ -209,7 +212,11 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
     /// 탭을 닫으면 OnDestroy 가 돌면서 저장되지만, 앱을 그냥 닫으면 문서는 파기되지 않는다.
     /// 그래서 이 경로가 없으면 "탭을 안 닫고 앱을 껐을 때만 설정이 안 남는" 상태가 된다.
     /// </summary>
-    public void SaveSettingsNow() => Guard(SaveSettings);
+    public void SaveSettingsNow()
+    {
+        // 초기화 전에 저장하면 기본값이 저장값을 덮어쓴다(OnDestroy 와 같은 이유).
+        if (_initialized) Guard(SaveSettings);
+    }
 
     /// <summary>창으로 띄웠을 때의 닫힘. 문서 탭은 OnClose/OnDestroy 를 탄다.</summary>
     protected virtual void OnClosing(CancelEventArgs e) => OnDestroy();

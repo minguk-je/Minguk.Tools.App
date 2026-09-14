@@ -280,9 +280,28 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     }
 
     /// <summary>지난번 프로젝트와 열어 둔 탭을 되살린다. 파일이 없어졌으면 조용히 건너뛴다.</summary>
+    /// <remarks>
+    /// Automation 에서 프로젝트를 골랐으면 <b>그 프로젝트의 .mtsproj 가 이긴다</b> - 지난번에 연 것이 다른 프로젝트(또는 옮기기 전 옛 자리)면
+    /// 위 칸은 사격장인데 스크립트는 딴 것을 보게 된다. 지난번 것이 그 프로젝트 폴더 안이면 탭까지 그대로 되살린다.
+    /// </remarks>
     private void RestoreProject()
     {
         var path = _host.GetSetting(ProjectPathKey, string.Empty);
+
+        if (CurrentProjectFile() is { } current && !IsInside(path, System.IO.Path.GetDirectoryName(current)!))
+        {
+            try
+            {
+                Project.OpenProject(current);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(ex, $"고른 프로젝트를 못 열었다: {current}");
+            }
+
+            return;
+        }
+
         if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return;
 
         try
@@ -301,6 +320,21 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
             Logger.Warn(ex, $"지난번 프로젝트를 못 열었다: {path}");
         }
     }
+
+    /// <summary>Automation 에서 고른 프로젝트의 .mtsproj. 고른 것이 없거나 파일이 없으면 null.</summary>
+    private static string? CurrentProjectFile()
+    {
+        if (global::Minguk.Tools.Projects.SolutionWorkspace.Current is not { } solution || solution.Startup() is not { } entry) return null;
+
+        var file = solution.FullPath(entry.Path);
+
+        return System.IO.File.Exists(file) ? file : null;
+    }
+
+    private static bool IsInside(string path, string folder)
+        => !string.IsNullOrEmpty(path) &&
+           System.IO.Path.GetFullPath(path).StartsWith(System.IO.Path.GetFullPath(folder).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar,
+                                                       StringComparison.OrdinalIgnoreCase);
 
     private void SaveProjectSettings()
     {

@@ -181,6 +181,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
                 return;
             }
 
+            // 완성품은 프로젝트 폴더의 bin 에 둔다(사격장/bin/사격장.mtsx) - 모델·영역·리소스가 이미 프로젝트 폴더에 있어 따로 복사할 것이 없다.
+            // bin 인 이유: 솔루션 탐색기가 bin 을 안 봐서 .mtsx 가 프로젝트 파일 목록에 안 끼어든다.
             var outputDirectory = System.IO.Path.Combine(project.Directory, "bin");
             System.IO.Directory.CreateDirectory(outputDirectory);
 
@@ -189,9 +191,13 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
             var resourceNote = CopyResources(project.Directory, outputDirectory);
 
+            // 스크립트가 참조한 바깥 DLL(참조 항목·#r) - IL 은 이름으로만 가리켜 옆에 없으면 플레이에서 로드하다 실패한다.
+            var references = CompiledScriptBuilder.CopyReferences(unit, outputDirectory);
+            if (references.Count > 0) resourceNote += $" · 참조 DLL {references.Count}개 함께 복사({string.Join(", ", references)})";
+
             StatusText = $"빌드 완료: {outputPath} ({bytes.Length / 1024.0:0.#} KB){resourceNote}";
             Live.Console.Print($"빌드 완료: {outputPath} ({bytes.Length:N0}바이트){resourceNote}");
-            Minguk.Base.Utilities.MessengerUtility.SendMainMessage($"'{name}' 빌드 완료 - 플레이 화면에서 '{name} (빌드됨)' 을 골라 돌립니다.");
+            Minguk.Base.Utilities.MessengerUtility.SendMainMessage($"'{name}' 빌드 완료 - 플레이 메뉴의 목록에서 골라 돌립니다 ({outputDirectory}).");
         }
         catch (Exception ex)
         {

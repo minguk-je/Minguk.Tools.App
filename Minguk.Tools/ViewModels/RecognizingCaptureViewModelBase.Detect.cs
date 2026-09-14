@@ -67,6 +67,18 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </remarks>
     private DateTime _detectorStamp;
 
+    /// <summary>읽어 둔 모델 파일의 자리. 시각만 보면 안 된다 - 복사한 모델은 수정 시각이 원본과 같아서, 다른 폴더의 모델로 바뀌어도 모른다.</summary>
+    private string? _detectorPath;
+
+    /// <summary>
+    /// 몹 찾기 모델·몹 이름·이름 붙인 자리를 읽을 폴더. 기본은 Automation Builder 에서 고른 프로젝트다.
+    /// </summary>
+    /// <remarks>
+    /// 플레이는 고른 완성품(<c>Player\솔루션\프로젝트\*.mtsx</c>)의 폴더에서 읽게 바꾼다 - 빌드가 모델·영역을 그 옆에 같이 복사하므로
+    /// Player 폴더만 다른 PC 로 옮겨도 돈다(사용자 결정 2026-09-14).
+    /// </remarks>
+    protected virtual string RecognitionRoot => LabelDataset.ConfiguredRoot;
+
     /// <summary>지금 찾는 중인지. 한 번에 하나만 돈다.</summary>
     private int _isDetectRunning;
 
@@ -350,7 +362,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
-        var dataset = new LabelDataset(LabelDataset.ConfiguredRoot);
+        var dataset = new LabelDataset(RecognitionRoot);
         var modelPath = DetectorFiles.CurrentFor(dataset);
 
         if (!File.Exists(modelPath))
@@ -396,7 +408,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     {
         var stamp = File.GetLastWriteTimeUtc(modelPath);
 
-        if (_detector is not null && stamp == _detectorStamp)
+        if (_detector is not null && stamp == _detectorStamp && modelPath == _detectorPath)
         {
             DetectionStatus = "찾는 중...";
             return;
@@ -436,6 +448,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
                 _detectClasses = dataset.LoadClasses();
                 _detectorStamp = stamp;
+                _detectorPath = modelPath;
                 _tracker.Reset();   // 새 모델의 사각형을 옛 모델의 것과 이어 붙이지 않는다
                 _detector = model;
                 _reloadSeenStamp = default;
@@ -492,12 +505,21 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (_detector is null || Volatile.Read(ref _isDetectorLoading) != 0) return;
 
-        var dataset = new LabelDataset(LabelDataset.ConfiguredRoot);
+        var dataset = new LabelDataset(RecognitionRoot);
         var modelPath = DetectorFiles.CurrentFor(dataset);
 
         if (!File.Exists(modelPath)) return;
 
         var stamp = File.GetLastWriteTimeUtc(modelPath);
+
+        // 모델 자리가 바뀌었으면(플레이에서 다른 완성품을 고름) 시각을 기다릴 것 없이 곧바로 읽는다 - 이미 다 써진 파일이다.
+        if (modelPath != _detectorPath)
+        {
+            LibTorchFlavor? moved = DetectorManifest.Load(modelPath).Engine == DetectorEngine.Torch ? LibTorchRuntime.Installed : null;
+            DispatcherService?.BeginInvoke(() => Guard(() => LoadDetector(modelPath, dataset, moved)));
+            return;
+        }
+
         if (stamp == _detectorStamp) return;
 
         if (stamp != _reloadSeenStamp)

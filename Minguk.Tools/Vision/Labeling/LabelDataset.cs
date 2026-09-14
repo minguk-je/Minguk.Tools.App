@@ -88,14 +88,24 @@ public sealed class LabelDataset
     }
 
     /// <summary>
-    /// 화면들이 <b>함께</b> 보는 데이터셋 자리.
+    /// 화면들이 <b>함께</b> 보는 데이터셋 자리. Automation 에서 프로젝트를 골랐으면 <b>그 프로젝트 폴더</b>다.
     /// </summary>
     /// <remarks>
     /// 캡처 모니터가 담고 라벨링이 찍는다. 둘이 각자 설정을 들면 사람이 라벨링에서만 폴더를
-    /// 바꿔 놓고, 담은 그림이 왜 안 보이는지 한참 찾게 된다. 화면별 키가 아니라
-    /// 앱 전체 키 하나를 쓰는 이유다.
+    /// 바꿔 놓고, 담은 그림이 왜 안 보이는지 한참 찾게 된다. 그래서 하나를 같이 본다.
+    ///
+    /// <b>솔루션을 쓰면서 기준이 고른 프로젝트로 바뀌었다</b>(2026-09-14). 예전에는 앱 전체 키 <c>Vision.DatasetRoot</c> 에 적었고
+    /// Automation 화면이 프로젝트를 고를 때마다 그 키를 고쳐 쓰는 다리를 뒀다. 이제 읽을 때 고른 프로젝트를 보므로 다리가 없다 -
+    /// 스크립트 자리·프레임 저장 자리와 같은 기준(<c>SolutionWorkspace.StartupDirectory</c>)이다.
+    /// 솔루션이 없을 때만 옛 키(<see cref="LegacyRoot"/>)를 본다.
     /// </remarks>
     public static string ConfiguredRoot
+        => global::Minguk.Tools.Projects.SolutionWorkspace.StartupDirectory ?? LegacyRoot;
+
+    /// <summary>
+    /// 솔루션을 쓰기 전의 데이터셋 자리(<c>Vision.DatasetRoot</c>, 없으면 기본 자리). 옛 자리를 옮기는 이주가 이것을 본다.
+    /// </summary>
+    public static string LegacyRoot
     {
         get
         {
@@ -103,7 +113,6 @@ public sealed class LabelDataset
 
             return string.IsNullOrWhiteSpace(saved) ? DefaultRoot : saved;
         }
-        set => Minguk.Base.Utilities.AppSettingUtility.Set(RootSettingKey, value ?? string.Empty);
     }
 
     private const string RootSettingKey = "Vision.DatasetRoot";

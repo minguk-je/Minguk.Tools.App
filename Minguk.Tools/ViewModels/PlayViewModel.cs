@@ -156,44 +156,52 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
         SelectedScript = Scripts.FirstOrDefault(s => string.Equals(s.Path, chosen, StringComparison.OrdinalIgnoreCase));
 
-        var projects = Scripts.Count(s => s.IsProject);
-
         StatusText = Scripts.Count == 0
-            ? $"스크립트가 없습니다. 스크립트 화면에서 저장하거나 프로젝트를 만들면 여기 보입니다 ({ScriptFiles.DefaultDirectory})."
-            : $"스크립트 {Scripts.Count - projects}개 · 프로젝트 {projects}개 ({ScriptFiles.DefaultDirectory})";
+            ? $"완성품이 없습니다. 빌더의 스크립트 탭에서 빌드(Ctrl+Shift+B)하면 여기 보입니다 (작업공간 {Vision.ProjectPaths.Root})."
+            : $"완성품 {Scripts.Count}개 (작업공간 {Vision.ProjectPaths.Root})";
     });
 
-    private static IEnumerable<ScriptFileItem> ListScripts() => ListScripts(ScriptFiles.DefaultDirectory);
+    private static IEnumerable<ScriptFileItem> ListScripts() => ListBuilds(Vision.ProjectPaths.Root);
 
     /// <summary>
-    /// 폴더의 스크립트 파일과 프로젝트. 프로젝트가 먼저다 - 여러 파일로 짠 것이 대개 "진짜로 돌리는 것" 이다.
+    /// 작업공간 아래 프로젝트마다 빌드한 완성품(<c>작업공간/솔루션/프로젝트/bin/*.mtsx</c>) - <c>오버워치 / 사격장</c> 으로 이름을 붙인다.
     /// </summary>
     /// <remarks>
-    /// 프로젝트는 스크립트 화면이 <c>Scripts\이름\이름.mtsproj</c> 로 만든다(프로젝트마다 폴더). 그래서 폴더 바로 아래와 한 겹 아래까지 본다.
-    /// 더 깊이는 안 본다 - 프로젝트 안의 하위 폴더에 든 .csx 가 한 파일짜리 스크립트처럼 목록에 섞이면 안 된다.
-    /// 프로젝트 폴더 안의 .csx 는 목록에 안 넣는다 - 그것은 그 프로젝트의 조각이지 혼자 돌리는 것이 아니다.
+    /// 플레이는 빌드한 완성품만 돌린다(사용자 결정 2026-09-14). 고치는 동안의 시험은 스크립트 탭 F5 로 한다. 다른 파일은 "열기" 로 고른다.
+    /// 완성품은 파일 하나라 따로 모아 두지 않고 프로젝트 폴더의 bin 에 둔다 - 한때 솔루션 안 Player 폴더로 모았다가 되돌렸다.
     /// </remarks>
-    public static IEnumerable<ScriptFileItem> ListScripts(string folder)
+    public static IEnumerable<ScriptFileItem> ListBuilds(string workspace)
     {
-        if (!Directory.Exists(folder)) return [];
+        if (!Directory.Exists(workspace)) return [];
 
-        var projects = Directory.EnumerateFiles(folder, "*" + Input.Scripting.Projects.ScriptProject.Extension)
-            .Concat(Directory.EnumerateDirectories(folder).SelectMany(d => Directory.EnumerateFiles(d, "*" + Input.Scripting.Projects.ScriptProject.Extension)))
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .Select(ScriptFileItem.From);
+        return Directory.EnumerateDirectories(workspace)
+            .SelectMany(solution => Directory.EnumerateDirectories(solution)
+                .Select(project => (Solution: Path.GetFileName(solution), Project: Path.GetFileName(project), Bin: Path.Combine(project, "bin"))))
+            .Where(item => Directory.Exists(item.Bin))
+            .SelectMany(item => Directory.EnumerateFiles(item.Bin, "*" + ScriptFiles.CompiledExtension)
+                .Select(path => new ScriptFileItem($"{item.Solution} / {item.Project}", path, IsCompiled: true)))
+            .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
-        // 빌드된 것(.mtsx)이 먼저다 - 다른 PC 로 넘겨 돌리는, 대개 "진짜로 돌리는 것" 이다.
-        var compiled = Directory.EnumerateFiles(folder, "*" + ScriptFiles.CompiledExtension)
-            .Concat(Directory.EnumerateDirectories(folder).SelectMany(d => Directory.EnumerateFiles(d, "*" + ScriptFiles.CompiledExtension)))
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .Select(ScriptFileItem.From);
+    /// <summary>
+    /// 몹 찾기 모델·이름 붙인 자리를 읽을 폴더 - 고른 완성품의 프로젝트 폴더다(<c>사격장/bin/사격장.mtsx</c> 면 <c>사격장</c>).
+    /// </summary>
+    /// <remarks>
+    /// 완성품이 bin 안에 있으면 그 위가 프로젝트 폴더고 모델·영역이 거기 있다. 열기로 딴 데서 고른 .mtsx 면 그 폴더를 본다.
+    /// 완성품을 안 골랐으면 바탕 자리(Builder 에서 고른 프로젝트)를 쓴다.
+    /// </remarks>
+    protected override string RecognitionRoot
+    {
+        get
+        {
+            if (SelectedScript is not { IsCompiled: true } compiled || Path.GetDirectoryName(compiled.Path) is not { } folder)
+                return base.RecognitionRoot;
 
-        var files = Directory.EnumerateFiles(folder)
-            .Where(p => ScriptFiles.FromPath(p) is not null)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .Select(ScriptFileItem.From);
-
-        return [.. compiled, .. projects, .. files];
+            return string.Equals(Path.GetFileName(folder), "bin", StringComparison.OrdinalIgnoreCase)
+                ? Path.GetDirectoryName(folder) ?? folder
+                : folder;
+        }
     }
 
     /// <summary>
@@ -208,7 +216,11 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
             // 빌드된 것: 소스 없이 IL 을 로드해 돌린다. 프로젝트를 열어 두었으면 닫는다.
             Script.Project.CloseProject();
             Script.LoadCompiled(SelectedScript.Path);
-            StatusText = $"빌드된 스크립트: {SelectedScript.Name}";
+
+            // 이름 붙인 자리는 완성품 옆 regions.json 을 다시 읽는다. 몹 찾기 모델은 켜 둔 채면 자리가 바뀐 것을 보고 곧바로 다시 읽는다.
+            LoadRegions();
+
+            StatusText = $"완성품: {SelectedScript.Name}";
             return;
         }
 

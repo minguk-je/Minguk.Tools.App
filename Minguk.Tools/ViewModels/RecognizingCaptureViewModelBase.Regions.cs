@@ -35,7 +35,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     public ObservableCollection<NamedRegion> Regions { get; } = [];
 
     /// <summary>스크립트가 볼 목록. 부를 때마다 지금 것을 준다.</summary>
-    public RegionBook RegionBook => _regions ??= RegionBook.Load(LabelDataset.ConfiguredRoot);
+    public RegionBook RegionBook => _regions ??= RegionBook.Load(RecognitionRoot);
 
     public NamedRegion? SelectedRegion
     {
@@ -181,7 +181,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>파일에서 목록을 다시 채운다. 고른 것이 없으면 첫 줄을 고른다 - 빈 채로 두면 이름 칸·지금 읽기가 다 죽어 보인다.</summary>
     protected void LoadRegions()
     {
-        _regions = RegionBook.Load(LabelDataset.ConfiguredRoot);
+        _regions = RegionBook.Load(RecognitionRoot);
 
         var keep = SelectedRegion?.Name;
 
