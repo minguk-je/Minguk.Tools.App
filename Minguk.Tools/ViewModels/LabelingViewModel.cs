@@ -47,6 +47,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
         DoSaveCommand = new DelegateCommand(DoSave, () => HasImage, false);
         DoDeleteBoxCommand = new DelegateCommand(DoDeleteBox, () => SelectedBoxIndex >= 0, false);
         DoClearBoxesCommand = new DelegateCommand(DoClearBoxes, () => Boxes.Count > 0, false);
+        DoDeleteImageCommand = new DelegateCommand(DoDeleteImage, () => HasImage && !IsExtractingVideo, false);
         DoAddClassCommand = new DelegateCommand(DoAddClass, false);
         DoDeleteClassCommand = new DelegateCommand(DoDeleteClass, () => SelectedClassIndex >= 0, false);
         DoPreviousCommand = new DelegateCommand(DoPrevious, () => Items.Count > 0, false);

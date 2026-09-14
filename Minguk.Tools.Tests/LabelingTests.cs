@@ -231,6 +231,7 @@ internal static partial class Program
             TestTrainingShape(dataset, imagePath);
 
             TestClassRemovalAndPalette();
+            TestImageRecycle();
 
             TestModelChoices();
 
@@ -252,6 +253,53 @@ internal static partial class Program
     /// 몹은 [왕슬라임, 버섯, 두 줄]. 라벨 둘을 심는다 - 가.txt 는 0·2 번, 나.txt 는 2 번.
     /// 1번(버섯)은 아무 데도 안 쓰여 지워지고, 그러면 2번이 1번으로 당겨져야 한다. 0번은 쓰여서 못 지운다.
     /// </remarks>
+    /// <summary>그림 지우기 - 그림과 라벨을 휴지통으로, 라벨이 없으면 그림만, 이름이 겹쳐 라벨을 나눠 가진 그림이면 라벨은 남긴다. 진짜 휴지통은 안 쓴다.</summary>
+    private static void TestImageRecycle()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "minguk-recycle-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var dataset = new LabelDataset(root);
+            dataset.EnsureCreated();
+
+            string Image(string name)
+            {
+                var path = Path.Combine(dataset.ImageDirectory, name);
+                File.WriteAllBytes(path, [0x89, 0x50, 0x4E, 0x47]);
+                return path;
+            }
+
+            var labeled = Image("가.png");
+            var unlabeled = Image("나.png");
+            var twinPng = Image("다.png");
+            var twinJpg = Image("다.jpg");
+
+            LabelFile.Save(dataset.LabelPathFor(labeled), [LabelBox.FromCorners(0, 0.1, 0.1, 0.3, 0.3)]);
+            LabelFile.Save(dataset.LabelPathFor(twinPng), [LabelBox.FromCorners(0, 0.2, 0.2, 0.4, 0.4)]);
+
+            var recycled = new System.Collections.Generic.List<string>();
+            var recycler = new FakeRecycler(recycled);
+            LabelItem ItemOf(string path) => dataset.EnumerateItems().First(i => string.Equals(i.ImagePath, path, StringComparison.OrdinalIgnoreCase));
+
+            var both = dataset.Recycle(ItemOf(labeled), recycler);
+            var imageOnly = dataset.Recycle(ItemOf(unlabeled), recycler);
+            var shared = dataset.Recycle(ItemOf(twinJpg), recycler);
+
+            Check("그림 지우기: 라벨이 있으면 그림·라벨을 같이, 없으면 그림만 휴지통으로",
+                  both.Count == 2 && !File.Exists(labeled) && !File.Exists(dataset.LabelPathFor(labeled)) && imageOnly.Count == 1 && !File.Exists(unlabeled),
+                  $"라벨 있음 {both.Count}개 · 라벨 없음 {imageOnly.Count}개");
+
+            Check("그림 지우기: 이름이 겹쳐 라벨을 나눠 가진 그림이면 라벨은 남긴다",
+                  shared.Count == 1 && !File.Exists(twinJpg) && File.Exists(twinPng) && File.Exists(dataset.LabelPathFor(twinPng)),
+                  $"보낸 것 {string.Join(", ", shared.Select(Path.GetFileName))} · 남은 라벨 {File.Exists(dataset.LabelPathFor(twinPng))}");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (Exception) { }
+        }
+    }
+
     private static void TestClassRemovalAndPalette()
     {
         var root = Path.Combine(Path.GetTempPath(), "minguk-classes-" + Guid.NewGuid().ToString("N"));

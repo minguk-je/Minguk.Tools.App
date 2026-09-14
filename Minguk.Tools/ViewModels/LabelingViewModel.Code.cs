@@ -332,6 +332,45 @@ public partial class LabelingViewModel
         SelectedBoxIndex = -1;
     });
 
+    /// <summary>
+    /// 지금 그림을 라벨과 함께 휴지통으로 보내고 같은 자리(다음 그림)로 간다. Ctrl+Delete · 그림 목록에서 Delete.
+    /// </summary>
+    /// <remarks>
+    /// 영상에서 뽑다 섞인 쓸모없는 장면을 치우려고(사용자, 2026-09-15). 묻지 않는다 - 수십 장을 치울 때 매번 물으면 못 쓰고, 휴지통에서 되살린다.
+    /// 보내기 전에 고치던 것을 저장하지 않는다 - 지울 그림에 라벨을 새로 쓰면 그 라벨만 남는다.
+    /// </remarks>
+    private void DoDeleteImage() => Guard(() =>
+    {
+        if (SelectedItem is not { } item || _dataset is null) return;
+
+        var index = Items.IndexOf(item);
+
+        IsDirty = false;
+        ClearPredictionsForNewImage();
+
+        var sent = _dataset.Recycle(item.Item, Helper.FileRecyclerFactory.Create());
+
+        _isReloading = true;
+        try
+        {
+            Items.Remove(item);
+        }
+        finally
+        {
+            _isReloading = false;
+        }
+
+        _loaded = null;
+
+        // 같은 자리 = 다음 그림. 맨 끝이었으면 앞 그림.
+        SelectedItem = Items.Count == 0 ? null : Items[Math.Min(index, Items.Count - 1)];
+
+        UpdateProgress();
+        RaiseListCommands();
+
+        StatusText = $"{item.Name} 을(를) 휴지통으로 보냈습니다" + (sent.Count > 1 ? " (라벨 파일도 함께)" : string.Empty) + " - 잘못 지웠으면 휴지통에서 되살리고 다시 읽기.";
+    });
+
     // ── 몹 이름 ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -644,6 +683,7 @@ public partial class LabelingViewModel
         DoClearPredictionsCommand.RaiseCanExecuteChanged();
         DoAdoptPredictionsCommand.RaiseCanExecuteChanged();
         DoCopyPreviousCommand.RaiseCanExecuteChanged();
+        DoDeleteImageCommand.RaiseCanExecuteChanged();
     }
 
     private void OnPredictionsChanged(object? sender, NotifyCollectionChangedEventArgs e)

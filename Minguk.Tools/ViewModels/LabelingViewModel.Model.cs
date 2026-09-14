@@ -17,6 +17,9 @@ public partial class LabelingViewModel
 
     public DelegateCommand DoReloadCommand { get; private set; } = null!;
 
+    /// <summary>지금 그림을 라벨과 함께 휴지통으로. Ctrl+Delete · 그림 목록에서 Delete.</summary>
+    public DelegateCommand DoDeleteImageCommand { get; private set; } = null!;
+
     public DelegateCommand DoOpenFolderCommand { get; private set; } = null!;
 
 

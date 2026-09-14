@@ -228,6 +228,37 @@ public sealed class LabelDataset
     }
 
     /// <summary>
+    /// 그림 한 장을 휴지통으로 보낸다 - 그 라벨 파일도 같이(없으면 그림만). 보낸 파일들을 돌려준다.
+    /// </summary>
+    /// <remarks>
+    /// 영상에서 뽑다 섞인 쓸모없는 장면을 치우려고(사용자, 2026-09-15). 지우지 않고 휴지통이다 - 잘못 누르면 되살린다.
+    /// 라벨만 남기면 다음에 같은 이름 그림을 담을 때 그 라벨이 붙는다. 이름이 겹치는 그림(확장자만 다름)이 라벨을 나눠 가지면
+    /// 라벨은 두고 그림만 보낸다 - 남은 그림의 라벨을 지우면 안 된다.
+    /// </remarks>
+    public IReadOnlyList<string> Recycle(LabelItem item, Helper.IFileRecycler recycler)
+    {
+        var sent = new List<string>();
+
+        if (File.Exists(item.ImagePath))
+        {
+            recycler.Recycle(item.ImagePath);
+            sent.Add(item.ImagePath);
+        }
+
+        var sharedLabel = EnumerateItems().Any(other =>
+            !string.Equals(other.ImagePath, item.ImagePath, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(other.LabelPath, item.LabelPath, StringComparison.OrdinalIgnoreCase));
+
+        if (!sharedLabel && File.Exists(item.LabelPath))
+        {
+            recycler.Recycle(item.LabelPath);
+            sent.Add(item.LabelPath);
+        }
+
+        return sent;
+    }
+
+    /// <summary>
     /// 담을 그림의 이름을 짓는다. 시각으로 지어 이름순이 곧 담은 순서가 되게 한다.
     /// </summary>
     /// <remarks>
