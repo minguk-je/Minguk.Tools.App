@@ -99,13 +99,12 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     // ── 미리보기 ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 미리보기 최소 간격(틱). <see cref="PreviewTargetFps"/> 가 바뀌면 다시 계산한다.
+    /// 미리보기 상한. <see cref="PreviewTargetFps"/> 가 바뀌면 다시 잡는다.
     ///
-    /// 목표 주기보다 10% 짧게 잡는 것이 요점이다. 60fps 목표에 간격을 딱 1/60 로 두면
-    /// 60fps 캡처와 주기가 겹쳐서, 프레임이 경계 직전에 도착할 때마다 버려지고
-    /// 다음 장까지 33ms 를 기다리게 된다. 실측으로 미리보기가 35fps 에 묶였다.
+    /// 간격을 딱 1/60 로 두면 60fps 캡처와 경계가 겹쳐 35fps 에 묶였고(실측), 90% 로 줄여도 도착 간격이 흔들리는
+    /// 모니터에서는 일찍 온 장이 버려져 30~50 이 됐다(2026-09-15). 그래서 캡처 세션과 같은 박자 규칙(<see cref="FrameRateLimiter"/>)을 쓴다.
     /// </summary>
-    private long _previewMinimumIntervalTicks = Stopwatch.Frequency * 9 / (60 * 10);
+    private readonly FrameRateLimiter _previewLimiter = new(60);
 
     /// <summary>
     /// 미리보기로 만들 최대 높이.
@@ -190,7 +189,6 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// <summary>UI 가 앞 장을 아직 그리는 중이면 1. 그동안 들어온 프레임은 버린다.</summary>
     private int _isCpuPreviewBlitInProgress;
 
-    private long _lastPreviewTimestamp;
     private int _presentedFrameCountInSecond;
 
     // CommandManager 의 자동 재조회는 사용자 입력 때만 돈다. 여기 상태는 캡처 스레드/타이머에서 바뀌므로
@@ -846,13 +844,13 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     private void TryPushPreview(CapturedFrameEventArgs e)
     {
         var now = Stopwatch.GetTimestamp();
-        if (now - _lastPreviewTimestamp < _previewMinimumIntervalTicks)
-            return;
 
         // GPU 경로는 복사가 GPU 안에서 끝나므로 UI 상태를 볼 필요가 없다.
         if (!_isGpuPreviewUnavailable)
         {
-            _lastPreviewTimestamp = now;
+            if (!_previewLimiter.TryAccept(now))
+                return;
+
             PushPreviewOnGpu(e);
             return;
         }
@@ -864,7 +862,13 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         if (Interlocked.CompareExchange(ref _isCpuPreviewBlitInProgress, 1, 0) != 0)
             return;
 
-        _lastPreviewTimestamp = now;
+        // 앞 장을 그리는 중이라 못 올린 장은 박자를 쓰지 않는다 - 그래서 잡은 뒤에 묻고, 안 받으면 놓는다.
+        if (!_previewLimiter.TryAccept(now))
+        {
+            Interlocked.Exchange(ref _isCpuPreviewBlitInProgress, 0);
+            return;
+        }
+
         PushPreviewOnCpu(e);
     }
 
@@ -1140,10 +1144,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// <summary>목표 fps 가 바뀌면 스로틀 간격을 다시 잡는다.</summary>
     private void OnPreviewTargetFpsChanged()
     {
-        var fps = Math.Clamp(PreviewTargetFps, 1, 240);
-
-        // 목표 주기의 90%. 캡처 주기와 경계가 겹쳐 절반이 버려지는 것을 막는다.
-        _previewMinimumIntervalTicks = Stopwatch.Frequency * 9 / (fps * 10);
+        _previewLimiter.Fps = Math.Clamp(PreviewTargetFps, 1, 240);
     }
 
     /// <summary>캡처 상한이 바뀌면 돌고 있는 세션에 바로 반영한다.</summary>

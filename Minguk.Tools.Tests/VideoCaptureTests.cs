@@ -210,6 +210,57 @@ internal static partial class Program
         }
     }
 
+    /// <summary>
+    /// fps 상한 - 흔들리는 원본(도착 간격이 ±4ms 흔들리는 60Hz·144Hz)을 상한으로 솎으면 상한 가까이 받는가.
+    /// 예전 규칙(직전 도착 + 90%)은 실제 모니터에서 상한 60 에 31~58fps 였다(<c>--capture-fps</c>).
+    /// </summary>
+    private static void TestFrameRateLimiter()
+    {
+        var random = new Random(7);
+
+        (double Accepted, double Old) Run(double sourceHz, int cap, double jitterMs)
+        {
+            var limiter = new FrameRateLimiter(cap);
+            var period = Stopwatch.Frequency / sourceHz;
+            var jitter = jitterMs / 1000.0 * Stopwatch.Frequency;
+            var seconds = 10;
+            var count = (int)(sourceHz * seconds);
+            long start = Stopwatch.Frequency * 1000;
+            long last = 0;
+            var accepted = 0;
+            var old = 0;
+            var oldMinimum = Stopwatch.Frequency * 9 / (cap * 10L);
+
+            for (var i = 0; i < count; i++)
+            {
+                var t = start + (long)(i * period + ((random.NextDouble() * 2) - 1) * jitter);
+
+                if (limiter.TryAccept(t)) accepted++;
+                if (t - last >= oldMinimum) { old++; last = t; }
+            }
+
+            return (accepted / (double)seconds, old / (double)seconds);
+        }
+
+        var cases = new (double Hz, int Cap, double Jitter, double Min, double Max)[]
+        {
+            (60, 60, 4, 57, 60.5), (60, 30, 4, 29, 31), (60, 45, 4, 43, 46.5), (60, 20, 4, 19, 21),
+            (59.94, 60, 3, 57, 60.5), (144, 60, 2, 58, 61), (144, 30, 2, 29, 31), (30, 60, 4, 29, 30.5)
+        };
+
+        var lines = new List<string>();
+        var ok = true;
+
+        foreach (var c in cases)
+        {
+            var (accepted, old) = Run(c.Hz, c.Cap, c.Jitter);
+            ok &= accepted >= c.Min && accepted <= c.Max;
+            lines.Add($"{c.Hz:0.##}Hz±{c.Jitter}ms→{c.Cap}: {accepted:0.0}(예전 {old:0.0})");
+        }
+
+        Check("fps 상한: 흔들리는 원본을 상한 가까이 받는다(60Hz→60 이 57 이상, 60Hz→30 이 30 안팎, 원본보다 크게 잡으면 원본 그대로)", ok, string.Join(" · ", lines));
+    }
+
     /// <summary>위 절반 빨강·아래 절반 파랑 영상. 한가운데에 움직이는 흰 띠를 둬 인코더가 장마다 일하게 한다.</summary>
     private static void MakeTwoColorVideo(string path, int width, int height, int fps, int frames)
     {

@@ -135,9 +135,10 @@ public sealed class MediaFoundationVideoRecorder : IVideoRecorder
             return false;
         }
 
-        // 고른 fps 보다 빨리 온 프레임은 솎는다. 캡처 간격은 흔들리므로 1/4 간격만큼은 이르게 와도 받는다.
-        // 다음 받을 시각은 간격씩 밀되, 한참 늦었으면(캡처가 느림) 지금부터 다시 센다 - 몰아서 받지 않게.
-        if (_nextDue != 0 && timestamp < _nextDue - (long)(_frameInterval * 0.25))
+        // 고른 fps 보다 빨리 온 프레임은 솎는다. 캡처 간격은 흔들리므로 1/3 간격만큼은 이르게 와도 받는다(FrameRateLimiter 와 같은 규칙 -
+        // 1/4 이면 60Hz 를 60 으로 녹화할 때 일찍 온 장이 버려진다). 다음 받을 시각은 간격씩 밀되, 한참 늦었으면 지금부터 다시 센다.
+        // FrameRateLimiter 를 그대로 못 쓰는 이유 - 쓰기 줄이 차서 버린 장은 박자를 쓰지 않아야 한다(아래).
+        if (_nextDue != 0 && timestamp < _nextDue - (long)(_frameInterval / 3))
         {
             Interlocked.Increment(ref _framesSkipped);
             return false;

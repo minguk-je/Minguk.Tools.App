@@ -86,8 +86,7 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
     public bool AutoFallbackToMonitor { get; }
 
     private int _targetFps;
-    private long _minimumFrameIntervalTicks;
-    private long _lastProcessedTimestamp;
+    private readonly FrameRateLimiter _limiter = new();
 
     /// <summary>
     /// 캡처 상한(fps). 0 이면 제한하지 않는다.
@@ -95,6 +94,7 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
     /// WGC 는 화면 주사율만큼 프레임을 준다. 그보다 느리게 받고 싶으면 여기서 솎아 낸다.
     /// 솎아 낸 프레임은 리드백도 이벤트도 타지 않으므로 그만큼 실제 일이 준다.
     /// (WGC 가 프레임을 만드는 것 자체는 막을 수 없다 — 그건 시스템이 하는 일이다.)
+    /// 솎는 규칙은 <see cref="FrameRateLimiter"/> - 직전 도착 기준이었을 때 60Hz 를 상한 60 으로 잡으면 31~58fps 로 떨어졌다.
     ///
     /// 돌아가는 중에 바꿔도 곧바로 반영된다.
     /// </summary>
@@ -104,9 +104,7 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
         set
         {
             _targetFps = value;
-
-            // 목표 주기의 90%. 딱 1/N 로 두면 주사율과 경계가 겹쳐 절반이 버려진다.
-            _minimumFrameIntervalTicks = value > 0 ? Stopwatch.Frequency * 9 / (value * 10L) : 0;
+            _limiter.Fps = value;
         }
     }
 
@@ -230,6 +228,7 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
         }
 
         _frameId = 0;
+        _limiter.Reset();
         _lastSize = _captureItem.Size;
         _session.StartCapture();
 
@@ -327,10 +326,8 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
                 // 상한에 걸리면 이 프레임은 버린다.
                 // using 이 frame 을 놓아 주므로 프레임 풀은 그대로 돈다 —
                 // 여기서 return 해도 다음 프레임은 정상적으로 들어온다.
-                if (_minimumFrameIntervalTicks > 0 && frameArrivedTimestamp - _lastProcessedTimestamp < _minimumFrameIntervalTicks)
+                if (!_limiter.TryAccept(frameArrivedTimestamp))
                     return;
-
-                _lastProcessedTimestamp = frameArrivedTimestamp;
 
                 ProcessFrame(frame, frameArrivedTimestamp);
             }

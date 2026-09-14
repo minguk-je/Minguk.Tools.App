@@ -83,6 +83,9 @@ internal static partial class Program
         // 라벨링 화면의 YOLO 학습 길을 화면 없이 돌린다. 들이기까지 하므로 --root 로 시험 폴더를 준다(GPU 를 쓴다).
         if (args.Contains("--yolo-train")) return YoloTrainProbe.Run(args);
 
+        // 모니터 캡처 fps 를 화면 내용 없이/있게 잰다. 화면에 창을 몇 초 띄운다. --capture-fps[=모니터 번호]
+        if (args.Any(a => a.StartsWith("--capture-fps", StringComparison.OrdinalIgnoreCase))) return CaptureFpsProbe.Run(ArgValue(args, "--capture-fps="));
+
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.
         if (args.Contains("--canvas-drag")) return CanvasDragProbe.Run();
 
@@ -192,6 +195,7 @@ internal static partial class Program
         TestTrainingActivity();
         TestVideoRecorder();
         TestVideoCapture();
+        TestFrameRateLimiter();
         TestScriptProject();
         TestScriptWorkspace();
     }

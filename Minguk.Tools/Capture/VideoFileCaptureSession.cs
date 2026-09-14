@@ -20,7 +20,7 @@ namespace Minguk.Tools.Capture;
 /// - 프레임은 WGC 와 같은 얼굴이다: GPU 텍스처(<see cref="CapturedFrameEventArgs.Texture"/>) + 리드백을 켰으면 CPU 픽셀.
 ///   텍스처가 있어야 GPU 미리보기·GPU 전처리(몹 찾기)가 창 캡처와 같은 길로 간다.
 /// - 픽셀은 위에서 아래로, 알파 255 로 고친다 - RGB32 는 알파 칸이 비어(0) 있어 미리보기가 투명해진다.
-/// - <see cref="TargetFps"/> 보다 촘촘한 프레임은 솎는다(WGC 와 같은 90% 규칙). 늦어지면(풀기가 느림) 기다리지 않고 시계를 다시 맞춘다.
+/// - <see cref="TargetFps"/> 보다 촘촘한 프레임은 솎는다(WGC 와 같은 <see cref="FrameRateLimiter"/>). 늦어지면(풀기가 느림) 기다리지 않고 시계를 다시 맞춘다.
 /// - 입력은 받지 않는다 - 부르는 쪽(PreviewInputRouter·실시간 스크립트)이 대상 종류로 막는다.
 /// </remarks>
 public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
@@ -45,7 +45,7 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
     private bool _disposed;
 
     private int _targetFps;
-    private long _minimumFrameIntervalTicks;
+    private readonly FrameRateLimiter _limiter = new();
 
     public VideoFileCaptureSession(CaptureTarget target, bool cpuReadback)
     {
@@ -68,9 +68,7 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
         set
         {
             _targetFps = value;
-
-            // 목표 주기의 90% - WgcCaptureSession 과 같다. 딱 1/N 이면 경계가 겹쳐 절반이 버려진다.
-            Interlocked.Exchange(ref _minimumFrameIntervalTicks, value > 0 ? Stopwatch.Frequency * 9 / (value * 10L) : 0);
+            _limiter.Fps = value;
         }
     }
 
@@ -274,7 +272,7 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
             var frameId = 0L;
             var clockStart = Stopwatch.GetTimestamp();   // 영상 0 초가 이 시각
             var firstSampleTime = -1L;
-            var lastEmitted = 0L;
+            _limiter.Reset();
 
             while (!stopping.IsSet)
             {
@@ -328,11 +326,8 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
                 }
 
                 var arrived = Stopwatch.GetTimestamp();
-                var minimum = Interlocked.Read(ref _minimumFrameIntervalTicks);
 
-                if (minimum > 0 && lastEmitted != 0 && arrived - lastEmitted < minimum) continue;
-
-                lastEmitted = arrived;
+                if (!_limiter.TryAccept(arrived)) continue;
 
                 CopyPixels(sample, pixels, width, height);
                 Emit(++frameId, pixels, width, height, arrived);
