@@ -224,7 +224,7 @@
                 <!-- 겹그림 없음. 이 화면은 찾지 않는다. -->
                 <dxdo:LayoutPanel x:Name="PreviewDockPanel"
                                   AllowClose="False"
-                                  ItemHeight="0.6*"
+                                  ItemHeight="0.9*"
                                   ShowCaption="False"
                                   Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <parts:CapturePreviewPanel />
@@ -233,7 +233,7 @@
                 <!-- 통계는 마지막 1초 한 줄만(MaxRows = 1). 시작 비율 0.3*, 스플리터로 늘린다. -->
                 <dxdo:LayoutPanel x:Name="StatsDockPanel"
                                   AllowClose="False"
-                                  ItemHeight="0.3*"
+                                  ItemHeight="0.1*"
                                   ShowCaption="False">
 
                     <!--
