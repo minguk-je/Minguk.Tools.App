@@ -3,32 +3,27 @@
                     xmlns:regions="clr-namespace:Minguk.Tools.Markup.Regions">
 
     <!--
-        참조 프로젝트(wpf_test_app.ResizeAdorner)의 DesignerItem · ResizeRotateChrome · SizeChrome 을 옮긴 것.
-        회전 손잡이는 뺐다 - 읽을 자리는 돌리지 않는다.
+        참조 프로젝트(wpf_test_app.ResizeAdorner)의 DesignerItem · ResizeRotateChrome · SizeChrome 을 옮긴 것. 회전 손잡이는 뺐다.
+        모양은 라벨링 캔버스(LabelCanvas)와 같게 맞췄다(2026-09-15, 사용자 "Adorner 라벨링 화면이랑 같게"):
+          평소 1.5px 테두리 · 자리 색 바탕에 흰 11px 이름표 / 고르면 같은 색 3px 테두리 · 모서리와 변 가운데 6px 네모 손잡이.
+        미리보기는 판을 LayoutTransform 으로 키우므로, 크기마다 배율 역수(RegionItem.InverseZoom)를 곱해 확대해도 화면에서 같은 크기다.
     -->
 
     <regions:RegionRoundConverter x:Key="RegionRoundConverter" />
+    <regions:RegionZoomConverter x:Key="Zoom" />
 
-    <!-- 모서리 표시(보이기만 한다 - 잡는 것은 투명 Thumb). -->
-    <Style x:Key="RegionThumbCorner"
-           TargetType="{x:Type Shape}">
+    <!-- 자리 색 - 겹그림(DetectionOverlay)의 NamedColour · SelectedNamedColour 와 같다. -->
+    <SolidColorBrush x:Key="RegionBrush" Color="#FF78C8FF" />
+    <SolidColorBrush x:Key="RegionLabelBrush" Color="#D978C8FF" />
+    <SolidColorBrush x:Key="RegionSelectedBrush" Color="#FFFFAA28" />
+
+    <!-- 고른 자리의 보이는 손잡이 - 라벨링 캔버스처럼 6px 네모. 잡는 것은 위 투명 Thumb 이다. -->
+    <Style x:Key="RegionGrip"
+           TargetType="{x:Type Rectangle}">
         <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="Stroke" Value="#FFC8C8C8" />
-        <Setter Property="StrokeThickness" Value=".5" />
-        <Setter Property="Width" Value="7" />
-        <Setter Property="Height" Value="7" />
-        <Setter Property="Margin" Value="-2" />
-        <Setter Property="Fill">
-            <Setter.Value>
-                <RadialGradientBrush Center="0.2, 0.2"
-                                     GradientOrigin="0.2, 0.2"
-                                     RadiusX="0.8"
-                                     RadiusY="0.8">
-                    <GradientStop Offset="0.0" Color="White" />
-                    <GradientStop Offset="0.8" Color="Magenta" />
-                </RadialGradientBrush>
-            </Setter.Value>
-        </Setter>
+        <Setter Property="Fill" Value="{StaticResource RegionSelectedBrush}" />
+        <Setter Property="Width" Value="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=6}" />
+        <Setter Property="Height" Value="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=6}" />
     </Style>
 
     <ControlTemplate x:Key="RegionMoveThumbTemplate"
@@ -52,17 +47,21 @@
                         <regions:RegionMoveThumb Cursor="SizeAll"
                                                  Template="{StaticResource RegionMoveThumbTemplate}" />
                         <Rectangle IsHitTestVisible="False"
-                                   Stroke="#FF78C8FF"
-                                   StrokeThickness="2" />
-                        <!-- 이름표는 사각형 위에. 겹그림(DetectionOverlay)이 그리던 것과 같은 모양. -->
-                        <Border Margin="0,-17,0,0"
-                                HorizontalAlignment="Left"
+                                   Stroke="{StaticResource RegionBrush}"
+                                   StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=1.5}" />
+                        <!-- 이름표는 사각형 위에 - 라벨링 캔버스의 이름표와 같은 모양. 크기는 배율 역수로 되돌린다. -->
+                        <Border HorizontalAlignment="Left"
                                 VerticalAlignment="Top"
-                                Background="#AA000000"
-                                IsHitTestVisible="False">
-                            <TextBlock Padding="3,0,3,0"
+                                Background="{StaticResource RegionLabelBrush}"
+                                IsHitTestVisible="False"
+                                Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,-18,0,0'}">
+                            <Border.LayoutTransform>
+                                <ScaleTransform ScaleX="{Binding InverseZoom}"
+                                                ScaleY="{Binding InverseZoom}" />
+                            </Border.LayoutTransform>
+                            <TextBlock Padding="3,1,3,1"
                                        FontFamily="Segoe UI"
-                                       FontSize="12"
+                                       FontSize="11"
                                        Foreground="White"
                                        Text="{Binding Region.Name}" />
                         </Border>
@@ -72,75 +71,75 @@
         </Setter>
     </Style>
 
-    <!-- 고른 자리의 테두리와 손잡이 여덟 개. 손잡이는 투명(잡히기만 한다), 보이는 것은 아래 그리드다. -->
+    <!-- 고른 자리의 테두리와 손잡이 여덟 개. 잡는 Thumb 은 투명(8px 폭), 보이는 것은 아래 그리드다. -->
     <Style TargetType="{x:Type regions:RegionResizeChrome}">
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type regions:RegionResizeChrome}">
                     <Grid>
-                        <Grid Margin="-3"
+                        <Grid Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=-4}"
                               Opacity="0">
-                            <regions:RegionResizeThumb Height="7"
+                            <regions:RegionResizeThumb Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=8}"
                                                        HorizontalAlignment="Stretch"
                                                        VerticalAlignment="Top"
                                                        Cursor="SizeNS" />
-                            <regions:RegionResizeThumb Width="7"
+                            <regions:RegionResizeThumb Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=8}"
                                                        HorizontalAlignment="Left"
                                                        VerticalAlignment="Stretch"
                                                        Cursor="SizeWE" />
-                            <regions:RegionResizeThumb Width="7"
+                            <regions:RegionResizeThumb Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=8}"
                                                        HorizontalAlignment="Right"
                                                        VerticalAlignment="Stretch"
                                                        Cursor="SizeWE" />
-                            <regions:RegionResizeThumb Height="7"
+                            <regions:RegionResizeThumb Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=8}"
                                                        HorizontalAlignment="Stretch"
                                                        VerticalAlignment="Bottom"
                                                        Cursor="SizeNS" />
 
-                            <regions:RegionResizeThumb Width="7"
-                                                       Height="7"
-                                                       Margin="-2"
+                            <regions:RegionResizeThumb Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
+                                                       Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
                                                        HorizontalAlignment="Left"
                                                        VerticalAlignment="Top"
                                                        Cursor="SizeNWSE" />
-                            <regions:RegionResizeThumb Width="7"
-                                                       Height="7"
-                                                       Margin="-2"
+                            <regions:RegionResizeThumb Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
+                                                       Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
                                                        HorizontalAlignment="Right"
                                                        VerticalAlignment="Top"
                                                        Cursor="SizeNESW" />
-                            <regions:RegionResizeThumb Width="7"
-                                                       Height="7"
-                                                       Margin="-2"
+                            <regions:RegionResizeThumb Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
+                                                       Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
                                                        HorizontalAlignment="Left"
                                                        VerticalAlignment="Bottom"
                                                        Cursor="SizeNESW" />
-                            <regions:RegionResizeThumb Width="7"
-                                                       Height="7"
-                                                       Margin="-2"
+                            <regions:RegionResizeThumb Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
+                                                       Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
                                                        HorizontalAlignment="Right"
                                                        VerticalAlignment="Bottom"
                                                        Cursor="SizeNWSE" />
                         </Grid>
-                        <Grid Margin="-3"
-                              IsHitTestVisible="False"
-                              Opacity="1">
-                            <Rectangle Margin="1"
-                                       SnapsToDevicePixels="True"
-                                       Stroke="Magenta"
-                                       StrokeThickness="3" />
-                            <Ellipse HorizontalAlignment="Left"
-                                     VerticalAlignment="Top"
-                                     Style="{StaticResource RegionThumbCorner}" />
-                            <Ellipse HorizontalAlignment="Right"
-                                     VerticalAlignment="Top"
-                                     Style="{StaticResource RegionThumbCorner}" />
-                            <Ellipse HorizontalAlignment="Left"
-                                     VerticalAlignment="Bottom"
-                                     Style="{StaticResource RegionThumbCorner}" />
-                            <Ellipse HorizontalAlignment="Right"
-                                     VerticalAlignment="Bottom"
-                                     Style="{StaticResource RegionThumbCorner}" />
+
+                        <!-- 보이는 것 - 라벨링 캔버스의 고른 사각형과 같다. -->
+                        <Grid IsHitTestVisible="False">
+                            <Rectangle SnapsToDevicePixels="True"
+                                       Stroke="{StaticResource RegionSelectedBrush}"
+                                       StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=3}" />
+
+                            <Rectangle HorizontalAlignment="Left" VerticalAlignment="Top" Style="{StaticResource RegionGrip}"
+                                       Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='-3,-3,0,0'}" />
+                            <Rectangle HorizontalAlignment="Center" VerticalAlignment="Top" Style="{StaticResource RegionGrip}"
+                                       Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,-3,0,0'}" />
+                            <Rectangle HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource RegionGrip}"
+                                       Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,-3,-3,0'}" />
+                            <Rectangle HorizontalAlignment="Left" VerticalAlignment="Center" Style="{StaticResource RegionGrip}"
+                                       Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='-3,0,0,0'}" />
+                            <Rectangle HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource RegionGrip}"
+                                       Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,0,-3,0'}" />
+                            <Rectangle HorizontalAlignment="Left" VerticalAlignment="Bottom" Style="{StaticResource RegionGrip}"
+                                       Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='-3,0,0,-3'}" />
+                            <Rectangle HorizontalAlignment="Center" VerticalAlignment="Bottom" Style="{StaticResource RegionGrip}"
+                                       Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,0,0,-3'}" />
+                            <Rectangle HorizontalAlignment="Right" VerticalAlignment="Bottom" Style="{StaticResource RegionGrip}"
+                                       Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,0,-3,-3'}" />
                         </Grid>
                     </Grid>
                 </ControlTemplate>
@@ -148,34 +147,39 @@
         </Setter>
     </Style>
 
-    <!-- 크기를 바꾸는 동안의 치수 - 아래에 너비, 오른쪽에 높이(원본 픽셀). -->
+    <!-- 크기를 바꾸는 동안의 치수 - 아래에 너비, 오른쪽에 높이(원본 픽셀). 글자·선도 배율 역수로 되돌린다. -->
     <Style TargetType="{x:Type regions:RegionSizeChrome}">
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type regions:RegionSizeChrome}">
                     <Grid SnapsToDevicePixels="True">
-                        <Path Height="10"
-                              Margin="-2,0,-2,-15"
+                        <Path Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
+                              Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='-2,0,-2,-15'}"
                               VerticalAlignment="Bottom"
                               Data="M0,0 0,10 M 0,5 100,5 M 100,0 100,10"
                               Stretch="Fill"
                               Stroke="Red"
-                              StrokeThickness="1" />
-                        <TextBlock Margin="0,0,0,-18"
+                              StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=1}" />
+                        <TextBlock Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,0,0,-18'}"
                                    Padding="3,0,3,0"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Bottom"
                                    Background="White"
                                    Foreground="Red"
-                                   Text="{Binding Path=SourceWidthPx, Converter={StaticResource RegionRoundConverter}}" />
-                        <Path Width="10"
-                              Margin="0,-2,-15,-2"
+                                   Text="{Binding Path=SourceWidthPx, Converter={StaticResource RegionRoundConverter}}">
+                            <TextBlock.LayoutTransform>
+                                <ScaleTransform ScaleX="{Binding InverseZoom}"
+                                                ScaleY="{Binding InverseZoom}" />
+                            </TextBlock.LayoutTransform>
+                        </TextBlock>
+                        <Path Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
+                              Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,-2,-15,-2'}"
                               HorizontalAlignment="Right"
                               Data="M5,0 5,100 M 0,0 10,0 M 0,100 10,100"
                               Stretch="Fill"
                               Stroke="Red"
-                              StrokeThickness="1" />
-                        <TextBlock Margin="0,0,-18,0"
+                              StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=1}" />
+                        <TextBlock Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='0,0,-18,0'}"
                                    Padding="3,0,3,0"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Center"
@@ -183,9 +187,11 @@
                                    Foreground="Red"
                                    Text="{Binding Path=SourceHeightPx, Converter={StaticResource RegionRoundConverter}}">
                             <TextBlock.LayoutTransform>
-                                <RotateTransform Angle="90"
-                                                 CenterX="1"
-                                                 CenterY="0.5" />
+                                <TransformGroup>
+                                    <RotateTransform Angle="90" />
+                                    <ScaleTransform ScaleX="{Binding InverseZoom}"
+                                                    ScaleY="{Binding InverseZoom}" />
+                                </TransformGroup>
                             </TextBlock.LayoutTransform>
                         </TextBlock>
                     </Grid>

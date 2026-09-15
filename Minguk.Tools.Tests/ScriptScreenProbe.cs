@@ -211,6 +211,33 @@ internal static class ScriptScreenProbe
         vm.IsRegionPicking = false;
         vm.PreviewZoom = 1;
 
+        // 입력 전달이 꺼져 있으면 영역 편집 없이도 휠이 확대다(2026-09-15). 켜져 있으면 휠은 게임 몫이라 배율이 안 바뀐다.
+        void Wheel()
+        {
+            var tunnelWheel = new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, 120) { RoutedEvent = System.Windows.Input.Mouse.PreviewMouseWheelEvent, Source = image };
+            image.RaiseEvent(tunnelWheel);
+        }
+
+        vm.IsInputForwardingEnabled = false;
+        await Pump(100);
+        Wheel();
+        await Pump(200);
+        var offZoom = vm.PreviewZoom;
+
+        vm.PreviewZoom = 1;
+        vm.IsInputForwardingEnabled = true;
+        await Pump(100);
+        Wheel();
+        await Pump(200);
+        var onZoom = vm.PreviewZoom;
+
+        vm.IsInputForwardingEnabled = false;
+        vm.PreviewZoom = 1;
+
+        if (Math.Abs(offZoom - 1.25) < 0.001 && Math.Abs(onZoom - 1) < 0.001)
+            Console.WriteLine("[PASS] 입력 전달이 꺼져 있으면 휠이 확대(1 → 1.25), 켜져 있으면 확대하지 않는다(게임 몫)");
+        else { Console.WriteLine($"[FAIL] 휠 확대 조건이 틀렸다 - 전달 끔 {offZoom} (1.25 여야) · 전달 켬 {onZoom} (1 이어야)"); failures++; }
+
         return failures;
     }
 
@@ -252,6 +279,24 @@ internal static class ScriptScreenProbe
 
         if (item.IsSelected && item.HasAdorner) Console.WriteLine("[PASS] 고른 자리에 테두리·손잡이 어도너가 붙었다");
         else { Console.WriteLine($"[FAIL] 고른 자리인데 어도너가 없다 - 고름 {item.IsSelected} · 어도너 {item.HasAdorner}"); failures++; }
+
+        // 라벨링 캔버스처럼 확대해도 테두리가 화면에서 같은 굵기 - 배율 2 면 항목 좌표의 굵기는 절반(판이 2배로 키운다).
+        {
+            vm.PreviewZoom = 2;
+            await Pump(200);
+
+            var border = Descendants<System.Windows.Shapes.Rectangle>(item).FirstOrDefault(r => r.Stroke is not null && !r.IsHitTestVisible);
+            var onScreen = (border?.StrokeThickness ?? 0) * vm.PreviewZoom;
+
+            vm.PreviewZoom = 1;
+            await Pump(200);
+
+            var atOne = border?.StrokeThickness ?? 0;
+
+            if (Math.Abs(item.InverseZoom - 1) < 0.001 && Math.Abs(onScreen - 1.5) < 0.01 && Math.Abs(atOne - 1.5) < 0.01)
+                Console.WriteLine($"[PASS] 확대해도 영역 테두리가 화면에서 같은 굵기다 - 배율 2 에서 화면 {onScreen:0.##}px · 배율 1 에서 {atOne:0.##}px");
+            else { Console.WriteLine($"[FAIL] 확대하면 영역 테두리 굵기가 달라진다 - 배율 2 화면 {onScreen:0.##}px · 배율 1 {atOne:0.##}px (둘 다 1.5 여야) · 역수 {item.InverseZoom}"); failures++; }
+        }
 
         var before = System.Windows.Controls.Canvas.GetLeft(item);
 

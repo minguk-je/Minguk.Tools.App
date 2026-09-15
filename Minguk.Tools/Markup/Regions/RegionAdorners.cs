@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -13,7 +14,8 @@ namespace Minguk.Tools.Markup.Regions;
 /// </summary>
 /// <remarks>
 /// 어도너 층은 ScrollViewer 안(<c>ScrollContentPresenter</c>)에 있어 미리보기의 <c>LayoutTransform</c> 밖이지만, <see cref="Adorner"/>
-/// 가 붙은 요소의 변환을 스스로 따라가므로 확대해도 자리에 맞는다. 선·손잡이도 같이 커진다 - 참조 프로젝트와 같다.
+/// 가 붙은 요소의 변환을 스스로 따라가므로 확대해도 자리에 맞는다. 모양은 라벨링 캔버스와 같다(2026-09-15) - 같은 색 3px 테두리,
+/// 모서리·변 가운데 6px 네모 손잡이. 크기에 배율 역수를 곱해(<see cref="RegionZoomConverter"/>) 확대해도 화면에서 같은 크기다.
 /// </remarks>
 public sealed class RegionResizeAdorner : Adorner
 {
@@ -77,6 +79,28 @@ public sealed class RegionResizeChrome : Control
 public sealed class RegionSizeChrome : Control
 {
     public RegionSizeChrome() => Style = RegionChromeResources.StyleFor(typeof(RegionSizeChrome));
+}
+
+/// <summary>
+/// 배율 역수(<see cref="RegionItem.InverseZoom"/>)에 크기를 곱한다 - 선 굵기·손잡이 크기·여백이 확대해도 화면에서 같게.
+/// </summary>
+/// <remarks>
+/// 매개변수는 화면 픽셀 값. 받는 쪽이 <see cref="Thickness"/>(여백)면 "0,-17,0,0" 이나 "-3" 을, 아니면 수 하나를 받는다.
+/// </remarks>
+public sealed class RegionZoomConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var inverse = value is double d && d > 0 ? d : 1d;
+        var parts = (parameter?.ToString() ?? "1").Split(',').Select(p => double.Parse(p, CultureInfo.InvariantCulture) * inverse).ToArray();
+
+        if (targetType == typeof(Thickness))
+            return parts.Length == 4 ? new Thickness(parts[0], parts[1], parts[2], parts[3]) : new Thickness(parts[0]);
+
+        return parts[0];
+    }
+
+    public object? ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => null;
 }
 
 /// <summary>치수 글자는 정수로. 참조한 <c>DoubleFormatConverter</c>.</summary>

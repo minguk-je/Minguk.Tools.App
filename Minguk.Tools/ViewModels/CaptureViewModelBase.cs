@@ -449,7 +449,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             : savedTarget;
 
         CaptureTargetFps = GetSetting(nameof(CaptureTargetFps), 60);
-        PreviewTargetFps = GetSetting(nameof(PreviewTargetFps), 60);
+        // 미리보기 상한은 따로 저장값을 안 믿는다 - 칸을 뺐으니 옛 저장값(예: 30)이 남으면 고칠 길 없이 미리보기만 느리다. FPS 콤보를 따른다.
+        PreviewTargetFps = CaptureTargetFps;
 
         IsElementInspectEnabled = GetSetting(nameof(IsElementInspectEnabled), false);
 
@@ -469,7 +470,6 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     {
         SetSetting(nameof(ShowPreview), ShowPreview);
         SetSetting(nameof(CaptureTargetFps), CaptureTargetFps);
-        SetSetting(nameof(PreviewTargetFps), PreviewTargetFps);
         SetSetting(nameof(SelectedInputBackend), SelectedInputBackend.ToString());
         SetSetting(nameof(IsElementInspectEnabled), IsElementInspectEnabled);
         SetSetting(nameof(PreviewZoom), PreviewZoom);
@@ -1152,6 +1152,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     {
         if (_captureSession is not null)
             _captureSession.TargetFps = CaptureTargetFps;
+
+        // 미리보기는 FPS 콤보를 따른다(2026-09-15) - 따로 두던 "갱신 상한" 칸은 모든 화면에서 뺐다.
+        PreviewTargetFps = CaptureTargetFps;
     }
 
     // ── 미리보기 입력 전달 ────────────────────────────────────────────────

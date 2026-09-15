@@ -68,6 +68,19 @@ public sealed class RegionItem : ContentControl
         set => SetValue(SourceHeightPxProperty, value);
     }
 
+    public static readonly DependencyProperty InverseZoomProperty = DependencyProperty.Register(
+        nameof(InverseZoom), typeof(double), typeof(RegionItem), new PropertyMetadata(1d));
+
+    /// <summary>
+    /// 미리보기 배율의 역수. 테두리·손잡이·이름표 크기에 곱해 확대해도 화면에서 늘 같은 크기로 보이게 한다 - 라벨링 캔버스와 같다(2026-09-15).
+    /// </summary>
+    /// <remarks>미리보기는 판을 LayoutTransform 으로 키워 안의 선·글자가 같이 굵어진다. 캔버스(<see cref="RegionCanvas.Zoom"/>)가 넣어 준다.</remarks>
+    public double InverseZoom
+    {
+        get => (double)GetValue(InverseZoomProperty);
+        set => SetValue(InverseZoomProperty, value);
+    }
+
     /// <summary>이 항목을 든 캔버스. 손잡이들이 끌기를 여기로 넘긴다.</summary>
     internal RegionCanvas? Owner => Parent as RegionCanvas;
 

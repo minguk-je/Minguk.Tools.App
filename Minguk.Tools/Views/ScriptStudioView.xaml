@@ -237,23 +237,7 @@
                 <dxb:BarCheckItem Content="미리보기"
                                   Hint="캡처 중인 화면을 미리보기 창에 그대로 보여 준다."
                                   IsChecked="{Binding ShowPreview}" />
-                <!--
-                    SpinEdit 는 값을 Decimal 로 내준다. EditValueType 을 안 주면 double 인 PreviewZoom 으로 못 바꿔
-                    바인딩이 조용히 실패한다(로그: ConvertBack cannot convert value '1.25' (type 'Decimal')) - 칸은 바뀌는데 확대가 안 됐다.
-                -->
-                <dxb:BarEditItem Content="확대"
-                                 EditValue="{Binding PreviewZoom, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={markup:ToDoubleConverter}}"
-                                 EditWidth="56"
-                                 Hint="미리보기를 키운다. 1 이면 창에 맞춤. 영역을 손보는 중에는 휠로도 된다.">
-                    <dxb:BarEditItem.EditSettings>
-                        <dxe:SpinEditSettings Increment="0.25"
-                                              MaxValue="8"
-                                              MinValue="0.5" />
-                    </dxb:BarEditItem.EditSettings>
-                </dxb:BarEditItem>
-                <dxb:BarButtonItem Command="{Binding ZoomResetCommand}"
-                                   Content="맞춤"
-                                   Hint="확대를 1(창에 맞춤) 로 되돌린다." />
+                <!-- 확대·맞춤은 미리보기 아래 띠로 옮겼다(2026-09-15) - VS XAML 디자이너처럼 배율은 그리는 판 아래에 둔다. -->
                 <dxb:BarItemSeparator />
                 <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                    Command="{Binding CollectFrameCommand}"
@@ -306,17 +290,7 @@
                                                   ItemsSource="{Binding OcrLanguages}" />
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
-                <dxb:BarItemSeparator />
-                <dxb:BarEditItem Content="이름"
-                                 EditValue="{Binding RegionName}"
-                                 EditWidth="100"
-                                 Hint="새로 만들 자리의 이름. 비워 두면 자리1 처럼 붙는다." />
-                <dxb:BarCheckItem Content="영역 지정"
-                                  Hint="켜 둔 동안 미리보기가 편집기다 - 빈 자리 끌기는 새 자리, 자리 안 끌기는 옮기기, 고른 자리의 손잡이는 크기 조절(치수가 픽셀로 뜬다). 휠 확대·오른쪽 끌기 이동."
-                                  IsChecked="{Binding IsRegionPicking}" />
-                <dxb:BarCheckItem Content="영역 보기"
-                                  Hint="만들어 둔 자리를 미리보기에 이름과 함께 겹쳐 그린다."
-                                  IsChecked="{Binding ShowRegions}" />
+                <!-- 이름 붙인 자리(이름·영역 지정·영역 보기)는 미리보기 아래 띠로 옮겼다(2026-09-15) - 그 자리를 손보는 판 바로 아래에서 켜고 끈다. -->
             </dxb:Bar>
 
             <!-- ── 입력 ── -->
@@ -768,12 +742,30 @@
                                               ItemHeight="1*"
                                               ItemWidth="1.2*">
                                 <DockPanel>
-                                    <!-- VS XAML 디자이너의 나누기 띠 - 위아래 · 좌우 · 자리 바꾸기. -->
+                                    <!--
+                                        VS XAML 디자이너의 아래 띠 - 이름 붙인 자리(이름·영역 지정·영역 보기) · 나누기(위아래·좌우·바꾸기).
+                                        확대 콤보는 라벨링 화면처럼 판 위 도구 줄(PreviewForwardBar)에 있다(2026-09-15).
+                                    -->
                                     <dxlc:LayoutControl Padding="2,1"
                                                         HorizontalAlignment="Left"
                                                         DockPanel.Dock="Bottom"
                                                         Orientation="Horizontal">
+                                        <dxlc:LayoutItem Label="이름"
+                                                         ToolTip="새로 만들 자리의 이름. 비워 두면 자리1 처럼 붙는다.">
+                                            <dxe:TextEdit Width="100"
+                                                          EditValue="{Binding RegionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </dxlc:LayoutItem>
+                                        <dxe:CheckEdit VerticalAlignment="Center"
+                                                       Content="영역 지정"
+                                                       IsChecked="{Binding IsRegionPicking, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                       ToolTip="켜 둔 동안 미리보기가 편집기다 - 빈 자리 끌기는 새 자리, 자리 안 끌기는 옮기기, 고른 자리의 손잡이는 크기 조절(치수가 픽셀로 뜬다). 휠 확대·오른쪽 끌기 이동." />
+                                        <dxe:CheckEdit VerticalAlignment="Center"
+                                                       Content="영역 보기"
+                                                       IsChecked="{Binding ShowRegions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                       ToolTip="만들어 둔 자리를 미리보기에 이름과 함께 겹쳐 그린다." />
+
                                         <dx:SimpleButton Width="56"
+                                                         Margin="12,0,0,0"
                                                          Command="{Binding SplitVerticalCommand}"
                                                          Content="위아래"
                                                          ToolTip="미리보기를 위, 스크립트를 아래에 둔다." />
@@ -787,7 +779,7 @@
                                                          ToolTip="미리보기와 스크립트의 자리를 맞바꾼다." />
                                     </dxlc:LayoutControl>
 
-                                    <!-- 미리보기를 켰을 때만: 갱신 상한 · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
+                                    <!-- 미리보기를 켰을 때만: 확대 · 맞춤 · 실제 FPS · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
                                     <parts:PreviewForwardBar DockPanel.Dock="Top" />
 
                                     <!-- 비어 있으면 할 일을 말한다. 빈 창만 보이면 무엇을 눌러야 할지 모른다(실측 - 캡처 시작을 못 찾았다). -->
@@ -812,7 +804,8 @@
                                                                      SelectedRegion="{Binding SelectedRegion}"
                                                                      ShowOcrRegion="{Binding IsOcrRegionVisible}"
                                                                      ShowRegions="{Binding IsRegionVisible}"
-                                                                     Source="{Binding PreviewImage}" />
+                                                                     Source="{Binding PreviewImage}"
+                                                                     Zoom="{Binding PreviewZoom}" />
                                         </parts:CapturePreviewPanel.Overlay>
                                         <!-- 영역 지정 중에만 보이는 편집기 - 자리마다 Thumb 손잡이, 고른 것에 테두리·손잡이 어도너. -->
                                         <parts:CapturePreviewPanel.Editor>
@@ -821,7 +814,8 @@
                                                                   Regions="{Binding Regions}"
                                                                   RegionsRevision="{Binding RegionsRevision}"
                                                                   SelectedRegion="{Binding SelectedRegion, Mode=TwoWay}"
-                                                                  Source="{Binding PreviewImage}" />
+                                                                  Source="{Binding PreviewImage}"
+                                                                  Zoom="{Binding PreviewZoom}" />
                                         </parts:CapturePreviewPanel.Editor>
                                     </parts:CapturePreviewPanel>
                                 </DockPanel>
@@ -1038,11 +1032,13 @@
                         <dxdo:LayoutPanel x:Name="BreakpointsPanel"
                                           Caption="중단점">
                             <dxlc:LayoutControl Orientation="Vertical">
-                                <dxe:TextEdit Opacity="0.7"
+                                <dxe:TextEdit VerticalAlignment="Top"
+                                              Opacity="0.7"
                                               IsReadOnly="True"
                                               ShowBorder="False"
                                               Text="편집기 왼쪽 여백을 누르거나 F9 로 켜고 끕니다. 한 줄씩(F10)은 JavaScript·Python 만 됩니다." />
-                                <dxe:ListBoxEdit ItemsSource="{Binding Live.Debug.Breakpoints}" />
+                                <dxe:ListBoxEdit VerticalAlignment="Stretch"
+                                                 ItemsSource="{Binding Live.Debug.Breakpoints}" />
                             </dxlc:LayoutControl>
                         </dxdo:LayoutPanel>
                     </dxdo:TabbedGroup>

@@ -88,6 +88,25 @@ public sealed class RegionCanvas : Canvas
         set => SetValue(IsEditingProperty, value);
     }
 
+    public static readonly DependencyProperty ZoomProperty = DependencyProperty.Register(
+        nameof(Zoom), typeof(double), typeof(RegionCanvas), new PropertyMetadata(1d, (d, _) => ((RegionCanvas)d).ApplyZoom()));
+
+    /// <summary>
+    /// 미리보기 배율(PreviewZoom). 항목마다 역수를 넣어 테두리·손잡이·이름표가 확대해도 같은 크기로 보이게 한다(라벨링 캔버스와 같게, 2026-09-15).
+    /// </summary>
+    public double Zoom
+    {
+        get => (double)GetValue(ZoomProperty);
+        set => SetValue(ZoomProperty, value);
+    }
+
+    private double InverseZoom => Zoom > 0 ? 1 / Zoom : 1;
+
+    private void ApplyZoom()
+    {
+        foreach (var item in _items.Values) item.InverseZoom = InverseZoom;
+    }
+
     public static readonly DependencyProperty EditCommandProperty = DependencyProperty.Register(
         nameof(EditCommand), typeof(ICommand), typeof(RegionCanvas), new PropertyMetadata(null));
 
@@ -150,7 +169,7 @@ public sealed class RegionCanvas : Canvas
         {
             if (!_items.TryGetValue(region, out var item))
             {
-                item = new RegionItem { Region = region };
+                item = new RegionItem { Region = region, InverseZoom = InverseZoom };
                 _items.Add(region, item);
                 Children.Add(item);
             }

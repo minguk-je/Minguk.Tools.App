@@ -296,7 +296,8 @@
                                                  ShowOcrRegion="{Binding IsOcrRegionVisible}"
                                              OcrRegionDraft="{Binding OcrRegionDraft}"
                                              OcrText="{Binding OcrText}"
-                                             Source="{Binding PreviewImage}" />
+                                             Source="{Binding PreviewImage}"
+                                             Zoom="{Binding PreviewZoom}" />
                 </parts:CapturePreviewPanel.Overlay>
             </parts:CapturePreviewPanel>
 

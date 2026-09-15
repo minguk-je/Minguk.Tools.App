@@ -119,6 +119,27 @@ public sealed class DetectionOverlay : FrameworkElement
     /// <summary>글자 영역 색. 몹 색(황금각 팔레트)과 헷갈리지 않게 청록 하나로 고정한다.</summary>
     private static readonly Color OcrColour = Color.FromRgb(0x00, 0xBC, 0xD4);
 
+    public static readonly DependencyProperty ZoomProperty = DependencyProperty.Register(
+        nameof(Zoom), typeof(double), typeof(DetectionOverlay),
+        new FrameworkPropertyMetadata(1d, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>
+    /// 미리보기 배율(PreviewZoom). 선 굵기·글자 크기·여백을 이것으로 나눠, 확대해도 화면에서 늘 같은 크기로 그린다 - 라벨링 캔버스와 같다(2026-09-15).
+    /// </summary>
+    /// <remarks>판이 LayoutTransform 으로 커져 이 요소도 같이 커진다. 배율이 바뀌면 다시 그려야 해 속성으로 받는다(크기는 그대로라 다시 그리기가 안 온다).</remarks>
+    public double Zoom
+    {
+        get => (double)GetValue(ZoomProperty);
+        set => SetValue(ZoomProperty, value);
+    }
+
+    /// <summary>화면 1px 이 이 요소 좌표로 몇인가.</summary>
+    private double Unit => Zoom > 0 ? 1 / Zoom : 1;
+
+    private FormattedText Text(string text, double size, Brush brush)
+        => new(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), size * Unit, brush,
+               VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
     protected override void OnRender(DrawingContext dc)
     {
         if (ComputeImageRect() is not { IsEmpty: false } area) return;
@@ -221,24 +242,25 @@ public sealed class DetectionOverlay : FrameworkElement
             box.Width * area.Width,
             box.Height * area.Height);
 
-        // 확대하면 이 요소도 같이 커진다(LayoutTransform). 선은 화면에서 늘 같은 굵기로 보이게 나눈다.
-        var zoom = Math.Max(1d, ZoomOf(this));
+        // 라벨링 캔버스와 같은 모양 - 1.5px(고르면 3px) 테두리, 자리 색 바탕에 흰 11px 이름표. 크기는 배율로 나눠 화면에서 같게.
+        var unit = Unit;
         var colour = selected ? SelectedNamedColour : NamedColour;
-        var pen = new Pen(new SolidColorBrush(colour), (selected ? 3d : 2d) / zoom);
+        var pen = new Pen(new SolidColorBrush(colour), (selected ? 3d : 1.5d) * unit);
 
         pen.Freeze();
         dc.DrawRectangle(null, pen, rect);
 
-        var formatted = new FormattedText(region.Name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                                          new Typeface("Segoe UI"), 12d, Brushes.White,
-                                          VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        var formatted = Text(region.Name, 11d, Brushes.White);
 
         // 이름표는 사각형 위에. 위가 좁으면 안쪽에 넣는다 - 화면 밖으로 나가면 안 보인다.
-        var top = rect.Y - formatted.Height - 2 >= area.Y ? rect.Y - formatted.Height - 2 : rect.Y + 2;
+        var top = rect.Top - formatted.Height - (2 * unit);
+        if (top < area.Top) top = rect.Top + (2 * unit);
 
-        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(170, 0, 0, 0)), null,
-                         new Rect(rect.X, top, formatted.Width + 6, formatted.Height));
-        dc.DrawText(formatted, new Point(rect.X + 3, top));
+        var background = new SolidColorBrush(colour) { Opacity = 0.85 };
+        background.Freeze();
+
+        dc.DrawRectangle(background, null, new Rect(rect.X, top, formatted.Width + (6 * unit), formatted.Height + (2 * unit)));
+        dc.DrawText(formatted, new Point(rect.X + (3 * unit), top + unit));
     }
 
     /// <summary>이름 붙인 자리의 색. 글자 영역(노랑)·몹(초록)과 달라야 한다.</summary>
@@ -246,17 +268,6 @@ public sealed class DetectionOverlay : FrameworkElement
 
     /// <summary>목록에서 고른 자리. 여럿 사이에서 무엇을 골랐는지 한눈에 갈리게 주황.</summary>
     private static readonly Color SelectedNamedColour = Color.FromRgb(255, 170, 40);
-
-    /// <summary>위쪽 LayoutTransform 들의 배율을 곱한다. 미리보기 확대가 여기서 온다.</summary>
-    private static double ZoomOf(DependencyObject element)
-    {
-        var zoom = 1d;
-
-        for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
-            if (node is FrameworkElement { LayoutTransform: ScaleTransform scale }) zoom *= scale.ScaleX;
-
-        return zoom;
-    }
 
     private void DrawOcrRegion(DrawingContext dc, Rect area, Rect region, bool dashed, string? text)
     {
@@ -268,25 +279,24 @@ public sealed class DetectionOverlay : FrameworkElement
             region.Width * area.Width,
             region.Height * area.Height);
 
-        var pen = new Pen(new SolidColorBrush(OcrColour), 2d);
+        var unit = Unit;
+        var pen = new Pen(new SolidColorBrush(OcrColour), 2d * unit);
         if (dashed) pen.DashStyle = new DashStyle([4, 3], 0);
         pen.Freeze();
 
         dc.DrawRectangle(null, pen, rect);
 
         var caption = string.IsNullOrEmpty(text) ? "글자" : "글자: " + FirstLine(text, 60);
-        var formatted = new FormattedText(caption, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                                          new Typeface("Segoe UI"), 12d, Brushes.White,
-                                          VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        var formatted = Text(caption, 11d, Brushes.White);
 
-        var top = rect.Bottom + 2;
-        if (top + formatted.Height > area.Bottom) top = rect.Top - formatted.Height - 2;
+        var top = rect.Bottom + (2 * unit);
+        if (top + formatted.Height > area.Bottom) top = rect.Top - formatted.Height - (2 * unit);
 
         var background = new SolidColorBrush(OcrColour) { Opacity = 0.85 };
         background.Freeze();
 
-        dc.DrawRectangle(background, null, new Rect(rect.X, top, formatted.Width + 6, formatted.Height + 2));
-        dc.DrawText(formatted, new Point(rect.X + 3, top + 1));
+        dc.DrawRectangle(background, null, new Rect(rect.X, top, formatted.Width + (6 * unit), formatted.Height + (2 * unit)));
+        dc.DrawText(formatted, new Point(rect.X + (3 * unit), top + unit));
     }
 
     private static string FirstLine(string text, int max)
@@ -323,30 +333,24 @@ public sealed class DetectionOverlay : FrameworkElement
 
         var colour = LabelCanvas.ColorOf(box.ClassId);
 
-        // 라벨링 화면과 같은 규칙 - 모델이 찾은 것은 점선이다.
-        var pen = new Pen(new SolidColorBrush(colour), 2d) { DashStyle = new DashStyle([4, 3], 0) };
+        // 라벨링 화면과 같은 규칙 - 모델이 찾은 것은 2px 점선, 11px 이름표. 크기는 배율로 나눠 확대해도 화면에서 같게.
+        var unit = Unit;
+        var pen = new Pen(new SolidColorBrush(colour), 2d * unit) { DashStyle = new DashStyle([4, 3], 0) };
         pen.Freeze();
 
         dc.DrawRectangle(null, pen, rect);
 
-        var text = new FormattedText(
-            detection.Caption,
-            CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"),
-            12d,
-            Brushes.White,
-            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        var text = Text(detection.Caption, 11d, Brushes.White);
 
         // 위쪽에 붙이되, 화면 위에 걸린 것은 안으로 넣는다. 안 그러면 잘려 안 보인다.
-        var top = rect.Top - text.Height - 2;
-        if (top < area.Top) top = rect.Top + 2;
+        var top = rect.Top - text.Height - (2 * unit);
+        if (top < area.Top) top = rect.Top + (2 * unit);
 
-        var background = new SolidColorBrush(colour) { Opacity = 0.8 };
+        var background = new SolidColorBrush(colour) { Opacity = 0.7 };
         background.Freeze();
 
-        dc.DrawRectangle(background, null, new Rect(rect.X, top, text.Width + 6, text.Height + 2));
-        dc.DrawText(text, new Point(rect.X + 3, top + 1));
+        dc.DrawRectangle(background, null, new Rect(rect.X, top, text.Width + (6 * unit), text.Height + (2 * unit)));
+        dc.DrawText(text, new Point(rect.X + (3 * unit), top + unit));
     }
 
     /// <summary>

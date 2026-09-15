@@ -111,6 +111,15 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// </remarks>
     protected override bool IsPreviewEditing => IsRegionPicking || IsOcrRegionPicking;
 
+    /// <summary>
+    /// 휠 확대·오른쪽 끌기 이동 - 영역을 손보는 중이거나, <b>입력 전달이 꺼져 있으면</b> 늘(사용자, 2026-09-15).
+    /// </summary>
+    /// <remarks>
+    /// 입력 전달이 켜져 있으면 휠·오른쪽 버튼은 게임으로 가야 한다(무기 바꾸기·조준). 꺼져 있으면 게임으로 갈 것이 없어
+    /// 영역 편집을 켜야만 확대할 수 있던 것이 번거로웠다. Ctrl+휠 확대는 전달 중에도 된다.
+    /// </remarks>
+    protected override bool AllowPreviewPanZoom => IsPreviewEditing || !IsInputForwardingEnabled;
+
     protected override bool TryInterceptPreviewMouseDown(Point pointInControl)
         => TryBeginRegionPick(pointInControl) || TryBeginOcrRegionPick(pointInControl);
 

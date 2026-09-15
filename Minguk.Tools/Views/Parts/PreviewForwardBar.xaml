@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
              xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
-             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm">
+             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:markup="clr-namespace:Minguk.Tools.Markup">
 
     <UserControl.Resources>
         <dxmvvm:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
@@ -16,18 +17,32 @@
                         TextBlock.FontSize="{DynamicResource BaseFontSize}"
                         Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
 
-        <dxb:BarEditItem Content="갱신 상한"
-                         EditValue="{Binding PreviewTargetFps}"
-                         EditWidth="70"
-                         ToolTip="미리보기 갱신 상한(FPS). 캡처 자체는 이 값과 무관하게 계속 돈다.">
+        <!--
+            미리보기 갱신 상한 칸은 뺐다(2026-09-15, 사용자 "FPS 콤보랑 맞춰줘") - 화면캡처 화면처럼 미리보기는 위 FPS 콤보를 따른다
+            (PreviewTargetFps = CaptureTargetFps). 두 칸이 따로 있으면 미리보기만 30 으로 묶여 캡처는 60 인데 화면이 뚝뚝 끊겨 보였다.
+        -->
+        <!--
+            미리보기 확대 - 라벨링 화면 그림 판과 같은 콤보(2026-09-15). 고르거나 직접 치고, 휠로 바꾼 배율도 여기 뜬다(PreviewZoom 양방향).
+            판 위 휠 확대·오른쪽 끌기 이동은 입력 전달이 꺼져 있거나 영역을 손보는 중에 된다. 값이 Decimal 로 올 수 있어 ToDoubleConverter 로 잇는다.
+        -->
+        <dxb:BarEditItem Content="확대"
+                         EditValue="{Binding PreviewZoom, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={markup:ToDoubleConverter}}"
+                         EditWidth="64"
+                         ToolTip="미리보기를 키우고 줄입니다. 100% 면 창에 맞춤.&#10;입력 전달이 꺼져 있거나 영역을 손보는 중이면 판 위에서 휠로도 되고, 오른쪽 버튼으로 끌면 옮겨집니다. 전달 중에는 Ctrl+휠.">
             <dxb:BarEditItem.EditSettings>
-                <dxe:ComboBoxEditSettings IsTextEditable="False"
-                                          ItemsSource="{Binding FpsOptions}" />
+                <dxe:ComboBoxEditSettings DisplayFormat="0%"
+                                          IsTextEditable="True"
+                                          ItemsSource="{Binding ZoomOptions}" />
             </dxb:BarEditItem.EditSettings>
         </dxb:BarEditItem>
+        <dxb:BarButtonItem Command="{Binding ZoomResetCommand}"
+                           Content="맞춤"
+                           ToolTip="확대를 1(창에 맞춤) 로 되돌립니다." />
+
+        <dxb:BarItemSeparator />
 
         <dxb:BarStaticItem Content="{Binding PreviewFpsText, Mode=OneWay}"
-                           ToolTip="지금 화면에 올라가고 있는 실제 FPS. 왼쪽 값은 상한일 뿐이다." />
+                           ToolTip="지금 화면에 올라가고 있는 실제 FPS. 상한은 위 FPS 콤보를 따른다." />
 
         <dxb:BarItemSeparator />
 
