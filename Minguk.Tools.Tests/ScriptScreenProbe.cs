@@ -123,6 +123,8 @@ internal static class ScriptScreenProbe
 
                 Render(window, output);
                 Console.WriteLine($"[INFO] 화면을 찍었다: {output}");
+
+                failures += await CheckHelpPanel(window, vm, Path.ChangeExtension(output, null) + "-help.png");
             }
             catch (Exception ex)
             {
@@ -284,6 +286,23 @@ internal static class ScriptScreenProbe
         if (item.IsSelected && item.HasAdorner) Console.WriteLine("[PASS] 고른 자리에 테두리·손잡이 어도너가 붙었다");
         else { Console.WriteLine($"[FAIL] 고른 자리인데 어도너가 없다 - 고름 {item.IsSelected} · 어도너 {item.HasAdorner}"); failures++; }
 
+        // 캡처 전(그림 없음)에는 놓을 자리가 없다 - 어도너가 크기 0 항목에 붙어 점으로 남으면 안 된다(사용자, 2026-09-15).
+        {
+            var image = vm.PreviewImage;
+            vm.PreviewImage = null;
+            await Pump(200);
+
+            var noDot = !item.HasAdorner && item.Visibility != Visibility.Visible;
+
+            vm.PreviewImage = image;
+            await Pump(200);
+
+            var back = item.HasAdorner && item.Visibility == Visibility.Visible;
+
+            if (noDot && back) Console.WriteLine("[PASS] 그림이 없으면 고른 자리의 어도너도 안 보이고(점 없음), 그림이 오면 다시 붙는다");
+            else { Console.WriteLine($"[FAIL] 그림 없을 때 어도너가 남는다 - 없음에서 어도너 {item.HasAdorner} · 항목 {item.Visibility} / 다시 붙음 {back}"); failures++; }
+        }
+
         // 라벨링 캔버스처럼 확대해도 테두리가 화면에서 같은 굵기 - 배율 2 면 항목 좌표의 굵기는 절반(판이 2배로 키운다).
         {
             vm.PreviewZoom = 2;
@@ -300,6 +319,32 @@ internal static class ScriptScreenProbe
             if (Math.Abs(item.InverseZoom - 1) < 0.001 && Math.Abs(onScreen - 1.5) < 0.01 && Math.Abs(atOne - 1.5) < 0.01)
                 Console.WriteLine($"[PASS] 확대해도 영역 테두리가 화면에서 같은 굵기다 - 배율 2 에서 화면 {onScreen:0.##}px · 배율 1 에서 {atOne:0.##}px");
             else { Console.WriteLine($"[FAIL] 확대하면 영역 테두리 굵기가 달라진다 - 배율 2 화면 {onScreen:0.##}px · 배율 1 {atOne:0.##}px (둘 다 1.5 여야) · 역수 {item.InverseZoom}"); failures++; }
+        }
+
+        // 빈 자리를 눌렀다 떼면 고른 것이 풀린다(사용자, 2026-09-15). 미리보기 바탕(Border)에 실제 이벤트를 흘린다 - 좌표는 진짜 커서라 창 밖이고, 그림 가장자리로 접힌 점짜리 끌기다.
+        {
+            var surface = Descendants<System.Windows.Controls.Border>(window).FirstOrDefault(b => b.Name == "Surface");
+
+            if (surface is null) { Console.WriteLine("[FAIL] 미리보기 바탕(Surface)을 못 찾았다"); failures++; }
+            else
+            {
+                // 실제 클릭처럼 그 자리에 맞는 요소(그림 등)에서 올린다 - 바탕에 바로 넣으면 중간(ScrollViewer 등)이 먹는 것을 못 잡는다.
+                var empty = canvas.TranslatePoint(new Point(canvas.ImageArea.Left + 20, canvas.ImageArea.Top + 20), surface);
+                var hit = surface.InputHitTest(empty) as UIElement ?? surface;
+                Console.WriteLine($"[INFO] 빈 자리 누르기 - 맞은 요소 {hit.GetType().Name}");
+
+                hit.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left) { RoutedEvent = System.Windows.Input.Mouse.MouseDownEvent });
+                hit.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left) { RoutedEvent = System.Windows.Input.Mouse.MouseUpEvent });
+                await Pump(200);
+
+                var cleared = vm.SelectedRegion is null && !item.IsSelected && !item.HasAdorner;
+
+                if (cleared) Console.WriteLine("[PASS] 빈 자리를 누르면 고른 자리가 풀리고 어도너가 진다");
+                else { Console.WriteLine($"[FAIL] 빈 자리를 눌러도 고른 것이 안 풀린다 - VM {vm.SelectedRegion?.Name ?? "없음"} · 고름 {item.IsSelected} · 어도너 {item.HasAdorner}"); failures++; }
+
+                vm.SelectedRegion = region;
+                await Pump(200);
+            }
         }
 
         var before = System.Windows.Controls.Canvas.GetLeft(item);
@@ -365,6 +410,48 @@ internal static class ScriptScreenProbe
 
         vm.Regions.Remove(region);
         vm.PreviewImage = null;
+
+        return failures;
+    }
+
+    /// <summary>
+    /// 도움말 패널(사용자, 2026-09-15) - 솔루션 탐색기 탭 그룹에 있고, 함수 표(ScriptApiCatalog)가 빠짐없이 들어가고, 고르면 설명·예시가 뜬다.
+    /// </summary>
+    private static async System.Threading.Tasks.Task<int> CheckHelpPanel(Window window, ScriptStudioViewModel vm, string output)
+    {
+        var failures = 0;
+        var dock = Descendants<DevExpress.Xpf.Docking.DockLayoutManager>(window).FirstOrDefault();
+        var help = dock?.GetItem("HelpPanel") as DevExpress.Xpf.Docking.LayoutPanel;
+        var solution = dock?.GetItem("SolutionExplorerPanel") as DevExpress.Xpf.Docking.LayoutPanel;
+
+        if (help is null) { Console.WriteLine("[FAIL] 도움말 패널이 없다"); return 1; }
+
+        var sameGroup = solution?.Parent is DevExpress.Xpf.Docking.TabbedGroup group && ReferenceEquals(help.Parent, group);
+
+        var rows = vm.HelpRows;
+        var missing = Minguk.Tools.Input.Scripting.ScriptApiCatalog.Entries.Where(e => !rows.Any(r => r.English == e.Signature)).Select(e => e.Name).ToList();
+        var others = rows.Count(r => r.Group.StartsWith("9.", StringComparison.Ordinal));
+
+        if (sameGroup && missing.Count == 0 && others == 0)
+            Console.WriteLine($"[PASS] 도움말 패널 - 솔루션 탐색기 탭 그룹 · {rows.Count}줄 · 함수 {Minguk.Tools.Input.Scripting.ScriptApiCatalog.Entries.Count}개 빠짐없이 분류됨");
+        else { Console.WriteLine($"[FAIL] 도움말 패널 - 같은 탭 그룹 {sameGroup} · 빠진 함수 {string.Join(", ", missing)} · 분류 없는(기타) {others}줄"); failures++; }
+
+        dock!.DockController.Activate(help);
+        vm.SelectedHelpRow = rows.First(r => r.Name.StartsWith("목표(", StringComparison.Ordinal));
+        await Pump(400);
+
+        var grid = help.Content is DependencyObject content ? Descendants<DevExpress.Xpf.Grid.GridControl>(content).FirstOrDefault() : null;
+        var shown = help.Content is DependencyObject body
+            && Descendants<DevExpress.Xpf.Editors.TextEdit>(body).Any(t => t.IsVisible && (t.EditValue as string)?.Contains("목표()", StringComparison.Ordinal) == true);
+
+        if (grid is not null && grid.VisibleRowCount > 0 && shown)
+            Console.WriteLine($"[PASS] 도움말에서 고르면 아래에 설명·예시가 뜬다 - 보이는 줄 {grid.VisibleRowCount}");
+        else { Console.WriteLine($"[FAIL] 도움말 그리드·설명이 안 보인다 - 그리드 {grid is not null} · 줄 {grid?.VisibleRowCount} · 예시 보임 {shown}"); failures++; }
+
+        failures += VerticalAlignmentCheck.Report((FrameworkElement)window.Content, "스크립트 화면(도움말)");
+
+        Render(window, output);
+        Console.WriteLine($"[INFO] 도움말 화면을 찍었다: {output}");
 
         return failures;
     }

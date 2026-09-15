@@ -315,6 +315,10 @@ public abstract partial class RecognizingCaptureViewModelBase
     {
         if (!IsRegionEditingActive || IsElementInspectEnabled) return false;
 
+        // 빈 자리를 누르면 고른 것을 바로 푼다(VS 디자이너와 같다, 사용자 2026-09-15). 끌어서 새 자리를 만들면 그것이 골라진다.
+        // 뗄 때만 풀면 좌표를 못 푼 누름(그림 크기를 모를 때)에서 안 풀렸다.
+        if (SelectedRegion is not null) SelectedRegion = null;
+
         var (control, source) = PreviewSizes;
 
         if (!PreviewInputMapper.TryMapToRatio(pointInControl, control, source, clamp: true, out var ratio))

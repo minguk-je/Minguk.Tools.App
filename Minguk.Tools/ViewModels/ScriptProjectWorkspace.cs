@@ -245,6 +245,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     private void Attach(ScriptProject project)
     {
         Project = project;
+        PruneDataItems(project);
         RebuildNodes();
         WatchFolder(project);
         Changed?.Invoke(this, EventArgs.Empty);
@@ -477,18 +478,73 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         }
     }
 
-    private bool IsIgnored(string relative)
+    /// <summary>목록·솔루션 탐색기에 안 넣는 경로(프로젝트 폴더 기준, '/' 로 나눔). 검사 하네스가 규칙을 본다.</summary>
+    public static bool IsIgnored(string relative)
     {
         if (string.Equals(Path.GetExtension(relative), ScriptProject.Extension, StringComparison.OrdinalIgnoreCase)) return true;
 
-        foreach (var part in relative.Split('/'))
+        var parts = relative.Split('/');
+
+        foreach (var part in parts)
         {
             if (part is ".git" or ".vs" or "bin" or "obj") return true;
         }
 
+        if (IsDataPath(parts)) return true;
+
         var name = Path.GetFileName(relative);
 
         return name.StartsWith('~') || name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".swp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 프로젝트 폴더의 데이터(사진·라벨·프레임·녹화·모델·영역) - 폴더 규약으로 두고 목록(.mtsproj)·솔루션 탐색기에 안 넣는다(docs/프로젝트-설계.md).
+    /// </summary>
+    /// <remarks>
+    /// 폴더 감시가 이것들을 목록에 넣어 탐색기에 Images·Labels 가 떴다 - 넣은 때의 몇 장만 박제돼 라벨링 목록과도 달랐다(사용자, 2026-09-15).
+    /// 사진 수백 장이 들어가면 탐색기를 못 쓴다. 이름은 프로젝트 폴더 바로 아래 것만 본다 - 스크립트가 쓰는 Resources 안은 건드리지 않는다.
+    /// </remarks>
+    private static bool IsDataPath(string[] parts)
+    {
+        var first = parts[0];
+
+        if (parts.Length > 1 || !first.Contains('.'))
+        {
+            // 폴더(또는 그 안): Images·Labels·Captures·Recordings. 대소문자는 안 가린다(옛 소문자 폴더).
+            if (string.Equals(first, Vision.ProjectPaths.ImagesFolder, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(first, Vision.ProjectPaths.LabelsFolder, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(first, Vision.ProjectPaths.CapturesFolder, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(first, Vision.ProjectPaths.RecordingsFolder, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (parts.Length > 1) return false;
+        }
+
+        // 프로젝트 폴더 바로 아래 파일: 몹 이름·색, 학습 내보내기, 모델, 영역, 학습 캐시, 백업.
+        return first.ToLowerInvariant() switch
+        {
+            Vision.Labeling.LabelClasses.FileName or Vision.Labeling.LabelPalette.FileName => true,
+            "data.yaml" or "coco.json" or "labels.cache" => true,
+            Vision.Regions.RegionBook.FileName => true,
+            var n when n.StartsWith("detector.", StringComparison.Ordinal) => true,
+            var n when n.EndsWith(".bak", StringComparison.Ordinal) => true,
+            _ => false
+        };
+    }
+
+    /// <summary>예전 폴더 감시가 목록에 넣어 둔 데이터 항목을 걷어낸다. 파일은 안 지운다. 걷어낸 것이 있으면 저장한다.</summary>
+    private void PruneDataItems(ScriptProject project)
+    {
+        var items = project.Items.Where(i => i.Kind != ScriptItemKind.ProjectReference && IsIgnored(i.Path)).Select(i => i.Path).ToList();
+        var folders = project.Folders.Where(IsIgnored).ToList();
+
+        if (items.Count == 0 && folders.Count == 0) return;
+
+        foreach (var path in items) project.Remove(path);
+        foreach (var folder in folders) project.RemoveFolder(folder);
+
+        project.Save();
+        Logger.Info($"프로젝트 목록에서 데이터 항목을 뺐다(파일은 그대로): 파일 {items.Count}개 · 폴더 {folders.Count}개 · {project.FilePath}");
     }
 
     private void DoNewProject() => Try(() =>

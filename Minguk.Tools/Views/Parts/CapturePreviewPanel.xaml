@@ -58,8 +58,12 @@
             RenderTransform 으로 하면 즐은 그려지기만 하고 자리 계산은 안 바뀌어 어긋난다.
 
             크기를 바깥 Border 에 맞춘다 - 스크롤 뷰포트에 맞추면 막대가 나타났다 사라졌다 하며 떨린다.
+
+            Focusable="False" 를 빼지 않는다 - ScrollViewer 는 왼쪽 누름에 제게 포커스를 주고 Handled 로 만들어, 바깥 Border 의 MouseDown 이
+            안 불렸다(영역 빈 자리 누르기·새 자리 끌기·게임으로 클릭 전달이 다 죽음, 2026-09-15, 스크립트 화면 검사가 잡는다). 포커스는 Border 가 받는다.
         -->
-        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+        <ScrollViewer Focusable="False"
+                      HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto">
             <Grid Width="{Binding ActualWidth, ElementName=Surface}"
                   Height="{Binding ActualHeight, ElementName=Surface}">

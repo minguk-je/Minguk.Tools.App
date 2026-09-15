@@ -1198,9 +1198,15 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     public ICommand ZoomResetCommand => new DelegateCommand(() => PreviewZoom = 1);
 
+    /// <remarks>
+    /// 원본 크기는 마지막 프레임 크기다. 캡처를 멈추면 그 값이 0 으로 지워지는데 그림은 남아 있다 - 그때는 그림 크기로 대신한다
+    /// (비율 계산은 가로세로 비만 보므로 논리 크기여도 같다). 안 그러면 멈춘 미리보기에서 빈 자리 누르기·끌기가 아무 일도 안 한다.
+    /// </remarks>
     protected (System.Windows.Size Control, System.Windows.Size Source) PreviewSizes => (
-        new System.Windows.Size(_previewImage!.ActualWidth, _previewImage.ActualHeight),
-        new System.Windows.Size(_lastFrameWidth, _lastFrameHeight));
+        _previewImage is { } image ? new System.Windows.Size(image.ActualWidth, image.ActualHeight) : System.Windows.Size.Empty,
+        _lastFrameWidth > 0 && _lastFrameHeight > 0
+            ? new System.Windows.Size(_lastFrameWidth, _lastFrameHeight)
+            : PreviewImage is { Width: > 0, Height: > 0 } shown ? new System.Windows.Size(shown.Width, shown.Height) : System.Windows.Size.Empty);
 
     /// <summary>
     /// 미리보기를 눌렀다. 대상 창의 같은 자리를 누르고 뗀다.

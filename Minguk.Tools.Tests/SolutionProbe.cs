@@ -35,6 +35,7 @@ public static class SolutionProbe
             failures += CheckScreensFollowProject(root);
             failures += CheckFindUnder(root);
             failures += CheckSharedProject(root);
+            failures += CheckDataNotListed();
         }
         finally
         {
@@ -51,6 +52,25 @@ public static class SolutionProbe
         Console.WriteLine(failures == 0 ? "솔루션 검사 통과" : $"솔루션 검사 실패 {failures}건");
 
         return failures;
+    }
+
+    /// <summary>
+    /// 프로젝트 폴더의 데이터(사진·라벨·프레임·녹화·모델·영역)는 목록·솔루션 탐색기에 안 들어간다(사용자, 2026-09-15 - 탐색기에 Images·Labels 가 떴다).
+    /// </summary>
+    private static int CheckDataNotListed()
+    {
+        string[] hidden = ["Images", "images/a.png", "Labels/a.txt", "Captures", "Recordings/x.mp4", "classes.txt", "class-colors.json", "data.yaml", "coco.json",
+                           "labels.cache", "regions.json", "detector.onnx", "detector.yolo11n.onnx.json", "detector.zip.bak", "bin/x.mtsx"];
+        string[] shown = ["main.csx", "스크립트.csx", "Resources", "Resources/images/a.png", "Resources/regions.json", "공용/도우미.csx", "ImagesTool.csx"];
+
+        var wrongHidden = hidden.Where(p => !Minguk.Tools.ViewModels.ScriptProjectWorkspace.IsIgnored(p)).ToList();
+        var wrongShown = shown.Where(Minguk.Tools.ViewModels.ScriptProjectWorkspace.IsIgnored).ToList();
+        var ok = wrongHidden.Count == 0 && wrongShown.Count == 0;
+
+        Report(ok, "데이터(사진·라벨·모델·영역)는 프로젝트 목록에 안 넣고 스크립트·Resources 는 넣는다",
+            ok ? $"숨김 {hidden.Length} · 보임 {shown.Length}" : $"안 숨겨짐: {string.Join(", ", wrongHidden)} / 잘못 숨겨짐: {string.Join(", ", wrongShown)}");
+
+        return ok ? 0 : 1;
     }
 
     /// <summary>솔루션마다 폴더를 만든다(VS 와 같다).</summary>

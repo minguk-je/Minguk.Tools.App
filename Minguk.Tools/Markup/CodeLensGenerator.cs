@@ -105,6 +105,9 @@ public sealed class CodeLensGenerator : VisualLineElementGenerator
     {
         var lensHeight = Math.Round(FontSize * 1.25);
 
+        // 윗줄과 띄우는 틈. 글자를 요소 맨 위에 두면 윗줄 코드 밑에 달라붙어 보였다(사용자, 2026-09-15). VS 도 CodeLens 위가 비어 있다.
+        var topGap = Math.Round(FontSize * 0.4);
+
         var label = new TextBlock
         {
             Text = lens.Count == 1 ? "참조 1개" : $"참조 {lens.Count}개",
@@ -121,13 +124,13 @@ public sealed class CodeLensGenerator : VisualLineElementGenerator
         var host = new Canvas
         {
             Width = 0,
-            // 참조 한 줄 + 코드 글자 높이. 코드 글자는 이 요소의 밑선에 앉는다.
-            Height = lensHeight + FontSize,
+            // 틈 + 참조 한 줄 + 코드 글자 높이. 코드 글자는 이 요소의 밑선에 앉는다.
+            Height = topGap + lensHeight + FontSize,
             ClipToBounds = false,
             Background = null
         };
 
-        Canvas.SetTop(label, 0);
+        Canvas.SetTop(label, topGap);
         host.Children.Add(label);
 
         label.MouseLeftButtonDown += (_, e) =>

@@ -37,6 +37,12 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>스크립트 문서. XAML 은 <c>Script.Text</c> 처럼 한 단계 들어가 묶는다.</summary>
     public ScriptWorkbench Script { get; }
 
+    /// <summary>도움말 패널의 줄 - 기본 사용법 · 함수 전부 · 몹의 속성(<see cref="ScriptHelp"/>).</summary>
+    public IReadOnlyList<ScriptHelpRow> HelpRows => ScriptHelp.Rows;
+
+    /// <summary>도움말에서 고른 줄. 아래 칸에 설명·예시가 뜬다.</summary>
+    public ScriptHelpRow? SelectedHelpRow { get => GetProperty(() => SelectedHelpRow); set => SetProperty(() => SelectedHelpRow, value); }
+
     /// <summary>돌리는 것. 한 번 · 반복 · 중지 · 진행.</summary>
     public ScriptPlayer Player { get; }
 
@@ -283,8 +289,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.
     /// 3: 솔루션 탐색기 왼쪽 · 미리보기|문서 좌우 · 도구 모음 세 줄(2026-09-13). 옛 배치를 그대로 살리면 새 기본이 안 보인다.
     /// 4: 영역 패널을 아래 탭에서 솔루션 탐색기 탭 그룹으로(2026-09-15, 사용자).
+    /// 5: 솔루션 탐색기 탭 그룹에 도움말 패널(2026-09-15, 사용자).
     /// </summary>
-    private const int DockLayoutVersion = 4;
+    private const int DockLayoutVersion = 5;
 
     // ── 미리보기 | 문서 나누기 ──────────────────────────────────────────
 
@@ -550,6 +557,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             grid.CurrentColumn = grid.Columns["Name"];
             view.Focus();
             view.ShowEditor();
+            view.BestFitColumns();
         }));
     }
 

@@ -50,9 +50,16 @@
 
     <!-- Ctrl+Delete = 그림 지우기. 그림 판에 초점이 있어도 된다(그 자리의 Delete 는 사각형 지우기). -->
     <UserControl.InputBindings>
-        <KeyBinding Command="{Binding DoDeleteImageCommand}"
-                    Key="Delete"
+        <KeyBinding Key="Delete"
+                    Command="{Binding DoDeleteImageCommand}"
                     Modifiers="Control" />
+
+        <KeyBinding Key="A"
+                    Command="{Binding DoDetectCommand}"
+                    Modifiers="Alt" />
+        <KeyBinding Key="S"
+                    Command="{Binding DoAdoptPredictionsCommand}"
+                    Modifiers="Alt" />
     </UserControl.InputBindings>
 
     <dxmvvm:Interaction.Behaviors>
@@ -573,13 +580,13 @@
                                                       ValueToolTipPlacement="TopLeft" />
                                 </dxlc:LayoutItem>
                                 <!-- 셋이 한 묶음이다: 모델이 점선으로 그려 주면(자동 라벨) 사람이 확정하거나 지운다. 지우는 것은 점선뿐 - 찍어 둔 라벨은 안 건드린다. -->
-                                <dx:SimpleButton Width="90"
+                                <dx:SimpleButton Width="100"
                                                  Command="{Binding DoDetectCommand}"
-                                                 Content="자동 라벨"
+                                                 Content="자동 라벨(_A)"
                                                  ToolTip="학습한 모델로 이 그림에서 몹을 찾아 점선으로 겹쳐 그립니다. 아직 라벨이 아닙니다 - 확정해야 저장됩니다." />
-                                <dx:SimpleButton Width="90"
+                                <dx:SimpleButton Width="100"
                                                  Command="{Binding DoAdoptPredictionsCommand}"
-                                                 Content="라벨 확정"
+                                                 Content="라벨 확정(_S)"
                                                  ToolTip="자동 라벨(점선)을 전부 내 라벨로 굳힙니다. 틀린 것은 굳힌 뒤 골라서 지우세요. 하나만 확정하려면 그림에서 그 점선을 누르세요." />
                                 <!-- "라벨 지우기" 로 두면 옆의 "고른 것 지우기 · 모두 지우기" 와 헷갈린다 - 지우는 것이 점선뿐임을 이름에 담는다. -->
                                 <dx:SimpleButton Width="120"
@@ -587,7 +594,8 @@
                                                  Content="자동 라벨 지우기"
                                                  ToolTip="확정하지 않은 자동 라벨(점선)만 지웁니다. 내가 찍어 둔 라벨(실선)은 그대로입니다." />
                                 <!-- 라벨 없는 그림으로 넘어가면 자동 라벨을 알아서(2026-09-15). 학습한 모델이 있어야 돈다. -->
-                                <dxe:CheckEdit VerticalAlignment="Center"
+                                <dxe:CheckEdit HorizontalAlignment="Left"
+                                               VerticalAlignment="Center"
                                                Content="새 그림은 자동으로"
                                                IsChecked="{Binding AutoDetectNewImages, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                ToolTip="라벨이 하나도 없는 그림으로 넘어가면 '자동 라벨' 을 알아서 누릅니다(멈춘 뒤 0.25초).&#10;학습한 모델이 있어야 합니다 - 몇십 장을 손으로 찍고 한 번 학습하면 그다음부터 점선이 뜹니다.&#10;찍어 둔 라벨이 있는 그림은 건드리지 않고, 학습하는 동안은 쉽니다. 맞으면 '라벨 확정' 을 누르세요." />
@@ -609,12 +617,16 @@
                                 진행 라벨(TrainProgressLabel)은 학습 전에는 빈 글이라 LayoutItem 의 Label 로 쓰면 칸이 통째로 빈 것처럼 보인다 -
                                 라벨은 "진행" 으로 두고 그 글은 막대 오른쪽에 적는다. 막대는 0% 일 때 테두리가 없으면 안 보여 ShowBorder 를 켠다.
                             -->
-                            <dxlc:LayoutGroup Orientation="Horizontal">
-                                <dxlc:LayoutItem Width="348"
+                            <dxlc:LayoutGroup HorizontalAlignment="Left"
+                                              Orientation="Horizontal">
+                                <dxlc:LayoutItem Width="330"
+                                                 HorizontalAlignment="Left"
                                                  Label="진행">
-                                    <DockPanel LastChildFill="True">
+                                    <DockPanel HorizontalAlignment="Stretch"
+                                               LastChildFill="True">
                                         <TextBlock MinWidth="70"
                                                    Margin="6,0,0,0"
+                                                   HorizontalAlignment="Left"
                                                    VerticalAlignment="Center"
                                                    DockPanel.Dock="Right"
                                                    Text="{Binding TrainProgressLabel}" />
@@ -627,20 +639,27 @@
                                                              ToolTip="학습이 어디까지 왔는지. YOLO 는 묶음마다 움직이고, D-FINE 은 바퀴가 끝날 때 움직입니다." />
                                     </DockPanel>
                                 </dxlc:LayoutItem>
+
                                 <!-- 없어졌던 "학습 중인 그림 보기" 를 묶음으로 되살렸다(2026-09-15). 켜면 학습하는 동안 라벨 판 자리에 묶음 그림이 덮인다. -->
-                                <dxe:CheckEdit VerticalAlignment="Center"
+                                <dxe:CheckEdit Margin="30,0,0,0"
+                                               HorizontalAlignment="Left"
+                                               VerticalAlignment="Center"
                                                Content="학습 묶음 보기"
                                                IsChecked="{Binding ShowTrainingBatch, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                ToolTip="켜면 학습하는 동안 라벨 판 자리에 모델이 지금 받는 그림 묶음(라벨 상자 포함)을 띄웁니다. 바퀴마다 바뀝니다.&#10;YOLO 는 여러 장을 이어 붙여 묶음으로 배워서 한 장씩이 아니라 묶음을 보여 줍니다. D-FINE 학습은 아직 그림을 보내지 않습니다.&#10;켜 둔 동안은 라벨을 고칠 수 없습니다 - 끄면 곧바로 라벨 판이 돌아옵니다." />
+
                                 <!-- YOLO 학습이 쓸 카드. 따로 뜨는 파이썬이라 다음 학습부터 바로 먹는다. -->
                                 <dxlc:LayoutItem Width="290"
+                                                 Margin="30,0,0,0"
                                                  Label="GPU">
                                     <dxe:ComboBoxEdit IsTextEditable="False"
                                                       ItemsSource="{Binding GpuOptions}"
                                                       SelectedItem="{Binding SelectedGpuOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                       ToolTip="YOLO 학습이 쓸 그래픽카드. 게임이 도는 카드를 피하면 학습도 게임도 덜 느려집니다." />
                                 </dxlc:LayoutItem>
-                                <TextBlock VerticalAlignment="Center"
+
+                                <TextBlock HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
                                            Foreground="#BF6A02"
                                            Text="{Binding GpuNotice}" />
                             </dxlc:LayoutGroup>

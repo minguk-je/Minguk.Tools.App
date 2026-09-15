@@ -45,6 +45,8 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     protected AutomationMainViewModel()
     {
         Caption = "솔루션";
+        // 탭 아이콘은 메뉴 아이콘과 같게(MainMenu 의 tree.png). 안 넣으면 이 탭만 아이콘 없이 뜬다.
+        CaptionImage = Minguk.Image.FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/tree.png");
 
         Solutions = [];
         Projects = [];
@@ -108,6 +110,7 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     {
         if (AutomationDocumentManagerService is { } service)
             service.ActiveDocumentChanged += OnChildActivated;
+
     }
 
     protected override void OnLoaded()

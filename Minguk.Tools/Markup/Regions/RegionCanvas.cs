@@ -174,12 +174,15 @@ public sealed class RegionCanvas : Canvas
                 Children.Add(item);
             }
 
-            // 어도너(테두리·손잡이)는 편집 중에만 - 아닐 때 보이면 잡히는 줄 안다.
-            item.IsSelected = IsEditing && ReferenceEquals(region, SelectedRegion);
+            // 그림이 없으면(캡처 전) 놓을 자리가 없다. 항목만 숨기면 어도너는 다른 층이라 크기 0 인 항목에 붙어 점으로 남았다(사용자, 2026-09-15).
+            var placeable = !area.IsEmpty && region.Width > 0 && region.Height > 0;
+
+            // 어도너(테두리·손잡이)는 편집 중이고 놓인 자리에만 - 아닐 때 보이면 잡히는 줄 안다.
+            item.IsSelected = IsEditing && placeable && ReferenceEquals(region, SelectedRegion);
 
             if (ReferenceEquals(item, _dragging)) continue;
 
-            if (area.IsEmpty || region.Width <= 0 || region.Height <= 0)
+            if (!placeable)
             {
                 item.Visibility = Visibility.Collapsed;
                 continue;

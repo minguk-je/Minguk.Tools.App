@@ -46,7 +46,9 @@
                     <Grid DataContext="{Binding RelativeSource={RelativeSource TemplatedParent}}">
                         <regions:RegionMoveThumb Cursor="SizeAll"
                                                  Template="{StaticResource RegionMoveThumbTemplate}" />
-                        <Rectangle IsHitTestVisible="False"
+                        <!-- 선 가운데를 자리 경계에(굵기 절반만큼 넓힘) - 라벨링 캔버스와 같다. -->
+                        <Rectangle Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=-0.75}"
+                                   IsHitTestVisible="False"
                                    Stroke="{StaticResource RegionBrush}"
                                    StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=1.5}" />
                         <!-- 이름표는 사각형 위에 - 라벨링 캔버스의 이름표와 같은 모양. 크기는 배율 역수로 되돌린다. -->
@@ -120,7 +122,12 @@
 
                         <!-- 보이는 것 - 라벨링 캔버스의 고른 사각형과 같다. -->
                         <Grid IsHitTestVisible="False">
-                            <Rectangle SnapsToDevicePixels="True"
+                            <!--
+                                Rectangle 의 선은 안쪽으로만 그려진다 - 그대로 두면 선이 1.5px 안으로 들어가 손잡이 점이 선 바깥으로 삐져 보였다.
+                                선 굵기 절반만큼 넓혀 선 가운데가 자리 경계에 오게 한다(라벨링 캔버스의 펜과 같다, 2026-09-15).
+                            -->
+                            <Rectangle Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=-1.5}"
+                                       SnapsToDevicePixels="True"
                                        Stroke="{StaticResource RegionSelectedBrush}"
                                        StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=3}" />
 

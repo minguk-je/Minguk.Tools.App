@@ -46,89 +46,10 @@ public class MainWindowViewModel : ViewModelBase
     public ICommand DoDeleteLayoutCommand { get; set; }
 
     /// <summary>
-    /// 창 제목. 솔루션이 열려 있으면 VS 처럼 "사격장 - 오버워치 - Minguk Tools v1.0.0", 없으면 "Minguk Tools v1.0.0".
+    /// 창 제목 "Minguk Tools v1.0.0". 솔루션·프로젝트 이름은 넣지 않는다(사용자, 2026-09-15 - 넣었다가 뺐다).
+    /// 제목 표시줄의 ▶ 시작 프로젝트 · 중지 버튼도 같은 날 뺐다 - 돌리기는 플레이 화면에서 한다.
     /// </summary>
-    /// <remarks>
-    /// 메뉴창은 접히고 솔루션 탭은 다른 탭 뒤로 갈 수 있다 - 그러면 지금 어느 프로젝트(모델·스크립트가 통째로 다르다)인지 안 보인다(docs/프로젝트-설계.md).
-    /// </remarks>
     public string Title { get => GetProperty(() => Title); private set => SetProperty(() => Title, value); }
-
-    private static string MakeTitle()
-    {
-        if (Minguk.Tools.Projects.SolutionWorkspace.Current is not { } solution) return AppVersionHelper.DisplayTitle;
-
-        var startup = solution.Startup();
-
-        return startup is null
-            ? $"{solution.Name} - {AppVersionHelper.DisplayTitle}"
-            : $"{Minguk.Tools.Projects.Solution.NameOf(startup)} - {solution.Name} - {AppVersionHelper.DisplayTitle}";
-    }
-
-    private void OnSolutionChanged(object? sender, EventArgs e)
-    {
-        var title = MakeTitle();
-        var startup = MakeStartupName();
-
-        void Apply()
-        {
-            Title = title;
-            StartupName = startup;
-        }
-
-        // 솔루션은 UI 에서 바뀌지만, 혹시 다른 스레드에서 오면 창 스레드로 넘긴다.
-        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess()) dispatcher.BeginInvoke(Apply);
-        else Apply();
-    }
-
-    // ── 셸 실행 : ▶ 시작 프로젝트 · ■ 중지 ──────────────────────────────────
-
-    /// <summary>
-    /// ▶ 옆에 보이는 시작 프로젝트 이름(VS 2026 의 "▶ 프로젝트"). 솔루션이 없으면 "시작 프로젝트 없음".
-    /// </summary>
-    /// <remarks>
-    /// 고르는 것은 솔루션 탭 위 칸에서만 한다 - 여기서도 바꾸면 솔루션 탭 아래 화면이 옛 프로젝트를 들고 있어 위 칸과 어긋난다.
-    /// </remarks>
-    public string StartupName { get => GetProperty(() => StartupName); private set => SetProperty(() => StartupName, value); }
-
-    /// <summary>▶ - 시작 프로젝트의 완성품(bin\*.mtsx)을 플레이 화면에서 한 번 돌린다.</summary>
-    public ICommand DoRunStartupCommand { get; }
-
-    /// <summary>■ - 플레이 화면의 실행을 멈춘다.</summary>
-    public ICommand DoStopCommand { get; }
-
-    private static string MakeStartupName()
-        => Minguk.Tools.Projects.SolutionWorkspace.Current?.Startup() is { } startup
-            ? Minguk.Tools.Projects.Solution.NameOf(startup)
-            : "시작 프로젝트 없음";
-
-    /// <summary>
-    /// 완성품을 찾고, 플레이 화면을 열어(없으면 만들어) 돌린다. VS 가 F5 로 디버그 창을 띄우는 것과 같다.
-    /// </summary>
-    /// <remarks>
-    /// 소스가 아니라 빌드한 완성품을 돌린다 - 플레이 화면이 완성품만 돌리기 때문이다(고치는 중의 시험은 스크립트 화면 F5).
-    /// 없으면 빌드하라고만 말한다. 몰래 빌드하지 않는다 - 빌드가 실패하면 왜 안 도는지 한 번 더 헤매게 된다.
-    /// </remarks>
-    private void DoRunStartup()
-    {
-        try
-        {
-            var (path, reason) = PlayViewModel.FindStartupBuild();
-
-            if (path is null)
-            {
-                MessengerUtility.SendMainMessage(reason ?? "돌릴 완성품이 없습니다.");
-                return;
-            }
-
-            MessengerUtility.SendShowWindow(typeof(MainViewModel), "Minguk.Tools.Views.PlayView");
-            PlayViewModel.RequestRun(path);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(JsonConvert.SerializeObject(ex));
-            ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName());
-        }
-    }
 
     public bool IsTopMost { get => GetProperty(() => IsTopMost); set => SetProperty(() => IsTopMost, value); }
     public bool IsMenuVisible { get => GetProperty(() => IsMenuVisible); set => SetProperty(() => IsMenuVisible, value); }
@@ -156,15 +77,7 @@ public class MainWindowViewModel : ViewModelBase
         DoSaveLayoutCommand = new DelegateCommand(DoSaveLayout, false);
         DoDeleteLayoutCommand = new DelegateCommand(DoDeleteLayout, false);
 
-        DoRunStartupCommand = new DelegateCommand(DoRunStartup, false);
-        DoStopCommand = new DelegateCommand(PlayViewModel.RequestStop, false);
-
-        Title = MakeTitle();
-        StartupName = MakeStartupName();
-
-        // 정적 이벤트다 - 창이 닫힐 때 푼다(Disposables). 창은 앱과 수명이 같지만 재시작·하네스에서 새로 만들 수 있다.
-        Minguk.Tools.Projects.SolutionWorkspace.Changed += OnSolutionChanged;
-        Disposables.Add(Disposable.Create(() => Minguk.Tools.Projects.SolutionWorkspace.Changed -= OnSolutionChanged));
+        Title = AppVersionHelper.DisplayTitle;
     }
 
     private void OnInitialized()

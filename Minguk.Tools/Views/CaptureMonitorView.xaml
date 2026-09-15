@@ -114,7 +114,7 @@
                                ToolTip="녹화한 mp4 가 든 폴더를 탐색기로 연다." />
             <dxb:BarEditItem Content="{x:Null}"
                              EditValue="{Binding RecordingStatus, Mode=OneWay}"
-                             EditWidth="400"
+                             EditWidth="410"
                              IsReadOnly="True">
                 <dxb:BarEditItem.EditSettings>
                     <dxe:TextEditSettings />

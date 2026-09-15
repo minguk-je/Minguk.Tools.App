@@ -391,7 +391,91 @@ public sealed class LabelCanvas : FrameworkElement
         }
 
         DrawRubberBand(dc);
+
+        DrawDragSize(dc);
     }
+
+    /// <summary>
+    /// 크기를 바꾸거나 새로 그리는 동안 아래에 너비, 오른쪽에 높이(원본 픽셀). 스크립트 미리보기의 영역 치수 표시(<c>RegionSizeChrome</c>)와 같은 모양.
+    /// </summary>
+    /// <remarks>원본 픽셀로 적는다 - 화면 픽셀은 배율마다 달라 몹 크기를 가늠하지 못한다.</remarks>
+    private void DrawDragSize(DrawingContext dc)
+    {
+        if (_dragStart is not { } start) return;
+
+        Rect rect;
+        double widthRatio, heightRatio;
+
+        switch (_dragMode)
+        {
+            case DragMode.Resize when Boxes is { } boxes && _dragIndex >= 0 && _dragIndex < boxes.Count:
+                rect = ToScreen(boxes[_dragIndex]);
+                widthRatio = boxes[_dragIndex].Width;
+                heightRatio = boxes[_dragIndex].Height;
+                break;
+
+            case DragMode.Draw:
+                var from = ToNormalized(start);
+                var to = ToNormalized(_dragCurrent);
+                rect = new Rect(start, _dragCurrent);
+                widthRatio = Math.Abs(to.X - from.X);
+                heightRatio = Math.Abs(to.Y - from.Y);
+                break;
+
+            default:
+                return;
+        }
+
+        if (rect.Width < MinimumDragPixels || rect.Height < MinimumDragPixels) return;
+
+        var (pixelWidth, pixelHeight) = ImagePixelSize();
+
+        var red = new SolidColorBrush(Colors.Red);
+        red.Freeze();
+        var pen = new Pen(red, 1d);
+        pen.Freeze();
+
+        // 자리는 스크립트 영역 치수(RegionSizeChrome)와 같다 - 선은 사각형에서 10px 떨어지고 양끝 눈금은 2px 바깥,
+        // 글자는 흰 바탕으로 선 한가운데에 겹쳐 선을 끊는다.
+
+        // 아래 치수선: 가로줄, 양끝에 세로 눈금.
+        var y = rect.Bottom + 10;
+        var left = rect.Left - 2;
+        var right = rect.Right + 2;
+        dc.DrawLine(pen, new Point(left, y), new Point(right, y));
+        dc.DrawLine(pen, new Point(left, y - 5), new Point(left, y + 5));
+        dc.DrawLine(pen, new Point(right, y - 5), new Point(right, y + 5));
+
+        var widthText = MakeText(Math.Round(widthRatio * pixelWidth).ToString(CultureInfo.InvariantCulture), 11d, red);
+        var widthBox = new Rect(rect.Left + ((rect.Width - widthText.Width) / 2) - 3, y - (widthText.Height / 2), widthText.Width + 6, widthText.Height);
+        dc.DrawRectangle(Brushes.White, null, widthBox);
+        dc.DrawText(widthText, new Point(widthBox.X + 3, widthBox.Y));
+
+        // 오른쪽 치수선: 세로줄, 양끝에 가로 눈금. 글자는 90° 돌려 줄 한가운데에.
+        var x = rect.Right + 10;
+        var top = rect.Top - 2;
+        var bottom = rect.Bottom + 2;
+        dc.DrawLine(pen, new Point(x, top), new Point(x, bottom));
+        dc.DrawLine(pen, new Point(x - 5, top), new Point(x + 5, top));
+        dc.DrawLine(pen, new Point(x - 5, bottom), new Point(x + 5, bottom));
+
+        var heightText = MakeText(Math.Round(heightRatio * pixelHeight).ToString(CultureInfo.InvariantCulture), 11d, red);
+        var center = new Point(x, rect.Top + (rect.Height / 2));
+
+        dc.PushTransform(new RotateTransform(90, center.X, center.Y));
+        var heightBox = new Rect(center.X - (heightText.Width / 2) - 3, center.Y - (heightText.Height / 2), heightText.Width + 6, heightText.Height);
+        dc.DrawRectangle(Brushes.White, null, heightBox);
+        dc.DrawText(heightText, new Point(heightBox.X + 3, heightBox.Y));
+        dc.Pop();
+    }
+
+    /// <summary>그림의 원본 픽셀 크기. 비트맵이 아니면(드묾) 그림의 논리 크기.</summary>
+    private (double Width, double Height) ImagePixelSize() => ImageSource switch
+    {
+        System.Windows.Media.Imaging.BitmapSource bitmap => (bitmap.PixelWidth, bitmap.PixelHeight),
+        { } image => (image.Width, image.Height),
+        _ => (0, 0)
+    };
 
     /// <summary>
     /// 모델이 찾은 것. 점선으로 그리고 신뢰도를 같이 적는다.
@@ -466,10 +550,11 @@ public sealed class LabelCanvas : FrameworkElement
         dc.DrawText(text, new Point(rect.X + 3, top + 1));
     }
 
-    /// <summary>끌고 있는 동안 보여 주는 점선 사각형.</summary>
+    /// <summary>새로 그리는 동안 보여 주는 점선 사각형.</summary>
+    /// <remarks>옮기기·크기 조절 중에는 안 그린다 - 누른 자리에서 마우스까지 엉뚱한 점선이 따라다녔다(2026-09-15).</remarks>
     private void DrawRubberBand(DrawingContext dc)
     {
-        if (_dragStart is not { } start) return;
+        if (_dragStart is not { } start || _dragMode != DragMode.Draw) return;
 
         var pen = new Pen(new SolidColorBrush(ColorFor(CurrentClassId)), 1.5d)
         {

@@ -26,7 +26,7 @@ Minguk Tools (틀)
 │  │    아래 탭 : 화면캡처 · 라벨링 · 스크립트   ← 고른 프로젝트를 따라간다
 │  └ 플레이                   ← bin 의 완성품(.mtsx)을 돌린다
 └ 입력 테스트                 ← 입력 경로 점검(계획 모드)
-제목 표시줄 : [▶ 시작 프로젝트] [중지] · 최상위 · 테마      창 제목 : 사격장 - 오버워치 - Minguk Tools
+제목 표시줄 : 최상위 · 테마      창 제목 : Minguk Tools (프로젝트 이름 안 넣음)
 ```
 
 - 게임 하나 = **솔루션**(`.mtsln`), 모드·스테이지·런 = **프로젝트**(`.mtsproj`). VS 2026 과 같은 말이다. 사진·라벨·모델·영역·스크립트는 **프로젝트마다 제 것**.
@@ -34,7 +34,7 @@ Minguk Tools (틀)
 - **화면들이 고른 프로젝트를 본다** - 기준은 `SolutionWorkspace.StartupDirectory` 하나: 데이터셋·모델·영역(`LabelDataset.ConfiguredRoot`), 스크립트 자리(`ScriptFiles.DefaultDirectory`),
   프레임 저장(`ProjectPaths.Captures`), 스크립트 화면이 여는 `.mtsproj`. 솔루션이 없을 때만 옛 자리(`LegacyRoot`)를 본다.
   이름 주의: `Minguk.Tools.Input.Scripting` 안에서 `Projects.` 는 `Input.Scripting.Projects` 로 잡혀 `global::Minguk.Tools.Projects` 로 적는다.
-- 자세한 것(솔루션 탭 문서·프로젝트 바꾸기·공유 프로젝트·솔루션 탐색기·▶ 실행)은 `docs/프로젝트-설계.md`.
+- 자세한 것(솔루션 탭 문서·프로젝트 바꾸기·공유 프로젝트·솔루션 탐색기)은 `docs/프로젝트-설계.md`.
 
 ## 화면 하나 추가하는 법
 
