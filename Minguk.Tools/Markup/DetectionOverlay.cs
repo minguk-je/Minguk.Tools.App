@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -72,50 +72,6 @@ public sealed class DetectionOverlay : FrameworkElement
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
 
-    public static readonly DependencyProperty OcrRegionProperty = DependencyProperty.Register(
-        nameof(OcrRegion), typeof(Rect), typeof(DetectionOverlay),
-        new FrameworkPropertyMetadata(Rect.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
-
-    /// <summary>글자를 읽는 자리(0~1). 비어 있으면 안 그린다.</summary>
-    public Rect OcrRegion
-    {
-        get => (Rect)GetValue(OcrRegionProperty);
-        set => SetValue(OcrRegionProperty, value);
-    }
-
-    /// <summary>글자 영역을 그릴지. 글자 읽기가 꺼져 있으면 안 그린다 - 읽지도 않는 영역이 화면에 남아 있으면 "저게 뭐지" 가 된다.</summary>
-    public static readonly DependencyProperty ShowOcrRegionProperty = DependencyProperty.Register(
-        nameof(ShowOcrRegion), typeof(bool), typeof(DetectionOverlay),
-        new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
-
-    public bool ShowOcrRegion
-    {
-        get => (bool)GetValue(ShowOcrRegionProperty);
-        set => SetValue(ShowOcrRegionProperty, value);
-    }
-
-    public static readonly DependencyProperty OcrRegionDraftProperty = DependencyProperty.Register(
-        nameof(OcrRegionDraft), typeof(Rect), typeof(DetectionOverlay),
-        new FrameworkPropertyMetadata(Rect.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
-
-    /// <summary>끄는 중인 글자 영역. 점선으로 그린다.</summary>
-    public Rect OcrRegionDraft
-    {
-        get => (Rect)GetValue(OcrRegionDraftProperty);
-        set => SetValue(OcrRegionDraftProperty, value);
-    }
-
-    public static readonly DependencyProperty OcrTextProperty = DependencyProperty.Register(
-        nameof(OcrText), typeof(string), typeof(DetectionOverlay),
-        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
-
-    /// <summary>마지막으로 읽은 글. 영역 아래에 붙인다.</summary>
-    public string? OcrText
-    {
-        get => (string?)GetValue(OcrTextProperty);
-        set => SetValue(OcrTextProperty, value);
-    }
-
     /// <summary>글자 영역 색. 몹 색(황금각 팔레트)과 헷갈리지 않게 청록 하나로 고정한다.</summary>
     private static readonly Color OcrColour = Color.FromRgb(0x00, 0xBC, 0xD4);
 
@@ -147,15 +103,16 @@ public sealed class DetectionOverlay : FrameworkElement
         if (Detections is { Count: > 0 } detections)
             foreach (var detection in detections) Draw(dc, area, detection);
 
-        DrawOcrRegion(dc, area, OcrRegionDraft, dashed: true, text: null);
-        if (ShowOcrRegion) DrawOcrRegion(dc, area, OcrRegion, dashed: false, text: OcrText);
-
+        // 새 자리를 끄는 중인 사각형.
         DrawOcrRegion(dc, area, RegionDraft, dashed: true, text: null);
 
-        // 영역 지정 중에는 캔버스(RegionCanvas)의 항목이 제 테두리·이름표를 그린다. 여기서도 그리면 두 겹이 된다.
-        if (ShowRegions && !IsRegionEditing && Regions is { } named)
+        if (ShowRegions && Regions is { } named)
             foreach (var region in named)
-                DrawNamed(dc, area, region, selected: ReferenceEquals(region, SelectedRegion));
+            {
+                // 편집 중에는 캔버스(RegionCanvas)의 항목이 제 테두리·이름표를 그린다 - 여기서는 읽은 글자만 붙인다(두 겹이 안 되게).
+                if (!IsRegionEditing) DrawNamed(dc, area, region, selected: ReferenceEquals(region, SelectedRegion));
+                if (region.KeepReading) DrawReadText(dc, area, region);
+            }
     }
 
     public static readonly DependencyProperty SelectedRegionProperty = DependencyProperty.Register(
@@ -268,6 +225,26 @@ public sealed class DetectionOverlay : FrameworkElement
 
     /// <summary>목록에서 고른 자리. 여럿 사이에서 무엇을 골랐는지 한눈에 갈리게 주황.</summary>
     private static readonly Color SelectedNamedColour = Color.FromRgb(255, 170, 40);
+
+    /// <summary>계속 읽기를 켠 자리 아래에 읽은 글자(청록 바탕). 아직 못 읽었으면 「읽는 중」.</summary>
+    private void DrawReadText(DrawingContext dc, Rect area, Minguk.Tools.Vision.Regions.NamedRegion region)
+    {
+        var box = region.Rect;
+        if (box.Width <= 0 || box.Height <= 0) return;
+
+        var rect = new Rect(area.X + (box.X * area.Width), area.Y + (box.Y * area.Height), box.Width * area.Width, box.Height * area.Height);
+        var unit = Unit;
+        var formatted = Text(string.IsNullOrEmpty(region.LastText) ? "읽는 중…" : FirstLine(region.LastText, 60), 11d, Brushes.White);
+
+        var top = rect.Bottom + (2 * unit);
+        if (top + formatted.Height > area.Bottom) top = rect.Top - formatted.Height - (2 * unit);
+
+        var background = new SolidColorBrush(OcrColour) { Opacity = 0.85 };
+        background.Freeze();
+
+        dc.DrawRectangle(background, null, new Rect(rect.X, top, formatted.Width + (6 * unit), formatted.Height + (2 * unit)));
+        dc.DrawText(formatted, new Point(rect.X + (3 * unit), top + unit));
+    }
 
     private void DrawOcrRegion(DrawingContext dc, Rect area, Rect region, bool dashed, string? text)
     {

@@ -98,18 +98,12 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         // 0.25초에 한 번만, 앞의 것이 끝났을 때만.
         MaybeDetect(e);
 
-        // 글자 읽기도 같은 규칙 - 0.5초에 한 번, 앞의 것이 끝났을 때만.
-        MaybeOcr(e);
+        // 계속 읽기를 켠 자리도 같은 규칙 - 0.5초에 한 번, 앞의 것이 끝났을 때만.
+        MaybeReadRegions(e);
     }
 
-    /// <summary>
-    /// 영역을 끄는 중이면 클릭이 아니라 영역의 시작점이다. 게임으로 보내지 않는다.
-    /// </summary>
-    /// <remarks>
-    /// 이름 붙인 자리 쪽을 먼저 본다. 둘 다 켜지는 일은 없게 막아 두었지만(각각 켜질 때 다른 쪽을 끈다),
-    /// 순서를 정해 두지 않으면 나중에 셋째가 생길 때 어느 것이 먹는지 알 수 없게 된다.
-    /// </remarks>
-    protected override bool IsPreviewEditing => IsRegionEditingActive || IsOcrRegionPicking;
+    /// <summary>자리 편집기가 도는 동안은 클릭이 게임으로 안 가고 휠·오른쪽 끌기가 확대·이동이다.</summary>
+    protected override bool IsPreviewEditing => IsRegionEditingActive;
 
     /// <summary>
     /// 휠 확대·오른쪽 끌기 이동 - 영역을 손보는 중이거나, <b>입력 전달이 꺼져 있으면</b> 늘(사용자, 2026-09-15).
@@ -121,7 +115,7 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     protected override bool AllowPreviewPanZoom => IsPreviewEditing || !IsInputForwardingEnabled;
 
     protected override bool TryInterceptPreviewMouseDown(Point pointInControl)
-        => TryBeginRegionPick(pointInControl) || TryBeginOcrRegionPick(pointInControl);
+        => TryBeginRegionPick(pointInControl);
 
     /// <summary>담을 때 방금 찾은 것을 라벨로 같이 준다. 라벨링 화면은 그리는 곳이 아니라 틀린 것만 고치는 곳이 된다.</summary>
     protected override IReadOnlyList<Detection> DetectionsForLabels => FreshDetections;
@@ -158,11 +152,13 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         // 이름 붙인 자리는 데이터셋 폴더에 있다(설정이 아니다) - 게임을 바꾸면 데이터셋과 같이 바뀐다.
         LoadRegions();
 
+        // 옛 "글자 영역" 저장값은 한 번 「글자」 자리로 옮긴다(2026-09-15 - 글자 영역을 이름 붙인 자리로 합쳤다).
+        MigrateOcrRegionSetting();
+
         // 켜진 채로 복구하지 않는다 - 화면을 열자마자 모델 68MB 를 읽으면 뜨는 것이 느려진다.
         // 화면을 나누기 전 값(캡처 모니터 이름으로 저장된 것)을 처음 한 번 물려받는다.
         DetectMinimumScore = GetSettingOrLegacy(nameof(DetectMinimumScore), 0.5);
         IsTrackingOn = GetSettingOrLegacy(nameof(IsTrackingOn), true);
-        RestoreOcrRegion();
         IsNameplateOcrOn = GetSettingOrLegacy(nameof(IsNameplateOcrOn), false);
 
         var ocrLanguage = GetSettingOrLegacy(nameof(SelectedOcrLanguage), Vision.Ocr.OcrEngineFactory.PreferredLanguage);
@@ -176,7 +172,6 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         // 문턱은 읽기만 하고 저장을 안 해 슬라이더를 움직여도 다음 실행에 안 남았다. 같이 저장한다.
         SetSetting(nameof(DetectMinimumScore), DetectMinimumScore);
         SetSetting(nameof(IsTrackingOn), IsTrackingOn);
-        SaveOcrRegion();
         SetSetting(nameof(IsNameplateOcrOn), IsNameplateOcrOn);
         SetSetting(nameof(SelectedOcrLanguage), SelectedOcrLanguage ?? string.Empty);
     }

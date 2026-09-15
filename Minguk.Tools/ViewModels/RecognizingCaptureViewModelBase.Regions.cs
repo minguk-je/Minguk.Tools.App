@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
@@ -8,23 +10,23 @@ using DevExpress.Mvvm;
 
 using Minguk.Tools.Capture.Input;
 using Minguk.Tools.Markup.Regions;
-using Minguk.Tools.Vision.Labeling;
 using Minguk.Tools.Vision.Regions;
 
 namespace Minguk.Tools.ViewModels;
 
 /// <summary>
-/// 이름 붙인 자리 만들기 - 미리보기에서 끌어 사각형을 만들고 이름을 붙인다.
+/// 이름 붙인 자리 - 미리보기에서 끌어 만들고, 그리드에서 이름·계속 읽기·전처리를 고친다.
 /// </summary>
 /// <remarks>
-/// <b>글자 영역 지정과 무엇이 다른가</b> - 그쪽은 자리가 <b>하나</b>고 이름이 없다(늘 읽는 자리 하나).
-/// 이쪽은 여럿이고 이름이 있어 스크립트가 <c>숫자읽기("탄약")</c> 처럼 부른다. 두 기능이 같은 끌기 손짓을
-/// 쓰므로 한 번에 하나만 켜지게 한다 - 둘 다 켜져 있으면 끈 사각형이 어디로 갈지 알 수 없다.
+/// <b>한 곳으로 정리했다</b>(사용자, 2026-09-15 "영역 기능 사용법이 좀 이상해"):
+/// - 옛 "글자 영역"(자리 하나, 이름 없음, 설정에 저장)을 없애고 자리마다 <see cref="NamedRegion.KeepReading"/> 로 합쳤다.
+///   예전에 저장된 글자 영역은 처음 한 번 「글자」 자리로 옮긴다(<see cref="MigrateOldOcrRegion"/>).
+/// - "영역 지정" 체크를 없앴다 - 편집기는 <b>영역 보기가 켜져 있고 입력 전달이 꺼져 있으면</b> 돈다(<see cref="IsRegionEditingActive"/>).
+/// - 새 자리 이름 칸을 없앴다 - 새 자리는 「자리N」 으로 생기고 그리드의 이름 칸이 바로 편집 상태가 된다(<see cref="OnRegionCreated"/>).
+/// - 버튼은 영역 패널 도구 줄 한 곳(새 자리 · 지금 읽기 · 지우기 · 영역 보기), 같은 것을 그리드 오른쪽 버튼 메뉴에도.
 ///
-/// 여기서 하는 것은 <b>새 자리 그리기</b>뿐이다. 만들어 둔 자리를 옮기고 크기를 바꾸는 것은 미리보기 위의
-/// <see cref="RegionCanvas"/>(Thumb·어도너)가 하고, 결과만 <see cref="RegionEditCommand"/> 로 받아 저장한다.
-///
-/// 목록은 데이터셋 폴더의 <c>regions.json</c> 이다(<see cref="RegionBook"/>).
+/// 만들어 둔 자리를 옮기고 크기를 바꾸는 것은 미리보기 위의 <see cref="RegionCanvas"/>(Thumb·어도너)가 하고, 결과만
+/// <see cref="RegionEditCommand"/> 로 받아 저장한다. 목록은 데이터셋 폴더의 <c>regions.json</c> 이다(<see cref="RegionBook"/>).
 /// </remarks>
 public abstract partial class RecognizingCaptureViewModelBase
 {
@@ -40,39 +42,10 @@ public abstract partial class RecognizingCaptureViewModelBase
     public NamedRegion? SelectedRegion
     {
         get => GetProperty(() => SelectedRegion);
-        set => SetProperty(() => SelectedRegion, value, RaiseRegionFields);
+        set => SetProperty(() => SelectedRegion, value, () => RegionsRevision++);
     }
 
-    /// <summary>켜면 미리보기에서 끈 사각형이 새 자리가 된다. 그동안 클릭은 게임으로 안 나간다.</summary>
-    public bool IsRegionPicking
-    {
-        get => GetProperty(() => IsRegionPicking);
-        set => SetProperty(() => IsRegionPicking, value, () =>
-        {
-            RaisePropertyChanged(nameof(IsRegionVisible));
-            RaiseRegionEditingActive();
-
-            if (!IsRegionPicking)
-            {
-                // 끄는 도중에 모드를 껐으면 잡고 있던 것을 놓는다. 커서도 게임 쪽 모양으로 되돌린다.
-                CancelRegionDrag();
-                if (_previewSurface is not null) _previewSurface.Cursor = null;
-                return;
-            }
-
-            // 같은 손짓을 두 기능이 나눠 쓴다. 글자 영역 쪽은 끈다.
-            IsOcrRegionPicking = false;
-
-            // 빈 자리는 새로 그리는 곳이다. 자리 위의 커서(옮기기·크기 조절)는 손잡이가 제 것을 보인다.
-            if (_previewSurface is not null) _previewSurface.Cursor = Cursors.Cross;
-
-            StatusText = "빈 자리를 끌면 새 자리, 자리 안을 끌면 옮기기, 고른 자리의 손잡이를 끌면 크기 조절입니다. 끝나면 영역 지정을 끄세요.";
-        });
-    }
-
-    /// <summary>만들어 둔 자리를 미리보기에 겹쳐 그릴지. 지정 중이거나 사람이 켰을 때.</summary>
-    public bool IsRegionVisible => IsRegionPicking || ShowRegions;
-
+    /// <summary>만들어 둔 자리를 미리보기에 겹쳐 그릴지. 켜 두고 입력 전달을 끄면 미리보기에서 바로 고친다.</summary>
     public bool ShowRegions
     {
         get => GetProperty(() => ShowRegions);
@@ -83,19 +56,20 @@ public abstract partial class RecognizingCaptureViewModelBase
         });
     }
 
-    /// <summary>
-    /// 미리보기가 자리 편집기로 도는가 - "영역 지정" 을 켰거나, <b>입력 전달이 꺼져 있고 자리가 보일 때</b>(사용자, 2026-09-15).
-    /// 캔버스(<c>RegionCanvas.IsEditing</c>)가 이것에 묶여 고르기·옮기기·크기 조절 어도너가 산다.
-    /// </summary>
-    /// <remarks>
-    /// 전달이 꺼져 있으면 미리보기 클릭이 게임으로 갈 일이 없어, 보이는 자리를 고치려고 영역 지정을 따로 켜는 것이 번거로웠다.
-    /// 전달이 켜져 있으면 클릭은 게임 몫이라 영역 지정을 켜야만 된다. 글자 영역을 끄는 중에는 그쪽이 먼저다 - 같은 손짓을 나눠 쓴다.
-    /// 자리가 안 보이면(영역 보기 끔) 편집기도 안 뜬다 - 안 보이는 것을 잡으면 헷갈린다.
-    /// </remarks>
-    public bool IsRegionEditingActive => IsRegionPicking || (EditsRegionsWithoutPicking && !IsInputForwardingEnabled && ShowRegions && !IsOcrRegionPicking);
+    /// <summary>겹그림이 자리를 그릴지(옛 이름을 XAML 이 묶고 있어 남겼다). <see cref="ShowRegions"/> 와 같다.</summary>
+    public bool IsRegionVisible => ShowRegions;
 
     /// <summary>
-    /// 영역 지정 없이(전달 끔 + 영역 보기) 자리 편집기를 띄우는 화면인가. 스크립트 화면만 - 플레이 화면에는 자리 편집 도구가 없어
+    /// 미리보기가 자리 편집기로 도는가 - <b>영역 보기가 켜져 있고 입력 전달이 꺼져 있을 때</b>(스크립트 화면만).
+    /// 캔버스(<c>RegionCanvas.IsEditing</c>)가 이것에 묶여 고르기·옮기기·크기 조절 어도너가 산다. 빈 자리를 끌면 새 자리.
+    /// </summary>
+    /// <remarks>
+    /// 전달이 켜져 있으면 클릭은 게임 몫이라 편집기가 안 뜬다 - 고치려면 전달을 끈다. 자리가 안 보이면(영역 보기 끔) 편집기도 안 뜬다.
+    /// </remarks>
+    public bool IsRegionEditingActive => EditsRegionsWithoutPicking && ShowRegions && !IsInputForwardingEnabled;
+
+    /// <summary>
+    /// 미리보기에서 자리를 고치는 화면인가. 스크립트 화면만 - 플레이 화면에는 자리 편집 도구가 없어
     /// 거기서 켜지면 미리보기를 누른 것이 모르는 새 자리가 된다.
     /// </summary>
     protected virtual bool EditsRegionsWithoutPicking => false;
@@ -125,62 +99,6 @@ public abstract partial class RecognizingCaptureViewModelBase
         set => SetProperty(() => RegionDraft, value);
     }
 
-    /// <summary>
-    /// 새로 만들 자리의 이름. 도구 줄의 칸에 묶인다.
-    /// </summary>
-    /// <remarks>
-    /// 끌고 나서 대화 상자로 묻지 않는다 - 미리보기에서 손을 뗀 순간 창이 뜨면 게임 화면을 가리고, 그 사이
-    /// 화면이 바뀐다. 이름을 먼저 적고 끄는 편이 손이 덜 간다. 비워 두면 <c>자리1</c> 처럼 붙인다.
-    /// </remarks>
-    public string RegionName
-    {
-        get => GetProperty(() => RegionName);
-        set => SetProperty(() => RegionName, value);
-    }
-
-    /// <summary>
-    /// 고른 자리의 이름. 칸에서 고치면 바로 바뀐다.
-    /// </summary>
-    /// <remarks>
-    /// 처음에는 도구 줄의 "이름" 칸을 써서 바꾸게 했는데, 그 칸은 <b>새로 만드는 자리의 이름</b>이라
-    /// 고른 자리의 이름은 그 칸에 안 들어 있어 비어 있었고, 그대로 누르면 상태 줄에만 말이
-    /// 떠서 아무 일도 안 일어난 것처럼 보였다. 고르면 그 값이 들어 있는 칸이 있어야 한다.
-    /// </remarks>
-    public string SelectedRegionName
-    {
-        get => SelectedRegion?.Name ?? string.Empty;
-        set => RenameSelected(value);
-    }
-
-    private void RenameSelected(string wanted) => Guard(() =>
-    {
-        if (SelectedRegion is not { } region) return;
-
-        var name = (wanted ?? string.Empty).Trim();
-
-        if (name.Length == 0 || string.Equals(name, region.Name, StringComparison.Ordinal)) return;
-
-        // 이름으로 찾으므로 옮기기 전에 옛 이름으로 빼낸다 - 안 그러면 둘이 남는다.
-        RegionBook.Remove(region.Name);
-        region.Name = name;
-        RegionBook.Put(region);
-
-        SaveRegions();
-        LoadRegions();
-
-        SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
-        StatusText = $"이름을 「{name}」 으로 바꿨습니다.";
-    });
-
-    /// <summary>고른 자리가 바뀌거나 그 값이 바뀌면 이름 칸과 겹그림을 다시 그리게 한다.</summary>
-    private void RaiseRegionFields()
-    {
-        RaisePropertyChanged(nameof(SelectedRegionName));
-
-        // 겹그림·캔버스는 목록이 바뀔 때만 다시 그린다. 안의 값만 바뀌면 모르므로 여기서 알린다.
-        RegionsRevision++;
-    }
-
     /// <summary>자리가 한 번 바뀔 때마다 오른다. 겹그림과 캔버스가 이것을 보고 다시 놓는다.</summary>
     public int RegionsRevision
     {
@@ -188,15 +106,13 @@ public abstract partial class RecognizingCaptureViewModelBase
         set => SetProperty(() => RegionsRevision, value);
     }
 
-    public ICommand RemoveRegionCommand => new DelegateCommand(DoRemoveRegion, () => SelectedRegion is not null);
+    /// <summary>화면 가운데에 새 자리를 하나 놓는다 - 미리보기에서 끌어 옮기고 손잡이로 크기를 맞춘다. 이름 칸이 바로 편집 상태가 된다.</summary>
+    public ICommand NewRegionCommand => new DelegateCommand(DoNewRegion);
 
-    public ICommand RenameRegionCommand => new DelegateCommand(DoRenameRegion, () => SelectedRegion is not null);
+    public ICommand RemoveRegionCommand => new DelegateCommand(DoRemoveRegion, () => SelectedRegion is not null);
 
     /// <summary>고른 자리를 지금 읽어 본다 - 자리가 맞는지 확인하는 가장 빠른 길.</summary>
     public ICommand TestRegionCommand => new DelegateCommand(DoTestRegion, () => SelectedRegion is not null);
-
-    /// <summary>고른 자리의 전처리(흰 글자만 남기기)를 켜고 끈다.</summary>
-    public ICommand ToggleRegionInkCommand => new DelegateCommand(DoToggleRegionInk, () => SelectedRegion is not null);
 
     /// <summary>
     /// 미리보기 캔버스가 자리를 옮기거나 크기를 바꿀 때마다 준다. 끄는 동안은 자리만 고치고, 놓으면 저장한다.
@@ -212,15 +128,25 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (!edit.Completed) return;
 
         SaveRegions();
-        RaiseRegionFields();
+        RegionsRevision++;
 
         StatusText = $"「{edit.Region.Name}」 자리를 고쳤습니다 - " +
                      $"{edit.Region.X * 100:0.0}%, {edit.Region.Y * 100:0.0}%  {edit.Region.Width * 100:0.0}% x {edit.Region.Height * 100:0.0}%";
     });
 
-    /// <summary>파일에서 목록을 다시 채운다. 고른 것이 없으면 첫 줄을 고른다 - 빈 채로 두면 이름 칸·지금 읽기가 다 죽어 보인다.</summary>
+    // ── 목록 ─────────────────────────────────────────────────────────────
+
+    /// <summary>자리마다 저장된 이름. 그리드에서 이름을 고치면 옛 이름과 견줘 겹치거나 비었으면 되돌린다.</summary>
+    private readonly Dictionary<NamedRegion, string> _savedNames = new(ReferenceEqualityComparer.Instance);
+
+    private bool _isRevertingName;
+
+    /// <summary>파일에서 목록을 다시 채운다. 고른 것이 없으면 첫 줄을 고른다 - 빈 채로 두면 지금 읽기·지우기가 다 죽어 보인다.</summary>
     protected void LoadRegions()
     {
+        foreach (var old in _savedNames.Keys) old.PropertyChanged -= OnRegionPropertyChanged;
+        _savedNames.Clear();
+
         _regions = RegionBook.Load(RecognitionRoot);
 
         var keep = SelectedRegion?.Name;
@@ -228,9 +154,14 @@ public abstract partial class RecognizingCaptureViewModelBase
         Regions.Clear();
 
         foreach (var region in _regions.Regions.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
+        {
             Regions.Add(region);
+            _savedNames[region] = region.Name;
+            region.PropertyChanged += OnRegionPropertyChanged;
+        }
 
         SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, keep, StringComparison.OrdinalIgnoreCase)) ?? Regions.FirstOrDefault();
+        UpdateLiveRegions();
     }
 
     private void SaveRegions() => Guard(() =>
@@ -239,19 +170,150 @@ public abstract partial class RecognizingCaptureViewModelBase
         RaisePropertyChanged(nameof(Regions));
     });
 
+    /// <summary>그리드 칸에서 고친 것 - 이름은 검사해 저장하고, 계속 읽기·전처리는 바로 저장한다.</summary>
+    private void OnRegionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not NamedRegion region || _isRevertingName) return;
+
+        switch (e.PropertyName)
+        {
+            case nameof(NamedRegion.Name):
+                CommitRename(region);
+                break;
+
+            case nameof(NamedRegion.Ink):
+                SaveRegions();
+                StatusText = $"「{region.Name}」 전처리(흰 글자만 남기기)를 {(region.Ink ? "켰습니다" : "껐습니다")}.";
+                break;
+
+            case nameof(NamedRegion.KeepReading):
+                SaveRegions();
+                if (!region.KeepReading) region.LastText = string.Empty;
+                UpdateLiveRegions();
+                StatusText = region.KeepReading
+                    ? $"「{region.Name}」 을(를) 0.5초마다 읽습니다{(IsRunning ? string.Empty : " - 캡처를 시작하면 읽기 시작합니다")}."
+                    : $"「{region.Name}」 계속 읽기를 껐습니다.";
+                break;
+        }
+    }
+
+    private void CommitRename(NamedRegion region)
+    {
+        var old = _savedNames.TryGetValue(region, out var saved) ? saved : region.Name;
+        var name = region.Name.Trim();
+
+        if (string.Equals(name, old, StringComparison.Ordinal))
+            return;
+
+        var clash = Regions.Any(other => !ReferenceEquals(other, region) && string.Equals(other.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (name.Length == 0 || clash)
+        {
+            _isRevertingName = true;
+            try { region.Name = old; }
+            finally { _isRevertingName = false; }
+
+            StatusText = name.Length == 0
+                ? "이름을 비울 수 없습니다 - 스크립트가 이 이름으로 부릅니다."
+                : $"「{name}」 은(는) 이미 있는 이름입니다 - 스크립트가 어느 쪽을 볼지 모르게 됩니다.";
+            return;
+        }
+
+        if (!string.Equals(region.Name, name, StringComparison.Ordinal))
+        {
+            _isRevertingName = true;
+            try { region.Name = name; }
+            finally { _isRevertingName = false; }
+        }
+
+        _savedNames[region] = name;
+        SaveRegions();
+        RegionsRevision++;
+
+        StatusText = $"이름을 「{old}」 → 「{name}」 으로 바꿨습니다. 스크립트에서 읽기(\"{old}\") 로 부르던 곳이 있으면 같이 고치세요.";
+    }
+
+    // ── 만들기 · 지우기 ───────────────────────────────────────────────────
+
+    private void DoNewRegion() => Guard(() =>
+    {
+        // 화면 가운데에 탄약 숫자 만한 크기로. 옮기고 크기를 바꾸는 것은 미리보기의 손잡이로.
+        AddRegion(new Rect(0.45, 0.45, 0.1, 0.06), "가운데에 놓았습니다 - 미리보기에서 끌어 옮기고 손잡이로 크기를 맞추세요");
+    });
+
+    /// <summary>자리를 넣고 고른 뒤 이름 칸을 편집 상태로 연다. 새 자리가 보이게 영역 보기를 켠다.</summary>
+    private void AddRegion(Rect rect, string how)
+    {
+        var name = NextName();
+        var region = new NamedRegion { Name = name, Rect = rect, Ink = true };
+
+        RegionBook.Put(region);
+        SaveRegions();
+        LoadRegions();
+
+        SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+        ShowRegions = true;
+
+        StatusText = $"「{name}」 자리를 만들었습니다({how}). 이름을 바로 고치고 Enter." +
+                     (IsInputForwardingEnabled ? " 미리보기에서 옮기려면 입력 전달을 끄세요." : string.Empty);
+
+        if (SelectedRegion is { } created) OnRegionCreated(created);
+    }
+
+    /// <summary>새 자리가 생겼다. 화면은 영역 목록을 앞으로 띄우고 이름 칸을 편집 상태로 연다.</summary>
+    protected virtual void OnRegionCreated(NamedRegion region) { }
+
+    private void DoRemoveRegion() => Guard(() =>
+    {
+        if (SelectedRegion is not { } region) return;
+
+        RegionBook.Remove(region.Name);
+        SaveRegions();
+        LoadRegions();
+
+        StatusText = $"「{region.Name}」 자리를 지웠습니다.";
+    });
+
+    /// <summary>안 겹치는 새 이름. 「자리1」「자리2」….</summary>
+    private string NextName()
+    {
+        for (var n = 1; ; n++)
+        {
+            var candidate = $"자리{n}";
+
+            if (RegionBook.Find(candidate) is null) return candidate;
+        }
+    }
+
     /// <summary>
-    /// 지정 모드면 여기서 마우스 다운을 먹는다. true 면 클릭을 게임으로 보내지 않는다.
+    /// 예전 "글자 영역"(설정에 저장된 한 곳)을 한 번 「글자」 자리로 옮긴다. 이미 같은 이름이 있으면 「글자2」….
+    /// </summary>
+    protected void MigrateOldOcrRegion(Rect old)
+    {
+        if (old.IsEmpty || old.Width < MinimumRegionSize || old.Height < MinimumRegionSize) return;
+
+        var name = "글자";
+        for (var n = 2; RegionBook.Find(name) is not null; n++) name = $"글자{n}";
+
+        RegionBook.Put(new NamedRegion { Name = name, Rect = old, Ink = false });
+        SaveRegions();
+        LoadRegions();
+
+        Logger.Info($"옛 글자 영역을 자리 「{name}」 으로 옮겼다: {old}");
+    }
+
+    // ── 미리보기에서 새 자리 끌기 ─────────────────────────────────────────
+
+    /// <summary>
+    /// 편집기가 돌면 여기서 마우스 다운을 먹는다. true 면 클릭을 게임으로 보내지 않는다.
     /// </summary>
     /// <remarks>
     /// 여기 오는 것은 <b>빈 자리</b>를 누른 것뿐이다. 자리 위의 누름은 캔버스의 손잡이(Thumb)가 먼저 먹어 여기까지 안 온다.
-    /// 그래서 무엇을 잡았는지 가릴 것 없이 새로 그리기만 한다.
+    /// 요소 검사가 켜져 있으면 검사가 먼저다 - 검사하려고 누른 것이 새 자리가 되면 안 된다.
     /// </remarks>
     private bool TryBeginRegionPick(Point pointInControl)
     {
-        if (!IsRegionEditingActive) return false;
-
-        // 영역 지정을 켜지 않은 채(전달 끔)면 요소 검사가 먼저다 - 검사하려고 누른 것이 새 자리가 되면 안 된다.
-        if (!IsRegionPicking && IsElementInspectEnabled) return false;
+        if (!IsRegionEditingActive || IsElementInspectEnabled) return false;
 
         var (control, source) = PreviewSizes;
 
@@ -296,22 +358,16 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (rect.Width < MinimumRegionSize || rect.Height < MinimumRegionSize)
         {
             if (SelectedRegion is not null) SelectedRegion = null;
-            else StatusText = "너무 작습니다 - 읽을 글자가 들어가게 끌어 주세요.";
             return true;
         }
 
-        var name = NextName(RegionName);
-        var region = new NamedRegion { Name = name, Rect = rect };
-
-        RegionBook.Put(region);
-        SaveRegions();
-        LoadRegions();
-
-        SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
-        StatusText = $"「{name}」 자리를 만들었습니다. 스크립트에서 숫자읽기(\"{name}\") 로 읽습니다.";
-
+        AddRegion(rect, "미리보기에서 끈 자리");
         return true;
     }
+
+    protected override void OnPreviewMouseMove(MouseEventArgs args) => TryDragRegion(args);
+
+    protected override void OnPreviewMouseUp(MouseButtonEventArgs args) => Guard(() => TryFinishRegionPick(args));
 
     /// <summary>이보다 작은 자리는 읽을 것이 없다(0~1). <see cref="NamedRegion.IsUsable"/> 과 같다.</summary>
     private const double MinimumRegionSize = 0.004;
@@ -324,57 +380,10 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (_previewSurface?.IsMouseCaptured == true) _previewSurface.ReleaseMouseCapture();
     }
 
-    private void DoRemoveRegion() => Guard(() =>
-    {
-        if (SelectedRegion is not { } region) return;
-
-        RegionBook.Remove(region.Name);
-        SaveRegions();
-        LoadRegions();
-
-        StatusText = $"「{region.Name}」 자리를 지웠습니다.";
-    });
-
-    /// <summary>비었으면 안 겹치는 이름을 지어 준다. 이름 없이 만든 자리는 스크립트가 부를 길이 없다.</summary>
-    private string NextName(string wanted)
-    {
-        var name = (wanted ?? string.Empty).Trim();
-
-        if (name.Length > 0) return name;
-
-        for (var n = 1; ; n++)
-        {
-            var candidate = $"자리{n}";
-
-            if (RegionBook.Find(candidate) is null) return candidate;
-        }
-    }
-
-    private void DoRenameRegion() => Guard(() =>
-    {
-        if (SelectedRegion is not { } region) return;
-
-        var name = (RegionName ?? string.Empty).Trim();
-
-        if (name.Length == 0)
-        {
-            StatusText = "바꿀 이름을 도구 줄의 이름 칸에 적고 다시 누르세요.";
-            return;
-        }
-
-        if (string.Equals(name, region.Name, StringComparison.Ordinal)) return;
-
-        RegionBook.Remove(region.Name);
-        region.Name = name;
-        RegionBook.Put(region);
-        SaveRegions();
-        LoadRegions();
-
-        SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
-    });
+    // ── 지금 읽기 ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 고른 자리를 지금 한 번 읽어 상태 줄에 적는다.
+    /// 고른 자리를 지금 한 번 읽어 상태 줄과 그리드의 읽은 글자에 적는다.
     /// </summary>
     /// <remarks>
     /// <b>이게 없으면 자리를 못 맞춘다.</b> 끌어 놓고 맞는지 보려면 스크립트를 짜서 돌려야 하는데, 한 번에
@@ -386,18 +395,16 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (!IsRunning)
         {
-            StatusText = "먼저 시작(연결)을 눌러 화면을 잡아야 읽을 수 있습니다.";
+            StatusText = "먼저 캡처를 시작해 화면을 잡아야 읽을 수 있습니다.";
             return;
         }
 
         // 프레임 복사를 켜 둬야 허브가 조각을 준다. 한 장 올 때까지 잠깐 기다린다.
         Hub.WantsFrames = true;
 
-        var ocr = _ocr;
-
-        if (ocr is null)
+        if (!EnsureOcrEngine(out var problem) || _ocr is not { } ocr)
         {
-            StatusText = "글자 읽기 엔진이 없습니다 - Windows OCR 언어 팩을 확인하세요.";
+            StatusText = $"글자 읽기 엔진이 없습니다 - Windows OCR 언어 팩을 확인하세요. {problem}";
             return;
         }
 
@@ -439,6 +446,8 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         english?.Dispose();
 
+        region.LastText = best;
+
         var digits = new string([.. best.Where(char.IsDigit)]);
 
         StatusText = best.Length == 0
@@ -458,16 +467,4 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         return scaled;
     }
-
-    private void DoToggleRegionInk() => Guard(() =>
-    {
-        if (SelectedRegion is not { } region) return;
-
-        region.Ink = !region.Ink;
-        SaveRegions();
-        LoadRegions();
-
-        SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, region.Name, StringComparison.OrdinalIgnoreCase));
-        StatusText = $"「{region.Name}」 전처리(흰 글자만 남기기)를 {(region.Ink ? "켰습니다" : "껐습니다")}.";
-    });
 }

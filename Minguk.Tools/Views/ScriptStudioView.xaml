@@ -1,4 +1,4 @@
-<UserControl x:Class="Minguk.Tools.Views.ScriptStudioView"
+﻿<UserControl x:Class="Minguk.Tools.Views.ScriptStudioView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -272,12 +272,7 @@
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
                 <dxb:BarItemSeparator />
-                <dxb:BarCheckItem Content="글자 영역"
-                                  Hint="켜고 미리보기에서 글자가 있는 자리를 끈다. 그동안 휠은 확대, 오른쪽 끌기는 화면 옮기기다."
-                                  IsChecked="{Binding IsOcrRegionPicking}" />
-                <dxb:BarCheckItem Content="글자 읽기"
-                                  Hint="정한 영역의 글자를 0.5초에 한 번 읽는다."
-                                  IsChecked="{Binding IsOcrOn}" />
+                <!-- 글자 영역·글자 읽기는 이름 붙인 자리로 합쳤다(2026-09-15) - 영역 패널에서 자리마다 "계속 읽기" 를 켠다. -->
                 <dxb:BarCheckItem Content="이름표 읽기"
                                   Hint="찾은 몹마다 머리 위 이름표를 읽는다. 한국어(ko)여야 한글이 읽힌다."
                                   IsChecked="{Binding IsNameplateOcrOn}" />
@@ -290,7 +285,7 @@
                                                   ItemsSource="{Binding OcrLanguages}" />
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
-                <!-- 이름 붙인 자리(이름·영역 지정·영역 보기)는 미리보기 아래 띠로 옮겼다(2026-09-15) - 그 자리를 손보는 판 바로 아래에서 켜고 끈다. -->
+                <!-- 이름 붙인 자리(새 자리·지금 읽기·지우기·영역 보기)는 솔루션 탐색기 옆 영역 패널 한 곳에 있다(2026-09-15). -->
             </dxb:Bar>
 
             <!-- ── 입력 ── -->
@@ -726,6 +721,113 @@
                                     </controls:BaseGridControl>
                                 </DockPanel>
                             </dxdo:LayoutPanel>
+                            <!--
+                                ── 영역 ── 이름 붙인 자리. 솔루션 탐색기와 같은 탭 그룹이다(2026-09-15, 사용자).
+                                한 곳에 모았다: 도구 줄(새 자리 · 지금 읽기 · 지우기 · 영역 보기) + 그리드(이름 · 계속 읽기 · 읽은 글자 · 전처리) + 같은 것을 오른쪽 버튼 메뉴에.
+                                자리·크기는 미리보기의 손잡이로 고친다(영역 보기 켬 + 입력 전달 끔). 이름·계속 읽기·전처리는 칸에서 바로 고친다.
+                            -->
+                            <dxdo:LayoutPanel x:Name="RegionsPanel"
+                                              Caption="영역">
+                                <DockPanel>
+                                    <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                                        AllowQuickCustomization="False"
+                                                        DockPanel.Dock="Top"
+                                                        ShowBackground="False"
+                                                        TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                                                        TextBlock.FontSize="{DynamicResource BaseFontSize}">
+                                        <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                                           Command="{Binding NewRegionCommand}"
+                                                           Content="새 자리"
+                                                           Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
+                                                           Hint="화면 가운데에 새 자리를 놓고 이름 칸을 연다. 미리보기에서 끌어 옮기고 손잡이로 크기를 맞춘다.&#10;영역 보기가 켜져 있고 입력 전달이 꺼져 있으면 미리보기의 빈 자리를 끌어서도 만든다." />
+                                        <dxb:BarButtonItem Command="{Binding TestRegionCommand}"
+                                                           Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                                                           Hint="고른 자리를 지금 한 번 읽는다(전처리 켜고/끄고 × 한국어/영문 네 갈래 중 가장 긴 것)." />
+                                        <dxb:BarButtonItem Command="{Binding RemoveRegionCommand}"
+                                                           Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
+                                                           Hint="고른 자리를 지운다." />
+                                        <dxb:BarItemSeparator />
+                                        <dxb:BarCheckItem Content="영역 보기"
+                                                          Hint="만들어 둔 자리를 미리보기에 겹쳐 그린다.&#10;입력 전달이 꺼져 있으면 미리보기에서 자리를 눌러 고르고, 끌어 옮기고, 손잡이로 크기를 바꾼다(빈 자리 끌기는 새 자리)."
+                                                          IsChecked="{Binding ShowRegions, Mode=TwoWay}" />
+                                    </dxb:ToolBarControl>
+
+                                    <controls:BaseGridControl AutoGenerateColumns="None"
+                                                              ItemsSource="{Binding Regions}"
+                                                              SelectedItem="{Binding SelectedRegion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                        <dxmvvm:Interaction.Behaviors>
+                                            <!-- 새 자리를 만들면 ViewModel 이 이 그리드의 이름 칸을 편집 상태로 연다(OnRegionCreated). -->
+                                            <dxmvvm:UIObjectService x:Name="RegionsGridObjectService" />
+                                        </dxmvvm:Interaction.Behaviors>
+                                        <dxg:GridControl.Columns>
+                                            <dxg:GridColumn Width="*"
+                                                            FieldName="Name"
+                                                            Header="이름" />
+                                            <dxg:GridColumn Width="60"
+                                                            FieldName="KeepReading"
+                                                            Header="계속 읽기">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:CheckEditSettings />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn Width="*"
+                                                            AllowEditing="False"
+                                                            FieldName="LastText"
+                                                            Header="읽은 글자" />
+                                            <dxg:GridColumn Width="50"
+                                                            FieldName="Ink"
+                                                            Header="전처리">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:CheckEditSettings />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                            <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
+                                            <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="P1" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn AllowEditing="False" FieldName="Y" Header="세로" Visible="False">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="P1" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn AllowEditing="False" FieldName="Width" Header="너비" Visible="False">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="P1" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn AllowEditing="False" FieldName="Height" Header="높이" Visible="False">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="P1" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                        </dxg:GridControl.Columns>
+                                        <dxg:GridControl.View>
+                                            <controls:BaseTableView AllowEditing="True"
+                                                                    AutoWidth="True"
+                                                                    EditorShowMode="MouseUpFocused"
+                                                                    ShowGroupPanel="False"
+                                                                    ShowSearchPanelMode="Never">
+                                                <!-- 오른쪽 버튼 메뉴 - 도구 줄과 같은 것. -->
+                                                <dxg:TableView.RowCellMenuCustomizations>
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.NewRegionCommand}"
+                                                                       Content="새 자리(_N)"
+                                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}" />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.TestRegionCommand}"
+                                                                       Content="지금 읽기(_R)"
+                                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}" />
+                                                    <dxb:BarItemSeparator />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.RemoveRegionCommand}"
+                                                                       Content="지우기(_D)"
+                                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}" />
+                                                </dxg:TableView.RowCellMenuCustomizations>
+                                            </controls:BaseTableView>
+                                        </dxg:GridControl.View>
+                                    </controls:BaseGridControl>
+                                </DockPanel>
+                            </dxdo:LayoutPanel>
+
                         </dxdo:TabbedGroup>
 
                         <!--
@@ -736,36 +838,21 @@
                         <dxdo:LayoutGroup x:Name="DesignSplitGroup"
                                           Orientation="Horizontal">
 
-                            <!-- ── 미리보기 ── 잡은 화면. 몹·글자 영역·이름 붙인 자리를 겹쳐 그린다. -->
+                            <!-- ── 미리보기 ── 잡은 화면. 몹·이름 붙인 자리(계속 읽는 자리는 읽은 글자까지)를 겹쳐 그린다. -->
                             <dxdo:LayoutPanel x:Name="PreviewPanel"
                                               Caption="미리보기"
                                               ItemHeight="1*"
                                               ItemWidth="1.2*">
                                 <DockPanel>
                                     <!--
-                                        VS XAML 디자이너의 아래 띠 - 이름 붙인 자리(이름·영역 지정·영역 보기) · 나누기(위아래·좌우·바꾸기).
-                                        확대 콤보는 라벨링 화면처럼 판 위 도구 줄(PreviewForwardBar)에 있다(2026-09-15).
+                                        VS XAML 디자이너의 아래 띠 - 나누기(위아래·좌우·바꾸기). 확대 콤보는 판 위 도구 줄(PreviewForwardBar),
+                                        이름 붙인 자리는 영역 패널 한 곳에 있다(2026-09-15).
                                     -->
                                     <dxlc:LayoutControl Padding="2,1"
                                                         HorizontalAlignment="Left"
                                                         DockPanel.Dock="Bottom"
                                                         Orientation="Horizontal">
-                                        <dxlc:LayoutItem Label="이름"
-                                                         ToolTip="새로 만들 자리의 이름. 비워 두면 자리1 처럼 붙는다.">
-                                            <dxe:TextEdit Width="100"
-                                                          EditValue="{Binding RegionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                        </dxlc:LayoutItem>
-                                        <dxe:CheckEdit VerticalAlignment="Center"
-                                                       Content="영역 지정"
-                                                       IsChecked="{Binding IsRegionPicking, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                       ToolTip="켜 둔 동안 미리보기가 편집기다 - 빈 자리 끌기는 새 자리, 자리 안 끌기는 옮기기, 고른 자리의 손잡이는 크기 조절(치수가 픽셀로 뜬다). 휠 확대·오른쪽 끌기 이동." />
-                                        <dxe:CheckEdit VerticalAlignment="Center"
-                                                       Content="영역 보기"
-                                                       IsChecked="{Binding ShowRegions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                       ToolTip="만들어 둔 자리를 미리보기에 이름과 함께 겹쳐 그린다.&#10;입력 전달이 꺼져 있으면 영역 지정을 켜지 않아도 자리를 눌러 고르고, 끌어 옮기고, 손잡이로 크기를 바꿀 수 있다(빈 자리 끌기는 새 자리)." />
-
                                         <dx:SimpleButton Width="56"
-                                                         Margin="12,0,0,0"
                                                          Command="{Binding SplitVerticalCommand}"
                                                          Content="위아래"
                                                          ToolTip="미리보기를 위, 스크립트를 아래에 둔다." />
@@ -795,21 +882,17 @@
                                         <parts:CapturePreviewPanel.Overlay>
                                             <markup:DetectionOverlay Detections="{Binding Detections}"
                                                                      IsRegionEditing="{Binding IsRegionEditingActive}"
-                                                                     OcrRegion="{Binding OcrRegion}"
-                                                                     OcrRegionDraft="{Binding OcrRegionDraft}"
-                                                                     OcrText="{Binding OcrText}"
                                                                      RegionDraft="{Binding RegionDraft}"
                                                                      Regions="{Binding Regions}"
                                                                      RegionsRevision="{Binding RegionsRevision}"
                                                                      SelectedRegion="{Binding SelectedRegion}"
-                                                                     ShowOcrRegion="{Binding IsOcrRegionVisible}"
                                                                      ShowRegions="{Binding IsRegionVisible}"
                                                                      Source="{Binding PreviewImage}"
                                                                      Zoom="{Binding PreviewZoom}" />
                                         </parts:CapturePreviewPanel.Overlay>
                                         <!--
                                             자리 편집기 - 자리마다 Thumb 손잡이, 고른 것에 테두리·손잡이 어도너.
-                                            영역 지정을 켰거나, 입력 전달이 꺼져 있고 영역 보기가 켜져 있으면 돈다(IsRegionEditingActive, 2026-09-15).
+                                            영역 보기가 켜져 있고 입력 전달이 꺼져 있으면 돈다(IsRegionEditingActive, 2026-09-15). 빈 자리 끌기는 새 자리.
                                         -->
                                         <parts:CapturePreviewPanel.Editor>
                                             <regions:RegionCanvas EditCommand="{Binding RegionEditCommand}"
@@ -831,6 +914,7 @@
                                                 ItemHeight="1*"
                                                 ItemWidth="1.4*"
                                                 ItemsSource="{Binding Script.Project.Documents}"
+                                                ShowCloseButton="True"
                                                 ShowWhenEmpty="True"
                                                 Visibility="{Binding Script.IsProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <dxdo:DocumentGroup.ItemStyle>
@@ -964,73 +1048,6 @@
                             </dxlc:LayoutControl>
                         </dxdo:LayoutPanel>
 
-                        <!--
-                            이름 붙인 자리. 만드는 것은 미리보기에서 끄는 것이고, 여기서는 무엇을 만들어 뒀는지 보고
-                            "지금 읽기" 로 자리가 맞는지 확인한다.
-                        -->
-                        <dxdo:LayoutPanel x:Name="RegionsPanel"
-                                          Caption="영역">
-                            <dxlc:LayoutControl Orientation="Vertical">
-                                <dxe:ButtonEdit VerticalAlignment="Top"
-                                                AllowDefaultButton="False"
-                                                EditValue="{Binding SelectedRegionName, UpdateSourceTrigger=LostFocus}"
-                                                IsEnabled="{Binding SelectedRegion, Converter={dxmvvm:ObjectToBooleanConverter}}"
-                                                NullText="미리보기에서 끌어 자리를 만들면 여기 이름이 뜨고, 고치면 바뀐다">
-                                    <dxe:ButtonEdit.Buttons>
-                                        <dxe:ButtonInfo Command="{Binding TestRegionCommand}"
-                                                        Content="지금 읽기"
-                                                        GlyphKind="Refresh"
-                                                        ToolTip="고른 자리를 지금 한 번 읽어 상태 줄에 적는다." />
-                                    </dxe:ButtonEdit.Buttons>
-                                </dxe:ButtonEdit>
-
-                                <!-- 자리·크기는 미리보기의 손잡이로 고친다(RegionCanvas). 수자 칸은 뺐다 - 같은 일을 두 곳에서 하면 하나는 안 쓰인다. -->
-                                <dxlc:LayoutGroup HorizontalAlignment="Left"
-                                                  VerticalAlignment="Top"
-                                                  Orientation="Horizontal">
-                                    <dx:SimpleButton Command="{Binding ToggleRegionInkCommand}"
-                                                     Content="전처리"
-                                                     ToolTip="흰 글자만 남기기를 켜고 끈다." />
-                                    <dx:SimpleButton Command="{Binding RemoveRegionCommand}"
-                                                     Content="지우기" />
-                                </dxlc:LayoutGroup>
-
-                                <controls:BaseGridControl AutoGenerateColumns="None"
-                                                          ItemsSource="{Binding Regions}"
-                                                          SelectedItem="{Binding SelectedRegion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                                    <dxg:GridControl.Columns>
-                                        <dxg:GridColumn Width="*" FieldName="Name" Header="이름" />
-                                        <dxg:GridColumn FieldName="X" Header="가로">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="P1" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="Y" Header="세로">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="P1" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="Width" Header="너비">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="P1" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="Height" Header="높이">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="P1" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="Ink" Header="전처리" />
-                                    </dxg:GridControl.Columns>
-                                    <dxg:GridControl.View>
-                                        <controls:BaseTableView AllowEditing="False"
-                                                                AutoWidth="True"
-                                                                ShowGroupPanel="False"
-                                                                ShowSearchPanelMode="Never" />
-                                    </dxg:GridControl.View>
-                                </controls:BaseGridControl>
-                            </dxlc:LayoutControl>
-                        </dxdo:LayoutPanel>
 
                         <dxdo:LayoutPanel x:Name="BreakpointsPanel"
                                           Caption="중단점">

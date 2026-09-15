@@ -6,6 +6,9 @@ using System.Windows.Input;
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
 using DevExpress.Xpf.Docking;
+using DevExpress.Xpf.Grid;
+
+using NamedRegion = Minguk.Tools.Vision.Regions.NamedRegion;
 
 using Minguk.Image;
 using Minguk.Tools.Input;
@@ -279,8 +282,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>
     /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.
     /// 3: 솔루션 탐색기 왼쪽 · 미리보기|문서 좌우 · 도구 모음 세 줄(2026-09-13). 옛 배치를 그대로 살리면 새 기본이 안 보인다.
+    /// 4: 영역 패널을 아래 탭에서 솔루션 탐색기 탭 그룹으로(2026-09-15, 사용자).
     /// </summary>
-    private const int DockLayoutVersion = 3;
+    private const int DockLayoutVersion = 4;
 
     // ── 미리보기 | 문서 나누기 ──────────────────────────────────────────
 
@@ -529,6 +533,25 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
     /// <summary>입력 전달이 꺼져 있고 영역 보기면 영역 지정 없이도 자리를 고르고 옮기고 크기를 바꾼다(사용자, 2026-09-15). 자리 편집 도구가 있는 화면이다.</summary>
     protected override bool EditsRegionsWithoutPicking => true;
+
+    /// <summary>
+    /// 새 자리를 만들었다 - 영역 탭을 앞으로 띄우고 그 줄의 이름 칸을 편집 상태로 연다(이름 칸은 여기 하나다, 2026-09-15).
+    /// </summary>
+    /// <remarks>탭을 띄운 뒤 그리드가 그려져야 편집기가 열려 한 박자 늦게(Background) 연다. 못 열면 이름은 「자리N」 그대로다.</remarks>
+    protected override void OnRegionCreated(NamedRegion region)
+    {
+        ShowToolWindow("RegionsPanel");
+
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () => Guard(() =>
+        {
+            if (FindControl<GridControl>("RegionsGridObjectService") is not { View: TableView view } grid) return;
+
+            grid.CurrentItem = region;
+            grid.CurrentColumn = grid.Columns["Name"];
+            view.Focus();
+            view.ShowEditor();
+        }));
+    }
 
     protected override void RestoreSettings()
     {

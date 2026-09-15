@@ -292,10 +292,9 @@
             <parts:CapturePreviewPanel Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <parts:CapturePreviewPanel.Overlay>
                     <markup:DetectionOverlay Detections="{Binding Detections}"
-                                             OcrRegion="{Binding OcrRegion}"
-                                                 ShowOcrRegion="{Binding IsOcrRegionVisible}"
-                                             OcrRegionDraft="{Binding OcrRegionDraft}"
-                                             OcrText="{Binding OcrText}"
+                                             Regions="{Binding Regions}"
+                                             RegionsRevision="{Binding RegionsRevision}"
+                                             ShowRegions="{Binding IsRegionVisible}"
                                              Source="{Binding PreviewImage}"
                                              Zoom="{Binding PreviewZoom}" />
                 </parts:CapturePreviewPanel.Overlay>

@@ -189,7 +189,10 @@ internal static class ScriptScreenProbe
         else { Console.WriteLine($"[FAIL] 확대 2 인데 스크롤 범위가 안 커졌다 - 범위 {extent:0} / 뷰포트 {viewport:0}"); failures++; }
 
         vm.PreviewZoom = 1;
-        vm.IsRegionPicking = true;
+
+        // 자리 편집기가 도는 동안(영역 보기 켬 + 입력 전달 끔) 휠은 확대다.
+        vm.IsInputForwardingEnabled = false;
+        vm.ShowRegions = true;
         await Pump(200);
 
         // InputManager 가 하는 순서 그대로: 터널이 먼저, 안 먹혔으면 버블.
@@ -205,10 +208,10 @@ internal static class ScriptScreenProbe
         await Pump(200);
 
         if (Math.Abs(vm.PreviewZoom - 1.25) < 0.001)
-            Console.WriteLine("[PASS] 영역 지정 중 휠 한 칸 - 배율 1 → 1.25");
-        else { Console.WriteLine($"[FAIL] 영역 지정 중 휠을 굴렸는데 배율이 {vm.PreviewZoom} 이다(1.25 여야 한다) - 그림 위 ScrollViewer 가 휠을 먹는다"); failures++; }
+            Console.WriteLine("[PASS] 자리 편집 중 휠 한 칸 - 배율 1 → 1.25");
+        else { Console.WriteLine($"[FAIL] 자리 편집 중 휠을 굴렸는데 배율이 {vm.PreviewZoom} 이다(1.25 여야 한다) - 그림 위 ScrollViewer 가 휠을 먹는다"); failures++; }
 
-        vm.IsRegionPicking = false;
+        vm.ShowRegions = false;
         vm.PreviewZoom = 1;
 
         // 입력 전달이 꺼져 있으면 영역 편집 없이도 휠이 확대다(2026-09-15). 켜져 있으면 휠은 게임 몫이라 배율이 안 바뀐다.
@@ -259,7 +262,8 @@ internal static class ScriptScreenProbe
         var region = new Minguk.Tools.Vision.Regions.NamedRegion { Name = "탄약", Rect = new Rect(0.5, 0.2, 0.1, 0.1) };
         vm.Regions.Add(region);
         vm.SelectedRegion = region;
-        vm.IsRegionPicking = true;
+        vm.IsInputForwardingEnabled = false;
+        vm.ShowRegions = true;
         await Pump(400);
 
         var canvas = Descendants<Minguk.Tools.Markup.Regions.RegionCanvas>(window).FirstOrDefault();
@@ -317,41 +321,47 @@ internal static class ScriptScreenProbe
             Console.WriteLine($"[PASS] 치수 표시가 원본 픽셀이다 - {item.SourceWidthPx:0} x {item.SourceHeightPx:0}");
         else { Console.WriteLine($"[FAIL] 치수가 원본 픽셀이 아니다 - {item.SourceWidthPx:0}"); failures++; }
 
-        // 입력 전달이 켜져 있으면 클릭은 게임 몫 - 영역 지정을 끄면 편집기가 빠진다.
+        // 켜는 조건은 하나 - 영역 보기 켬 + 입력 전달 끔(2026-09-15). 전달을 켜거나 영역 보기를 끄면 편집기가 빠진다(클릭은 게임 몫).
         vm.IsInputForwardingEnabled = true;
-        vm.IsRegionPicking = false;
         await Pump(100);
 
-        if (!canvas.IsHitTestVisible && canvas.Visibility == Visibility.Collapsed && !item.HasAdorner)
-            Console.WriteLine("[PASS] 입력 전달 중에 영역 지정을 끄면 캔버스가 마우스에서 빠지고 어도너도 진다");
-        else { Console.WriteLine($"[FAIL] 껐는데 캔버스가 남아 있다 - 히트 {canvas.IsHitTestVisible} · {canvas.Visibility} · 어도너 {item.HasAdorner}"); failures++; }
+        var forwardingOff = !canvas.IsHitTestVisible && canvas.Visibility == Visibility.Collapsed && !item.HasAdorner && !vm.IsRegionEditingActive;
 
-        // 입력 전달이 꺼져 있고 자리가 보이면 영역 지정 없이도 편집기(고르기·옮기기·어도너)가 돈다(2026-09-15). 자리가 안 보이면 안 뜬다.
-        vm.ShowRegions = true;
         vm.IsInputForwardingEnabled = false;
         vm.SelectedRegion = region;
         await Pump(200);
 
-        var passiveOn = canvas.IsHitTestVisible && canvas.Visibility == Visibility.Visible && item.HasAdorner && vm.IsRegionEditingActive;
+        var backOn = canvas.IsHitTestVisible && item.HasAdorner && vm.IsRegionEditingActive;
 
         vm.ShowRegions = false;
         await Pump(100);
 
         var hiddenOff = !canvas.IsHitTestVisible && !item.HasAdorner && !vm.IsRegionEditingActive;
 
-        vm.ShowRegions = true;
-        vm.IsOcrRegionPicking = true;
-        await Pump(100);
+        if (forwardingOff && backOn && hiddenOff)
+            Console.WriteLine("[PASS] 자리 편집기는 영역 보기 켬 + 입력 전달 끔일 때만 돈다(전달 켜면·영역 보기 끄면 빠지고 어도너도 진다)");
+        else { Console.WriteLine($"[FAIL] 자리 편집기 켜는 조건이 틀렸다 - 전달 켬에서 빠짐 {forwardingOff} · 다시 켜짐 {backOn} · 영역 보기 끔에서 빠짐 {hiddenOff}"); failures++; }
 
-        var ocrFirst = !vm.IsRegionEditingActive && !canvas.IsHitTestVisible;
+        // 영역 패널 - 솔루션 탐색기와 같은 탭 그룹, 이름·계속 읽기·전처리 칸에서 바로 고친다(사용자 데이터를 안 건드리게 새 자리·이름 바꾸기는 여기서 안 누른다).
+        {
+            var solution = Descendants<DevExpress.Xpf.Docking.LayoutPanel>(window).FirstOrDefault(p => p.Name == "SolutionExplorerPanel");
+            var regionsPanel = Descendants<DevExpress.Xpf.Docking.LayoutPanel>(window).FirstOrDefault(p => p.Name == "RegionsPanel")
+                               ?? (solution?.Parent as DevExpress.Xpf.Docking.LayoutGroup)?.Items.OfType<DevExpress.Xpf.Docking.LayoutPanel>().FirstOrDefault(p => p.Name == "RegionsPanel");
+            var sameGroup = solution?.Parent is DevExpress.Xpf.Docking.TabbedGroup group && regionsPanel is not null && ReferenceEquals(regionsPanel.Parent, group);
 
-        vm.IsOcrRegionPicking = false;
-        vm.ShowRegions = false;
-        await Pump(100);
+            var grid = (regionsPanel?.Content as DependencyObject) is { } content
+                ? Descendants<DevExpress.Xpf.Grid.GridControl>(content).FirstOrDefault()
+                : null;
+            var editable = grid is not null
+                           && grid.Columns["Name"] is { AllowEditing: not DevExpress.Utils.DefaultBoolean.False }
+                           && grid.Columns["KeepReading"] is not null
+                           && grid.Columns["LastText"] is { AllowEditing: DevExpress.Utils.DefaultBoolean.False }
+                           && grid.Columns["X"] is { Visible: false };
 
-        if (passiveOn && hiddenOff && ocrFirst)
-            Console.WriteLine("[PASS] 입력 전달이 꺼져 있고 영역 보기면 영역 지정 없이 어도너가 돈다(영역 보기 끄면·글자 영역 중이면 안 돈다)");
-        else { Console.WriteLine($"[FAIL] 전달 끔 편집기 조건이 틀렸다 - 켜짐 {passiveOn} · 영역 보기 끔에서 꺼짐 {hiddenOff} · 글자 영역 우선 {ocrFirst}"); failures++; }
+            if (sameGroup && editable)
+                Console.WriteLine("[PASS] 영역 패널이 솔루션 탐색기 탭 그룹에 있고, 그리드는 이름·계속 읽기·읽은 글자·전처리(자리 열은 숨김)");
+            else { Console.WriteLine($"[FAIL] 영역 패널 자리·그리드가 틀렸다 - 같은 탭 그룹 {sameGroup} · 그리드 {grid is not null} · 칸 {editable}"); failures++; }
+        }
 
         vm.Regions.Remove(region);
         vm.PreviewImage = null;

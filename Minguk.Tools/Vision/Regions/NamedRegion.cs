@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using System.Windows;
 
@@ -13,12 +15,24 @@ namespace Minguk.Tools.Vision.Regions;
 /// 스크립트는 그대로다 - 고치는 것은 화면에서 사각형 하나를 다시 끄는 일이 된다.
 ///
 /// 좌표는 <b>0~1 비율</b>이다. 해상도가 바뀌어도 같은 자리를 가리킨다.
+///
+/// 옛 "글자 영역"(한 곳만, 설정에 저장)을 여기로 합쳤다(2026-09-15) - 자리마다 <see cref="KeepReading"/> 를 켜면 화면이 계속 읽어
+/// <see cref="LastText"/> 에 적는다. 그리드가 칸에서 바로 고치므로 바뀐 것을 알린다(<see cref="INotifyPropertyChanged"/>).
 /// </remarks>
-public sealed class NamedRegion
+public sealed class NamedRegion : INotifyPropertyChanged
 {
+    private string _name = string.Empty;
+    private bool _ink = true;
+    private bool _keepReading;
+    private string _lastText = string.Empty;
+
     /// <summary>스크립트가 부를 이름. 빈 이름은 못 만든다.</summary>
     [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    public string Name
+    {
+        get => _name;
+        set => Set(ref _name, value ?? string.Empty);
+    }
 
     [JsonPropertyName("x")]
     public double X { get; set; }
@@ -41,7 +55,30 @@ public sealed class NamedRegion
     /// 빈 답이면 다른 길로도 한 번 해 보므로, 틀리게 놓아도 대개는 읽힌다.
     /// </remarks>
     [JsonPropertyName("ink")]
-    public bool Ink { get; set; } = true;
+    public bool Ink
+    {
+        get => _ink;
+        set => Set(ref _ink, value);
+    }
+
+    /// <summary>
+    /// 화면(스크립트·플레이)이 이 자리를 0.5초마다 읽어 <see cref="LastText"/> 에 적을지. 저장한다.
+    /// </summary>
+    /// <remarks>스크립트의 <c>읽기("이름")</c> 은 이것과 상관없이 부를 때 읽는다 - 이것은 사람이 화면에서 보려는 것이다.</remarks>
+    [JsonPropertyName("live")]
+    public bool KeepReading
+    {
+        get => _keepReading;
+        set => Set(ref _keepReading, value);
+    }
+
+    /// <summary>마지막으로 읽은 글(한 줄로). 저장하지 않는다.</summary>
+    [JsonIgnore]
+    public string LastText
+    {
+        get => _lastText;
+        set => Set(ref _lastText, value ?? string.Empty);
+    }
 
     /// <summary>사람이 보는 메모. 읽는 데는 안 쓴다.</summary>
     [JsonPropertyName("note")]
@@ -69,4 +106,14 @@ public sealed class NamedRegion
     public string Describe => $"{Name}  ({X:0.000}, {Y:0.000})  {Width:0.000} x {Height:0.000}{(Ink ? "  · 흰 글자만" : string.Empty)}";
 
     public override string ToString() => Describe;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (Equals(field, value)) return;
+
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
 }
