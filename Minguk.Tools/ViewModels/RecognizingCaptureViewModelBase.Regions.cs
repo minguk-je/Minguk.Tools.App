@@ -50,6 +50,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         set => SetProperty(() => IsRegionPicking, value, () =>
         {
             RaisePropertyChanged(nameof(IsRegionVisible));
+            RaiseRegionEditingActive();
 
             if (!IsRegionPicking)
             {
@@ -75,7 +76,46 @@ public abstract partial class RecognizingCaptureViewModelBase
     public bool ShowRegions
     {
         get => GetProperty(() => ShowRegions);
-        set => SetProperty(() => ShowRegions, value, () => RaisePropertyChanged(nameof(IsRegionVisible)));
+        set => SetProperty(() => ShowRegions, value, () =>
+        {
+            RaisePropertyChanged(nameof(IsRegionVisible));
+            RaiseRegionEditingActive();
+        });
+    }
+
+    /// <summary>
+    /// 미리보기가 자리 편집기로 도는가 - "영역 지정" 을 켰거나, <b>입력 전달이 꺼져 있고 자리가 보일 때</b>(사용자, 2026-09-15).
+    /// 캔버스(<c>RegionCanvas.IsEditing</c>)가 이것에 묶여 고르기·옮기기·크기 조절 어도너가 산다.
+    /// </summary>
+    /// <remarks>
+    /// 전달이 꺼져 있으면 미리보기 클릭이 게임으로 갈 일이 없어, 보이는 자리를 고치려고 영역 지정을 따로 켜는 것이 번거로웠다.
+    /// 전달이 켜져 있으면 클릭은 게임 몫이라 영역 지정을 켜야만 된다. 글자 영역을 끄는 중에는 그쪽이 먼저다 - 같은 손짓을 나눠 쓴다.
+    /// 자리가 안 보이면(영역 보기 끔) 편집기도 안 뜬다 - 안 보이는 것을 잡으면 헷갈린다.
+    /// </remarks>
+    public bool IsRegionEditingActive => IsRegionPicking || (EditsRegionsWithoutPicking && !IsInputForwardingEnabled && ShowRegions && !IsOcrRegionPicking);
+
+    /// <summary>
+    /// 영역 지정 없이(전달 끔 + 영역 보기) 자리 편집기를 띄우는 화면인가. 스크립트 화면만 - 플레이 화면에는 자리 편집 도구가 없어
+    /// 거기서 켜지면 미리보기를 누른 것이 모르는 새 자리가 된다.
+    /// </summary>
+    protected virtual bool EditsRegionsWithoutPicking => false;
+
+    private bool _wasRegionEditingActive;
+
+    private void RaiseRegionEditingActive()
+    {
+        RaisePropertyChanged(nameof(IsRegionEditingActive));
+
+        // 꺼지는 순간 잡고 있던 것을 놓는다(전달을 켰는데 끌기가 남으면 그 뒤 클릭이 게임으로 안 간다).
+        if (_wasRegionEditingActive && !IsRegionEditingActive) CancelRegionDrag();
+
+        _wasRegionEditingActive = IsRegionEditingActive;
+    }
+
+    protected override void OnInputForwardingEnabledChanged()
+    {
+        base.OnInputForwardingEnabledChanged();
+        RaiseRegionEditingActive();
     }
 
     /// <summary>끄는 중인 사각형. 놓으면 목록에 들어가고 이것은 비운다.</summary>
@@ -208,7 +248,10 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </remarks>
     private bool TryBeginRegionPick(Point pointInControl)
     {
-        if (!IsRegionPicking) return false;
+        if (!IsRegionEditingActive) return false;
+
+        // 영역 지정을 켜지 않은 채(전달 끔)면 요소 검사가 먼저다 - 검사하려고 누른 것이 새 자리가 되면 안 된다.
+        if (!IsRegionPicking && IsElementInspectEnabled) return false;
 
         var (control, source) = PreviewSizes;
 

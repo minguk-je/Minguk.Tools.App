@@ -317,12 +317,41 @@ internal static class ScriptScreenProbe
             Console.WriteLine($"[PASS] 치수 표시가 원본 픽셀이다 - {item.SourceWidthPx:0} x {item.SourceHeightPx:0}");
         else { Console.WriteLine($"[FAIL] 치수가 원본 픽셀이 아니다 - {item.SourceWidthPx:0}"); failures++; }
 
+        // 입력 전달이 켜져 있으면 클릭은 게임 몫 - 영역 지정을 끄면 편집기가 빠진다.
+        vm.IsInputForwardingEnabled = true;
         vm.IsRegionPicking = false;
         await Pump(100);
 
         if (!canvas.IsHitTestVisible && canvas.Visibility == Visibility.Collapsed && !item.HasAdorner)
-            Console.WriteLine("[PASS] 영역 지정을 끄면 캔버스가 마우스에서 빠지고 어도너도 진다");
+            Console.WriteLine("[PASS] 입력 전달 중에 영역 지정을 끄면 캔버스가 마우스에서 빠지고 어도너도 진다");
         else { Console.WriteLine($"[FAIL] 껐는데 캔버스가 남아 있다 - 히트 {canvas.IsHitTestVisible} · {canvas.Visibility} · 어도너 {item.HasAdorner}"); failures++; }
+
+        // 입력 전달이 꺼져 있고 자리가 보이면 영역 지정 없이도 편집기(고르기·옮기기·어도너)가 돈다(2026-09-15). 자리가 안 보이면 안 뜬다.
+        vm.ShowRegions = true;
+        vm.IsInputForwardingEnabled = false;
+        vm.SelectedRegion = region;
+        await Pump(200);
+
+        var passiveOn = canvas.IsHitTestVisible && canvas.Visibility == Visibility.Visible && item.HasAdorner && vm.IsRegionEditingActive;
+
+        vm.ShowRegions = false;
+        await Pump(100);
+
+        var hiddenOff = !canvas.IsHitTestVisible && !item.HasAdorner && !vm.IsRegionEditingActive;
+
+        vm.ShowRegions = true;
+        vm.IsOcrRegionPicking = true;
+        await Pump(100);
+
+        var ocrFirst = !vm.IsRegionEditingActive && !canvas.IsHitTestVisible;
+
+        vm.IsOcrRegionPicking = false;
+        vm.ShowRegions = false;
+        await Pump(100);
+
+        if (passiveOn && hiddenOff && ocrFirst)
+            Console.WriteLine("[PASS] 입력 전달이 꺼져 있고 영역 보기면 영역 지정 없이 어도너가 돈다(영역 보기 끄면·글자 영역 중이면 안 돈다)");
+        else { Console.WriteLine($"[FAIL] 전달 끔 편집기 조건이 틀렸다 - 켜짐 {passiveOn} · 영역 보기 끔에서 꺼짐 {hiddenOff} · 글자 영역 우선 {ocrFirst}"); failures++; }
 
         vm.Regions.Remove(region);
         vm.PreviewImage = null;

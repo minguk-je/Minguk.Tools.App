@@ -60,6 +60,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         set => SetProperty(() => IsOcrRegionPicking, value, () =>
         {
             RaisePropertyChanged(nameof(IsOcrRegionVisible));
+            RaiseRegionEditingActive();
 
             // 같은 손짓을 두 기능이 나눠 쓴다. 이름 붙인 자리 쪽은 끈다.
             if (IsOcrRegionPicking) IsRegionPicking = false;

@@ -290,8 +290,11 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     public bool IsInputForwardingEnabled
     {
         get => GetProperty(() => IsInputForwardingEnabled);
-        set => SetProperty(() => IsInputForwardingEnabled, value);
+        set => SetProperty(() => IsInputForwardingEnabled, value, OnInputForwardingEnabledChanged);
     }
+
+    /// <summary>입력 전달을 켜거나 껐다. 파생 화면은 base 를 부르고 제 것을 다시 본다(스크립트·플레이 - 자리 편집기가 켜지는 조건).</summary>
+    protected virtual void OnInputForwardingEnabledChanged() { }
 
     /// <summary>
     /// 클릭을 넘긴 뒤 이 앱으로 돌아올지.

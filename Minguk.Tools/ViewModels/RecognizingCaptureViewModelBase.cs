@@ -109,7 +109,7 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// 이름 붙인 자리 쪽을 먼저 본다. 둘 다 켜지는 일은 없게 막아 두었지만(각각 켜질 때 다른 쪽을 끈다),
     /// 순서를 정해 두지 않으면 나중에 셋째가 생길 때 어느 것이 먹는지 알 수 없게 된다.
     /// </remarks>
-    protected override bool IsPreviewEditing => IsRegionPicking || IsOcrRegionPicking;
+    protected override bool IsPreviewEditing => IsRegionEditingActive || IsOcrRegionPicking;
 
     /// <summary>
     /// 휠 확대·오른쪽 끌기 이동 - 영역을 손보는 중이거나, <b>입력 전달이 꺼져 있으면</b> 늘(사용자, 2026-09-15).

@@ -527,6 +527,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             await Task.Delay(ActivationSettleDelayMs);
     }
 
+    /// <summary>입력 전달이 꺼져 있고 영역 보기면 영역 지정 없이도 자리를 고르고 옮기고 크기를 바꾼다(사용자, 2026-09-15). 자리 편집 도구가 있는 화면이다.</summary>
+    protected override bool EditsRegionsWithoutPicking => true;
+
     protected override void RestoreSettings()
     {
         base.RestoreSettings();

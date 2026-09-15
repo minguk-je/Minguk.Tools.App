@@ -762,7 +762,7 @@
                                         <dxe:CheckEdit VerticalAlignment="Center"
                                                        Content="영역 보기"
                                                        IsChecked="{Binding ShowRegions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                       ToolTip="만들어 둔 자리를 미리보기에 이름과 함께 겹쳐 그린다." />
+                                                       ToolTip="만들어 둔 자리를 미리보기에 이름과 함께 겹쳐 그린다.&#10;입력 전달이 꺼져 있으면 영역 지정을 켜지 않아도 자리를 눌러 고르고, 끌어 옮기고, 손잡이로 크기를 바꿀 수 있다(빈 자리 끌기는 새 자리)." />
 
                                         <dx:SimpleButton Width="56"
                                                          Margin="12,0,0,0"
@@ -794,7 +794,7 @@
                                     <parts:CapturePreviewPanel Visibility="{Binding ShowPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <parts:CapturePreviewPanel.Overlay>
                                             <markup:DetectionOverlay Detections="{Binding Detections}"
-                                                                     IsRegionEditing="{Binding IsRegionPicking}"
+                                                                     IsRegionEditing="{Binding IsRegionEditingActive}"
                                                                      OcrRegion="{Binding OcrRegion}"
                                                                      OcrRegionDraft="{Binding OcrRegionDraft}"
                                                                      OcrText="{Binding OcrText}"
@@ -807,10 +807,13 @@
                                                                      Source="{Binding PreviewImage}"
                                                                      Zoom="{Binding PreviewZoom}" />
                                         </parts:CapturePreviewPanel.Overlay>
-                                        <!-- 영역 지정 중에만 보이는 편집기 - 자리마다 Thumb 손잡이, 고른 것에 테두리·손잡이 어도너. -->
+                                        <!--
+                                            자리 편집기 - 자리마다 Thumb 손잡이, 고른 것에 테두리·손잡이 어도너.
+                                            영역 지정을 켰거나, 입력 전달이 꺼져 있고 영역 보기가 켜져 있으면 돈다(IsRegionEditingActive, 2026-09-15).
+                                        -->
                                         <parts:CapturePreviewPanel.Editor>
                                             <regions:RegionCanvas EditCommand="{Binding RegionEditCommand}"
-                                                                  IsEditing="{Binding IsRegionPicking}"
+                                                                  IsEditing="{Binding IsRegionEditingActive}"
                                                                   Regions="{Binding Regions}"
                                                                   RegionsRevision="{Binding RegionsRevision}"
                                                                   SelectedRegion="{Binding SelectedRegion, Mode=TwoWay}"
