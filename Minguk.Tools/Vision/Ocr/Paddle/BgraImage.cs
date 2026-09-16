@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -45,6 +46,48 @@ public sealed class BgraImage
         bgra.CopyPixels(pixels, stride, 0);
 
         return new BgraImage(bgra.PixelWidth, bgra.PixelHeight, pixels);
+    }
+
+    /// <summary>
+    /// 둘레에 <paramref name="pad"/> px 씩 덧댄다. 덧댄 곳은 가장자리 픽셀의 채널별 가운뎃값(대개 바탕색)으로 칠한다.
+    /// </summary>
+    public BgraImage PadWithEdgeColor(int pad)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(pad);
+
+        if (pad == 0) return this;
+
+        var edge = new List<int>[3];
+        for (var c = 0; c < 3; c++) edge[c] = new List<int>((Width + Height) * 2);
+
+        void Take(int x, int y)
+        {
+            var i = ((y * Width) + x) * 4;
+            for (var c = 0; c < 3; c++) edge[c].Add(Pixels[i + c]);
+        }
+
+        for (var x = 0; x < Width; x++) { Take(x, 0); Take(x, Height - 1); }
+        for (var y = 0; y < Height; y++) { Take(0, y); Take(Width - 1, y); }
+
+        var fill = new byte[4];
+        for (var c = 0; c < 3; c++)
+        {
+            edge[c].Sort();
+            fill[c] = (byte)edge[c][edge[c].Count / 2];
+        }
+
+        fill[3] = 255;
+
+        var width = Width + (2 * pad);
+        var height = Height + (2 * pad);
+        var pixels = new byte[width * height * 4];
+
+        for (var i = 0; i < pixels.Length; i += 4) Buffer.BlockCopy(fill, 0, pixels, i, 4);
+
+        for (var y = 0; y < Height; y++)
+            Buffer.BlockCopy(Pixels, y * Width * 4, pixels, (((y + pad) * width) + pad) * 4, Width * 4);
+
+        return new BgraImage(width, height, pixels);
     }
 
     /// <summary>한 부분을 잘라 새 그림으로. 밖으로 나간 곳은 버린다. 남는 것이 없으면 null.</summary>

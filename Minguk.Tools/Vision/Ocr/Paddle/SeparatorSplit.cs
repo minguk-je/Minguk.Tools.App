@@ -22,7 +22,10 @@ namespace Minguk.Tools.Vision.Ocr.Paddle;
 /// <item><b>양옆이 평평</b> - 선이 걸친 줄 높이 안에서, 선에서 <see cref="Near"/>~<see cref="Far"/> 칸 떨어진 곳의 가로 밝기 변화가
 /// <see cref="Contrast"/> 넘는 줄이 <see cref="BusyRatio"/> 미만. 한글 <c>ㅣ</c> 옆에는 다른 획이 붙어 있어 여기서 떨어진다
 /// (이 조건 없이 자르면 「상제님」 이 「상제 님」 이 되어 이름 37/40 → 29/40). 숫자 <c>1</c> 의 한가운데 열도 여기서 떨어진다.</item>
-/// <item><b>양옆에 읽을 것</b> - 줄 끝에서 <see cref="Far"/>px 와 줄 높이의 <see cref="EdgeRatio"/> 중 큰 것 이상 떨어져 있다.</item>
+/// <item><b>양옆에 읽을 것</b> - 줄 끝에서 <see cref="Far"/>px 와 줄 높이의 <see cref="EdgeRatio"/> 중 큰 것 이상 떨어져 있고, 양쪽에 <b>획이 실제로 있다</b>
+/// (선이 걸친 높이 안에 가로 밝기 변화가 <see cref="Contrast"/> 넘는 곳). 거리만 보던 때는 줄 맨 앞 <c>1</c> 을 잘랐다 - 줄 상자가 글자에 딱 맞으면
+/// <c>1</c> 왼쪽의 빈 여백이 거리를 채워 「17 | 24」 가 <c>'724</c> 로 나왔다(조각 둘레 여백을 덧댄 뒤 드러남, 2026-09-17). Arial <c>1</c> 은 깃발에 획이 있어
+/// 그것만으로는 못 막아 <see cref="EdgeRatio"/> 를 0.2 → 0.45(글자 하나 폭쯤)로 올렸다 - 사격장 벤치 93/101 그대로.</item>
 /// </list>
 ///
 /// <b>결과</b> - 오버워치 탄약 16 → 30/39, 이름 37/40 · 궁극기 40/40 그대로. 문턱을 20~45 로 바꿔도 28~30.
@@ -38,7 +41,7 @@ public static class SeparatorSplit
     public const int Near = 2;
     public const int Far = 6;
     public const double BusyRatio = 0.2;
-    public const double EdgeRatio = 0.2;
+    public const double EdgeRatio = 0.45;
 
     /// <summary>따로 읽을 가로 범위들 [Start, End). 구분선 열은 빠진다. 구분선이 없으면 (0, 너비) 하나.</summary>
     public static IReadOnlyList<(int Start, int End)> Split(BgraImage line)
@@ -96,6 +99,16 @@ public static class SeparatorSplit
         var margin = Math.Max(Far, EdgeRatio * height);
         bool IsTall(int x) => spans[x].Bottom - spans[x].Top >= need;
 
+        // [from, to) 열·[top, bottom) 줄 안에 획(가로 밝기 변화)이 있나.
+        bool HasInk(int from, int to, int top, int bottom)
+        {
+            for (var y = top; y < bottom; y++)
+                for (var gx = Math.Max(1, from); gx < Math.Min(width, to); gx++)
+                    if (Math.Abs(L(gx, y) - L(gx - 1, y)) > Contrast) return true;
+
+            return false;
+        }
+
         var cuts = new List<(int Start, int End)>();
 
         for (var x = 0; x < width; x++)
@@ -128,7 +141,7 @@ public static class SeparatorSplit
                 if (changed) busy++;
             }
 
-            if (busy < BusyRatio * (bottom - top)) cuts.Add((s, e));
+            if (busy < BusyRatio * (bottom - top) && HasInk(1, s - Near, top, bottom) && HasInk(e + Near, width, top, bottom)) cuts.Add((s, e));
         }
 
         if (cuts.Count == 0) return whole;

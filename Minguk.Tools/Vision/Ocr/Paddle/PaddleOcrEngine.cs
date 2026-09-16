@@ -15,6 +15,10 @@ namespace Minguk.Tools.Vision.Ocr.Paddle;
 /// <remarks>
 /// <b>못 찾으면 통째로</b> - 찾은 줄이 없으면 조각 전체를 한 줄로 보고 한 번 읽는다. 글자가 조각을 꽉 채우면 검출이 놓친다.
 ///
+/// <b>둘레에 바탕색 여백</b>(<see cref="EdgePadding"/>) - 글자가 조각 가장자리에 붙으면 줄 찾기가 조각 전체를 한 줄로 잡고, 읽기는 글자를 맞게 읽어도
+/// 믿음이 0.42 로 떨어져 아래 규칙에 버려졌다(14px 「LV 57」 90x24, 실측 2026-09-17). 가장자리 색으로 12px 덧대면 줄을 글자에 딱 맞게 찾고 0.92~0.99 로 읽는다.
+/// 이름표·HUD 자리는 사람이 글자에 바짝 맞춰 잡아 늘 이 경우다.
+///
 /// <b>믿음이 낮은 줄은 버린다</b>(<see cref="MinimumConfidence"/>, PaddleOCR drop_score 와 같은 0.5) - 빈 배경을 통째로 읽으면 헛글이 나온다.
 ///
 /// <b>한 번에 하나</b> - 계속 읽기·이름표·스크립트가 같은 엔진을 부른다. 세션을 번갈아 쓰지 않게 줄 세운다.
@@ -25,6 +29,9 @@ namespace Minguk.Tools.Vision.Ocr.Paddle;
 public sealed class PaddleOcrEngine : IOcrEngine
 {
     public const float MinimumConfidence = 0.5f;
+
+    /// <summary>줄 찾기 전에 조각 둘레에 덧대는 여백(px). 8 부터 효과가 났다(12·14·18px 글자).</summary>
+    public const int EdgePadding = 12;
 
     private readonly PaddleDetector _detector;
     private readonly PaddleRecognizer _recognizer;
@@ -93,15 +100,17 @@ public sealed class PaddleOcrEngine : IOcrEngine
     {
         var watch = Stopwatch.StartNew();
         var words = new List<(DbBox Box, string Text)>();
-        var boxes = _detector.Detect(image);
+        var padded = image.PadWithEdgeColor(EdgePadding);
+        var boxes = _detector.Detect(padded);
 
         foreach (var box in boxes)
         {
             var left = (int)Math.Floor(box.Left);
             var top = (int)Math.Floor(box.Top);
-            var line = image.Crop(left, top, (int)Math.Ceiling(box.Right) - left, (int)Math.Ceiling(box.Bottom) - top);
+            var line = padded.Crop(left, top, (int)Math.Ceiling(box.Right) - left, (int)Math.Ceiling(box.Bottom) - top);
 
-            if (line is not null) ReadLine(line, left, top, box.Score, words);
+            // 낱말 자리는 덧대기 전 조각 좌표로 되돌린다.
+            if (line is not null) ReadLine(line, left - EdgePadding, top - EdgePadding, box.Score, words);
         }
 
         if (boxes.Count == 0) ReadLine(image, 0, 0, 1f, words);
