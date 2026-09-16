@@ -149,8 +149,10 @@
                         Margin="-4"
                         Visibility="Hidden" />
 
+                <!-- 칸 너비는 내용에 맞춘다(사용자, 2026-09-17) - 열에 Width 를 안 적고 TableView AutoWidth 도 안 쓴다. -->
                 <controls:BaseGridControl Grid.Column="0"
                                           Grid.ColumnSpan="2"
+                                          dependency:GridControlDependency.IsColumnAutoWidth="True"
                                           dependency:GridControlDependency.IsRowNumber="True"
                                           AutoGenerateColumns="None"
                                           ItemsSource="{Binding Items}">
@@ -165,8 +167,8 @@
 
                     <dxg:GridColumn FieldName="Name" Header="무엇" />
                     <dxg:GridColumn FieldName="State" Header="상태" />
-                    <dxg:GridColumn Width="*" FieldName="Path" Header="자리" />
-                    <dxg:GridColumn Width="*" FieldName="Note" Header="없으면" />
+                    <dxg:GridColumn FieldName="Path" Header="자리" />
+                    <dxg:GridColumn FieldName="Note" Header="없으면" />
                 </controls:BaseGridControl>
             </Grid>
         </dxlc:LayoutItem>

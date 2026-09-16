@@ -98,6 +98,18 @@ public static class EnvironmentScreenProbe
                 }
                 else Console.WriteLine("[PASS] 환경 화면 바인딩 오류 없음");
 
+                // 그리드 칸 너비는 내용에 맞춘다(사용자, 2026-09-17) - 보이는 열이 모두 Auto 이고, 긴 글(자리)은 머리글보다 훨씬 넓다.
+                foreach (var grid in Descendants<DevExpress.Xpf.Grid.GridControl>(window))
+                {
+                    var columns = grid.Columns.Where(c => c.Visible && c.Header is not null).ToList();
+                    var detail = string.Join(" · ", columns.Select(c => $"{c.Header} {c.Width.UnitType} {c.ActualWidth:0}"));
+                    var path = columns.FirstOrDefault(c => c.FieldName == "Path");
+
+                    if (columns.All(c => c.Width.UnitType == DevExpress.Xpf.Grid.GridColumnUnitType.Auto) && path is { ActualWidth: > 120 })
+                        Console.WriteLine($"[PASS] 그리드 칸 너비가 내용에 맞는다 - {detail}");
+                    else { Console.WriteLine($"[FAIL] 그리드 칸 너비가 내용에 안 맞는다 - {detail}"); failures++; }
+                }
+
                 failures += VerticalAlignmentCheck.Report((FrameworkElement)window.Content, "환경 화면");
 
                 // 폴더 칸 안의 폴더 그림 - 버튼 칸의 가로·세로 가운데에 있어야 한다(사용자 2026-09-14).

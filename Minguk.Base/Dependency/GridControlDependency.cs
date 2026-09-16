@@ -162,8 +162,24 @@ public class GridControlDependency
         if (ViewModelBase.IsInDesignMode)
             return;
 
-        if (source is GridControl grid)
-            ApplyColumnAutoWidth(grid, (bool)e.NewValue);
+        if (source is not GridControl grid)
+            return;
+
+        ApplyColumnAutoWidth(grid, (bool)e.NewValue);
+
+        // XAML 에서는 이 속성이 열보다 먼저 들어와 그때는 열이 0개다 - 켜도 아무 열도 Auto 가 안 되어 머리글 폭에 머물렀다(환경설정 그리드, 2026-09-17).
+        // 뜬 뒤 한 박자 늦게 한 번 더 건다(그때의 값으로). Loaded 안에서 바로 걸면 그리드가 뒤이어 열 폭을 Pixel 로 되돌렸다(실측, --environment-screen).
+        if (!grid.IsLoaded)
+        {
+            void OnLoaded(object sender, RoutedEventArgs args)
+            {
+                grid.Loaded -= OnLoaded;
+                grid.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
+                    () => ApplyColumnAutoWidth(grid, GetIsColumnAutoWidth(grid)));
+            }
+
+            grid.Loaded += OnLoaded;
+        }
     }
 
     /// <summary>
