@@ -12,6 +12,7 @@
              xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
              xmlns:settings="clr-namespace:Minguk.Tools.Markup.Settings"
              xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+             xmlns:views="clr-namespace:Minguk.Tools.Views"
              Style="{DynamicResource BaseControlStyle}"
              FontFamily="{DynamicResource BaseFontFamily}"
              FontSize="{DynamicResource BaseFontSize}"
@@ -42,6 +43,22 @@
     <dxmvvm:Interaction.Behaviors>
         <!-- 스크립트가 값을 쓰면 스크립트 스레드에서 알려 온다. 판에 닿는 일은 이것으로 넘긴다. -->
         <dxmvvm:DispatcherService />
+
+        <!-- 목록 칸 처음 행 대화 상자 - 속성 창 `처음 행` … -->
+        <dx:DialogService x:Name="ListRowsDialogService"
+                          DialogWindowStartupLocation="CenterOwner">
+            <dx:DialogService.ViewTemplate>
+                <DataTemplate>
+                    <views:SettingsListRowsView />
+                </DataTemplate>
+            </dx:DialogService.ViewTemplate>
+            <dx:DialogService.DialogStyle>
+                <Style TargetType="dx:ThemedWindow">
+                    <Setter Property="ShowIcon" Value="False" />
+                    <Setter Property="SizeToContent" Value="WidthAndHeight" />
+                </Style>
+            </dx:DialogService.DialogStyle>
+        </dx:DialogService>
 
         <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
                                EventName="Loaded" />
@@ -205,13 +222,54 @@
                     <dxlc:LayoutItem VerticalAlignment="Stretch"
                                      AddColonToLabel="False"
                                      Label="">
+                        <!--
+                            일반 사용자가 만지는 창이라 VS 속성 창보다 단순하게 둔다(사용자, 2026-09-17).
+                            순서는 사람이 읽는 순서(속성의 Display(Order)), 설명은 툴팁 - 바닥 설명 칸이 늘 비어 자리만 먹었다.
+                            긴 글(콤보 항목·목록 열)은 끝이 잘려 ▾ 로 넓게 펼쳐 고친다(한 줄에 하나씩 적어도 된다).
+                        -->
                         <dxprg:PropertyGridControl ExpandCategoriesWhenSelectedObjectChanged="True"
                                                    SelectedObject="{Binding SelectedEditor}"
                                                    ShowCategories="True"
-                                                   ShowDescriptionIn="Panel"
+                                                   ShowDescriptionIn="ToolTip"
                                                    ShowMenuButtonInRows="False"
+                                                   ShowProperties="All"
                                                    ShowToolPanel="False"
-                                                   SortMode="Ascending" />
+                                                   SortMode="NoSort">
+                            <dxprg:PropertyDefinition Path="Items">
+                                <dxprg:PropertyDefinition.EditSettings>
+                                    <dxe:MemoEditSettings ShowIcon="False"
+                                                          MemoTextWrapping="Wrap"
+                                                          MemoVerticalScrollBarVisibility="Auto"
+                                                          PopupHeight="160"
+                                                          PopupWidth="280" />
+                                </dxprg:PropertyDefinition.EditSettings>
+                            </dxprg:PropertyDefinition>
+                            <dxprg:PropertyDefinition Path="Columns">
+                                <dxprg:PropertyDefinition.EditSettings>
+                                    <dxe:MemoEditSettings ShowIcon="False"
+                                                          MemoTextWrapping="Wrap"
+                                                          MemoVerticalScrollBarVisibility="Auto"
+                                                          PopupHeight="160"
+                                                          PopupWidth="280" />
+                                </dxprg:PropertyDefinition.EditSettings>
+                            </dxprg:PropertyDefinition>
+                            <!-- 목록 처음 행 - 글로는 못 적어 … 이 표 대화 상자를 띄운다. 단추는 늘 보이게(안 누르면 무엇으로 고치는지 모른다). -->
+                            <dxprg:PropertyDefinition Path="DefaultRows"
+                                                      ShowEditorButtons="True">
+                                <dxprg:PropertyDefinition.CellTemplate>
+                                    <DataTemplate>
+                                        <dxe:ButtonEdit x:Name="PART_Editor"
+                                                        IsTextEditable="False"
+                                                        ShowBorder="False">
+                                            <dxmvvm:Interaction.Behaviors>
+                                                <dxmvvm:EventToCommand Command="{Binding DataContext.EditListRowsCommand, RelativeSource={RelativeSource AncestorType=dxprg:PropertyGridControl}}"
+                                                                       EventName="DefaultButtonClick" />
+                                            </dxmvvm:Interaction.Behaviors>
+                                        </dxe:ButtonEdit>
+                                    </DataTemplate>
+                                </dxprg:PropertyDefinition.CellTemplate>
+                            </dxprg:PropertyDefinition>
+                        </dxprg:PropertyGridControl>
                     </dxlc:LayoutItem>
                 </dxlc:LayoutGroup>
             </dxlc:LayoutControl>

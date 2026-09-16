@@ -153,7 +153,7 @@ public sealed class SolutionSettings
     }
 
     private static string? BadValue(string? where)
-        => where is null ? null : $"{where} 값이 칸 종류와 맞지 않아 기본값을 씁니다.";
+        => where is null ? null : $"{where} 값이 칸 종류와 맞지 않아 처음 값을 씁니다.";
 
     private static string? Join(string? a, string? b) => a is null ? b : b is null ? a : a + " " + b;
 

@@ -177,6 +177,72 @@ public static class SettingsScreenProbe
 
                 Render(window, Path.Combine(outputFolder, "minguk-settings-design.png"));
 
+                // 속성 창 - 긴 글(목록 열)은 잘려 보이므로 누르면 넓게 펼쳐 고친다(MemoEdit 팝업).
+                {
+                    var selectOnCanvas = typeof(SolutionSettingsViewModel).GetMethod("OnCanvasSelectedItemChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+                    var restore = vm.SelectedEditor?.Item;
+                    var listItem = Descendants<LayoutItem>(canvas).First(i => i.Tag is SettingsItem { Name: "물약목록" });
+                    selectOnCanvas.Invoke(vm, [canvas, (SettingsItem)listItem.Tag]);
+                    await Pump(500);
+
+                    var propertyGrid = Descendants<DevExpress.Xpf.PropertyGrid.PropertyGridControl>(window).Single();
+                    propertyGrid.Focus(); // 초점이 없으면 편집기가 안 켜진다(InplaceInactive)
+                    propertyGrid.SelectedPropertyPath = "Columns";
+                    await Pump(200);
+                    propertyGrid.ShowEditor(false);
+                    await Pump(400);
+                    var memo = Descendants<MemoEdit>(propertyGrid).FirstOrDefault();
+                    memo?.ShowPopup();
+                    await Pump(400);
+                    Expect(memo is { IsPopupOpen: true } && memo.EditValue is string text && text.Contains("켜기"), "속성 창: 목록 열은 넓게 펼쳐 고친다",
+                        memo is null ? "편집기 없음" : $"펼침 {memo.IsPopupOpen} · {memo.EditValue}");
+                    if (memo is not null) memo.IsPopupOpen = false;
+                    propertyGrid.HideEditor();
+                    await Pump(300);
+
+                    // ── 목록 처음 행 ── 속성 창의 … 이 표 대화 상자를 띄운다. 대화 상자는 모달이라 화면만 따로 띄워 고치고, 확인 뒤 하는 일(SetDefaultRows)을 부른다.
+                    var rowsButton = Descendants<ButtonEdit>(propertyGrid).FirstOrDefault(b => b is not MemoEdit && Equals(b.EditValue, "없음"));
+                    Expect(rowsButton is not null && vm.EditListRowsCommand.CanExecute(null), "속성 창: 목록 칸에 「처음 행」 … 이 있다",
+                        rowsButton is null ? "줄 없음" : $"{rowsButton.EditValue} · 명령 {vm.EditListRowsCommand.CanExecute(null)}");
+
+                    var listEditor = (Minguk.Tools.ViewModels.Settings.ListEditor)vm.SelectedEditor!;
+                    var rowsDialog = new Minguk.Tools.ViewModels.Settings.SettingsListRowsViewModel(listEditor.Item.Columns!, listEditor.DefaultRowsValue);
+                    var rowsView = new SettingsListRowsView { DataContext = rowsDialog };
+                    var rowsWindow = new Window { Left = -20000, Top = -20000, SizeToContent = SizeToContent.WidthAndHeight, ShowActivated = false, ShowInTaskbar = false, WindowStyle = WindowStyle.None, Content = rowsView };
+                    rowsWindow.Show();
+                    await Pump(600);
+
+                    var rowsEditor = Descendants<SettingsListRowsEditor>(rowsView).Single();
+                    rowsDialog.Rows = System.Text.Json.Nodes.JsonNode.Parse("""[{"키":"1","HP":30,"켜기":true},{"키":"2","HP":60,"켜기":false}]""")!.AsArray();
+                    await Pump(200);
+                    rowsEditor.ListGrid!.Grid.SetCellValue(1, "HP", 75.0);
+                    await Pump(200);
+                    Expect(rowsEditor.ListGrid.RowCount == 2 && rowsDialog.Rows.Count == 2 && rowsDialog.Rows[1]?["HP"]?.GetValue<long>() == 75,
+                        "처음 행 대화 상자: 표를 고치면 행 값에 들어간다", rowsDialog.Rows.ToJsonString());
+                    Render(rowsWindow, Path.Combine(outputFolder, "minguk-settings-list-rows.png"));
+                    rowsWindow.Close();
+
+                    listEditor.SetDefaultRows(rowsDialog.Rows);
+                    await Pump(500);
+                    var savedDefault = SettingsForm.Load(Path.Combine(Path.GetDirectoryName(project)!, SolutionSettingsFiles.FormFile)).Find("물약목록")?.Default;
+                    Expect(savedDefault is System.Text.Json.Nodes.JsonArray { Count: 2 } && (vm.SelectedEditor as Minguk.Tools.ViewModels.Settings.ListEditor)?.DefaultRows == "2행",
+                        "처음 행: 확인하면 양식 파일에 저장되고 속성 창에 「2행」", $"{savedDefault?.ToJsonString()} · {(vm.SelectedEditor as Minguk.Tools.ViewModels.Settings.ListEditor)?.DefaultRows}");
+
+                    Render(window, Path.Combine(outputFolder, "minguk-settings-design-list.png"));
+
+                    // 값이 없는 층에서는 처음 행이 보인다 - 솔루션 값을 빼고 미리보기에서 확인.
+                    var fallback = settings.Find("물약목록");
+                    settings.ResetValue("물약목록", SettingsLayerKind.Solution);
+                    await Pump(300);
+                    Expect(settings.Find("물약목록")?.Value is System.Text.Json.Nodes.JsonArray { Count: 2 } seen && seen[1]?["HP"]?.GetValue<long>() == 75 && settings.Find("물약목록")?.Source is null,
+                        "처음 행: 값을 안 바꾼 칸은 처음 행을 읽는다", settings.Find("물약목록")?.Value?.ToJsonString() ?? "(없음)");
+                    if (fallback?.Value is { } previous) settings.SetValue("물약목록", previous.DeepClone(), SettingsLayerKind.Solution);
+                    await Pump(300);
+
+                    selectOnCanvas.Invoke(vm, [canvas, restore]);
+                    await Pump(300);
+                }
+
                 vm.DeleteItemCommand.Execute(null);
                 await Pump(500);
                 savedForm = SettingsForm.Load(Path.Combine(Path.GetDirectoryName(project)!, SolutionSettingsFiles.FormFile));

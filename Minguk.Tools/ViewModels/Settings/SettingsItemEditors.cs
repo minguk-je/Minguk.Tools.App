@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json.Nodes;
@@ -35,11 +36,13 @@ public abstract class SettingsItemEditor : INotifyPropertyChanged
 
     [Category("이름")]
     [DisplayName("종류")]
+    [Display(Order = 4)]
     [Description("칸의 종류. 바꾸려면 지우고 새로 놓습니다.")]
     public string KindText => SolutionSettings.KindName(Item.Kind);
 
     [Category("이름")]
     [DisplayName("라벨")]
+    [Display(Order = 1)]
     [Description("화면에 보이는 이름. 비우면 이름을 보입니다.")]
     public string Label
     {
@@ -49,6 +52,7 @@ public abstract class SettingsItemEditor : INotifyPropertyChanged
 
     [Category("이름")]
     [DisplayName("툴팁")]
+    [Display(Order = 3)]
     [Description("마우스를 올리면 보이는 설명.")]
     public string Tooltip
     {
@@ -81,6 +85,7 @@ public sealed class GroupEditor(SettingsItem item) : SettingsItemEditor(item)
 {
     [Category("칸 배치")]
     [DisplayName("가로로 놓기")]
+    [Display(Order = 10)]
     [Description("안의 칸을 옆으로 나란히 놓습니다. 끄면 위아래로.")]
     public bool IsHorizontal
     {
@@ -90,6 +95,7 @@ public sealed class GroupEditor(SettingsItem item) : SettingsItemEditor(item)
 
     [Category("칸 배치")]
     [DisplayName("탭으로 보이기")]
+    [Display(Order = 11)]
     [Description("안의 구역들을 탭으로 보입니다. 안에 구역을 넣어야 탭이 됩니다.")]
     public bool IsTabs
     {
@@ -103,6 +109,7 @@ public abstract class ValueItemEditor(SettingsItem item) : SettingsItemEditor(it
 {
     [Category("이름")]
     [DisplayName("이름")]
+    [Display(Order = 2)]
     [Description("스크립트가 부르는 이름 - 설정<int>(\"이름\"). 띄어쓰기·'.' 은 못 씁니다. 솔루션 공통과 프로젝트에서 겹칠 수 없습니다.")]
     public string Name
     {
@@ -120,8 +127,9 @@ public abstract class ValueItemEditor(SettingsItem item) : SettingsItemEditor(it
 public sealed class TextEditor(SettingsItem item) : ValueItemEditor(item)
 {
     [Category("칸 값")]
-    [DisplayName("기본값")]
-    [Description("값을 한 번도 안 바꿨을 때 쓰는 값.")]
+    [DisplayName("처음 값")]
+    [Display(Order = 10)]
+    [Description("값을 한 번도 안 바꿨을 때 쓰는 값. 지금 값은 [디자인] 을 끄고 판에서 바꿉니다.")]
     public string Default
     {
         get => Item.Default is JsonValue v && v.GetValueKind() == System.Text.Json.JsonValueKind.String ? v.GetValue<string>() : string.Empty;
@@ -132,8 +140,9 @@ public sealed class TextEditor(SettingsItem item) : ValueItemEditor(item)
 public sealed class CheckEditor(SettingsItem item) : ValueItemEditor(item)
 {
     [Category("칸 값")]
-    [DisplayName("기본값")]
-    [Description("값을 한 번도 안 바꿨을 때 켜져 있을지.")]
+    [DisplayName("처음 값")]
+    [Display(Order = 10)]
+    [Description("값을 한 번도 안 바꿨을 때 켜져 있을지. 지금 값은 [디자인] 을 끄고 판에서 바꿉니다.")]
     public bool Default
     {
         get => Item.Default is JsonValue v && v.GetValueKind() == System.Text.Json.JsonValueKind.True;
@@ -145,8 +154,9 @@ public sealed class CheckEditor(SettingsItem item) : ValueItemEditor(item)
 public sealed class NumberEditor(SettingsItem item) : ValueItemEditor(item)
 {
     [Category("칸 값")]
-    [DisplayName("기본값")]
-    [Description("값을 한 번도 안 바꿨을 때 쓰는 값.")]
+    [DisplayName("처음 값")]
+    [Display(Order = 10)]
+    [Description("값을 한 번도 안 바꿨을 때 쓰는 값. 지금 값은 [디자인] 을 끄고 판에서 바꿉니다.")]
     public double Default
     {
         get => Item.Default is JsonValue v && v.GetValueKind() == System.Text.Json.JsonValueKind.Number ? SettingsValue.ToDouble(v) : 0;
@@ -155,6 +165,7 @@ public sealed class NumberEditor(SettingsItem item) : ValueItemEditor(item)
 
     [Category("칸 값")]
     [DisplayName("최소")]
+    [Display(Order = 11)]
     [Description("이보다 작게는 못 넣습니다. 비우면 제한 없음(슬라이더는 0).")]
     public double? Min
     {
@@ -164,6 +175,7 @@ public sealed class NumberEditor(SettingsItem item) : ValueItemEditor(item)
 
     [Category("칸 값")]
     [DisplayName("최대")]
+    [Display(Order = 12)]
     [Description("이보다 크게는 못 넣습니다. 비우면 제한 없음(슬라이더는 100).")]
     public double? Max
     {
@@ -173,6 +185,7 @@ public sealed class NumberEditor(SettingsItem item) : ValueItemEditor(item)
 
     [Category("칸 값")]
     [DisplayName("간격")]
+    [Display(Order = 13)]
     [Description("화살표·슬라이더 한 칸에 바뀌는 양.")]
     public double? Step
     {
@@ -182,6 +195,7 @@ public sealed class NumberEditor(SettingsItem item) : ValueItemEditor(item)
 
     [Category("칸 값")]
     [DisplayName("소수 자리")]
+    [Display(Order = 14)]
     [Description("0 이면 정수만. 스크립트에서 설정<int> 로 읽으려면 0.")]
     public int Decimals
     {
@@ -194,6 +208,7 @@ public sealed class ComboEditor(SettingsItem item) : ValueItemEditor(item)
 {
     [Category("칸 값")]
     [DisplayName("항목")]
+    [Display(Order = 10)]
     [Description("고를 수 있는 글. 쉼표로 나눕니다 - 보통, 악몽, 지옥.")]
     public string Items
     {
@@ -206,8 +221,9 @@ public sealed class ComboEditor(SettingsItem item) : ValueItemEditor(item)
     }
 
     [Category("칸 값")]
-    [DisplayName("기본값")]
-    [Description("값을 한 번도 안 바꿨을 때 고를 항목. 비우면 첫 항목.")]
+    [DisplayName("처음 값")]
+    [Display(Order = 11)]
+    [Description("값을 한 번도 안 바꿨을 때 고를 항목. 비우면 첫 항목. 지금 값은 [디자인] 을 끄고 판에서 바꿉니다.")]
     public string Default
     {
         get => Item.Default is JsonValue v && v.GetValueKind() == System.Text.Json.JsonValueKind.String ? v.GetValue<string>() : string.Empty;
@@ -228,6 +244,7 @@ public sealed class ListEditor(SettingsItem item) : ValueItemEditor(item)
 {
     [Category("칸 값")]
     [DisplayName("열")]
+    [Display(Order = 10)]
     [Description("열 이름:종류 를 쉼표로 나눕니다. 종류는 글자·숫자·체크·콤보(항목|항목). 예: 키:글자, HP:숫자, 켜기:체크, 모드:콤보(보통|지옥)")]
     public string Columns
     {
@@ -238,6 +255,25 @@ public sealed class ListEditor(SettingsItem item) : ValueItemEditor(item)
             Apply(() => Item.Columns = columns, error);
         }
     }
+
+    [Category("칸 값")]
+    [DisplayName("처음 행")]
+    [Display(Order = 11)]
+    [Description("값을 한 번도 안 바꿨을 때 들어 있는 행. … 을 눌러 표에서 넣습니다. 지금 값은 [디자인] 을 끄고 판에서 바꿉니다.")]
+    public string DefaultRows
+    {
+        get => DefaultRowsValue.Count == 0 ? "없음" : $"{DefaultRowsValue.Count}행";
+        // 속성 창이 읽기 전용 줄의 … 단추를 끄므로 setter 를 둔다. 글로는 못 고치고 대화 상자로만 고친다(SetDefaultRows).
+        set { }
+    }
+
+    /// <summary>처음 행 사본 - 대화 상자가 고친다.</summary>
+    [Browsable(false)]
+    public JsonArray DefaultRowsValue => Item.Default is JsonArray rows ? (JsonArray)rows.DeepClone() : [];
+
+    /// <summary>처음 행을 갈아 넣는다. 빈 배열이면 뺀다(빈 목록이 처음 값).</summary>
+    public void SetDefaultRows(JsonArray rows)
+        => Apply(() => Item.Default = rows.Count == 0 ? null : rows.DeepClone(), rows.All(r => r is JsonObject) ? null : "처음 행이 표 모양이 아닙니다.");
 
     private static string Format(SettingsColumn column) => column.Kind switch
     {

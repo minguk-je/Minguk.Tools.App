@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json.Nodes;
@@ -185,7 +184,7 @@ public sealed class SettingsFormCanvas : ContentControl
             Padding = new Thickness(4, 0, 4, 0),
             Margin = new Thickness(4, 0, 0, 0),
             VerticalAlignment = item.Kind == SettingsItemKind.List ? VerticalAlignment.Top : VerticalAlignment.Center,
-            ToolTip = "덮어쓴 값을 빼서 아래 층(솔루션 공통·기본값)의 값을 씁니다.",
+            ToolTip = "덮어쓴 값을 빼서 아래 층(솔루션 공통·처음 값)의 값을 씁니다.",
             Visibility = Visibility.Collapsed,
             IsEnabled = !design
         };
@@ -366,126 +365,17 @@ public sealed class SettingsFormCanvas : ContentControl
         return string.IsNullOrWhiteSpace(tooltip) ? warning : tooltip + "\n\n" + warning;
     }
 
-    /// <summary>목록 칸 - 열마다 DataTable 열. 행을 더하고 고치고 지우면 통째로 값을 낸다.</summary>
+    /// <summary>목록 칸 - 표는 <see cref="SettingsListGrid"/>(처음 행 대화 상자와 같다). 행을 더하고 고치고 지우면 통째로 값을 낸다.</summary>
     private (FrameworkElement Grid, Action<JsonNode?> Push) CreateList(SettingsItem item, bool design)
     {
-        var columns = item.Columns ?? [];
-        var table = new DataTable();
-
-        foreach (var column in columns)
-        {
-            table.Columns.Add(column.Name, column.Kind switch
-            {
-                SettingsItemKind.Number => typeof(double),
-                SettingsItemKind.Check => typeof(bool),
-                _ => typeof(string)
-            });
-        }
-
-        var grid = new Minguk.Base.Controls.BaseGridControl { AutoGenerateColumns = AutoGenerateColumnsMode.None, MinHeight = 120 };
-        Minguk.Base.Dependency.GridControlDependency.SetIsColumnAutoWidth(grid, true);
-
-        var view = new Minguk.Base.Controls.BaseTableView
-        {
-            ShowGroupPanel = false,
-            AllowEditing = !design,
-            NewItemRowPosition = design ? NewItemRowPosition.None : NewItemRowPosition.Bottom,
-            ShowSearchPanelMode = ShowSearchPanelMode.Never
-        };
-        grid.View = view;
-
-        foreach (var column in columns)
-        {
-            var gridColumn = new GridColumn { FieldName = column.Name, Header = string.IsNullOrWhiteSpace(column.Label) ? column.Name : column.Label };
-
-            gridColumn.EditSettings = column.Kind switch
-            {
-                SettingsItemKind.Check => new DevExpress.Xpf.Editors.Settings.CheckEditSettings(),
-                SettingsItemKind.Number => new DevExpress.Xpf.Editors.Settings.SpinEditSettings(),
-                SettingsItemKind.Combo => new DevExpress.Xpf.Editors.Settings.ComboBoxEditSettings { ItemsSource = column.Items ?? [], IsTextEditable = false },
-                _ => null
-            };
-
-            grid.Columns.Add(gridColumn);
-        }
-
-        grid.ItemsSource = table.DefaultView;
-
-        void Emit()
+        SettingsListGrid? list = null;
+        list = new SettingsListGrid(item.Columns ?? [], editable: !design, () =>
         {
             if (_pushing) return;
+            Raise(item, list!.Read());
+        });
 
-            var array = new JsonArray();
-
-            foreach (DataRow row in table.Rows)
-            {
-                if (row.RowState == DataRowState.Deleted) continue;
-
-                var obj = new JsonObject();
-
-                foreach (var column in columns)
-                {
-                    var cell = row[column.Name];
-                    obj[column.Name] = column.Kind switch
-                    {
-                        SettingsItemKind.Number => cell is double d ? (d == Math.Floor(d) ? JsonValue.Create((long)d) : JsonValue.Create(d)) : JsonValue.Create(0L),
-                        SettingsItemKind.Check => JsonValue.Create(cell is true),
-                        _ => JsonValue.Create(cell as string ?? string.Empty)
-                    };
-                }
-
-                array.Add(obj);
-            }
-
-            Raise(item, array);
-        }
-
-        table.RowChanged += (_, _) => Emit();
-        table.RowDeleted += (_, _) => Emit();
-
-        // 행 지우기 - VS 속성 표처럼 Delete 키.
-        view.PreviewKeyDown += (_, e) =>
-        {
-            if (design || e.Key != Key.Delete || view.ActiveEditor is not null) return;
-            if (view.FocusedRowHandle < 0 || grid.GetRow(view.FocusedRowHandle) is not DataRowView rowView) return;
-
-            rowView.Row.Delete();
-            table.AcceptChanges();
-            Emit();
-            e.Handled = true;
-        };
-
-        void Push(JsonNode? node)
-        {
-            table.Rows.Clear();
-
-            if (node is JsonArray rows)
-            {
-                foreach (var row in rows.OfType<JsonObject>())
-                {
-                    var dataRow = table.NewRow();
-
-                    foreach (var column in columns)
-                    {
-                        if (row[column.Name] is not JsonValue cell) continue;
-
-                        dataRow[column.Name] = column.Kind switch
-                        {
-                            SettingsItemKind.Number when cell.GetValueKind() == System.Text.Json.JsonValueKind.Number => SettingsValue.ToDouble(cell),
-                            SettingsItemKind.Check => cell.GetValueKind() == System.Text.Json.JsonValueKind.True,
-                            _ when cell.GetValueKind() == System.Text.Json.JsonValueKind.String => cell.GetValue<string>(),
-                            _ => DBNull.Value
-                        };
-                    }
-
-                    table.Rows.Add(dataRow);
-                }
-            }
-
-            table.AcceptChanges();
-        }
-
-        return (grid, Push);
+        return (list.Grid, list.Push);
     }
 
     private void Raise(SettingsItem item, JsonNode? value)

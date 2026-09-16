@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 
+using DevExpress.Mvvm;
+
 using Minguk.Base.Utilities;
 using Minguk.Tools.Markup.Settings;
 using Minguk.Tools.Projects.Settings;
@@ -493,6 +495,26 @@ public partial class SolutionSettingsViewModel
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
     });
 
+    /// <summary>목록 칸의 처음 행 - 열대로 만든 표를 대화 상자로 띄우고, 확인이면 양식에 넣는다(저장은 편집기의 Changed).</summary>
+    private void DoEditListRows() => Guard(() =>
+    {
+        if (SelectedEditor is not ListEditor editor || ListRowsDialogService is not { } dialogs) return;
+
+        if (editor.Item.Columns is not { Count: > 0 } columns)
+        {
+            SetStatus("열이 없습니다 - 속성 창의 「열」 을 먼저 적으세요.", error: true);
+            return;
+        }
+
+        var dialog = new SettingsListRowsViewModel(columns, editor.DefaultRowsValue);
+        var ok = new UICommand { Caption = "확인", IsDefault = true, Id = MessageResult.OK };
+        var cancel = new UICommand { Caption = "취소", IsCancel = true, Id = MessageResult.Cancel };
+
+        if (dialogs.ShowDialog([ok, cancel], $"「{editor.Item.DisplayLabel}」 처음 행", dialog) != ok) return;
+
+        editor.SetDefaultRows(dialog.Rows);
+    });
+
     private void ReportWarnings()
     {
         if (_settings is null) return;
@@ -522,5 +544,6 @@ public partial class SolutionSettingsViewModel
         RemoveUnusedCommand.RaiseCanExecuteChanged();
         ReloadCommand.RaiseCanExecuteChanged();
         OpenFolderCommand.RaiseCanExecuteChanged();
+        EditListRowsCommand.RaiseCanExecuteChanged();
     }
 }

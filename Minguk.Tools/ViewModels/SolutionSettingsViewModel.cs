@@ -46,6 +46,7 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
         RemoveUnusedCommand = new DelegateCommand(DoRemoveUnused, () => HasProject, false);
         ReloadCommand = new DelegateCommand(DoReload, () => HasProject, false);
         OpenFolderCommand = new DelegateCommand(DoOpenFolder, () => HasProject, false);
+        EditListRowsCommand = new DelegateCommand(DoEditListRows, () => IsDesign && SelectedEditor is ListEditor, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────

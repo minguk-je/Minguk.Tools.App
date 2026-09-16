@@ -32,6 +32,14 @@ public partial class SolutionSettingsViewModel
 
     public DelegateCommand OpenFolderCommand { get; private set; } = null!;
 
+    /// <summary>목록 칸의 처음 행을 표 대화 상자로 고친다 - 속성 창 `처음 행` 의 ….</summary>
+    public DelegateCommand EditListRowsCommand { get; private set; } = null!;
+
+    // ── 서비스 ───────────────────────────────────────────────────────────
+
+    /// <summary>처음 행 대화 상자. View 의 <c>ListRowsDialogService</c>.</summary>
+    protected IDialogService? ListRowsDialogService => GetService<IDialogService>("ListRowsDialogService");
+
     // ── 바인딩 프로퍼티 ──────────────────────────────────────────────────
 
     /// <summary>지금 프로젝트 폴더. 솔루션이 없으면 null - 화면이 안내만 한다.</summary>
