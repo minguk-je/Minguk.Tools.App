@@ -237,6 +237,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --settings-screen     # 설�
 dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 모델이 라벨을 다시 찾는지(재현율)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 입력 경로 전체 (커서·키보드를 가져간다)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --canvas-drag         # 라벨 캔버스 실제 마우스 끌기 (커서)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --region-drag [--busy] # 영역·구역 손잡이 실제 마우스 끌기 - 끄는 동안 커서와 벌어짐 (커서)
 ```
 
 - 화면(XAML)을 고쳤으면 `--views` - XAML 은 빌드를 통과하고 런타임에 터진다. 그 화면을 찍는 검사가 있으면 그것도.

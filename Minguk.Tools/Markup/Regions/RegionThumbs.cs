@@ -10,8 +10,8 @@ namespace Minguk.Tools.Markup.Regions;
 /// </summary>
 /// <remarks>
 /// 참조한 <c>MoveThumb</c> 을 옮긴 것이다. 그쪽은 <c>Canvas.Left/Top</c> 을 직접 고쳤는데, 여기서는 그림(칸이면 자리) 밖으로 못 나가게
-/// 하고 비율로 되돌려 저장해야 해서 캔버스(<see cref="RegionCanvas"/>)에 맡긴다. Thumb 의 변위는 안 쓴다 - 손잡이 자리 기준이라
-/// 배치가 따라오기 전에 겹쳐 커서보다 앞서 나갔다. 캔버스가 끌기 시작점에서 지금 마우스까지로 놓는다.
+/// 하고 비율로 되돌려 저장해야 해서 캔버스(<see cref="RegionCanvas"/>)에 맡긴다. Thumb 의 변위는 안 쓴다 - 캔버스가 끌기 시작점에서
+/// 지금 마우스까지로 놓는다(변위를 쌓지 않게).
 /// </remarks>
 public sealed class RegionMoveThumb : Thumb
 {

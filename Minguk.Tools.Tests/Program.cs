@@ -109,6 +109,9 @@ internal static partial class Program
         // 라벨 캔버스를 실제 마우스로 끈다. 커서를 몇 초 가져가므로 --views 에 안 끼운다.
         if (args.Contains("--canvas-drag")) return CanvasDragProbe.Run();
 
+        // 영역·구역 손잡이를 실제 마우스로 끌어 끄는 동안 커서를 따라오는지 잰다. 커서를 가져간다.
+        if (args.Contains("--region-drag")) return RegionDragProbe.Run(args);
+
         // libtorch(4GB)와 학습한 모델이 있어야 도는 것이라 평소 검증에는 안 낀다.
         if (args.Contains("--detect-bench")) return DetectBench.Run();
 
