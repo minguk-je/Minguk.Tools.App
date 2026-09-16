@@ -479,6 +479,36 @@ internal static class ScriptScreenProbe
             if (treeOk) Console.WriteLine($"[PASS] 영역 패널은 트리 - 「{region.Name}」 밑에 칸 {regionNode!.Nodes.Count}줄");
             else { Console.WriteLine($"[FAIL] 영역 패널 트리가 틀렸다 - 트리 {tree is not null} · 자리 줄 {regionNode is not null} · 칸 줄 {regionNode?.Nodes.Count}"); failures++; }
 
+            // 열 너비는 내용에 맞춘다(사용자, 2026-09-16 - 꽉 채운 너비는 별로). 하네스는 OnLoaded 를 안 거쳐 그 안에서 부르는 것을 직접 부른다.
+            if (grid is not null)
+            {
+                typeof(ScriptStudioViewModel).GetMethod("FitRegionsGridColumns", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(vm, null);
+                await Pump(100);
+
+                var widths = grid.Columns.Where(c => c.Visible).Select(c => $"{c.FieldName}:{c.Width.UnitType}").ToList();
+                if (grid.Columns.Where(c => c.Visible).All(c => c.Width.UnitType == DevExpress.Xpf.Grid.GridColumnUnitType.Auto))
+                    Console.WriteLine($"[PASS] 영역 그리드 열 너비는 내용에 맞춘다 - {string.Join(", ", widths)}");
+                else { Console.WriteLine($"[FAIL] 영역 그리드 열 너비가 자동이 아니다 - {string.Join(", ", widths)}"); failures++; }
+            }
+
+            // 미리보기에서 고르면 트리 줄도 따라간다(사용자, 2026-09-16). 캔버스가 누를 때 바꾸는 것과 같은 속성으로 고른다.
+            if (grid is not null && region.Cells.Count > 1)
+            {
+                var cellCanvas = Descendants<Minguk.Tools.Markup.Regions.RegionCanvas>(window).FirstOrDefault();
+                var lastCell = region.Cells[^1];
+
+                if (cellCanvas is not null) cellCanvas.SelectedCell = lastCell;
+                await Pump(200);
+                var cellRow = ReferenceEquals(grid.CurrentItem, lastCell);
+
+                if (cellCanvas is not null) { cellCanvas.SelectedCell = null; cellCanvas.SelectedRegion = region; }
+                await Pump(200);
+                var regionRow = ReferenceEquals(grid.CurrentItem, region);
+
+                if (cellCanvas is not null && cellRow && regionRow) Console.WriteLine("[PASS] 미리보기에서 칸·자리를 고르면 트리의 그 줄이 선택된다");
+                else { Console.WriteLine($"[FAIL] 미리보기 선택이 트리 줄로 안 간다 - 칸 {cellRow} · 자리 {regionRow} · 지금 줄 {grid.CurrentItem}"); failures++; }
+            }
+
             var editable = grid is not null
                            && grid.Columns["Name"] is { AllowEditing: not DevExpress.Utils.DefaultBoolean.False }
                            && grid.Columns["KeepReading"] is not null

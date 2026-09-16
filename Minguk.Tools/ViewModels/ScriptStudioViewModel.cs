@@ -620,8 +620,31 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         RegisterStudioHotkeys();
         Script.ApplyEditorTheme();
 
+        FitRegionsGridColumns();
+
         // 첫 준비가 유독 느리다(C# 은 첫 컴파일, 파이썬은 런타임 받기). 미리 치러 둔다.
         _ = Script.PrepareAsync();
+    }
+
+    /// <summary>
+    /// 영역 그리드 열 너비를 내용에 맞춘다(사용자, 2026-09-16). XAML 첨부 속성은 GridControl 에서만 돌고 그때는 열이 아직 없어 안 먹는다(라벨링 화면과 같다).
+    /// </summary>
+    /// <remarks>영역 탭은 아래 탭 줄의 안 고른 탭이라 아직 안 떴을 수 있다 - 뜰 때 한 번 더 건다(뜨면서 너비를 픽셀로 다시 쓰지 않게).</remarks>
+    private void FitRegionsGridColumns()
+    {
+        if (FindControl<GridControl>("RegionsGridObjectService") is not { } grid) return;
+
+        Minguk.Base.Dependency.GridControlDependency.ApplyColumnAutoWidth(grid, true);
+
+        if (!grid.IsLoaded) grid.Loaded += OnRegionsGridLoaded;
+    }
+
+    private void OnRegionsGridLoaded(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (sender is not GridControl grid) return;
+
+        grid.Loaded -= OnRegionsGridLoaded;
+        Minguk.Base.Dependency.GridControlDependency.ApplyColumnAutoWidth(grid, true);
     }
 
     protected override void ReleaseResources()

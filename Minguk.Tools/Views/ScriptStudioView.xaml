@@ -963,13 +963,14 @@
                                 </dxb:ToolBarControl>
                                 <controls:BaseGridControl AutoGenerateColumns="None"
                                                           ItemsSource="{Binding Regions}"
-                                                          SelectedItem="{Binding SelectedRegionNode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                                          SelectedItem="{Binding SelectedRegionNode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          SelectionMode="None">
                                     <dxmvvm:Interaction.Behaviors>
                                         <!-- 새 자리를 만들면 ViewModel 이 이 그리드의 이름 칸을 편집 상태로 연다(OnRegionCreated). -->
                                         <dxmvvm:UIObjectService x:Name="RegionsGridObjectService" />
                                     </dxmvvm:Interaction.Behaviors>
                                     <dxg:GridControl.Columns>
-                                        <dxg:GridColumn Width="*" FieldName="Name" Header="이름" />
+                                        <dxg:GridColumn FieldName="Name" Header="이름" />
                                         <!-- 계속 읽기는 자리 단위 - 칸 줄에서는 체크를 숨긴다. -->
                                         <dxg:GridColumn FieldName="KeepReading" Header="계속 읽기">
                                             <dxg:GridColumn.CellTemplate>
@@ -990,7 +991,7 @@
                                                 </DataTemplate>
                                             </dxg:GridColumn.CellTemplate>
                                         </dxg:GridColumn>
-                                        <dxg:GridColumn Width="*" AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
+                                        <dxg:GridColumn AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
                                         <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
                                         <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">
                                             <dxg:GridColumn.EditSettings>
@@ -1014,9 +1015,8 @@
                                         </dxg:GridColumn>
                                     </dxg:GridControl.Columns>
                                     <dxg:GridControl.View>
-                                        <!-- 칸 너비는 내용에 맞춘다(사용자, 2026-09-16) - 손질·언어 칸이 늘어 고정 너비로는 글자가 잘렸다. -->
-                                        <controls:BaseTreeListView dependency:GridControlDependency.IsColumnAutoWidth="True"
-                                                                   AllowBestFit="True"
+                                        <!-- 칸 너비는 내용에 맞춘다(사용자, 2026-09-16) - 열에 Width 를 안 적고, 자동 너비는 ViewModel 이 화면이 뜬 뒤 건다(OnLoaded). -->
+                                        <controls:BaseTreeListView AllowBestFit="True"
                                                                    AllowEditing="True"
                                                                    AutoExpandAllNodes="True"
                                                                    ChildNodesSelector="{StaticResource RegionTreeChildren}"
