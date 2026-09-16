@@ -141,11 +141,19 @@
                                          ItemsSource="{Binding Toolbox}"
                                          ShowBorder="False">
                             <dxe:ListBoxEdit.ItemTemplate>
+                                <!-- 아이콘 + 이름(VS 도구 상자 모양). 한 줄의 둘 다 세로 가운데. -->
                                 <DataTemplate>
-                                    <TextBlock Padding="2,3"
+                                    <DockPanel Margin="2,3"
+                                               ToolTip="{Binding Description}">
+                                        <Image Width="16"
+                                               Height="16"
+                                               Margin="0,0,6,0"
                                                VerticalAlignment="Center"
-                                               Text="{Binding Title}"
-                                               ToolTip="{Binding Description}" />
+                                               DockPanel.Dock="Left"
+                                               Source="{Binding Glyph}" />
+                                        <TextBlock VerticalAlignment="Center"
+                                                   Text="{Binding Title}" />
+                                    </DockPanel>
                                 </DataTemplate>
                             </dxe:ListBoxEdit.ItemTemplate>
                             <dxmvvm:Interaction.Behaviors>

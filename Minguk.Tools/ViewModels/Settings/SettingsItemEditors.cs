@@ -314,4 +314,37 @@ public sealed class ListEditor(SettingsItem item) : ValueItemEditor(item)
 }
 
 /// <summary>도구 상자 한 줄.</summary>
-public sealed record SettingsToolboxItem(SettingsItemKind Kind, string Title, string Description);
+/// <param name="Glyph">DevExpress 컨트롤 아이콘(<see cref="DevExpressGlyph"/>). 못 읽으면 null - 글자만 보인다.</param>
+public sealed record SettingsToolboxItem(SettingsItemKind Kind, string Title, string Description, System.Windows.Media.ImageSource? Glyph = null);
+
+/// <summary>
+/// DevExpress.Images 의 16x16 PNG 를 읽는다(사용자, 2026-09-17 - 도구 상자에 DevExpress 컨트롤 아이콘).
+/// </summary>
+/// <remarks>
+/// 경로는 DLL 안에 있는 것을 확인하고 적었다. 없는 경로면 터지지 않고 null 을 준다 - 내장 SVG(<c>dx:DXImage</c>)는 없는 경로면
+/// 런타임에 터져서(CLAUDE.md) PNG 를 pack URI 로 직접 읽고 잡는다. 어셈블리 이름은 버전을 박지 않게 DevExpress 상수(<c>AssemblyInfo.SRAssemblyImages</c>)로.
+/// 검사 <c>--settings-screen</c> 이 도구 상자 아이콘이 모두 읽혔는지 본다.
+/// </remarks>
+public static class DevExpressGlyph
+{
+    private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+
+    public static System.Windows.Media.ImageSource? Load(string path)
+    {
+        try
+        {
+            var image = new System.Windows.Media.Imaging.BitmapImage();
+            image.BeginInit();
+            image.UriSource = new Uri($"pack://application:,,,/{AssemblyInfo.SRAssemblyImages};component/{path}", UriKind.Absolute);
+            image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, $"DevExpress 아이콘을 읽지 못했습니다: {path}");
+            return null;
+        }
+    }
+}

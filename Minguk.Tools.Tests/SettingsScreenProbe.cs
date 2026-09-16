@@ -142,6 +142,10 @@ public static class SettingsScreenProbe
                 Render(window, Path.Combine(outputFolder, "minguk-settings-preview.png"));
 
                 // ── 디자인 ──
+                // 도구 상자 아이콘(DevExpress.Images) - 경로가 틀리면 null 이라 글자만 보인다.
+                var missingGlyphs = vm.Toolbox.Where(t => t.Glyph is not System.Windows.Media.Imaging.BitmapSource { PixelWidth: 16 }).Select(t => t.Title).ToList();
+                Expect(missingGlyphs.Count == 0, "도구 상자 칸마다 DevExpress 아이콘(16x16)이 읽힌다", missingGlyphs.Count == 0 ? $"{vm.Toolbox.Count}개" : "못 읽음: " + string.Join(", ", missingGlyphs));
+
                 vm.SelectedLayer = vm.Layers.First(l => l.Kind == SettingsLayerKind.Solution);
                 vm.IsDesign = true;
                 await Pump(1200);

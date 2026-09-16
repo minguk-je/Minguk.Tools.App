@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -35,6 +36,10 @@ internal static class RegionDragProbe
     /// <summary>그림(원본) 크기. 판도 같은 크기라 배율 1 에서 캔버스 1 = 그림 1 픽셀.</summary>
     private const int ImageWidth = 800;
     private const int ImageHeight = 450;
+
+    /// <summary>판 크기. 그림(16:9)보다 세로가 길어 위아래 여백이 생긴다.</summary>
+    private const double BoardWidth = 760;
+    private const double BoardHeight = 520;
 
     /// <summary>끄는 동안 커서와 잡은 점이 이만큼(화면 픽셀) 넘게 벌어지면 실패.</summary>
     private const double TolerancePx = 2.5;
@@ -81,8 +86,11 @@ internal static class RegionDragProbe
 
         try
         {
-            foreach (var zoom in new[] { 1.0, 2.0 })
-                failures += await RunZoomAsync(zoom);
+            // 확대하고 스크롤한 경우(사용자, 2026-09-16 "확대하고 스크롤하면 어긋나") - 판이 뷰포트 밖으로 밀려 있다.
+            // 휠 확대는 1.25배씩이라 배율이 소수다(1.5625·2.44…) - 반픽셀 자리에서 어긋나는지도 본다.
+            foreach (var (zoom, scroll) in new[] { (1.0, new Vector()), (2.0, new Vector()), (2.0, new Vector(200, 100)), (3.0, new Vector(300, 200)),
+                                                   (1.5625, new Vector(150, 120)), (2.44140625, new Vector(350, 260)) })
+                failures += await RunZoomAsync(zoom, scroll);
         }
         finally
         {
@@ -92,14 +100,15 @@ internal static class RegionDragProbe
         return failures;
     }
 
-    private static async Task<int> RunZoomAsync(double zoom)
+    private static async Task<int> RunZoomAsync(double zoom, Vector scroll)
     {
         var failures = 0;
-        var fixture = await Fixture.OpenAsync(zoom);
+        var fixture = await Fixture.OpenAsync(zoom, scroll);
+        var name = scroll.Length > 0 ? $"배율 {zoom:0.#} · 스크롤 ({scroll.X:0},{scroll.Y:0})" : $"배율 {zoom:0.#}";
 
         try
         {
-            Console.WriteLine($"[INFO] 배율 {zoom:0.#} - 판 {fixture.Canvas.ActualWidth:0}x{fixture.Canvas.ActualHeight:0} · dpi {VisualTreeHelper.GetDpi(fixture.Canvas).DpiScaleX:0.##}");
+            Console.WriteLine($"[INFO] {name} - 판 {fixture.Canvas.ActualWidth:0}x{fixture.Canvas.ActualHeight:0} · 실제 스크롤 ({fixture.Scroll.HorizontalOffset:0},{fixture.Scroll.VerticalOffset:0}) · dpi {VisualTreeHelper.GetDpi(fixture.Canvas).DpiScaleX:0.##}");
 
             // ── 1) 영역 크기 손잡이(오른쪽 아래) ── 영역을 목록에서 고른 것처럼 SelectedRegion 으로 고른다.
             fixture.Canvas.SelectedCell = null;
@@ -108,12 +117,20 @@ internal static class RegionDragProbe
 
             var regionItem = fixture.Canvas.Items.Single();
             var start = RectOf(regionItem);
-            var target = new Point(start.Right + 90, start.Bottom + 45);
+
+            // 끌기 전에 - 오른쪽 아래 손잡이(어도너)가 화면에서 영역 모서리에 있는가. 어도너 층은 확대·스크롤 밖이라 따로 따라가야 한다.
+            var gap = GripGap(regionItem, HorizontalAlignment.Right, VerticalAlignment.Bottom);
+            failures += Check($"{name} · 영역 오른쪽 아래 손잡이가 화면에서 모서리에 있다", gap <= TolerancePx + 1.5, $"모서리와 {gap:0.0}px");
+            var target = new Point(start.Right + (60 / zoom), start.Bottom + (40 / zoom));
 
             var error = await DragAsync(fixture, start.BottomRight, target, () => RectOf(regionItem).BottomRight, zoom);
-            var expectRegion = new Rect(start.X / ImageWidth, start.Y / ImageHeight, (target.X - start.X) / ImageWidth, (target.Y - start.Y) / ImageHeight);
-            failures += Check($"배율 {zoom:0.#} · 영역 오른쪽 아래 손잡이가 끄는 동안 커서를 따라온다", error <= TolerancePx, $"가장 벌어짐 {error:0.0}px");
-            failures += Check($"배율 {zoom:0.#} · 놓은 영역 크기가 커서가 간 만큼이다", Near(fixture.Region.Rect, expectRegion), $"{Describe(fixture.Region.Rect)} / 기대 {Describe(expectRegion)}");
+            var area = fixture.Canvas.ImageArea;
+            var expectRegion = new Rect((start.X - area.X) / area.Width, (start.Y - area.Y) / area.Height, (target.X - start.X) / area.Width, (target.Y - start.Y) / area.Height);
+            failures += Check($"{name} · 영역 오른쪽 아래 손잡이가 끄는 동안 커서를 따라온다", error <= TolerancePx, $"가장 벌어짐 {error:0.0}px");
+            await Settle();
+            gap = GripGap(regionItem, HorizontalAlignment.Right, VerticalAlignment.Bottom);
+            failures += Check($"{name} · 놓은 뒤에도 손잡이가 모서리에 있다", gap <= TolerancePx + 1.5, $"모서리와 {gap:0.0}px");
+            failures += Check($"{name} · 놓은 영역 크기가 커서가 간 만큼이다", Near(fixture.Region.Rect, expectRegion), $"{Describe(fixture.Region.Rect)} / 기대 {Describe(expectRegion)}");
 
             // ── 2) 구역 옮기기(안쪽 잡기) ── 반쪽 구역을 고르고 안쪽을 끈다.
             fixture.Canvas.SelectedCell = fixture.HalfCell;
@@ -125,16 +142,16 @@ internal static class RegionDragProbe
             var owner = RectOf(regionItem);
 
             // 영역 안에서만 움직인다 - 끝까지 가면 막혀 커서와 벌어지는 것이 맞다.
-            var move = new Vector(-cellStart.X + owner.X + 4, 0);
+            var move = new Vector(Math.Max(-cellStart.X + owner.X + 4, -80 / zoom), 0);
             error = await DragAsync(fixture, press, press + move, () => RectOf(cellItem).TopLeft, zoom);
-            failures += Check($"배율 {zoom:0.#} · 구역 안쪽을 끄는 동안 구역이 커서를 따라온다", error <= TolerancePx, $"가장 벌어짐 {error:0.0}px");
+            failures += Check($"{name} · 구역 안쪽을 끄는 동안 구역이 커서를 따라온다", error <= TolerancePx, $"가장 벌어짐 {error:0.0}px");
 
             // ── 3) 구역 크기 손잡이(오른쪽 변 가운데) ──
             await Settle();
             cellStart = RectOf(cellItem);
             var edge = new Point(cellStart.Right, cellStart.Y + (cellStart.Height / 2));
-            error = await DragAsync(fixture, edge, edge + new Vector(50, 0), () => new Point(RectOf(cellItem).Right, edge.Y), zoom);
-            failures += Check($"배율 {zoom:0.#} · 구역 오른쪽 손잡이가 끄는 동안 커서를 따라온다", error <= TolerancePx, $"가장 벌어짐 {error:0.0}px");
+            error = await DragAsync(fixture, edge, edge + new Vector(40 / zoom, 0), () => new Point(RectOf(cellItem).Right, edge.Y), zoom);
+            failures += Check($"{name} · 구역 오른쪽 손잡이가 끄는 동안 커서를 따라온다", error <= TolerancePx, $"가장 벌어짐 {error:0.0}px");
         }
         finally
         {
@@ -198,6 +215,37 @@ internal static class RegionDragProbe
         return worst;
     }
 
+    /// <summary>
+    /// 고른 영역의 손잡이(어도너 속 <see cref="RegionResizeThumb"/>) 가운데와 영역의 그 모서리가 화면에서 얼마나 떨어졌는가(화면 픽셀).
+    /// 손잡이 칸은 모서리에서 배율 역수로 1px 안쪽이 가운데라 화면에서 1px 쯤은 늘 있다.
+    /// </summary>
+    private static double GripGap(RegionItem item, HorizontalAlignment horizontal, VerticalAlignment vertical)
+    {
+        var layer = AdornerLayer.GetAdornerLayer(item);
+        var adorner = layer?.GetAdorners(item)?.OfType<RegionResizeAdorner>().FirstOrDefault();
+        if (adorner is null) return double.PositiveInfinity;
+
+        var thumb = Descendants<RegionResizeThumb>(adorner).FirstOrDefault(t => t.HorizontalAlignment == horizontal && t.VerticalAlignment == vertical);
+        if (thumb is null) return double.PositiveInfinity;
+
+        var gripCenter = thumb.PointToScreen(new Point(thumb.ActualWidth / 2, thumb.ActualHeight / 2));
+        var corner = item.PointToScreen(new Point(horizontal == HorizontalAlignment.Right ? item.ActualWidth : 0, vertical == VerticalAlignment.Bottom ? item.ActualHeight : 0));
+
+        return (gripCenter - corner).Length;
+    }
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match) yield return match;
+            foreach (var inner in Descendants<T>(child)) yield return inner;
+        }
+    }
+
     private static Point CursorInCanvas(RegionCanvas canvas)
     {
         GetCursorPos(out var cursor);
@@ -210,9 +258,9 @@ internal static class RegionDragProbe
 
     private static bool Near(Rect a, Rect b)
     {
-        // 화면 2px 까지 봐준다(비율로).
-        const double x = 2.0 / ImageWidth;
-        const double y = 2.0 / ImageHeight;
+        // 판 2px 까지 봐준다(비율로, 그림 영역 약 760x428).
+        const double x = 2.0 / BoardWidth;
+        const double y = 2.0 / (BoardWidth * ImageHeight / ImageWidth);
         return Math.Abs(a.X - b.X) <= x && Math.Abs(a.Y - b.Y) <= y && Math.Abs(a.Width - b.Width) <= x && Math.Abs(a.Height - b.Height) <= y;
     }
 
@@ -235,7 +283,9 @@ internal static class RegionDragProbe
 
         public required RegionCell HalfCell { get; init; }
 
-        public static async Task<Fixture> OpenAsync(double zoom)
+        public required ScrollViewer Scroll { get; init; }
+
+        public static async Task<Fixture> OpenAsync(double zoom, Vector scrollTo)
         {
             var image = new WriteableBitmap(ImageWidth, ImageHeight, 96, 96, PixelFormats.Bgra32, null);
             var pixels = new byte[ImageWidth * ImageHeight * 4];
@@ -252,8 +302,6 @@ internal static class RegionDragProbe
 
             var canvas = new RegionCanvas
             {
-                Width = ImageWidth,
-                Height = ImageHeight,
                 Source = image,
                 Regions = regions,
                 Zoom = zoom,
@@ -262,12 +310,15 @@ internal static class RegionDragProbe
             };
             canvas.IsEditing = true;
 
-            var board = new Grid { LayoutTransform = new ScaleTransform(zoom, zoom) };
-            board.Children.Add(new Image { Source = image, Width = ImageWidth, Height = ImageHeight, Stretch = Stretch.Uniform });
-            board.Children.Add(canvas);
+            // 미리보기(CapturePreviewPanel)처럼 편집기는 ContentPresenter 안에 얹는다.
+            // 판은 그림 비율과 다르게(위아래 여백) - 미리보기 판은 창 크기라 늘 레터박스가 생긴다.
+            var board = new Grid { Width = BoardWidth, Height = BoardHeight, LayoutTransform = new ScaleTransform(zoom, zoom) };
+            board.Children.Add(new Image { Source = image, Stretch = Stretch.Uniform });
+            board.Children.Add(new ContentPresenter { Content = canvas });
 
             var scroll = new ScrollViewer
             {
+                Focusable = false,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Content = board
@@ -295,9 +346,16 @@ internal static class RegionDragProbe
             await Task.WhenAny(rendered.Task, Task.Delay(5000));
             await Task.Delay(400);
 
+            if (scrollTo.Length > 0)
+            {
+                scroll.ScrollToHorizontalOffset(scrollTo.X);
+                scroll.ScrollToVerticalOffset(scrollTo.Y);
+                await Task.Delay(300);
+            }
+
             if (_busy) StartBusyPreview(window, board);
 
-            return new Fixture { Window = window, Canvas = canvas, Region = region, HalfCell = half };
+            return new Fixture { Window = window, Canvas = canvas, Region = region, HalfCell = half, Scroll = scroll };
         }
     }
 

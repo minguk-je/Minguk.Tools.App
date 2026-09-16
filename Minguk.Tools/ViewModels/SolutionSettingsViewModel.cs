@@ -29,13 +29,14 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
         Layers = [];
         Toolbox =
         [
-            new(SettingsItemKind.Group, "구역", "칸을 묶는 상자. 라벨을 비우면 테두리 없이 묶기만 합니다."),
-            new(SettingsItemKind.Text, "글자", "글 한 줄 - 이름·명령어."),
-            new(SettingsItemKind.Number, "숫자", "숫자 - 범위·소수 자리를 정합니다."),
-            new(SettingsItemKind.Check, "체크", "켜고 끄기."),
-            new(SettingsItemKind.Combo, "콤보", "정해 둔 항목 중 하나."),
-            new(SettingsItemKind.Slider, "슬라이더", "끌어서 고르는 숫자."),
-            new(SettingsItemKind.List, "목록", "여러 줄 값(표) - 물약 목록·스킬 순서.")
+            // 아이콘은 DevExpress.Images 의 컨트롤 그림(사용자, 2026-09-17). 슬라이더(TrackBar) 전용 그림은 없어 가로 게이지를 쓴다.
+            new(SettingsItemKind.Group, "구역", "칸을 묶는 상자. 라벨을 비우면 테두리 없이 묶기만 합니다.", DevExpressGlyph.Load("Images/Toolbox Items/Panel_16x16.png")),
+            new(SettingsItemKind.Text, "글자", "글 한 줄 - 이름·명령어.", DevExpressGlyph.Load("Images/Content/TextBox_16x16.png")),
+            new(SettingsItemKind.Number, "숫자", "숫자 - 범위·소수 자리를 정합니다.", DevExpressGlyph.Load("Images/Number Formats/Number_16x16.png")),
+            new(SettingsItemKind.Check, "체크", "켜고 끄기.", DevExpressGlyph.Load("Images/Content/CheckBox_16x16.png")),
+            new(SettingsItemKind.Combo, "콤보", "정해 둔 항목 중 하나.", DevExpressGlyph.Load("Images/Filter Elements/ComboBox_16x16.png")),
+            new(SettingsItemKind.Slider, "슬라이더", "끌어서 고르는 숫자.", DevExpressGlyph.Load("Images/Gauges/GaugeStyleLinearHorizontal_16x16.png")),
+            new(SettingsItemKind.List, "목록", "여러 줄 값(표) - 물약 목록·스킬 순서.", DevExpressGlyph.Load("Images/Grid/Grid_16x16.png"))
         ];
 
         AddItemCommand = new DelegateCommand<SettingsToolboxItem>(DoAddItem, item => IsDesign && HasProject && item is not null, false);
