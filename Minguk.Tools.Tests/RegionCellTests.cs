@@ -38,16 +38,27 @@ internal static partial class Program
                   back is null ? "없음" : string.Join(" · ", back.Cells.Select(c => $"{c.Name} {c.Rect}")));
 
             var health = read.Find("체력");
-            Check("칸 없이 넣은 자리에는 칸1 이 붙는다", health is not null && health.Cells.Count == 1 && health.Cells[0].Name == NamedRegion.DefaultCellName
+            Check("칸 없이 넣은 자리에는 「전체」 칸이 붙는다", health is not null && health.Cells.Count == 1 && health.Cells[0].Name == "전체"
                   && Near(health.Cells[0].Width, 1) && Near(health.Cells[0].Height, 1), health?.Cells.Count.ToString() ?? "없음");
 
-            // 칸을 적기 전의 파일 - 읽을 때 칸1 을 붙여 지금과 똑같이 읽힌다.
+            // 칸을 적기 전의 파일 - 읽을 때 「전체」 를 붙여 지금과 똑같이 읽힌다.
             File.WriteAllText(Path.Combine(folder, RegionBook.FileName),
                 """[{ "name": "옛자리", "x": 0.1, "y": 0.2, "width": 0.3, "height": 0.04, "live": false, "note": "" }]""");
 
             var legacy = RegionBook.Load(folder).Find("옛자리");
-            Check("칸이 없던 옛 파일은 칸1 하나", legacy is not null && legacy.Cells.Count == 1 && Near(legacy.Cells[0].X, 0) && Near(legacy.Cells[0].Width, 1),
+            Check("칸이 없던 옛 파일은 「전체」 하나", legacy is not null && legacy.Cells.Count == 1 && legacy.Cells[0].Name == "전체" && Near(legacy.Cells[0].X, 0) && Near(legacy.Cells[0].Width, 1),
                   legacy?.Cells.Count.ToString() ?? "없음");
+
+            // 예전 기본 이름 「칸1」 로 저장된 자리 전체 칸 하나는 「전체」 로, 손본 칸1(크기를 바꿨으면)은 그대로.
+            File.WriteAllText(Path.Combine(folder, RegionBook.FileName),
+                """
+                [{ "name": "기본", "x": 0.1, "y": 0.2, "width": 0.3, "height": 0.04, "cells": [{ "name": "칸1", "x": 0, "y": 0, "width": 1, "height": 1 }] },
+                    { "name": "손본", "x": 0.1, "y": 0.3, "width": 0.3, "height": 0.04, "cells": [{ "name": "칸1", "x": 0, "y": 0, "width": 0.5, "height": 1 }] }]
+                """);
+
+            var renamed = RegionBook.Load(folder);
+            Check("예전 기본 칸 「칸1」 은 「전체」 로, 손본 칸은 그대로", renamed.Find("기본")?.Cells[0].Name == "전체" && renamed.Find("손본")?.Cells[0].Name == "칸1",
+                  $"{renamed.Find("기본")?.Cells[0].Name} · {renamed.Find("손본")?.Cells[0].Name}");
 
             Check("자리.칸 으로 찾는다(대소문자 무시)", read.Resolve("탄약.현재") is { Region.Name: "탄약", Cell.Name: "현재" }
                   && read.Resolve(" 탄약 . 최대 ") is { Cell.Name: "최대" }, "");

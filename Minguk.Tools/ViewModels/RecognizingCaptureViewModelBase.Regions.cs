@@ -390,7 +390,8 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (SelectedRegion is not { } region) return;
 
         var name = string.Empty;
-        for (var n = region.Cells.Count + 1; name.Length == 0 || region.FindCell(name) is not null; n++) name = $"칸{n}";
+        // 칸1 부터 비어 있는 번호(기본 칸은 「전체」 라 겹치지 않는다).
+        for (var n = 1; name.Length == 0 || region.FindCell(name) is not null; n++) name = $"칸{n}";
 
         // 자리 가운데에 폭 절반 - 손잡이로 맞춘다.
         var cell = new RegionCell { Name = name, Rect = new Rect(0.25, 0, 0.5, 1) };

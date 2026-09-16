@@ -70,26 +70,36 @@ public sealed class NamedRegion : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 이 자리 안에서 따로 읽을 칸들(<see cref="RegionCell"/>). <b>늘 하나 이상</b> - 새 자리는 자리와 같은 크기의 「칸1」 로 시작한다.
+    /// 이 자리 안에서 따로 읽을 칸들(<see cref="RegionCell"/>). <b>늘 하나 이상</b> - 새 자리는 자리와 같은 크기의 「전체」 로 시작한다.
     /// </summary>
     /// <remarks>
     /// 읽는 것은 칸들뿐이고, 자리를 부르면 이 순서대로 읽어 잇는다(<see cref="RegionTargets"/>).
-    /// 칸을 적기 전의 파일은 <c>cells</c> 가 없어 여기 처음 값(「칸1」)이 남는다 - 지금과 똑같이 읽힌다.
+    /// 칸을 적기 전의 파일은 <c>cells</c> 가 없어 여기 처음 값(「전체」)이 남는다 - 지금과 똑같이 읽힌다.
     /// </remarks>
     [JsonPropertyName("cells")]
     public ObservableCollection<RegionCell> Cells { get; set; } = [NewWholeCell()];
 
-    /// <summary>새 자리·옛 파일에 붙는 칸 이름.</summary>
-    public const string DefaultCellName = "칸1";
+    /// <summary>새 자리·옛 파일에 붙는 칸 이름. 칸이 하나면 자리 전체를 읽으니 「전체」(사용자, 2026-09-16).</summary>
+    public const string DefaultCellName = "전체";
+
+    /// <summary>「전체」 전에 쓰던 기본 칸 이름. 이 이름의 자리 전체 칸 하나뿐이면 읽을 때 「전체」 로 바꾼다.</summary>
+    private const string OldDefaultCellName = "칸1";
 
     private static RegionCell NewWholeCell() => new() { Name = DefaultCellName, Rect = new Rect(0, 0, 1, 1) };
 
-    /// <summary>칸이 하나도 없으면(파일에 <c>"cells": []</c>) 자리와 같은 크기의 「칸1」 을 붙인다.</summary>
+    /// <summary>
+    /// 칸이 하나도 없으면(파일에 <c>"cells": []</c>) 자리와 같은 크기의 「전체」 를 붙인다.
+    /// 예전 기본 이름 「칸1」 로 저장된 자리 전체 칸 하나(돌리지 않은 것)는 「전체」 로 바꾼다 - 손대지 않은 기본 칸이다.
+    /// </summary>
     public void EnsureCells()
     {
         Cells ??= [];
 
         if (Cells.Count == 0) Cells.Add(NewWholeCell());
+
+        if (Cells is [{ X: 0, Y: 0, Width: 1, Height: 1 } only] && Math.Abs(only.Angle) < 0.01
+            && string.Equals(only.Name, OldDefaultCellName, StringComparison.OrdinalIgnoreCase))
+            only.Name = DefaultCellName;
     }
 
     /// <summary>칸의 화면 기준 0~1 상자(돌리기 전). 자리 안 비율을 화면 비율로 바꾼다.</summary>
