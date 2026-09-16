@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -37,6 +37,19 @@ public sealed class WindowsOcrEngine : IOcrEngine
     public const int MinimumHeight = 160;
 
     private readonly OcrEngine _engine;
+
+    /// <summary>
+    /// 한 번에 하나만 읽게 하는 자물쇠.
+    /// </summary>
+    /// <remarks>
+    /// Windows OCR 엔진 하나를 동시에 두 번 부르면 "Another RecognizeAsync operation is already running" 으로 거절한다
+    /// (실측 2026-09-16 - 스크립트의 숫자읽기와 자리 계속 읽기가 겹쳤다). 겹치면 뒤엣것이 앞엣것을 기다렸다 바로 읽는다.
+    /// <c>await</c> 를 사이에 두므로 <c>lock</c> 은 못 쓴다.
+    ///
+    /// 줄이 길어지지는 않는다 - 부르는 곳이 셋뿐이고(계속 읽기·이름표·스크립트) 셋 다 앞엣것이 끝나야 다음을 부른다.
+    /// 그래서 기다리는 것은 많아야 둘, 한 번이 10~30ms 다.
+    /// </remarks>
+    private readonly SemaphoreSlim _gate = new(1, 1);
 
     private WindowsOcrEngine(OcrEngine engine)
     {
@@ -89,7 +102,18 @@ public sealed class WindowsOcrEngine : IOcrEngine
         using var bitmap = SoftwareBitmap.CreateCopyFromBuffer(
             pixels.AsBuffer(), BitmapPixelFormat.Bgra8, width, height, BitmapAlphaMode.Premultiplied);
 
-        var result = await _engine.RecognizeAsync(bitmap).AsTask(token).ConfigureAwait(false);
+        OcrResult result;
+
+        await _gate.WaitAsync(token).ConfigureAwait(false);
+
+        try
+        {
+            result = await _engine.RecognizeAsync(bitmap).AsTask(token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
 
         watch.Stop();
 
@@ -132,6 +156,7 @@ public sealed class WindowsOcrEngine : IOcrEngine
 
     public void Dispose()
     {
-        // OcrEngine 은 놓을 것이 없다. 인터페이스가 IDisposable 인 것은 다른 엔진(네이티브) 때문이다.
+        // OcrEngine 은 놓을 것이 없다. 인터페이스가 IDisposable 인 것은 다른 엔진(네이티브) 때문이다. 자물쇠는 우리 것이라 놓는다.
+        _gate.Dispose();
     }
 }

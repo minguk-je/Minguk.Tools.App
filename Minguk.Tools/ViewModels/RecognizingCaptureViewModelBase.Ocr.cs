@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -159,6 +159,72 @@ public abstract partial class RecognizingCaptureViewModelBase
                 ? "이름표 읽기: 찾은 몹마다 머리 위 글자를 읽어 캡션에 붙입니다."
                 : "이름표 읽기는 몹 찾기가 켜져 있을 때 돕니다. 몹 찾기를 켜세요.";
         });
+    }
+
+    /// <summary>스크립트가 화면을 읽고 싶어 할 때(허브 <c>WantsFrames</c>) 프레임을 허브에 올리는 간격(ms).</summary>
+    /// <remarks>스크립트의 읽기는 1.5초를 기다리므로 이보다 촘촘할 필요가 없다. 1080p 한 장 복사가 수 ms 라 캡처를 잡지 않게 솎는다.</remarks>
+    private const int PublishFrameIntervalMs = 100;
+
+    private byte[]? _publishCopy;
+    private long _lastPublishTicks;
+
+    /// <summary>
+    /// 스크립트가 읽을 프레임을 허브에 올린다. 캡처 스레드.
+    /// </summary>
+    /// <remarks>
+    /// 이름표 복사(<see cref="CopyFrameForNameplates"/>)와 버퍼를 나눈다 - 이름표는 검출 스레드가 나중에 읽는데
+    /// 같은 버퍼에 덮어쓰면 반쯤 바뀐 그림을 읽는다. 허브는 제 버퍼에 다시 복사하므로 여기 버퍼는 바로 다시 써도 된다.
+    /// </remarks>
+    private void MaybePublishFrame(CapturedFrameEventArgs e)
+    {
+        if (!Hub.WantsFrames) return;
+
+        // 리드백이 꺼져 있으면 CPU 로 내려온 픽셀이 없다 - 스크립트가 읽으려 하면 켠다(세션이 다시 시작된다).
+        // 이름표 읽기·계속 읽기는 켤 때 이미 이렇게 한다. 스크립트만 빠져 있어 "프레임이 들어오지 않습니다" 로 끝났다(실측 2026-09-16).
+        if (!e.HasPixels)
+        {
+            RequestReadbackForScript();
+
+            return;
+        }
+
+        var now = Environment.TickCount64;
+        if (now - _lastPublishTicks < PublishFrameIntervalMs) return;
+
+        _lastPublishTicks = now;
+
+        var stride = e.Width * 4;
+        var needed = stride * e.Height;
+
+        if (_publishCopy is null || _publishCopy.Length < needed) _publishCopy = new byte[needed];
+
+        for (var y = 0; y < e.Height; y++)
+            System.Runtime.InteropServices.Marshal.Copy(e.PixelData + (y * e.RowPitch), _publishCopy, y * stride, stride);
+
+        Hub.PublishFrame(_publishCopy, e.Width, e.Height);
+    }
+
+
+    private long _readbackAskedTicks;
+
+    /// <summary>스크립트가 읽을 수 있게 리드백을 켠다. 캡처 스레드에서 불리므로 UI 스레드로 넘긴다.</summary>
+    /// <remarks>켜는 동안(세션 재시작) 프레임이 계속 들어와 여기로 또 오므로, 3초에 한 번만 청한다.</remarks>
+    private void RequestReadbackForScript()
+    {
+        var now = Environment.TickCount64;
+
+        if (EnableCpuReadback || now - _readbackAskedTicks < 3000) return;
+
+        _readbackAskedTicks = now;
+
+        // 켜는 동안(캡처 재시작) 스크립트가 더 기다리게 알린다.
+        Hub.PreparingFrames();
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        void Turn() => EnsureCpuReadback("스크립트가 화면 글자를 읽습니다");
+
+        if (dispatcher is null || dispatcher.CheckAccess()) Turn();
+        else dispatcher.BeginInvoke((Action)Turn);
     }
 
     /// <summary>검출 주기에 맞춰 복사해 둔 원본 프레임(Bgra32, 줄 간격 = 너비*4). 이름표를 여기서 자른다.</summary>

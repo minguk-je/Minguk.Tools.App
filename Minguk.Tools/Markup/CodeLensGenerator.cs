@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -103,10 +103,11 @@ public sealed class CodeLensGenerator : VisualLineElementGenerator
 
     private FrameworkElement MakeElement(Lens lens)
     {
-        var lensHeight = Math.Round(FontSize * 1.25);
+        // 참조 글자가 앉는 줄. 아래 코드 줄 쪽으로 붙인다 - 두 줄 사이 한가운데에 뜨면 어느 줄 것인지 애매하다(사용자, 2026-09-16).
+        var lensHeight = Math.Round(FontSize * 0.95);
 
         // 윗줄과 띄우는 틈. 글자를 요소 맨 위에 두면 윗줄 코드 밑에 달라붙어 보였다(사용자, 2026-09-15). VS 도 CodeLens 위가 비어 있다.
-        var topGap = Math.Round(FontSize * 0.4);
+        var topGap = Math.Round(FontSize * 0.85);
 
         var label = new TextBlock
         {

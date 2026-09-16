@@ -62,7 +62,7 @@
                                Command="{Binding RefreshTargetsCommand}"
                                Content="새로 고침"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
-                               ToolTip="연결할 수 있는 창·모니터 목록을 다시 훑는다." />
+                               ToolTip="연결할 수 있는 창·모니터 목록을 갱신한다." />
 
             <dxb:BarItemSeparator />
 
@@ -193,7 +193,7 @@
 
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding RefreshScriptsCommand}"
-                               Content="다시 훑기"
+                               Content="다시 읽기"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}" />
             <dxb:BarButtonItem BarItemDisplayMode="Content"
                                Command="{Binding BrowseScriptCommand}"

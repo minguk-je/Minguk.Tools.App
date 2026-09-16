@@ -368,16 +368,16 @@ public class LiveScriptApi
     private const double MoveBaseMs = 45;
 
     /// <summary>거리(카운트)의 제곱근에 곱하는 시간(ms). 멀수록 오래 걸리되 비례해서 늘지는 않는다 - 사람도 그렇다.</summary>
-    private const double MoveMsPerRoot = 4.2;
+    private const double MoveMsPerRoot = 3.0;
 
     /// <summary>한 번의 이동에 쓰는 시간 상한(ms). 조준은 새 화면을 기다렸다 또 겨누므로 오래 붙들 이유가 없다.</summary>
-    private const double MaxMoveMs = 180;
+    private const double MaxMoveMs = 130;
 
     /// <summary>걸음 사이 목표 간격(ms). 8ms 면 약 125Hz - 게이밍 마우스의 폴링과 비슷하다.</summary>
-    private const double MoveStepMs = 8;
+    private const double MoveStepMs = 5;
 
     /// <summary>걸음 수 상한. 눈금이 굵은 PC 에서 시간이 늘어지는 것을 막는다.</summary>
-    private const int MaxMoveSteps = 40;
+    private const int MaxMoveSteps = 60;
 
     /// <summary>옆으로 벗어나는 양을 거리의 몇 배로 할지. 손목이 휘는 만큼만 - 크면 겨눈 것이 흔들려 보인다.</summary>
     private const double ArcFraction = 0.012;
@@ -429,7 +429,8 @@ public class LiveScriptApi
     /// 모자라면 다음 화면에서 마저 당기면 되고, 검출이 0.08초에 한 번이라 그 한 번이 비싸지 않다.
     /// 사람이 잘 겨눌 때도 한 번에 딱 붙이지 않고 살짝 못 미치게 꺾은 뒤 마지막을 다듬는다.
     /// </remarks>
-    private const double AimDamping = 0.85;
+    /// 값은 사용자가 "좌우 전환이 뚝뚝 끊긴다, 조금 더 빨리" 라고 해 0.85 에서 올렸다(2026-09-16) - 한 번에 더 당겨 걸음 수가 준다.
+    private const double AimDamping = 0.93;
 
     /// <summary>마지막으로 겨눈 시각(TickCount64). 이보다 앞선 프레임으로 찾은 자리로는 다시 겨누지 않는다.</summary>
     private long _lastAimTicks;
@@ -902,6 +903,9 @@ public class LiveScriptApi
         }
     }
 
+    /// <summary>프레임 한 장을 기다리는 시간(ms). 리드백이 꺼져 있다가 켜지는 중이면 그때부터 다시 이만큼 기다린다.</summary>
+    private const int FrameWaitMs = 1500;
+
     private string ReadTextCore(double x, double y, double width, double height)
     {
         ThrowIfStopping();
@@ -914,12 +918,15 @@ public class LiveScriptApi
         // 처음 부를 때 프레임 복사를 켜고, 한 장 들어올 때까지 잠깐 기다린다.
         hub.WantsFrames = true;
 
-        var deadline = Environment.TickCount64 + 1500;
+        var deadline = Environment.TickCount64 + FrameWaitMs;
         var region = new Rect(x, y, width, height);
         System.Windows.Media.Imaging.BitmapSource? crop;
 
         while (!hub.TryCropFrame(region, out crop) || crop is null)
         {
+            // 리드백을 막 켰으면 캡처가 다시 시작되는 동안 더 기다린다 - 첫 읽기가 그 사이에 걸려 실패하던 것.
+            if (hub.IsPreparingFrames) deadline = Environment.TickCount64 + FrameWaitMs;
+
             if (Environment.TickCount64 >= deadline) throw Guard("프레임이 들어오지 않습니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.");
             Wait(50);
         }
@@ -1004,11 +1011,14 @@ public class LiveScriptApi
         // 처음 부를 때 프레임 복사를 켜고, 한 장 들어올 때까지 잠깐 기다린다.
         hub.WantsFrames = true;
 
-        var deadline = Environment.TickCount64 + 1500;
+        var deadline = Environment.TickCount64 + FrameWaitMs;
         System.Windows.Media.Imaging.BitmapSource? crop;
 
         while (!hub.TryCropFrame(region, out crop) || crop is null)
         {
+            // 리드백을 막 켰으면 캡처가 다시 시작되는 동안 더 기다린다 - 첫 읽기가 그 사이에 걸려 실패하던 것.
+            if (hub.IsPreparingFrames) deadline = Environment.TickCount64 + FrameWaitMs;
+
             if (Environment.TickCount64 >= deadline) throw Guard("프레임이 들어오지 않습니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.");
             Wait(50);
         }

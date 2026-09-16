@@ -95,6 +95,10 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// <summary>프레임마다 찾고 읽는다. 둘 다 시간이 됐을 때만 백그라운드로 하나 띄우고 바로 돌아온다.</summary>
     protected override void OnFramePixels(CapturedFrameEventArgs e)
     {
+        // 스크립트가 화면 글자를 읽고 싶어 하면(허브 WantsFrames) 프레임을 한 벌 올린다. 몹 찾기와 무관하다 -
+        // 검출 안에 두었더니 ONNX(GPU 텍스처) 길이나 몹 찾기를 끈 때 스크립트의 읽기가 프레임을 영영 못 받았다(실측 2026-09-16).
+        MaybePublishFrame(e);
+
         // 0.25초에 한 번만, 앞의 것이 끝났을 때만.
         MaybeDetect(e);
 
@@ -155,9 +159,12 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         // 옛 "글자 영역" 저장값은 한 번 「글자」 자리로 옮긴다(2026-09-15 - 글자 영역을 이름 붙인 자리로 합쳤다).
         MigrateOcrRegionSetting();
 
-        // 켜진 채로 복구하지 않는다 - 화면을 열자마자 모델 68MB 를 읽으면 뜨는 것이 느려진다.
         // 화면을 나누기 전 값(캡처 모니터 이름으로 저장된 것)을 처음 한 번 물려받는다.
         DetectMinimumScore = GetSettingOrLegacy(nameof(DetectMinimumScore), 0.5);
+
+        // 몹 찾기도 켜진 채로 복구한다(사용자, 2026-09-16 - "어차피 켜 놓을 거니까"). 켜져 있으면 화면을 열 때
+        // 모델(68MB)을 읽느라 조금 늦게 뜬다 - 그 값을 치르기로 한 것이다. 끄고 닫았으면 꺼진 채로 열린다.
+        IsMobDetectionOn = GetSettingOrLegacy(nameof(IsMobDetectionOn), false);
         IsTrackingOn = GetSettingOrLegacy(nameof(IsTrackingOn), true);
         IsNameplateOcrOn = GetSettingOrLegacy(nameof(IsNameplateOcrOn), false);
 
@@ -171,6 +178,7 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
 
         // 문턱은 읽기만 하고 저장을 안 해 슬라이더를 움직여도 다음 실행에 안 남았다. 같이 저장한다.
         SetSetting(nameof(DetectMinimumScore), DetectMinimumScore);
+        SetSetting(nameof(IsMobDetectionOn), IsMobDetectionOn);
         SetSetting(nameof(IsTrackingOn), IsTrackingOn);
         SetSetting(nameof(IsNameplateOcrOn), IsNameplateOcrOn);
         SetSetting(nameof(SelectedOcrLanguage), SelectedOcrLanguage ?? string.Empty);

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
@@ -38,6 +39,15 @@ public sealed class PerceptionHub : IPerceptionHub
         get => _wantsFrames;
         set => _wantsFrames = value;
     }
+
+    /// <summary>리드백을 켜는 데 걸리는 시간(캡처 재시작). 이보다 오래되면 준비 중이 아니다.</summary>
+    private const int PreparingWindowMs = 5000;
+
+    private long _preparingTicks;
+
+    public bool IsPreparingFrames => Environment.TickCount64 - Interlocked.Read(ref _preparingTicks) < PreparingWindowMs;
+
+    public void PreparingFrames() => Interlocked.Exchange(ref _preparingTicks, Environment.TickCount64);
 
     public void PublishState(bool capturing, bool detecting, CaptureTarget? target)
     {

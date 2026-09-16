@@ -1,4 +1,4 @@
-<UserControl x:Class="Minguk.Tools.Views.Parts.CodeLensReferencesPanel"
+﻿<UserControl x:Class="Minguk.Tools.Views.Parts.CodeLensReferencesPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Minguk.Base.Controls;assembly=Minguk.Base"
@@ -57,9 +57,16 @@
                 </dxg:GridControl.View>
             </controls:BaseGridControl>
 
-            <dxlc:LayoutGroup Orientation="Horizontal">
+            <!-- 버튼 줄은 높이를 못 박는다 - 안 그러면 남은 자리를 다 차지해 버튼이 크게 늘어난다(사용자, 2026-09-16). -->
+            <dxlc:LayoutGroup Height="28"
+                              VerticalAlignment="Bottom"
+                              Orientation="Horizontal">
                 <dx:SimpleButton x:Name="CollapseAllButton"
+                                 Width="80"
+                                 Height="22"
+                                 Padding="8,0"
                                  HorizontalAlignment="Left"
+                                 VerticalAlignment="Center"
                                  Content="모두 축소"
                                  ButtonKind="Simple" />
             </dxlc:LayoutGroup>

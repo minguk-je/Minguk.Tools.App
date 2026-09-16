@@ -533,6 +533,10 @@ internal static partial class Program
         public CaptureTarget? Target => target;
         public bool WantsFrames { get; set; }
 
+        public bool IsPreparingFrames => false;
+
+        public void PreparingFrames() { }
+
         /// <summary>가까운 쪽을 숨긴다 - 목표가 사라졌을 때를 본다.</summary>
         public bool HideNear { get; set; }
 
@@ -562,6 +566,10 @@ internal static partial class Program
         public bool IsDetecting { get; set; } = true;
         public CaptureTarget? Target => target;
         public bool WantsFrames { get; set; }
+
+        public bool IsPreparingFrames => false;
+
+        public void PreparingFrames() { }
 
         /// <summary>검출이 본 프레임의 시각. 0 이면 모름(조준이 같은 화면 검사를 안 한다).</summary>
         public long FrameTicks { get; set; }

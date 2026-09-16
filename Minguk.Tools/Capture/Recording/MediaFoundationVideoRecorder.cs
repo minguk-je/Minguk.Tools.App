@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -299,13 +299,20 @@ public sealed class MediaFoundationVideoRecorder : IVideoRecorder
         {
             output.Writer.Dispose();
 
+            // 싱크가 바이트 스트림을 쥐고 있어 Shutdown 이 스트림까지 닫는다 - 그 뒤에 Close 를 또 부르면 E_INVALIDARG 다(실측 2026-09-16, 녹화를 멈출 때마다 경고).
+            var sinkDown = true;
+
             try { output.Sink.Shutdown(); }
-            catch (Exception ex) { Logger.Warn(ex, $"녹화 싱크를 내리지 못했다: {FilePath}"); }
+            catch (Exception ex) { sinkDown = false; Logger.Warn(ex, $"녹화 싱크를 내리지 못했다: {FilePath}"); }
 
             output.Sink.Dispose();
 
-            try { output.Stream.Close(); }
-            catch (Exception ex) { Logger.Warn(ex, $"녹화 파일 스트림을 닫지 못했다: {FilePath}"); }
+            // 싱크를 못 내렸을 때만 우리가 닫는다 - 안 닫으면 파일 손잡이가 남는다.
+            if (!sinkDown)
+            {
+                try { output.Stream.Close(); }
+                catch (Exception ex) { Logger.Warn(ex, $"녹화 파일 스트림을 닫지 못했다: {FilePath}"); }
+            }
 
             output.Stream.Dispose();
         }

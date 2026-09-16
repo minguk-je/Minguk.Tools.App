@@ -58,6 +58,15 @@ public interface IPerceptionHub
     /// </summary>
     bool WantsFrames { get; set; }
 
+    /// <summary>
+    /// 리드백을 막 켜서 프레임이 곧 올 예정인가. 켜면 캡처가 다시 시작되느라 1~2초 걸린다 -
+    /// 그동안 스크립트의 읽기가 "프레임이 들어오지 않습니다" 로 끝나지 않게 더 기다리게 한다.
+    /// </summary>
+    bool IsPreparingFrames { get; }
+
+    /// <summary>리드백을 켜는 중이라고 알린다. 몇 초 동안만 <see cref="IsPreparingFrames"/> 가 참이다.</summary>
+    void PreparingFrames();
+
     void PublishState(bool capturing, bool detecting, CaptureTarget? target);
 
     /// <param name="frameTicks">검출이 본 프레임이 들어온 시각(TickCount64). 모르면 0.</param>

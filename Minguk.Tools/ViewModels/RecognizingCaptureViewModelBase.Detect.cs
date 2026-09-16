@@ -144,6 +144,9 @@ public abstract partial class RecognizingCaptureViewModelBase
         // 이 프레임이 들어온 시각. 검출 결과에 실어 스크립트의 조준이 "겨눈 뒤의 화면인가" 를 가린다.
         var frameTicks = now;
 
+        // 이름표는 원본 해상도에서 읽어야 한다(12px 글자). 이 검출 주기의 프레임을 한 벌 복사해 둔다.
+        if (e.HasPixels && IsNameplateOcrOn) CopyFrameForNameplates(e);
+
         if (tensorDetector is not null && device is { } gpu)
         {
             DetectFromTexture(tensorDetector, gpu, e, frameTicks);
@@ -172,15 +175,6 @@ public abstract partial class RecognizingCaptureViewModelBase
             var longestSide = Math.Max(DetectLongestSide, _detector?.Manifest.InputWidth ?? DetectLongestSide);
 
             size = FrameSnapshot.SaveScaledPng(e, _detectScratchPath, longestSide);
-
-            // 이름표는 원본 해상도에서 읽어야 한다(12px 글자). 이 검출 주기의 프레임을 한 벌 복사해 둔다.
-            // 스크립트가 글자를 읽고 싶어 하면(허브 WantsFrames) 그 복사본을 허브에도 올린다.
-            if (e.HasPixels && (IsNameplateOcrOn || Hub.WantsFrames))
-            {
-                CopyFrameForNameplates(e);
-
-                if (Hub.WantsFrames && _frameCopy is not null) Hub.PublishFrame(_frameCopy, _frameCopyWidth, _frameCopyHeight);
-            }
         }
         catch (Exception ex)
         {

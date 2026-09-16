@@ -157,15 +157,17 @@
                 </dxb:Bar.DockInfo>
                 <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                    Command="{Binding RunOrContinueCommand}"
-                                   Content="스크립트 실행"
+                                   Content="실행(F5)"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
                                    Hint="스크립트 시작/계속 (F5) - 캡처가 켜져 있어야 몹·글자를 본다.시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다." />
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding Player.StopCommand}"
+                                   Content="중지(F6)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
+                                   Hint="디버깅 중지(F6) (Shift+F5 · 게임 안에서는 F6)" />
                 <dxb:BarButtonItem Command="{Binding StepCommand}"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_goto_next.png'}"
                                    Hint="프로시저 단위 실행 (F10) - JavaScript·Python 만" />
-                <dxb:BarButtonItem Command="{Binding Player.StopCommand}"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
-                                   Hint="디버깅 중지 (Shift+F5 · 게임 안에서는 F6)" />
                 <dxb:BarItemSeparator />
                 <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                    Command="{Binding BuildCommand}"
@@ -823,15 +825,15 @@
                                 <DockPanel>
                                     <!-- 고른 줄의 설명·예시. 좁은 패널이라 칸에 다 못 넣어 아래에 편다(VS 개체 브라우저의 아래 칸). -->
                                     <DockPanel DockPanel.Dock="Bottom">
-                                        <dxe:TextEdit DockPanel.Dock="Top"
-                                                      FontWeight="Bold"
+                                        <dxe:TextEdit FontWeight="Bold"
+                                                      DockPanel.Dock="Top"
                                                       EditValue="{Binding SelectedHelpRow.Title, Mode=OneWay}"
                                                       IsReadOnly="True"
                                                       ShowBorder="False" />
-                                        <dxe:TextEdit DockPanel.Dock="Top"
-                                                      MaxHeight="140"
+                                        <dxe:TextEdit MaxHeight="140"
                                                       VerticalContentAlignment="Top"
                                                       AcceptsReturn="True"
+                                                      DockPanel.Dock="Top"
                                                       EditValue="{Binding SelectedHelpRow.Summary, Mode=OneWay}"
                                                       IsReadOnly="True"
                                                       ShowBorder="False"
@@ -840,14 +842,14 @@
                                         <dxe:TextEdit MaxHeight="180"
                                                       Margin="0,2,0,0"
                                                       VerticalContentAlignment="Top"
+                                                      FontFamily="D2Coding, Consolas, Courier New"
                                                       AcceptsReturn="True"
                                                       EditValue="{Binding SelectedHelpRow.Example, Mode=OneWay}"
-                                                      FontFamily="D2Coding, Consolas, Courier New"
+                                                      HorizontalScrollBarVisibility="Auto"
                                                       IsReadOnly="True"
                                                       TextWrapping="NoWrap"
-                                                      HorizontalScrollBarVisibility="Auto"
-                                                      VerticalScrollBarVisibility="Auto"
                                                       ToolTip="예시 - 골라서 Ctrl+C 로 복사한다."
+                                                      VerticalScrollBarVisibility="Auto"
                                                       Visibility="{Binding SelectedHelpRow.HasExample, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}" />
                                     </DockPanel>
 
@@ -856,27 +858,19 @@
                                                               ItemsSource="{Binding HelpRows}"
                                                               SelectedItem="{Binding SelectedHelpRow, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                                         <dxg:GridControl.Columns>
-                                            <dxg:GridColumn FieldName="Group"
-                                                            GroupIndex="0"
-                                                            Header="분류" />
-                                            <dxg:GridColumn Width="*"
-                                                            FieldName="Name"
-                                                            Header="이름" />
+                                            <dxg:GridColumn FieldName="Group" GroupIndex="0" Header="분류" />
+                                            <dxg:GridColumn Width="*" FieldName="Name" Header="이름" />
                                             <!-- 설명·영문은 검색에만 쓴다(패널이 좁아 칸으로는 안 보인다). 보이는 곳은 아래 칸. -->
-                                            <dxg:GridColumn FieldName="Summary"
-                                                            Header="설명"
-                                                            Visible="False" />
-                                            <dxg:GridColumn FieldName="English"
-                                                            Header="영문"
-                                                            Visible="False" />
+                                            <dxg:GridColumn FieldName="Summary" Header="설명" Visible="False" />
+                                            <dxg:GridColumn FieldName="English" Header="영문" Visible="False" />
                                         </dxg:GridControl.Columns>
                                         <dxg:GridControl.View>
                                             <controls:BaseTableView AllowEditing="False"
                                                                     AutoWidth="True"
                                                                     SearchColumns="Name;Summary;English"
                                                                     ShowColumnHeaders="False"
-                                                                    ShowGroupedColumns="False"
                                                                     ShowGroupPanel="False"
+                                                                    ShowGroupedColumns="False"
                                                                     ShowSearchPanelMode="Always" />
                                         </dxg:GridControl.View>
                                     </controls:BaseGridControl>
