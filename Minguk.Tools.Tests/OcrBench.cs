@@ -22,7 +22,13 @@ namespace Minguk.Tools.Tests;
 /// <b>왜</b> - 그린 글자는 게임 글꼴·배경을 못 흉내 낸다. 엔진·값을 바꿀지는 실제 화면에서 몇 장 맞는지로 정한다.
 /// 옛 길(Windows OCR + 자리 손질)을 걷어낼 때 이것으로 견줬다(2026-09-16, 오버워치 40장 × 3곳: 81/119 대 67/119).
 ///
+/// <b>칸마다 읽는다</b>(2026-09-17) - 스크립트가 <c>읽기("탄약자리.현재")</c> 로 읽는 그대로 칸을 잘라(돌린 칸은 세워) 읽는다. 자리 전체를 한 번에 읽던 때는
+/// 칸 사이에 빼 둔 게임 구분선까지 읽어 탄약이 <c>1724</c> 로 틀렸다고 셌다 - 실제 스크립트보다 낮게 잰 숫자였다.
+/// 칸 줄(<c>자리.칸</c>) 다음에 <c>자리 (칸 이음)</c> 줄이 칸 글을 이어(<see cref="RegionTargets.Combine"/>) 자리 정답과 숫자를 맞춘다.
+///
 /// <b>정답 파일</b> - 한 줄에 <c>자리이름⇥파일이름⇥정답</c>, <c>#</c> 은 주석. 띄어쓰기는 비교에서 뺀다. 정답이 빈 칸이면 "빈 글이 맞다".
+/// 칸 정답은 <c>자리.칸⇥파일⇥정답</c> 으로 따로 적거나, 자리 정답을 <c>|</c> 로 나눈 조각 수가 칸 수와 같으면 칸 순서대로 나눠 쓴다(<c>30|40</c> → 현재 30 · 최대 40).
+/// 칸이 하나뿐이면 자리 정답이 그 칸 정답이다.
 /// 정답을 모를 때는 <c>--sheet</c> 로 자리 조각을 번호 붙여 한 장에 모아 보고 적는다.
 /// </remarks>
 internal static class OcrBench
@@ -66,39 +72,64 @@ internal static class OcrBench
 
         foreach (var region in regions)
         {
-            Console.WriteLine();
-            Console.WriteLine($"[{region.Name}] {region.Rect}");
-            Console.WriteLine("  번호 | 파일 | PP-OCRv5 | 정답");
+            var targets = RegionTargets.Of(region, null);
+            var cellTexts = images.Select(_ => new List<string>()).ToList();
 
-            var score = new Score();
-            var crops = new List<BitmapSource>();
-
-            for (var i = 0; i < images.Count; i++)
+            foreach (var target in targets)
             {
-                var crop = Crop(images[i].Image, region.Rect);
-                crops.Add(crop);
+                var name = $"{region.Name}.{target.Cell.Name}";
 
-                var watch = Stopwatch.StartNew();
-                // 띄어쓰기는 남긴다 - 스크립트는 띄어쓰기로도 숫자 덩어리를 가른다(「17 24」 → [17, 24]).
-                var read = paddle.RecognizeAsync(crop).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
-                watch.Stop();
+                Console.WriteLine();
+                Console.WriteLine($"[{name}] {target.Box}{(RegionTargets.IsUpright(target.Angle) ? string.Empty : $" · {target.Angle:0.#}°")}");
+                Console.WriteLine("  번호 | 파일 | PP-OCRv5 | 정답");
 
-                var expected = truth.TryGetValue((region.Name, images[i].Name), out var e) ? Flat(e) : null;
+                var score = new Score();
+                var crops = new List<BitmapSource>();
 
-                // 첫 장은 세션 준비가 섞여 속도에서 뺀다.
-                score.Add(read, expected, i == 0 ? null : watch.Elapsed.TotalMilliseconds);
-                Console.WriteLine($"  {i + 1,3} | {images[i].Name} | {read} | {expected ?? "?"}");
+                for (var i = 0; i < images.Count; i++)
+                {
+                    var crop = CropCell(images[i].Image, target);
+                    crops.Add(crop);
+
+                    var watch = Stopwatch.StartNew();
+                    // 띄어쓰기는 남긴다 - 스크립트는 띄어쓰기로도 숫자 덩어리를 가른다(「17 24」 → [17, 24]).
+                    var read = paddle.RecognizeAsync(crop).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
+                    watch.Stop();
+
+                    cellTexts[i].Add(read);
+
+                    var expected = CellTruth(truth, region, target.Cell, targets.Count, images[i].Name);
+
+                    // 첫 장은 세션 준비가 섞여 속도에서 뺀다.
+                    score.Add(read, expected, i == 0 ? null : watch.Elapsed.TotalMilliseconds);
+                    Console.WriteLine($"  {i + 1,3} | {images[i].Name} | {read} | {expected ?? "?"}");
+                }
+
+                Console.WriteLine($"  → {score.Summary()}");
+                total.Merge(score);
+
+                if (sheetFolder is not null)
+                {
+                    Directory.CreateDirectory(sheetFolder);
+                    var path = Path.Combine(sheetFolder, $"{name}.png");
+                    SaveSheet(path, crops);
+                    Console.WriteLine($"  조각 모음: {path}");
+                }
             }
 
-            Console.WriteLine($"  → {score.Summary()}");
-            total.Merge(score);
-
-            if (sheetFolder is not null)
+            // 칸이 여럿이면 스크립트의 읽기("자리") 처럼 이어 자리 정답과 맞춘다. 전체 합계에는 안 넣는다(칸 줄과 두 번 센다).
+            if (targets.Count > 1)
             {
-                Directory.CreateDirectory(sheetFolder);
-                var path = Path.Combine(sheetFolder, $"{region.Name}.png");
-                SaveSheet(path, crops);
-                Console.WriteLine($"  조각 모음: {path}");
+                var joined = new Score();
+
+                for (var i = 0; i < images.Count; i++)
+                {
+                    var text = RegionTargets.Combine(cellTexts[i]).Text;
+                    joined.Add(text, truth.TryGetValue((region.Name, images[i].Name), out var e) ? Flat(e) : null, null);
+                }
+
+                Console.WriteLine();
+                Console.WriteLine($"[{region.Name} (칸 {targets.Count}개 이음)] → {joined.Summary()}");
             }
         }
 
@@ -145,6 +176,19 @@ internal static class OcrBench
 
     private static string Flat(string text) => new([.. text.Where(c => !char.IsWhiteSpace(c))]);
 
+    /// <summary>칸의 정답. <c>자리.칸</c> 줄 → 자리 정답을 <c>|</c> 로 나눈 칸 순서 조각 → 칸이 하나면 자리 정답. 모르면 null.</summary>
+    private static string? CellTruth(Dictionary<(string Region, string File), string> truth, NamedRegion region, RegionCell cell, int cellCount, string file)
+    {
+        if (truth.TryGetValue(($"{region.Name}.{cell.Name}", file), out var own)) return Flat(own);
+        if (!truth.TryGetValue((region.Name, file), out var whole)) return null;
+        if (cellCount == 1) return Flat(whole);
+
+        var pieces = whole.Split('|');
+        var index = region.Cells.IndexOf(cell);
+
+        return pieces.Length == cellCount && index >= 0 ? Flat(pieces[index]) : null;
+    }
+
     private static Dictionary<(string Region, string File), string> LoadTruth(string? path)
     {
         var truth = new Dictionary<(string, string), string>();
@@ -175,6 +219,16 @@ internal static class OcrBench
         image.Freeze();
 
         return image;
+    }
+
+    /// <summary>칸을 스크립트와 같이 자른다 - 돌린 칸은 감싸는 상자를 잘라 똑바로 세운다(<see cref="RegionTargets.TryCrop"/> 와 같은 길).</summary>
+    private static BitmapSource CropCell(BitmapSource image, RegionTarget target)
+    {
+        if (RegionTargets.IsUpright(target.Angle)) return Crop(image, target.Box);
+
+        var bounds = RegionTargets.Bounds(target, image.PixelWidth, image.PixelHeight);
+
+        return RegionTargets.Upright(Crop(image, bounds), bounds, target, image.PixelWidth, image.PixelHeight);
     }
 
     /// <summary>화면(<c>CropFrame</c>)과 같은 반올림으로 자른다.</summary>

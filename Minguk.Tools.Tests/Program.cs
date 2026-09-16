@@ -60,6 +60,9 @@ internal static partial class Program
         if (args.Contains("--ocr-bench")) return OcrBench.Run(args);
         if (args.Contains("--ocr-crop")) return OcrCropCheck.Run(args);
 
+        // 켜 둔 게임 창을 잡아 자리·칸을 읽어 본다. 게임이 떠 있어야 한다.
+        if (args.Contains("--live-ocr")) return LiveOcrCheck.Run(args);
+
         // 설계 2단계: ONNX 검출기가 무엇을 어디서 찾는지 본다(사각형을 그려 파일로 남긴다).
         if (args.Contains("--onnx-detect")) return OnnxDetect.Run(args);
 
@@ -84,6 +87,7 @@ internal static partial class Program
         // 라벨링 화면을 화면 밖 창에 띄워 아래 학습 패널 높이가 내용에 맞는지 재고 PNG 로 찍는다.
         if (args.Contains("--labeling-screen")) return LabelingScreenProbe.Run(args);
         if (args.Contains("--environment-screen")) return EnvironmentScreenProbe.Run(args);
+        if (args.Contains("--play-screen")) return PlayScreenProbe.Run(args);
         if (args.Contains("--settings-screen")) return SettingsScreenProbe.Run(args);
 
         // 라벨링 화면의 YOLO 학습 길을 화면 없이 돌린다. 들이기까지 하므로 --root 로 시험 폴더를 준다(GPU 를 쓴다).

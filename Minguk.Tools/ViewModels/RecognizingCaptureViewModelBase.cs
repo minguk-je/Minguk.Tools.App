@@ -180,6 +180,7 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
 
     protected override void ReleaseResources()
     {
+        Guard(CloseSettingsWindow);
         Vision.Training.TrainingActivity.Changed -= OnTrainingActivityChanged;
 
         // 눈을 감는다. 스크립트가 옛 결과를 읽지 않게.

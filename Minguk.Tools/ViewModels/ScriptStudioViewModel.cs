@@ -341,6 +341,12 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     private const string BarLayoutKey = "BarLayout";
 
     /// <summary>
+    /// 도구 줄 배치 판. 올리면 저장된 옛 자리를 버리고 XAML 의 기본 배치로 시작한다 - 안 올리면 옛 자리가 새 배치를 덮는다.
+    /// 1: 성격별로 두 줄(사용자, 2026-09-17) - 윗줄 표준·디버그·실행 설정, 아랫줄 캡처·인식. 시작 대기는 실행 설정으로, 빌드는 디버그 끝으로.
+    /// </summary>
+    private const int BarLayoutVersion = 1;
+
+    /// <summary>
     /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.
     /// 3: 솔루션 탐색기 왼쪽 · 미리보기|문서 좌우 · 도구 모음 세 줄(2026-09-13). 옛 배치를 그대로 살리면 새 기본이 안 보인다.
     /// 4: 영역 패널을 아래 탭에서 솔루션 탐색기 탭 그룹으로(2026-09-15, 사용자).
@@ -397,7 +403,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         if (_bars is not { } manager) return;
 
         var saved = GetSetting(BarLayoutKey, string.Empty);
-        if (string.IsNullOrEmpty(saved)) return;
+        if (string.IsNullOrEmpty(saved) || GetSetting(BarLayoutKey + "Version", 0) != BarLayoutVersion) return;
 
         try
         {
@@ -419,6 +425,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             using var stream = new System.IO.MemoryStream();
             manager.SaveLayoutToStream(stream);
             SetSetting(BarLayoutKey, Convert.ToBase64String(stream.ToArray()));
+            SetSetting(BarLayoutKey + "Version", BarLayoutVersion);
         }
         catch (Exception ex)
         {

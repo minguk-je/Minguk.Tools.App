@@ -204,7 +204,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
   - 메뉴·도구 모음·상태 표시줄은 BarManager. **목록·표·트리는 GridControl**(트리는 `TreeListView`). 컨트롤은 대부분 DevExpress(없는 것만 표준 WPF).
   - **한 줄에 놓인 컨트롤은 모두 세로 가운데 정렬** - 글자 템플릿의 `TextBlock` 에 `VerticalAlignment="Center"`. 도구 줄 글자 템플릿은 `Minguk.Base/Resource/Style.xaml`
     (`BarStaticItem`·`BarButtonItem`·`BarCheckItem`·`BarEditItem`). 글자 상자가 칸 높이로 늘어나면 글자는 상자 위에 붙어 뜬다.
-    검사 `VerticalAlignmentCheck`(`--labeling-screen`·`--script-screen`·`--environment-screen`) - 화면을 찍는 검사를 새로 만들면 넣는다.
+    검사 `VerticalAlignmentCheck`(`--labeling-screen`·`--script-screen`·`--environment-screen`·`--play-screen`) - 화면을 찍는 검사를 새로 만들면 넣는다.
   - 칸 옆 버튼은 `dxe:ButtonEdit` 안에 넣고 `AllowDefaultButton="False"` 를 같이 적는다(안 적으면 빈 `…` 버튼이 하나 더 붙는다). 그림 버튼은 `GlyphKind="User"` + `Image`(가운데 정렬).
   - `dxlc` 에는 `ItemHeight`·`ShowLabel` 이 없다 - 라벨을 비우려면 `AddColonToLabel="False" Label=""`.
 - 폰트·크기는 `BaseFontFamily`/`BaseFontSize` 를 **DynamicResource** 로. 경량 테마(`UseLightweightThemes`)라 표준 WPF 컨트롤은 테마를 안 탄다.
@@ -236,6 +236,8 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --solution            # 솔�
 dotnet run --project Minguk.Tools.Tests -c Debug -- --script-screen       # 스크립트 화면 화면 밖 띄우기·바인딩 오류·정렬·PNG (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --labeling-screen     # 라벨링 화면 패널 높이·정렬·PNG (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --environment-screen  # 환경설정 화면 두 칸·아이콘·정렬·PNG (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --play-screen [--width=1150] # 플레이 화면 도구 줄 두 줄·넘쳐 접힘·상태 표시줄·정렬·PNG (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --live-ocr --project=<프로젝트>  # 켜 둔 게임 창을 잡아 자리·칸을 읽고 조각 PNG (게임이 떠 있어야)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --settings-screen     # 설정 탭 미리보기·디자인·값 쓰기·정렬·PNG (안전, 임시 폴더)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 모델이 라벨을 다시 찾는지(재현율)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 입력 경로 전체 (커서·키보드를 가져간다)

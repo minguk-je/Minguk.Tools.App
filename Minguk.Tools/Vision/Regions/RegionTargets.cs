@@ -154,7 +154,8 @@ public static class RegionTargets
         return numbers;
     }
 
-    private static bool IsUpright(double angle) => Math.Abs(angle % 360) < 0.01;
+    /// <summary>안 돌린 칸인가(0°·360°).</summary>
+    public static bool IsUpright(double angle) => Math.Abs(angle % 360) < 0.01;
 
     /// <summary>칸 상자의 프레임 픽셀 가운데와 반너비·반높이.</summary>
     private static (double Cx, double Cy, double HalfW, double HalfH) PixelBox(RegionTarget target, int frameWidth, int frameHeight)
