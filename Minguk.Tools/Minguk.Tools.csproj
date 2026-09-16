@@ -167,6 +167,22 @@
 	</ItemGroup>
 
 	<!--
+	  글자 읽기 모델(PP-OCRv5, Apache-2.0). 도구\ppocr-onnx-내보내기.py 로 만들어 커밋한 것.
+	  출력 루트를 어지럽히지 않게 Models\Ocr\ 로 보낸다. Content 라 테스트 하네스에도 따라간다.
+	-->
+	<ItemGroup>
+	  <Content Include="..\Libs\PaddleOcr\det.onnx" Link="Libs\PaddleOcr\det.onnx" TargetPath="Models\Ocr\det.onnx">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="..\Libs\PaddleOcr\rec.onnx" Link="Libs\PaddleOcr\rec.onnx" TargetPath="Models\Ocr\rec.onnx">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="..\Libs\PaddleOcr\rec-dict.txt" Link="Libs\PaddleOcr\rec-dict.txt" TargetPath="Models\Ocr\rec-dict.txt">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
+	<!--
 	  디버그 레이어는 Debug 구성에만 넣는다.
 	
 	  패키지의 targets 는 구성을 보지 않는다 - Microsoft_AI_DirectML_SkipDebugLayerCopy 를

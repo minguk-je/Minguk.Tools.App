@@ -95,4 +95,77 @@ public static class RegionGeometry
 
         return new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
     }
+    // ── 칸(자리 안) ──────────────────────────────────────────────────────
+
+    /// <summary>칸의 자리 기준 0~1 상자 → 캔버스 픽셀(돌리기 전 상자).</summary>
+    public static Rect CellToCanvas(Rect cellRatio, Rect regionCanvas) => ToCanvas(cellRatio, regionCanvas);
+
+    /// <summary>캔버스 픽셀 칸 상자 → 자리 기준 0~1. 자리 밖으로 나간 것은 자리 안으로 접는다.</summary>
+    public static Rect CellToRatio(Rect cellCanvas, Rect regionCanvas) => ToRatio(cellCanvas, regionCanvas);
+
+    /// <summary>
+    /// 돌린 칸의 변을 끈다. 화면 변위를 칸의 돌린 좌표계로 바꿔 늘리고, <b>잡지 않은 반대편 변은 화면에서 제자리</b>에 둔다.
+    /// </summary>
+    /// <remarks>
+    /// 돌린 칸은 가운데를 중심으로 돈다. 너비만 바꾸면 가운데가 그대로라 양쪽 변이 같이 움직여, 사람이 잡은 변이 손 밑에서 반만 따라온다.
+    /// 그래서 늘어난 만큼의 절반을 칸의 가로축 방향(화면 좌표로 돌린 것)으로 가운데를 민다. 각도가 0 이면 <see cref="Resize"/> 와 같은 모양이다
+    /// (그림 밖 막기는 없다 - 칸을 놓는 쪽이 자리 안으로 접는다). 반환은 돌리기 전 상자.
+    /// </remarks>
+    public static Rect ResizeRotated(Rect box, double angle, HorizontalAlignment horizontal, VerticalAlignment vertical, double dx, double dy, Size minimum)
+    {
+        var radians = angle * Math.PI / 180;
+        var cos = Math.Cos(radians);
+        var sin = Math.Sin(radians);
+
+        // 화면 변위 → 칸의 가로·세로축 변위
+        var along = (dx * cos) + (dy * sin);
+        var across = (-dx * sin) + (dy * cos);
+
+        var width = box.Width;
+        var height = box.Height;
+        var shiftX = 0d;
+        var shiftY = 0d;
+
+        switch (horizontal)
+        {
+            case HorizontalAlignment.Left:
+                width = Math.Max(minimum.Width, box.Width - along);
+                shiftX = (box.Width - width) / 2;
+                break;
+            case HorizontalAlignment.Right:
+                width = Math.Max(minimum.Width, box.Width + along);
+                shiftX = (width - box.Width) / 2;
+                break;
+        }
+
+        switch (vertical)
+        {
+            case VerticalAlignment.Top:
+                height = Math.Max(minimum.Height, box.Height - across);
+                shiftY = (box.Height - height) / 2;
+                break;
+            case VerticalAlignment.Bottom:
+                height = Math.Max(minimum.Height, box.Height + across);
+                shiftY = (height - box.Height) / 2;
+                break;
+        }
+
+        var centerX = box.X + (box.Width / 2) + (shiftX * cos) - (shiftY * sin);
+        var centerY = box.Y + (box.Height / 2) + (shiftX * sin) + (shiftY * cos);
+
+        return new Rect(centerX - (width / 2), centerY - (height / 2), width, height);
+    }
+
+    /// <summary>
+    /// 회전 손잡이를 끈 뒤의 각도(도, 0~360). 누른 곳과 지금 곳이 가운데에서 이루는 각도 차이만큼 돌린다.
+    /// </summary>
+    /// <remarks>손잡이를 누른 자리가 손잡이 한가운데가 아니어도 칸이 튀지 않게, 절대 각도가 아니라 차이를 더한다.</remarks>
+    public static double Rotate(double startAngle, Point center, Point start, Point current)
+    {
+        var from = Math.Atan2(start.Y - center.Y, start.X - center.X);
+        var to = Math.Atan2(current.Y - center.Y, current.X - center.X);
+        var angle = (startAngle + ((to - from) * 180 / Math.PI)) % 360;
+
+        return angle < 0 ? angle + 360 : angle;
+    }
 }

@@ -54,6 +54,25 @@ public sealed class RegionBook
         => _regions.FirstOrDefault(r => string.Equals(r.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
+    /// 스크립트가 부른 이름을 자리와 칸으로 푼다. <c>"탄약"</c> 은 (자리, null), <c>"탄약.현재"</c> 는 (자리, 칸). 없으면 null.
+    /// </summary>
+    /// <remarks>이름에 점(.)을 못 쓰게 막아 두었으므로(<see cref="IsValidName"/>) 첫 점에서 자르면 된다.</remarks>
+    public (NamedRegion Region, RegionCell? Cell)? Resolve(string name)
+    {
+        var text = name?.Trim() ?? string.Empty;
+        var dot = text.IndexOf('.');
+
+        if (dot < 0) return Find(text) is { } whole ? (whole, null) : null;
+
+        if (Find(text[..dot]) is not { } region) return null;
+
+        return region.FindCell(text[(dot + 1)..]) is { } cell ? (region, cell) : null;
+    }
+
+    /// <summary>자리·칸 이름으로 쓸 수 있는가. 비지 않고 점(.)이 없어야 한다 - 스크립트가 <c>자리.칸</c> 으로 가른다.</summary>
+    public static bool IsValidName(string? name) => !string.IsNullOrWhiteSpace(name) && !name.Contains('.');
+
+    /// <summary>
     /// 자리를 넣거나 고친다. <b>같은 이름이면 덮어쓴다</b> - 이름이 겹치면 스크립트가 어느 쪽을 볼지 알 수 없다.
     /// </summary>
     public void Put(NamedRegion region)
@@ -91,7 +110,10 @@ public sealed class RegionBook
 
             if (loaded is not null)
                 foreach (var region in loaded.Where(r => r.IsUsable))
+                {
+                    region.EnsureCells();
                     book.Put(region);
+                }
         }
         catch (Exception ex)
         {

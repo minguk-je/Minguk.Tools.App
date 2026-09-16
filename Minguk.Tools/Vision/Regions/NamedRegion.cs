@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using System.Windows;
@@ -18,14 +20,13 @@ namespace Minguk.Tools.Vision.Regions;
 ///
 /// 옛 "글자 영역"(한 곳만, 설정에 저장)을 여기로 합쳤다(2026-09-15) - 자리마다 <see cref="KeepReading"/> 를 켜면 화면이 계속 읽어
 /// <see cref="LastText"/> 에 적는다. 그리드가 칸에서 바로 고치므로 바뀐 것을 알린다(<see cref="INotifyPropertyChanged"/>).
+///
+/// 자리마다 손질·언어·기울기를 고르던 때(2026-09-16 까지)의 키(<c>ink</c>·<c>prep</c>·<c>lang</c>·<c>shear</c>)는 읽을 때 버린다 -
+/// System.Text.Json 은 모르는 키를 건너뛰고, 다음 저장에서 사라진다. 엔진(PP-OCRv5)이 손질 없이 한글·영문·숫자를 읽는다.
 /// </remarks>
 public sealed class NamedRegion : INotifyPropertyChanged
 {
     private string _name = string.Empty;
-    private bool _ink = true;
-    private string _preprocessor = string.Empty;
-    private double _shearDegrees;
-    private string _language = string.Empty;
     private bool _keepReading;
     private string _lastText = string.Empty;
 
@@ -50,70 +51,6 @@ public sealed class NamedRegion : INotifyPropertyChanged
     public double Height { get; set; }
 
     /// <summary>
-    /// 읽기 전에 흰 글자만 남길지(<see cref="Ocr.HudInk"/>).
-    /// </summary>
-    /// <remarks>
-    /// 배경이 밝아졌다 어두워졌다 하는 자리(탄약·체력)는 켜야 읽히고, 늘 어두운 자리(궁극기 고리 안)는
-    /// 켜면 오히려 못 읽는다. 어느 쪽인지는 해 보기 전에는 모르므로 사람이 켜고 끈다 - 읽는 쪽은 한 길이
-    /// 빈 답이면 다른 길로도 한 번 해 보므로, 틀리게 놓아도 대개는 읽힌다.
-    /// </remarks>
-    [JsonPropertyName("ink")]
-    public bool Ink
-    {
-        get => _ink;
-        set => Set(ref _ink, value);
-    }
-
-    /// <summary>
-    /// 읽기 전 손질 이름(<see cref="Ocr.OcrPreprocessors"/> 의 Id - plain·bright·dark). 비어 있으면 옛 <see cref="Ink"/> 를 따른다.
-    /// </summary>
-    /// <remarks>
-    /// 게임마다 글자가 달라 한 가지 손질로 못 덮는다(실측 2026-09-16: 오버워치 탄약은 "밝은 글자만" 0/12, "그대로 키우기" 10/12).
-    /// 자리마다 골라 저장한다 - 화면의 <c>지금 읽기</c> 가 손질을 모두 해 보고 가장 잘 읽은 것을 알려 준다.
-    /// </remarks>
-    [JsonPropertyName("prep")]
-    public string Preprocessor
-    {
-        get => _preprocessor;
-        set => Set(ref _preprocessor, value ?? string.Empty);
-    }
-
-    /// <summary>
-    /// 이 자리를 읽을 언어 태그("ko"·"en-US"). 비어 있으면 자동 - 숫자는 영문, 안 되면 쓰던 언어로 한 번 더.
-    /// </summary>
-    /// <remarks>
-    /// 같은 숫자라도 언어 팩에 따라 읽히고 안 읽힌다(실측 2026-09-16: 오버워치 영상의 탄약은 ko 가 읽고 en-US 는 빈 글,
-    /// 다른 스크린샷은 반대). 「지금 읽기」 가 둘 다 해 보고 잘 읽은 쪽을 여기에 적는다.
-    /// </remarks>
-    [JsonPropertyName("lang")]
-    public string Language
-    {
-        get => _language;
-        set => Set(ref _language, value ?? string.Empty);
-    }
-
-    /// <summary>글자가 오른쪽으로 기운 각도(도). 0 이면 손대지 않는다. 이탤릭 HUD 는 10~12도.</summary>
-    [JsonPropertyName("shear")]
-    public double ShearDegrees
-    {
-        get => _shearDegrees;
-        set => Set(ref _shearDegrees, value);
-    }
-
-    /// <summary>
-    /// 이 자리를 읽을 때 쓰는 손질과 옵션. 저장된 이름이 없으면 옛 <see cref="Ink"/>(true = 밝은 글자만)를 따른다.
-    /// </summary>
-    [JsonIgnore]
-    public Ocr.IOcrPreprocessor Preprocess
-        => Preprocessor.Length > 0
-            ? Ocr.OcrPreprocessors.Find(Preprocessor)
-            : Ink ? Ocr.OcrPreprocessors.Find("bright") : Ocr.OcrPreprocessors.Default;
-
-    /// <summary>이 자리의 전처리 옵션(기울기). 목표 높이는 공통 기본값.</summary>
-    [JsonIgnore]
-    public Ocr.OcrPreprocessOptions PreprocessOptions => new(Ocr.OcrPreprocessOptions.DefaultTargetHeight, ShearDegrees);
-
-    /// <summary>
     /// 화면(스크립트·플레이)이 이 자리를 0.5초마다 읽어 <see cref="LastText"/> 에 적을지. 저장한다.
     /// </summary>
     /// <remarks>스크립트의 <c>읽기("이름")</c> 은 이것과 상관없이 부를 때 읽는다 - 이것은 사람이 화면에서 보려는 것이다.</remarks>
@@ -131,6 +68,41 @@ public sealed class NamedRegion : INotifyPropertyChanged
         get => _lastText;
         set => Set(ref _lastText, value ?? string.Empty);
     }
+
+    /// <summary>
+    /// 이 자리 안에서 따로 읽을 칸들(<see cref="RegionCell"/>). <b>늘 하나 이상</b> - 새 자리는 자리와 같은 크기의 「칸1」 로 시작한다.
+    /// </summary>
+    /// <remarks>
+    /// 읽는 것은 칸들뿐이고, 자리를 부르면 이 순서대로 읽어 잇는다(<see cref="RegionTargets"/>).
+    /// 칸을 적기 전의 파일은 <c>cells</c> 가 없어 여기 처음 값(「칸1」)이 남는다 - 지금과 똑같이 읽힌다.
+    /// </remarks>
+    [JsonPropertyName("cells")]
+    public ObservableCollection<RegionCell> Cells { get; set; } = [NewWholeCell()];
+
+    /// <summary>새 자리·옛 파일에 붙는 칸 이름.</summary>
+    public const string DefaultCellName = "칸1";
+
+    private static RegionCell NewWholeCell() => new() { Name = DefaultCellName, Rect = new Rect(0, 0, 1, 1) };
+
+    /// <summary>칸이 하나도 없으면(파일에 <c>"cells": []</c>) 자리와 같은 크기의 「칸1」 을 붙인다.</summary>
+    public void EnsureCells()
+    {
+        Cells ??= [];
+
+        if (Cells.Count == 0) Cells.Add(NewWholeCell());
+    }
+
+    /// <summary>칸의 화면 기준 0~1 상자(돌리기 전). 자리 안 비율을 화면 비율로 바꾼다.</summary>
+    public Rect CellRect(RegionCell cell)
+        => new(X + (cell.X * Width), Y + (cell.Y * Height), cell.Width * Width, cell.Height * Height);
+
+    /// <summary>이름으로 칸을 찾는다(대소문자 무시). 없으면 null.</summary>
+    public RegionCell? FindCell(string name)
+        => Cells.FirstOrDefault(c => string.Equals(c.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>트리 줄이 자리인가(칸이면 false). 영역 패널이 칸 줄의 계속 읽기 체크를 숨기는 데 쓴다.</summary>
+    [JsonIgnore]
+    public bool IsRegion => true;
 
     /// <summary>사람이 보는 메모. 읽는 데는 안 쓴다.</summary>
     [JsonPropertyName("note")]
@@ -155,7 +127,7 @@ public sealed class NamedRegion : INotifyPropertyChanged
 
     /// <summary>화면 목록에 한 줄로 보여 줄 글.</summary>
     [JsonIgnore]
-    public string Describe => $"{Name}  ({X:0.000}, {Y:0.000})  {Width:0.000} x {Height:0.000}{(Ink ? "  · 흰 글자만" : string.Empty)}";
+    public string Describe => $"{Name}  ({X:0.000}, {Y:0.000})  {Width:0.000} x {Height:0.000}";
 
     public override string ToString() => Describe;
 

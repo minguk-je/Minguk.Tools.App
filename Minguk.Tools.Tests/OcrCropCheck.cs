@@ -12,7 +12,7 @@ namespace Minguk.Tools.Tests;
 
 /// <summary>
 /// 그림의 한 자리를 잘라 글자를 읽어 본다 - 스크립트에 넣을 <c>읽기</c>·<c>숫자읽기</c> 의 자리를 찾는 데 쓴다.
-/// <c>--ocr-crop --image=경로.png --region=x,y,w,h [--lang=ko] [--scale=3 | --height=300] [--prep=plain|bright|dark] [--shear=12]</c>
+/// <c>--ocr-crop --image=경로.png --region=x,y,w,h</c>
 /// </summary>
 /// <remarks>
 /// <b>왜</b> - 스크립트의 <c>숫자읽기(x, y, w, h)</c> 는 0~1 비율을 받는데, 그 네 숫자를 눈대중으로 맞히기 어렵다.
@@ -45,10 +45,6 @@ internal static class OcrCropCheck
             return 1;
         }
 
-        // 작은 글자는 키워서 넣는다. 게임 HUD 숫자는 20px 안팎이라 그대로는 잘 안 읽힌다.
-        var scale = int.TryParse(Program.ArgValue(args, "--scale="), out var s) ? Math.Clamp(s, 1, 8) : 3;
-        var language = Program.ArgValue(args, "--lang=") ?? OcrEngineFactory.PreferredLanguage;
-
         var frame = BitmapFrame.Create(new Uri(imagePath), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
         var width = frame.PixelWidth;
         var height = frame.PixelHeight;
@@ -67,24 +63,7 @@ internal static class OcrCropCheck
 
         var crop = new CroppedBitmap(frame, box);
 
-        // --ink 는 흰 글자만 남긴다. 밝은 배경 위의 HUD 숫자는 그냥은 안 읽힌다(HudInk 참고).
-        var ink = args.Contains("--ink");
-        var shear = double.TryParse(Program.ArgValue(args, "--shear="), System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0;
-
-        // 손질은 화면·스크립트와 같은 어댑터를 쓴다 - 여기서 잰 것이 앱에서도 그대로 나와야 한다.
-        var preprocessor = Minguk.Tools.Vision.Ocr.OcrPreprocessors.Find(Program.ArgValue(args, "--prep=") ?? (ink ? "bright" : "plain"));
-        var targetHeight = int.TryParse(Program.ArgValue(args, "--height="), out var h) ? h : crop.PixelHeight * scale;
-        // --keep=0,0.5 면 자리를 통째로 넣되 오른쪽 절반을 지워 앞 숫자만 읽는다(좁게 자르면 못 읽는다).
-        var keep = (Program.ArgValue(args, "--keep=") ?? "0,1").Split(',');
-        var options = new Minguk.Tools.Vision.Ocr.OcrPreprocessOptions(
-            targetHeight,
-            shear,
-            double.Parse(keep[0], CultureInfo.InvariantCulture),
-            double.Parse(keep.Length > 1 ? keep[1] : "1", CultureInfo.InvariantCulture));
-
-        BitmapSource scaled = preprocessor.Prepare(crop, options);
-
-        scaled.Freeze();
+        crop.Freeze();
 
         var outputPath = Path.ChangeExtension(imagePath, null) + "-오려낸.png";
 
@@ -92,16 +71,15 @@ internal static class OcrCropCheck
         {
             var encoder = new PngBitmapEncoder();
 
-            encoder.Frames.Add(BitmapFrame.Create(scaled));
+            encoder.Frames.Add(BitmapFrame.Create(crop));
             encoder.Save(file);
         }
 
-        using var ocr = OcrEngineFactory.Create(language);
-        var outcome = ocr.RecognizeAsync(scaled).GetAwaiter().GetResult();
+        using var ocr = OcrEngineFactory.Create(out var fallback);
+        var outcome = ocr.RecognizeAsync(crop).GetAwaiter().GetResult();
 
         Console.WriteLine($"그림 {Path.GetFileName(imagePath)} ({width}x{height})");
-        Console.WriteLine($"오려낸 자리 {box.X},{box.Y} {box.Width}x{box.Height} · " +
-                          $"{preprocessor.Name} · 높이 {scaled.PixelHeight}px{(shear == 0 ? string.Empty : $" · {shear:0.#}도 세움")} · {ocr.Name} ({ocr.Language})");
+        Console.WriteLine($"오려낸 자리 {box.X},{box.Y} {box.Width}x{box.Height} · {ocr.Name}{(fallback is null ? string.Empty : $" ({fallback})")}");
         Console.WriteLine();
         Console.WriteLine($"읽은 글: 「{outcome.Text}」  ({outcome.Elapsed.TotalMilliseconds:N0}ms)");
 

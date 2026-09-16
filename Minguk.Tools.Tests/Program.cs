@@ -53,10 +53,12 @@ internal static partial class Program
         if (args.Contains("--onnx-bench")) return OnnxBench.Run(args);
         if (args.Contains("--onnx-raw")) return OnnxRaw.Run(args);
         if (args.Contains("--onnx-agree")) return OnnxAgree.Run(args);
-        if (args.Contains("--ocr-crop")) return OcrCropCheck.Run(args);
 
-        // 자리 하나를 여러 장·여러 손질로 읽어 어느 조합이 잘 읽는지 표로 낸다.
-        if (args.Contains("--ocr-tune")) return OcrTuneCheck.Run(args);
+        // 글자 읽기만. --vision 전체(영상·학습 검사 포함)를 기다리지 않고 OCR 을 고칠 때.
+        if (args.Contains("--ocr")) return RunOcrOnly();
+        // 프로젝트의 사진·자리로 PP-OCRv5 가 몇 장 맞는지 잰다. 사진이 있어야 하므로 평소 검증 밖.
+        if (args.Contains("--ocr-bench")) return OcrBench.Run(args);
+        if (args.Contains("--ocr-crop")) return OcrCropCheck.Run(args);
 
         // 설계 2단계: ONNX 검출기가 무엇을 어디서 찾는지 본다(사각형을 그려 파일로 남긴다).
         if (args.Contains("--onnx-detect")) return OnnxDetect.Run(args);
@@ -117,7 +119,7 @@ internal static partial class Program
             return root is null ? DetectCheck.Run(score) : DetectCheck.Run(new Minguk.Tools.Vision.Labeling.LabelDataset(root), score);
         }
 
-        // 라벨 위 이름표 자리를 잘라 OCR 이 무엇을 읽는지 본다. 언어 팩·데이터셋이 있어야 해 평소 검증 밖.
+        // 라벨 위 이름표 자리를 잘라 OCR 이 무엇을 읽는지 본다. 데이터셋이 있어야 해 평소 검증 밖.
         if (args.Contains("--nameplate-check"))
         {
             var count = int.Parse(ArgValue(args, "--count=") ?? "3", CultureInfo.InvariantCulture);
@@ -207,6 +209,7 @@ internal static partial class Program
         TestPreprocessorReuse();
         TestPrecisionTimer();
         TestRegionBook();
+        TestRegionCells();
         TestRegionGeometry();
         TestCompiledScript();
         TestTrainingActivity();
@@ -232,6 +235,29 @@ internal static partial class Program
         {
             TestScriptFiles();
             RunVision();
+        }
+        catch (Exception ex)
+        {
+            Fail("예외", ex.ToString());
+        }
+
+        foreach (var line in Results) Console.WriteLine(line);
+
+        Console.WriteLine();
+        Console.WriteLine(_failures == 0 ? "== 전체 통과 ==" : $"== 실패 {_failures}건 ==");
+
+        return _failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>글자 읽기 검사만 돌린다. 커서·키보드를 안 건드린다.</summary>
+    private static int RunOcrOnly()
+    {
+        Console.WriteLine("글자 읽기 검증");
+        Console.WriteLine();
+
+        try
+        {
+            TestOcr();
         }
         catch (Exception ex)
         {

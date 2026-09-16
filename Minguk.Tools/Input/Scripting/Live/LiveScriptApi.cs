@@ -13,6 +13,7 @@ using Minguk.Tools.Capture.Input;
 using Minguk.Tools.Input.Interop;
 using Minguk.Tools.Input.Sequencing;
 using Minguk.Tools.Vision.Ocr;
+using Minguk.Tools.Vision.Regions;
 
 namespace Minguk.Tools.Input.Scripting.Live;
 
@@ -913,8 +914,6 @@ public class LiveScriptApi
         var hub = _host.Hub;
         if (!hub.IsCapturing) throw Guard("눈이 없습니다 - 화면에서 시작(연결)을 눌러 창을 잡아야 글자를 읽을 수 있습니다.");
 
-        var ocr = _host.Ocr?.Invoke() ?? throw Guard("글자 읽기 엔진이 없습니다 - Windows OCR 언어 팩을 확인하세요.");
-
         // 처음 부를 때 프레임 복사를 켜고, 한 장 들어올 때까지 잠깐 기다린다.
         hub.WantsFrames = true;
 
@@ -931,7 +930,7 @@ public class LiveScriptApi
             Wait(50);
         }
 
-        var outcome = ocr.RecognizeAsync(crop, _token).GetAwaiter().GetResult();
+        var outcome = Ocr().RecognizeAsync(crop, _token).GetAwaiter().GetResult();
 
         return outcome.Text.Replace(Environment.NewLine, " ").Trim();
     }
@@ -976,41 +975,28 @@ public class LiveScriptApi
     /// HUD 의 한 자리를 읽어 <paramref name="index"/> 번째 숫자를 준다. 「17 24」 면 0 이 17, 1 이 24.
     /// </summary>
     /// <remarks>
-    /// <see cref="ReadNumber"/> 와 두 가지가 다르다.
-    /// <list type="number">
-    /// <item><b>흰 글자만 남긴다</b>(<see cref="HudInk"/>) - 같은 숫자가 어두운 벽 위에서는 읽히고 밝은 주황 바닥
-    /// 위에서는 안 읽혔다(실측: 여섯 장 중 셋이 빈 결과).</item>
-    /// <item><b>영문 엔진으로 읽는다</b> - 한국어 팩은 225 를 <c>22512h5</c>, 193 을 <c>1亐3</c> 으로 냈다(실측).
-    /// 이름표는 한글이라 ko 가 맞지만 숫자는 아니다.</item>
-    /// </list>
-    /// 「현재 | 최대」 처럼 둘이 붙어 나오므로 순서로 고른다. 구분자는 엔진이 1 이나 역슬래시로도 읽어 못 믿는다 -
+    /// 「현재 | 최대」 처럼 둘이 붙어 나오므로 순서로 고른다. 구분선은 엔진이 1 이나 역슬래시로도 읽어 못 믿는다 -
     /// 숫자가 아닌 것은 다 버리고 남은 덩어리의 순서만 본다.
-    ///
-    /// <b>두 길을 다 해 본다</b> - 자리마다 정해 둔 쪽을 먼저 보고, 아무 숫자도 안 나오면 다른 쪽으로 한 번 더.
-    /// 같은 자리라도 배경이 밝아졌다 어두워졌다 하므로 한 길만 고집하면 그때그때 빈 답이 나온다.
     /// </remarks>
     private int? HudNumber(HudSpot spot, int index)
     {
-        var crop = CropFor(spot.Region);
-        var first = spot.Ink ? OcrPreprocessors.Find("bright") : OcrPreprocessors.Default;
-        var numbers = ReadNumbers(crop, first, OcrPreprocessOptions.Default, out var text);
-
-        // 손질을 바꿔 한 번 더 - 같은 자리라도 배경이 밝아졌다 어두워졌다 한다.
-        if (text.Length == 0)
-            foreach (var other in OcrPreprocessors.All)
-            {
-                if (other.Id == first.Id) continue;
-
-                numbers = ReadNumbers(crop, other, OcrPreprocessOptions.Default, out text);
-
-                if (text.Length > 0) break;
-            }
+        var numbers = ReadNumbers(CropFor(spot.Region), out _);
 
         return index < numbers.Count ? numbers[index] : null;
     }
 
     /// <summary>그 자리의 화면 조각을 얻는다. 아직 프레임이 안 왔으면 잠깐 기다린다.</summary>
     private System.Windows.Media.Imaging.BitmapSource CropFor(Rect region)
+        => CropWith((out System.Windows.Media.Imaging.BitmapSource? crop) => _host.Hub.TryCropFrame(region, out crop));
+
+    /// <summary>칸의 화면 조각 - 돌린 칸은 똑바로 세워서(<see cref="RegionTargets.TryCrop"/>).</summary>
+    private System.Windows.Media.Imaging.BitmapSource CropFor(RegionTarget target)
+        => CropWith((out System.Windows.Media.Imaging.BitmapSource? crop) => RegionTargets.TryCrop(_host.Hub, target, out crop));
+
+    private delegate bool CropAttempt(out System.Windows.Media.Imaging.BitmapSource? crop);
+
+    /// <summary>프레임이 올 때까지 잠깐 기다리며 자른다.</summary>
+    private System.Windows.Media.Imaging.BitmapSource CropWith(CropAttempt attempt)
     {
         ThrowIfStopping();
 
@@ -1024,7 +1010,7 @@ public class LiveScriptApi
         var deadline = Environment.TickCount64 + FrameWaitMs;
         System.Windows.Media.Imaging.BitmapSource? crop;
 
-        while (!hub.TryCropFrame(region, out crop) || crop is null)
+        while (!attempt(out crop) || crop is null)
         {
             // 리드백을 막 켰으면 캡처가 다시 시작되는 동안 더 기다린다 - 첫 읽기가 그 사이에 걸려 실패하던 것.
             if (hub.IsPreparingFrames) deadline = Environment.TickCount64 + FrameWaitMs;
@@ -1036,44 +1022,15 @@ public class LiveScriptApi
         return crop;
     }
 
-    /// <summary>조각을 한 손질로 읽어 숫자 덩어리들을 순서대로 준다. 읽은 글도 같이 준다.</summary>
-    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, IOcrPreprocessor preprocessor, OcrPreprocessOptions options, out string text)
-        => ReadNumbers(crop, preprocessor, options, NumberOcr(), out text);
-
-    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, IOcrPreprocessor preprocessor, OcrPreprocessOptions options, IOcrEngine engine, out string text)
+    /// <summary>조각을 읽어 숫자 덩어리들을 왼쪽부터 순서대로 준다. 읽은 글도 같이 준다.</summary>
+    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, out string text)
     {
-        var prepared = preprocessor.Prepare(crop, options);
-
-        var outcome = engine.RecognizeAsync(prepared, _token).GetAwaiter().GetResult();
+        var outcome = Ocr().RecognizeAsync(crop, _token).GetAwaiter().GetResult();
 
         text = outcome.Text.Replace(Environment.NewLine, " ").Trim();
-        var numbers = new List<int>();
-        var digits = new StringBuilder();
 
-        foreach (var letter in outcome.Text + " ")
-        {
-            if (char.IsDigit(letter))
-            {
-                digits.Append(letter);
-                continue;
-            }
-
-            if (digits.Length > 0 && int.TryParse(digits.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
-                numbers.Add(value);
-
-            digits.Clear();
-        }
-
-        return numbers;
-    }
-
-    private static System.Windows.Media.Imaging.BitmapSource Enlarge(System.Windows.Media.Imaging.BitmapSource crop, double scale)
-    {
-        var scaled = new System.Windows.Media.Imaging.TransformedBitmap(crop, new System.Windows.Media.ScaleTransform(scale, scale));
-
-        scaled.Freeze();
-
-        return scaled;
+        // 칸을 이어 읽을 때와 같은 규칙으로 뽑는다(RegionTargets.NumbersIn) - 두 길이 다르게 끊으면 같은 화면에서 답이 갈린다.
+        return [.. RegionTargets.NumbersIn(outcome.Text)];
     }
 
     // ── 이름 붙인 자리 ───────────────────────────────────────────────────
@@ -1115,95 +1072,37 @@ public class LiveScriptApi
         var book = _host.Regions?.Invoke()
                    ?? throw Guard("영역 목록이 없습니다 - 화면에서 데이터셋 폴더를 골라야 합니다.");
 
-        var region = book.Find(name)
-                     ?? throw Guard($"「{name}」 라는 자리가 없습니다. 스크립트 화면에서 \"영역 지정\" 으로 만들어 두세요. " +
-                                    (book.Regions.Count == 0
-                                        ? "지금 만들어 둔 자리가 하나도 없습니다."
-                                        : $"있는 것: {string.Join(" · ", book.Regions.Select(r => r.Name))}"));
+        var found = book.Resolve(name) ?? throw Guard(MissingRegion(book, name));
 
-        var crop = CropFor(region.Rect);
-        var preprocessor = region.Preprocess;
-        var options = region.PreprocessOptions;
+        // 칸마다 따로 읽어 잇는다 - 자리를 부르면 칸 순서대로, 칸을 부르면 그 칸만.
+        var texts = RegionTargets.Of(found.Region, found.Cell)
+            .Select(target => Ocr().RecognizeAsync(CropFor(target), _token).GetAwaiter().GetResult().Text)
+            .ToList();
 
-        // 언어도 자리마다 갈린다 - 같은 숫자를 ko 는 읽고 en-US 는 못 읽는 자리가 있고(오버워치 영상의 탄약) 반대도 있다.
-        // 자리에 적어 둔 언어를 먼저 쓰고(「지금 읽기」 가 골라 적는다), 없으면 숫자에 강한 영문부터.
-        var first = RegionOcr(region);
-        var numbers = ReadNumbers(crop, preprocessor, options, first, out var digitsText);
+        var (text, numbers) = RegionTargets.Combine(texts);
 
-        // 자리에 적힌 손질로 안 읽히면 다른 손질로도 해 본다(화면의 "지금 읽기" 가 고르기 전일 수 있다).
-        if (digitsText.Length == 0)
-            foreach (var other in OcrPreprocessors.All)
-            {
-                if (other.Id == preprocessor.Id) continue;
-
-                numbers = ReadNumbers(crop, other, options, first, out digitsText);
-
-                if (digitsText.Length > 0) break;
-            }
-
-        var text = digitsText;
-
-        // 첫 언어로 아무것도 안 나오면 다른 언어로 본다(자리에 언어를 안 적어 뒀을 때).
-        if (numbers.Count == 0 && OtherOcr(region, first) is { } wordy)
-        {
-            ReadNumbers(crop, preprocessor, options, wordy, out var wordText);
-
-            if (wordText.Length == 0)
-                foreach (var other in OcrPreprocessors.All)
-                {
-                    if (other.Id == preprocessor.Id) continue;
-
-                    ReadNumbers(crop, other, options, wordy, out wordText);
-
-                    if (wordText.Length > 0) break;
-                }
-            if (wordText.Length > 0) text = wordText;
-        }
-
-        return (text, numbers.Count > 0 ? numbers[0] : null, [.. numbers]);
+        return (text, numbers.Length > 0 ? numbers[0] : null, numbers);
     }
 
-    /// <summary>
-    /// 자리에 적힌 언어의 엔진. 안 적혀 있으면(자동) 화면에서 고른 언어부터 - 화면의 계속 읽기와 같은 순서다.
-    /// </summary>
-    /// <remarks>자동은 "둘 다 해 본다" 는 뜻이다. 먼저 쓴 쪽이 빈 글이면 <see cref="OtherOcr"/> 로 한 번 더 읽는다.</remarks>
-    private IOcrEngine RegionOcr(Vision.Regions.NamedRegion region)
-        => region.Language.Length > 0
-            ? LanguageOcr(region.Language) ?? NumberOcr()
-            : _host.Ocr?.Invoke() ?? NumberOcr();
-
-    /// <summary>먼저 쓴 엔진과 다른 언어의 엔진(화면 언어 ↔ 영문). 없으면 null - 그러면 한 번만 읽는다.</summary>
-    private IOcrEngine? OtherOcr(Vision.Regions.NamedRegion region, IOcrEngine used)
+    /// <summary>못 찾은 이름을 사람이 고칠 수 있게 - 자리가 없는지, 자리는 있는데 칸이 없는지.</summary>
+    private static string MissingRegion(RegionBook book, string name)
     {
-        var wanted = string.Equals(used.Language, "en-US", StringComparison.OrdinalIgnoreCase)
-            ? _host.Ocr?.Invoke()?.Language
-            : "en-US";
+        var text = name?.Trim() ?? string.Empty;
+        var dot = text.IndexOf('.');
 
-        if (wanted is null || string.Equals(wanted, used.Language, StringComparison.OrdinalIgnoreCase)) return null;
+        if (dot >= 0 && book.Find(text[..dot]) is { } region)
+            return $"「{region.Name}」 자리에 「{text[(dot + 1)..].Trim()}」 칸이 없습니다. 있는 칸: {string.Join(" · ", region.Cells.Select(c => c.Name))}";
 
-        return LanguageOcr(wanted);
+        return $"「{text}」 라는 자리가 없습니다. 스크립트 화면의 영역 패널에서 [새 자리] 로 만들어 두세요 - 칸은 「자리.칸」 으로 부릅니다. " +
+               (book.Regions.Count == 0
+                   ? "지금 만들어 둔 자리가 하나도 없습니다."
+                   : $"있는 것: {string.Join(" · ", book.Regions.Select(r => r.Name))}");
     }
 
-    /// <summary>언어별 엔진 하나씩 만들어 들고 있는다 - 부를 때마다 만들면 한 번에 0.1초가 든다.</summary>
-    private IOcrEngine? LanguageOcr(string language)
-    {
-        if (_languageOcr.TryGetValue(language, out var engine)) return engine;
-
-        engine = OcrEngineFactory.TryCreate(language);
-        _languageOcr[language] = engine;
-
-        return engine;
-    }
-
-    private readonly Dictionary<string, IOcrEngine?> _languageOcr = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>숫자를 읽을 엔진. 영문 팩이 없으면 쓰던 것으로.</summary>
-    private IOcrEngine NumberOcr()
-        => _numberOcr ??= OcrEngineFactory.TryCreate("en-US")
-                          ?? _host.Ocr?.Invoke()
-                          ?? throw Guard("글자 읽기 엔진이 없습니다 - Windows OCR 언어 팩을 확인하세요.");
-
-    private IOcrEngine? _numberOcr;
+    /// <summary>글자 읽기 엔진. 화면이 든 것을 같이 쓴다 - 한 모델이 한글·영문·숫자를 읽어 따로 둘 것이 없다.</summary>
+    private IOcrEngine Ocr()
+        => _host.Ocr?.Invoke()
+           ?? throw Guard("글자 읽기 엔진이 없습니다 - 화면 상태 줄의 안내를 보세요(모델 파일이 없거나 엔진을 열지 못했습니다).");
 
     public IReadOnlyList<ScriptMob> 몹들() => Mobs();
     public ScriptMob? 가장가까운몹() => NearestMob();
@@ -1339,6 +1238,9 @@ public class LiveScriptApi
             try { _host.Service.Adapter.ReleaseMouseButton(button); }
             catch (Exception) { }
         }
+
+        // 묶어 둔 설정 쓰기를 낸다 - 멈춘 뒤 앱을 바로 꺼도 쓴 값이 남게.
+        _settings?.Flush();
     }
 
     // ── 흐름 ─────────────────────────────────────────────────────────────
@@ -1390,6 +1292,83 @@ public class LiveScriptApi
     public byte[] 리소스바이트(string name) => ResourceBytes(name);
 
     public void 소리(string name) => PlaySound(name);
+
+    // ── 설정(솔루션·프로젝트) ────────────────────────────────────────────
+    //    설정 탭에서 사람이 만든 칸의 값. 부를 때마다 앱 안의 한 벌에서 읽는다 - 도는 중에 설정 탭에서 바꾸면 다음 호출부터 먹는다.
+    //    찾는 순서·겹침 규칙은 SolutionSettings(docs/솔루션-설정.md). 없는 이름·형식 틀림은 멈추고 이유를 말한다.
+
+    private Minguk.Tools.Projects.Settings.SolutionSettings? _settings;
+    private readonly HashSet<string> _settingWarned = [];
+
+    /// <summary>설정 값 - 숫자(정수 long·실수 double)·글·참거짓·목록(행들) 그대로.</summary>
+    public object? Setting(string name) => Traced(nameof(Setting), Quote(name), () => Minguk.Tools.Projects.Settings.SettingsValue.ToObject(SettingEntry(name).Value));
+
+    /// <summary>설정 값을 그 형식으로 - <c>Setting&lt;int&gt;("물약HP")</c>.</summary>
+    public T Setting<T>(string name) => Traced(nameof(Setting), Quote(name), () =>
+    {
+        var entry = SettingEntry(name);
+
+        return Minguk.Tools.Projects.Settings.SettingsValue.TryConvert(entry.Value, typeof(T), out var result)
+            ? (T)result!
+            : throw Guard($"설정 「{name}」 은(는) {Minguk.Tools.Projects.Settings.SolutionSettings.KindName(entry.Item.Kind)} 칸이라 {typeof(T).Name} 로 읽을 수 없습니다 (값 {entry.Value?.ToJsonString() ?? "null"}).");
+    });
+
+    /// <summary>목록 칸의 행들. 행은 <c>row["HP"]</c>·<c>row.Get&lt;int&gt;("HP")</c>.</summary>
+    public IReadOnlyList<Minguk.Tools.Projects.Settings.SettingsRow> SettingList(string name) => Traced(nameof(SettingList), Quote(name), () =>
+    {
+        var entry = SettingEntry(name);
+
+        return Minguk.Tools.Projects.Settings.SettingsValue.ToObject(entry.Value) as IReadOnlyList<Minguk.Tools.Projects.Settings.SettingsRow>
+               ?? throw Guard($"설정 「{name}」 은(는) {Minguk.Tools.Projects.Settings.SolutionSettings.KindName(entry.Item.Kind)} 칸이라 목록으로 읽을 수 없습니다.");
+    });
+
+    /// <summary>값을 쓴다 - 지금 프로젝트 층에. 설정 탭에도 곧바로 보인다.</summary>
+    public void SetSetting(string name, object? value) => Traced(nameof(SetSetting), $"{Quote(name)}, {value}", () =>
+    {
+        var settings = OpenSettings();
+
+        try
+        {
+            settings.SetValue(name, Minguk.Tools.Projects.Settings.SettingsValue.FromObject(value));
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidCastException)
+        {
+            throw Guard(ex.Message);
+        }
+    });
+
+    /// <summary>그 이름의 칸이 있는가.</summary>
+    public bool HasSetting(string name) => Traced(nameof(HasSetting), Quote(name), () => OpenSettings().Find(name) is not null);
+
+    public object? 설정(string name) => Setting(name);
+
+    public T 설정<T>(string name) => Setting<T>(name);
+
+    public IReadOnlyList<Minguk.Tools.Projects.Settings.SettingsRow> 설정목록(string name) => SettingList(name);
+
+    public void 설정저장(string name, object? value) => SetSetting(name, value);
+
+    public bool 설정있나(string name) => HasSetting(name);
+
+    private Minguk.Tools.Projects.Settings.SolutionSettings OpenSettings()
+    {
+        var root = _host.ResourceRoot
+                   ?? throw Guard("설정을 쓰려면 프로젝트로 열어야 합니다 - 한 파일짜리 스크립트에는 솔루션·프로젝트 설정이 없습니다.");
+
+        return _settings ??= Minguk.Tools.Projects.Settings.SolutionSettings.ForScriptRoot(root);
+    }
+
+    private Minguk.Tools.Projects.Settings.SettingsEntry SettingEntry(string name)
+    {
+        var entry = OpenSettings().Find(name ?? string.Empty)
+                    ?? throw Guard(Minguk.Tools.Projects.Settings.SolutionSettings.MissingMessage(name ?? string.Empty));
+
+        // 겹침·형식 틀림은 멈추지 않고 한 번만 말한다 - 파일 하나 때문에 돌던 런이 서면 안 된다.
+        if (entry.Warning is { } warning && _settingWarned.Add(name + "\n" + warning))
+            _host.Print($"설정 경고: {warning}");
+
+        return entry;
+    }
 
     private string FindResource(string name)
     {

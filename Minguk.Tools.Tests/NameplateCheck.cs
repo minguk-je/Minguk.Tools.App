@@ -11,7 +11,7 @@ using Minguk.Tools.Vision.Ocr;
 namespace Minguk.Tools.Tests;
 
 /// <summary>
-/// 데이터셋의 라벨 위 이름표 자리를 잘라 OCR 에 넣어 본다. 언어별로, 원본과 전처리 각각 무엇이 읽히는지.
+/// 데이터셋의 라벨 위 이름표 자리를 잘라 OCR 에 넣어 본다. 무엇이 읽히는지.
 /// </summary>
 /// <remarks>
 /// 실시간에서 이름표가 빈 글로 나올 때 "코드 경로가 안 도는지" 와 "OCR 이 그 글자를 못 읽는지" 를
@@ -28,12 +28,9 @@ internal static class NameplateCheck
 
         Directory.CreateDirectory(output);
 
-        var engines = WindowsOcrEngine.AvailableLanguages
-            .Select(tag => (Tag: tag, Engine: OcrEngineFactory.TryCreate(tag)))
-            .Where(e => e.Engine is not null)
-            .ToList();
+        using var engine = OcrEngineFactory.Create(out var fallback);
 
-        Console.WriteLine($"데이터셋 {dataset.Root} · 그림 {items.Count}장 · 언어 {string.Join(", ", engines.Select(e => e.Tag))} · 잘라낸 그림 → {output}");
+        Console.WriteLine($"데이터셋 {dataset.Root} · 그림 {items.Count}장 · {engine.Name}{(fallback is null ? string.Empty : $" ({fallback})")} · 잘라낸 그림 → {output}");
 
         foreach (var item in items)
         {
@@ -57,29 +54,11 @@ internal static class NameplateCheck
 
                 Console.WriteLine($"{item.Name} #{i} {rect.Width}x{rect.Height}px");
 
-                // 원본과 제품 전처리(NameplateInk)를 나란히. 전처리를 손보면 여기서 바로 비교된다.
-                var variants = new (string Name, BitmapSource Image)[]
-                {
-                    ("원본", crop),
-                    ("전처리", NameplateInk.Prepare(crop)),
-                };
+                var read = engine.RecognizeAsync(crop).GetAwaiter().GetResult();
 
-                foreach (var (name, variant) in variants)
-                {
-                    if (name == "전처리") Save(variant, Path.Combine(output, $"{Path.GetFileNameWithoutExtension(item.ImagePath)}-{i}-{name}.png"));
-
-                    var results = engines.Select(e =>
-                    {
-                        var read = e.Engine!.RecognizeAsync(variant).GetAwaiter().GetResult();
-                        return $"{e.Tag}=[{read.Text.Replace(Environment.NewLine, " / ")}] {read.Elapsed.TotalMilliseconds:0}ms";
-                    });
-
-                    Console.WriteLine($"    {name,-6} {string.Join("  ", results)}");
-                }
+                Console.WriteLine($"    [{read.Text.Replace(Environment.NewLine, " / ")}] {read.Elapsed.TotalMilliseconds:0}ms");
             }
         }
-
-        foreach (var e in engines) e.Engine!.Dispose();
 
         return 0;
     }

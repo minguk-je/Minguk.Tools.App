@@ -558,6 +558,7 @@ internal static partial class Program
         public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0) { }
         public void PublishFrame(byte[] bgra, int width, int height) { }
         public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
+        public bool TryGetFrameSize(out int width, out int height) { width = height = 0; return false; }
     }
 
     private sealed class FakeHub(CaptureTarget target) : IPerceptionHub
@@ -582,5 +583,6 @@ internal static partial class Program
         public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0) { }
         public void PublishFrame(byte[] bgra, int width, int height) { }
         public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
+        public bool TryGetFrameSize(out int width, out int height) { width = height = 0; return false; }
     }
 }

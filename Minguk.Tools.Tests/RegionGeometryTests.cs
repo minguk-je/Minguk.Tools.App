@@ -62,5 +62,41 @@ internal static partial class Program
         Check("가장자리에서 멈춘다 - 잘리지 않는다", NearPx(pinned.X, area.Left) && NearPx(pinned.Bottom, area.Bottom) && NearPx(pinned.Width, 80), pinned.ToString());
 
         Check("그림이 없으면 자리가 없다", RegionGeometry.ImageArea(new Size(800, 600), Size.Empty).IsEmpty, "");
+
+        TestCellGeometry();
+    }
+
+    /// <summary>자리 안의 칸 - 자리 기준 0~1 ↔ 캔버스, 돌린 칸 늘리기(반대편 변은 제자리), 회전 손잡이 각도.</summary>
+    private static void TestCellGeometry()
+    {
+        var region = new Rect(100, 50, 200, 100);
+        var cell = RegionGeometry.CellToCanvas(new Rect(0.5, 0.25, 0.25, 0.5), region);
+
+        Check("칸 0~1 → 캔버스(자리 안)", NearPx(cell.X, 200) && NearPx(cell.Y, 75) && NearPx(cell.Width, 50) && NearPx(cell.Height, 50), cell.ToString());
+
+        var back = RegionGeometry.CellToRatio(cell, region);
+        Check("칸 캔버스 → 0~1 이 되돌아온다", NearPx(back.X, 0.5) && NearPx(back.Y, 0.25) && NearPx(back.Width, 0.25) && NearPx(back.Height, 0.5), back.ToString());
+
+        var outside = RegionGeometry.CellToRatio(new Rect(250, 100, 100, 100), region);
+        Check("자리 밖으로 나간 칸은 자리 안으로 접는다", NearPx(outside.Right, 1) && NearPx(outside.Bottom, 1), outside.ToString());
+
+        var minimum = new Size(4, 4);
+
+        // 돌리지 않은 칸 - 오른쪽 변을 끌면 너비만 는다.
+        var flat = RegionGeometry.ResizeRotated(new Rect(0, 0, 40, 10), 0, HorizontalAlignment.Right, VerticalAlignment.Stretch, 6, 3, minimum);
+        Check("각도 0 이면 늘리기는 축 그대로", NearPx(flat.X, 0) && NearPx(flat.Width, 46) && NearPx(flat.Height, 10), flat.ToString());
+
+        // 90도 돈 칸의 '오른쪽' 변은 화면 아래를 향한다 - 화면에서 아래로 10 끌면 너비가 10 늘고, 가운데는 아래로 5 간다(왼쪽 변은 제자리).
+        var turned = RegionGeometry.ResizeRotated(new Rect(0, 0, 40, 10), 90, HorizontalAlignment.Right, VerticalAlignment.Stretch, 0, 10, minimum);
+        var center = new Point(turned.X + (turned.Width / 2), turned.Y + (turned.Height / 2));
+        Check("돌린 칸은 돌린 방향으로 늘고 반대편 변은 제자리", NearPx(turned.Width, 50) && NearPx(turned.Height, 10) && NearPx(center.X, 20) && NearPx(center.Y, 10),
+              $"{turned} 가운데 {center}");
+
+        var crushed = RegionGeometry.ResizeRotated(new Rect(0, 0, 40, 10), 30, HorizontalAlignment.Left, VerticalAlignment.Stretch, 999, 0, minimum);
+        Check("돌린 칸도 최소 크기에서 멈춘다", NearPx(crushed.Width, minimum.Width), crushed.ToString());
+
+        var quarter = RegionGeometry.Rotate(0, new Point(0, 0), new Point(0, -10), new Point(10, 0));
+        var back90 = RegionGeometry.Rotate(350, new Point(0, 0), new Point(0, -10), new Point(-10, 0));
+        Check("회전 손잡이 - 위에서 오른쪽으로 끌면 +90, 각도는 0~360 안", NearPx(quarter, 90) && NearPx(back90, 260), $"{quarter} / {back90}");
     }
 }

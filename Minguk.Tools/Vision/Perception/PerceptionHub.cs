@@ -76,6 +76,17 @@ public sealed class PerceptionHub : IPerceptionHub
         }
     }
 
+    public bool TryGetFrameSize(out int width, out int height)
+    {
+        lock (_frameGate)
+        {
+            width = _frameWidth;
+            height = _frameHeight;
+
+            return _frame is not null && width > 0 && height > 0;
+        }
+    }
+
     public bool TryCropFrame(Rect ratio, out BitmapSource? crop)
     {
         crop = null;

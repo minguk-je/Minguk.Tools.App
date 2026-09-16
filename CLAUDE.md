@@ -74,6 +74,8 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
   파생 화면은 `RestoreSettings/SaveSettings/ReleaseResources` 에서 반드시 `base` 를 부른다. 바탕 이름은 `...Base` 로 끝낸다(`ViewModel` 로 끝나면 로거 이름이 겹친다).
 - 설정 키는 **파생 화면 이름**으로 저장된다 - 캡처와 플레이가 대상 창을 각자 기억한다.
 - 미리보기 판·입력 전달 도구 줄은 `Views/Parts`(`CapturePreviewPanel`·`PreviewForwardBar`). 겹그림은 판의 `Overlay`, 영역 편집기는 `Editor` 자리.
+- **자리 안 칸**(2026-09-16): 자리(`NamedRegion`)는 그룹, 칸(`RegionCell`, 자리 기준 0~1, 돌릴 수 있음)만 읽는다. 스크립트 `읽기("자리.칸")`. 칸은 별개 항목·별개 어도너(`RegionCellItem`·`RegionCellAdorner`),
+  영역 패널은 트리. 자세한 것·함정(돌린 칸 손잡이 변위는 돌린 좌표계, 회전은 픽셀 공간)은 `docs/몹-검출.md`.
 - 스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`. 스크립트 입력은 미리보기와 **같은 어댑터**로 나가고 보내기 직전 대상 창을 앞으로.
 - **캡처 세션은 허브에서 나눠 쓴다**(`SharedCaptureHub`) - 같은 창을 잡는 화면이 여럿이어도 WGC 세션은 하나. 리드백은 누구라도 원하면 켜고, 세션을 만들 때 정해져 필요하면 새로 만든다.
   콜백은 잠금 없이 손잡이 배열 스냅샷을 돈다.
@@ -137,7 +139,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
 | `IUiAutomationAdapter` | `WindowsUiAutomationAdapter` | `UiAutomationAdapterFactory` |
 | `IGlobalHotkeyAdapter` | `GlobalHotkeyAdapter` | `GlobalHotkeyAdapterFactory` · `SharedHotkeysFactory` |
 | `IWindowTargetAdapter` | `Win32WindowTargetAdapter` | `WindowTargetAdapterFactory` |
-| `IOcrEngine` | `WindowsOcrEngine` | `OcrEngineFactory` |
+| `IOcrEngine` | `PaddleOcrEngine`(PP-OCRv5 ONNX) | `OcrEngineFactory` |
 
 - **능력이 경로마다 다르면 능력별 인터페이스**(`IScanCodeInput` SendInput·Interception / `ICharacterInput`·`IImeControl` PostMessage·SendMessage). 부르는 쪽이 `adapter is IXxx` 로 묻는다 -
   늘 false 인 빈 메서드는 되는 줄 알고 쓰게 만든다.
@@ -220,6 +222,8 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
 ```
 dotnet run --project Minguk.Tools.Tests -c Debug -- --views               # 화면·모듈 생성 (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --vision              # 라벨·검출·OCR·스크립트·빌드·조준(가짜 어댑터) (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --ocr                 # 글자 읽기만 (안전, CPU·GPU)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --ocr-bench --project=<프로젝트> --truth=Minguk.Tools.Tests/OcrData/<게임>.tsv   # 실제 화면 정답률
 dotnet run --project Minguk.Tools.Tests -c Debug -- --solution            # 솔루션·공유 프로젝트·탐색기·▶ 찾기 (안전, 임시 폴더)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --script-screen       # 스크립트 화면 화면 밖 띄우기·바인딩 오류·정렬·PNG (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --labeling-screen     # 라벨링 화면 패널 높이·정렬·PNG (안전)

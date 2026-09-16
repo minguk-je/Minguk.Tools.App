@@ -366,6 +366,77 @@ internal static class ScriptScreenProbe
             Console.WriteLine($"[PASS] 치수 표시가 원본 픽셀이다 - {item.SourceWidthPx:0} x {item.SourceHeightPx:0}");
         else { Console.WriteLine($"[FAIL] 치수가 원본 픽셀이 아니다 - {item.SourceWidthPx:0}"); failures++; }
 
+        // 칸(사용자 2026-09-16 - 자리는 LayoutGroup, 칸은 그 안 항목) - 칸은 자리와 별개 항목·별개 어도너. 칸을 고르면 칸 어도너만 붙는다.
+        // 손잡이가 부르는 것과 같은 캔버스 길로 끈다 - 놓기(저장)는 안 부른다(사용자 데이터셋을 건드리지 않게).
+        {
+            var current = new Minguk.Tools.Vision.Regions.RegionCell { Name = "현재", Rect = new Rect(0, 0, 0.4, 1) };
+            var maximum = new Minguk.Tools.Vision.Regions.RegionCell { Name = "최대", Rect = new Rect(0.6, 0, 0.4, 1), Angle = 20 };
+
+            // 눈으로 볼 수 있게 자리를 크게 - 칸 손잡이·회전 동그라미가 제자리에 그려지는지 PNG 로 남긴다.
+            region.Rect = new Rect(0.3, 0.25, 0.4, 0.4);
+            region.Cells.Clear();
+            region.Cells.Add(current);
+            region.Cells.Add(maximum);
+            vm.RegionsRevision++;
+            await Pump(300);
+
+            var cells = canvas.CellItems.Where(c => ReferenceEquals(c.Region, region)).ToList();
+            var currentItem = cells.FirstOrDefault(c => ReferenceEquals(c.Cell, current));
+            var maximumItem = cells.FirstOrDefault(c => ReferenceEquals(c.Cell, maximum));
+
+            var placed = cells.Count == 2 && currentItem is not null && maximumItem is not null
+                         && Math.Abs(System.Windows.Controls.Canvas.GetLeft(currentItem) - System.Windows.Controls.Canvas.GetLeft(item)) < 0.5
+                         && Math.Abs(maximumItem.Width - (item.Width * 0.4)) < 0.5
+                         && maximumItem.RenderTransform is RotateTransform { Angle: 20 };
+
+            if (placed) Console.WriteLine($"[PASS] 칸 둘이 자리 안에 따로 놓이고 돌린 칸은 돌아 있다 - 칸 항목 {cells.Count}개");
+            else { Console.WriteLine($"[FAIL] 칸이 자리 안에 안 놓였다 - 칸 항목 {cells.Count}개 · 최대 각도 {(maximumItem?.RenderTransform as RotateTransform)?.Angle}"); failures++; }
+
+            if (currentItem is not null && maximumItem is not null)
+            {
+                vm.SelectedCell = maximum;
+                await Pump(200);
+
+                var cellsShot = Path.Combine(Path.GetTempPath(), "minguk-script-screen-cells.png");
+                Render(window, cellsShot);
+                Console.WriteLine($"[INFO] 칸을 고른 미리보기를 찍었다: {cellsShot}");
+
+                var onlyCell = maximumItem.HasAdorner && !currentItem.HasAdorner && !item.HasAdorner
+                               && ReferenceEquals(vm.SelectedRegion, region) && ReferenceEquals(vm.SelectedRegionNode, maximum);
+
+                if (onlyCell) Console.WriteLine("[PASS] 칸을 고르면 칸 어도너만 붙고 자리 어도너는 떨어진다(자리는 고른 채)");
+                else { Console.WriteLine($"[FAIL] 칸 고르기 어도너가 틀렸다 - 칸 {maximumItem.HasAdorner} · 다른 칸 {currentItem.HasAdorner} · 자리 {item.HasAdorner} · VM 자리 {vm.SelectedRegion?.Name}"); failures++; }
+
+                var cellAdorner = System.Windows.Documents.AdornerLayer.GetAdornerLayer(maximumItem)?.GetAdorners(maximumItem)?.FirstOrDefault();
+                var rotateThumb = cellAdorner is null ? null : Descendants<Minguk.Tools.Markup.Regions.RegionRotateThumb>(cellAdorner).FirstOrDefault();
+
+                if (cellAdorner is Minguk.Tools.Markup.Regions.RegionCellAdorner && rotateThumb is not null)
+                    Console.WriteLine("[PASS] 칸 어도너는 자리 어도너와 다른 것이고 회전 손잡이가 있다");
+                else { Console.WriteLine($"[FAIL] 칸 어도너가 아니거나 회전 손잡이가 없다 - {cellAdorner?.GetType().Name ?? "없음"} · 회전 {rotateThumb is not null}"); failures++; }
+
+                // 칸 옮기기 - 자리 너비 기준 비율로 VM 에 온다. 자리 밖으로는 못 나간다.
+                canvas.MoveBy(currentItem, item.Width * 0.1, 0);
+                await Pump(100);
+                var moved = Math.Abs(current.X - 0.1) < 0.002;
+
+                canvas.MoveBy(currentItem, -9999, 0);
+                await Pump(100);
+                var pinned = Math.Abs(current.X) < 0.002;
+
+                canvas.RotateTo(maximumItem, 45);
+                await Pump(100);
+                var rotated = Math.Abs(maximum.Angle - 45) < 0.01 && maximumItem.RenderTransform is RotateTransform { Angle: 45 };
+
+                if (moved && pinned && rotated)
+                    Console.WriteLine($"[PASS] 칸 끌기·돌리기가 VM 의 칸으로 온다 - 옮김 {moved} · 자리 밖 막음 {pinned} · 45° {rotated}");
+                else { Console.WriteLine($"[FAIL] 칸 끌기가 틀렸다 - 옮김 {moved}({current.X:0.###}) · 자리 밖 막음 {pinned} · 돌림 {rotated}({maximum.Angle})"); failures++; }
+
+                vm.SelectedCell = null;
+                vm.SelectedRegion = region;
+                await Pump(200);
+            }
+        }
+
         // 켜는 조건은 하나 - 영역 보기 켬 + 입력 전달 끔(2026-09-15). 전달을 켜거나 영역 보기를 끄면 편집기가 빠진다(클릭은 게임 몫).
         vm.IsInputForwardingEnabled = true;
         await Pump(100);
@@ -387,7 +458,7 @@ internal static class ScriptScreenProbe
             Console.WriteLine("[PASS] 자리 편집기는 영역 보기 켬 + 입력 전달 끔일 때만 돈다(전달 켜면·영역 보기 끄면 빠지고 어도너도 진다)");
         else { Console.WriteLine($"[FAIL] 자리 편집기 켜는 조건이 틀렸다 - 전달 켬에서 빠짐 {forwardingOff} · 다시 켜짐 {backOn} · 영역 보기 끔에서 빠짐 {hiddenOff}"); failures++; }
 
-        // 영역 패널 - 솔루션 탐색기와 같은 탭 그룹, 이름·계속 읽기·전처리 칸에서 바로 고친다(사용자 데이터를 안 건드리게 새 자리·이름 바꾸기는 여기서 안 누른다).
+        // 영역 패널 - 솔루션 탐색기와 같은 탭 그룹, 이름·계속 읽기 칸에서 바로 고친다(손질·언어 열은 PP-OCRv5 로 바꾸며 없앴다 - 2026-09-16)(사용자 데이터를 안 건드리게 새 자리·이름 바꾸기는 여기서 안 누른다).
         {
             // 영역은 아래 탭 줄(오류 목록·출력과 같은 그룹) 맨 왼쪽이다(사용자, 2026-09-16 - 칸이 늘어 옆 패널에는 좁고, 탭이 있다는 것을 알아채게).
             // 안 고른 탭은 시각 트리에 없다 - 도킹의 항목 목록으로 본다.
@@ -400,16 +471,24 @@ internal static class ScriptScreenProbe
             var grid = (regionsPanel?.Content as DependencyObject) is { } content
                 ? Descendants<DevExpress.Xpf.Grid.GridControl>(content).FirstOrDefault()
                 : null;
+            // 트리 - 자리 줄 밑에 칸 줄(자리.칸).
+            var tree = grid?.View as DevExpress.Xpf.Grid.TreeListView;
+            var regionNode = tree?.Nodes.FirstOrDefault(n => ReferenceEquals(n.Content, region));
+            var treeOk = regionNode is not null && regionNode.Nodes.Count == region.Cells.Count && region.Cells.Count > 1;
+
+            if (treeOk) Console.WriteLine($"[PASS] 영역 패널은 트리 - 「{region.Name}」 밑에 칸 {regionNode!.Nodes.Count}줄");
+            else { Console.WriteLine($"[FAIL] 영역 패널 트리가 틀렸다 - 트리 {tree is not null} · 자리 줄 {regionNode is not null} · 칸 줄 {regionNode?.Nodes.Count}"); failures++; }
+
             var editable = grid is not null
                            && grid.Columns["Name"] is { AllowEditing: not DevExpress.Utils.DefaultBoolean.False }
                            && grid.Columns["KeepReading"] is not null
                            && grid.Columns["LastText"] is { AllowEditing: DevExpress.Utils.DefaultBoolean.False }
-                           && grid.Columns["Preprocessor"] is not null
-                           && grid.Columns["Language"] is not null
+                           && grid.Columns["Preprocessor"] is null
+                           && grid.Columns["Language"] is null
                            && grid.Columns["X"] is { Visible: false };
 
             if (sameGroup && editable)
-                Console.WriteLine("[PASS] 영역 패널이 아래 탭 줄 맨 왼쪽이고, 그리드는 이름·계속 읽기·읽은 글자·손질·언어(자리 열은 숨김)");
+                Console.WriteLine("[PASS] 영역 패널이 아래 탭 줄 맨 왼쪽이고, 그리드는 이름·계속 읽기·읽은 글자(손질·언어 없음, 자리 열은 숨김)");
             else { Console.WriteLine($"[FAIL] 영역 패널 자리·그리드가 틀렸다 - 아래 탭 맨 왼쪽 {sameGroup} · 그리드 {grid is not null} · 칸 {editable}"); failures++; }
         }
 

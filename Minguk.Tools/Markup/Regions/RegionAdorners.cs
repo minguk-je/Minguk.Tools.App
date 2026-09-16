@@ -51,7 +51,7 @@ public sealed class RegionSizeAdorner : Adorner
     private readonly VisualCollection _visuals;
     private readonly RegionSizeChrome _chrome;
 
-    public RegionSizeAdorner(RegionItem item) : base(item)
+    public RegionSizeAdorner(RegionItemBase item) : base(item)
     {
         SnapsToDevicePixels = true;
         _chrome = new RegionSizeChrome { DataContext = item };
@@ -67,6 +67,41 @@ public sealed class RegionSizeAdorner : Adorner
         _chrome.Arrange(new Rect(new Point(0, 0), finalSize));
         return finalSize;
     }
+}
+
+/// <summary>
+/// 고른 <b>칸</b>에 붙는 테두리·손잡이 여덟 개·회전 손잡이. 자리 어도너(<see cref="RegionResizeAdorner"/>)와 별개다(사용자 2026-09-16).
+/// </summary>
+/// <remarks>
+/// 색이 초록이라 주황(자리)과 한눈에 갈린다. 칸 항목이 돌면 어도너도 같이 돈다 - 손잡이 변위는 돌린 좌표계로 온다(<see cref="RegionCellItem"/>).
+/// </remarks>
+public sealed class RegionCellAdorner : Adorner
+{
+    private readonly VisualCollection _visuals;
+    private readonly RegionCellChrome _chrome;
+
+    public RegionCellAdorner(RegionCellItem item) : base(item)
+    {
+        SnapsToDevicePixels = true;
+        _chrome = new RegionCellChrome { DataContext = item };
+        _visuals = new VisualCollection(this) { _chrome };
+    }
+
+    protected override int VisualChildrenCount => _visuals.Count;
+
+    protected override Visual GetVisualChild(int index) => _visuals[index];
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        _chrome.Arrange(new Rect(finalSize));
+        return finalSize;
+    }
+}
+
+/// <summary>칸 테두리·손잡이 모양. 템플릿은 <c>RegionChrome.xaml</c> 에 있다.</summary>
+public sealed class RegionCellChrome : Control
+{
+    public RegionCellChrome() => Style = RegionChromeResources.StyleFor(typeof(RegionCellChrome));
 }
 
 /// <summary>테두리·손잡이 모양. 템플릿은 <c>RegionChrome.xaml</c> 에 있다.</summary>

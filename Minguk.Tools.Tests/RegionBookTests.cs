@@ -24,14 +24,14 @@ internal static partial class Program
             var book = new RegionBook(folder);
 
             book.Put(new NamedRegion { Name = "탄약", Rect = new Rect(0.9, 0.86, 0.09, 0.06) });
-            book.Put(new NamedRegion { Name = "체력", Rect = new Rect(0.09, 0.80, 0.11, 0.05), Ink = false });
+            book.Put(new NamedRegion { Name = "체력", Rect = new Rect(0.09, 0.80, 0.11, 0.05) });
             book.Save();
 
             var read = RegionBook.Load(folder);
             var ammo = read.Find("탄약");
 
             Check("저장했다 되읽으면 자리가 그대로다",
-                  read.Regions.Count == 2 && ammo is not null && Near(ammo.Rect.X, 0.9) && Near(ammo.Rect.Width, 0.09) && ammo.Ink,
+                  read.Regions.Count == 2 && ammo is not null && Near(ammo.Rect.X, 0.9) && Near(ammo.Rect.Width, 0.09),
                   ammo is null ? "탄약을 못 찾음" : ammo.Describe);
 
             Check("이름은 대소문자를 안 가린다 - 스크립트가 글자 하나 달라 못 찾으면 자리 탓인 줄 안다",
@@ -45,6 +45,14 @@ internal static partial class Program
                   $"{read.Regions.Count}개");
 
             Check("지우면 없다", read.Remove("체력") && read.Find("체력") is null && !read.Remove("없는것"), "");
+
+            // 옛 파일(손질·언어를 자리마다 적던 때)도 읽혀야 한다 - 모르는 키는 건너뛴다.
+            File.WriteAllText(Path.Combine(folder, RegionBook.FileName),
+                """[{ "name": "옛자리", "x": 0.1, "y": 0.2, "width": 0.3, "height": 0.04, "ink": true, "prep": "bright", "lang": "en-US", "shear": 12, "live": true, "note": "" }]""");
+
+            var legacy = RegionBook.Load(folder).Find("옛자리");
+            Check("옛 regions.json(ink·prep·lang·shear)도 읽는다", legacy is not null && legacy.KeepReading && Near(legacy.Rect.Height, 0.04),
+                  legacy?.Describe ?? "못 읽음");
 
             // 망가진 파일 - 빈 목록으로 가야 한다.
             File.WriteAllText(Path.Combine(folder, RegionBook.FileName), "{ 이건 json 이 아니다");

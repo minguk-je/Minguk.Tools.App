@@ -9,6 +9,7 @@ using DevExpress.Xpf.Docking;
 using DevExpress.Xpf.Grid;
 
 using NamedRegion = Minguk.Tools.Vision.Regions.NamedRegion;
+using RegionCell = Minguk.Tools.Vision.Regions.RegionCell;
 
 using Minguk.Image;
 using Minguk.Tools.Input;
@@ -552,9 +553,28 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () => Guard(() =>
         {
-            if (FindControl<GridControl>("RegionsGridObjectService") is not { View: TableView view } grid) return;
+            if (FindControl<GridControl>("RegionsGridObjectService") is not { View: TreeListView view } grid) return;
 
             grid.CurrentItem = region;
+            grid.CurrentColumn = grid.Columns["Name"];
+            view.Focus();
+            view.ShowEditor();
+            view.BestFitColumns();
+        }));
+    }
+
+    /// <summary>새 칸 - 영역 목록을 앞으로 띄우고 트리의 그 칸 줄 이름을 편집 상태로 연다.</summary>
+    protected override void OnCellCreated(RegionCell cell)
+    {
+        ShowToolWindow("RegionsPanel");
+
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () => Guard(() =>
+        {
+            if (FindControl<GridControl>("RegionsGridObjectService") is not { View: TreeListView view } grid) return;
+
+            // AutoExpandAllNodes 는 처음 불러올 때만 펼친다 - 나중에 더한 칸이 접힌 자리 밑에 숨지 않게 펼친다.
+            view.ExpandAllNodes();
+            grid.CurrentItem = cell;
             grid.CurrentColumn = grid.Columns["Name"];
             view.Focus();
             view.ShowEditor();

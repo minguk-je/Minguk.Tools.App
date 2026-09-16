@@ -42,7 +42,54 @@ public abstract partial class RecognizingCaptureViewModelBase
     public NamedRegion? SelectedRegion
     {
         get => GetProperty(() => SelectedRegion);
-        set => SetProperty(() => SelectedRegion, value, () => RegionsRevision++);
+        set => SetProperty(() => SelectedRegion, value, () =>
+        {
+            // 다른 자리를 고르면 칸 선택은 풀린다 - 칸은 늘 고른 자리 안의 것이다.
+            if (SelectedCell is { } cell && (value is null || !value.Cells.Contains(cell))) SelectedCell = null;
+            RaisePropertyChanged(nameof(SelectedRegionNode));
+            RegionsRevision++;
+        });
+    }
+
+    /// <summary>고른 칸. 없으면 자리 전체를 고른 것이다. 칸을 고르면 그 칸의 자리가 <see cref="SelectedRegion"/> 이다.</summary>
+    public RegionCell? SelectedCell
+    {
+        get => GetProperty(() => SelectedCell);
+        set => SetProperty(() => SelectedCell, value, () =>
+        {
+            if (value is not null && Regions.FirstOrDefault(r => r.Cells.Contains(value)) is { } owner && !ReferenceEquals(owner, SelectedRegion))
+                SelectedRegion = owner;
+
+            RaisePropertyChanged(nameof(SelectedRegionNode));
+            RegionsRevision++;
+        });
+    }
+
+    /// <summary>
+    /// 영역 패널 트리에서 고른 줄 - 자리(<see cref="NamedRegion"/>)나 칸(<see cref="RegionCell"/>). 고르면 <see cref="SelectedRegion"/>·<see cref="SelectedCell"/> 로 나눠 넣는다.
+    /// </summary>
+    public object? SelectedRegionNode
+    {
+        get => (object?)SelectedCell ?? SelectedRegion;
+        set
+        {
+            switch (value)
+            {
+                case RegionCell cell:
+                    SelectedCell = cell;
+                    break;
+
+                case NamedRegion region:
+                    SelectedCell = null;
+                    SelectedRegion = region;
+                    break;
+
+                case null when SelectedRegion is not null || SelectedCell is not null:
+                    SelectedCell = null;
+                    SelectedRegion = null;
+                    break;
+            }
+        }
     }
 
     /// <summary>만들어 둔 자리를 미리보기에 겹쳐 그릴지. 켜 두고 입력 전달을 끄면 미리보기에서 바로 고친다.</summary>
@@ -111,6 +158,11 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     public ICommand RemoveRegionCommand => new DelegateCommand(DoRemoveRegion, () => SelectedRegion is not null);
 
+    /// <summary>
+    /// 고른 자리에 칸을 하나 더한다 - 자리(또는 그 칸)를 골랐을 때만 켜진다(사용자 2026-09-16 「AdornerLayer 가 선택되어 있으면 Adorner 추가 버튼 활성화」).
+    /// </summary>
+    public ICommand AddCellCommand => new DelegateCommand(DoAddCell, () => SelectedRegion is not null);
+
     /// <summary>고른 자리를 지금 읽어 본다 - 자리가 맞는지 확인하는 가장 빠른 길.</summary>
     public ICommand TestRegionCommand => new DelegateCommand(DoTestRegion, () => SelectedRegion is not null);
 
@@ -118,6 +170,24 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 미리보기 캔버스가 자리를 옮기거나 크기를 바꿀 때마다 준다. 끄는 동안은 자리만 고치고, 놓으면 저장한다.
     /// </summary>
     public ICommand RegionEditCommand => new DelegateCommand<RegionEdit>(ApplyRegionEdit);
+
+    /// <summary>미리보기 캔버스가 칸을 옮기거나 크기·각도를 바꿀 때마다 준다. 끄는 동안은 칸만 고치고, 놓으면 저장한다.</summary>
+    public ICommand CellEditCommand => new DelegateCommand<CellEdit>(ApplyCellEdit);
+
+    private void ApplyCellEdit(CellEdit edit) => Guard(() =>
+    {
+        edit.Cell.Rect = edit.Rect;
+        edit.Cell.Angle = edit.Angle;
+
+        if (!edit.Completed) return;
+
+        SaveRegions();
+        RegionsRevision++;
+
+        StatusText = $"「{edit.Region.Name}.{edit.Cell.Name}」 칸을 고쳤습니다 - " +
+                     $"{edit.Cell.X * 100:0.0}%, {edit.Cell.Y * 100:0.0}%  {edit.Cell.Width * 100:0.0}% x {edit.Cell.Height * 100:0.0}%" +
+                     (Math.Abs(edit.Cell.Angle) < 0.01 ? string.Empty : $"  {edit.Cell.Angle:0.#}°");
+    });
 
     private void ApplyRegionEdit(RegionEdit edit) => Guard(() =>
     {
@@ -145,11 +215,14 @@ public abstract partial class RecognizingCaptureViewModelBase
     protected void LoadRegions()
     {
         foreach (var old in _savedNames.Keys) old.PropertyChanged -= OnRegionPropertyChanged;
+        foreach (var old in _savedCellNames.Keys) old.PropertyChanged -= OnCellPropertyChanged;
         _savedNames.Clear();
+        _savedCellNames.Clear();
 
         _regions = RegionBook.Load(RecognitionRoot);
 
         var keep = SelectedRegion?.Name;
+        var keepCell = SelectedCell?.Name;
 
         Regions.Clear();
 
@@ -158,10 +231,60 @@ public abstract partial class RecognizingCaptureViewModelBase
             Regions.Add(region);
             _savedNames[region] = region.Name;
             region.PropertyChanged += OnRegionPropertyChanged;
+
+            foreach (var cell in region.Cells) WatchCell(cell);
         }
 
         SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, keep, StringComparison.OrdinalIgnoreCase)) ?? Regions.FirstOrDefault();
+        SelectedCell = keepCell is null ? null : SelectedRegion?.FindCell(keepCell);
         UpdateLiveRegions();
+    }
+
+    /// <summary>칸마다 저장된 이름. 트리에서 칸 이름을 고치면 옛 이름과 견줘 겹치거나 틀리면 되돌린다.</summary>
+    private readonly Dictionary<RegionCell, string> _savedCellNames = new(ReferenceEqualityComparer.Instance);
+
+    private void WatchCell(RegionCell cell)
+    {
+        _savedCellNames[cell] = cell.Name;
+        cell.PropertyChanged += OnCellPropertyChanged;
+    }
+
+    private void OnCellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not RegionCell cell || _isRevertingName || e.PropertyName != nameof(RegionCell.Name)) return;
+
+        var region = Regions.FirstOrDefault(r => r.Cells.Contains(cell));
+        var old = _savedCellNames.TryGetValue(cell, out var saved) ? saved : cell.Name;
+        var name = cell.Name.Trim();
+
+        if (region is null || string.Equals(name, old, StringComparison.Ordinal)) return;
+
+        var clash = region.Cells.Any(other => !ReferenceEquals(other, cell) && string.Equals(other.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (!RegionBook.IsValidName(name) || clash)
+        {
+            _isRevertingName = true;
+            try { cell.Name = old; }
+            finally { _isRevertingName = false; }
+
+            StatusText = name.Length == 0 ? "칸 이름을 비울 수 없습니다 - 스크립트가 「자리.칸」 으로 부릅니다."
+                : clash ? $"「{region.Name}」 자리에 「{name}」 칸이 이미 있습니다."
+                : "이름에 점(.)은 못 씁니다 - 스크립트가 「자리.칸」 으로 가릅니다.";
+            return;
+        }
+
+        if (!string.Equals(cell.Name, name, StringComparison.Ordinal))
+        {
+            _isRevertingName = true;
+            try { cell.Name = name; }
+            finally { _isRevertingName = false; }
+        }
+
+        _savedCellNames[cell] = name;
+        SaveRegions();
+        RegionsRevision++;
+
+        StatusText = $"칸 이름을 「{region.Name}.{old}」 → 「{region.Name}.{name}」 으로 바꿨습니다. 스크립트에서 부르던 곳이 있으면 같이 고치세요.";
     }
 
     private void SaveRegions() => Guard(() =>
@@ -170,7 +293,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         RaisePropertyChanged(nameof(Regions));
     });
 
-    /// <summary>그리드 칸에서 고친 것 - 이름은 검사해 저장하고, 계속 읽기·전처리는 바로 저장한다.</summary>
+    /// <summary>그리드 칸에서 고친 것 - 이름은 검사해 저장하고, 계속 읽기는 바로 저장한다.</summary>
     private void OnRegionPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (sender is not NamedRegion region || _isRevertingName) return;
@@ -179,30 +302,6 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             case nameof(NamedRegion.Name):
                 CommitRename(region);
-                break;
-
-            case nameof(NamedRegion.Ink):
-                SaveRegions();
-                StatusText = $"「{region.Name}」 전처리(흰 글자만 남기기)를 {(region.Ink ? "켰습니다" : "껐습니다")}.";
-                break;
-
-            case nameof(NamedRegion.Preprocessor):
-                SaveRegions();
-                StatusText = $"「{region.Name}」 손질을 「{region.Preprocess.Name}」 로 바꿨습니다 - {region.Preprocess.Summary}";
-                break;
-
-            case nameof(NamedRegion.Language):
-                SaveRegions();
-                StatusText = region.Language.Length == 0
-                    ? $"「{region.Name}」 언어를 자동으로 - 숫자는 영문으로 먼저 읽고 안 되면 화면 언어로 읽습니다."
-                    : $"「{region.Name}」 을(를) {region.Language} 로 읽습니다.";
-                break;
-
-            case nameof(NamedRegion.ShearDegrees):
-                SaveRegions();
-                StatusText = region.ShearDegrees == 0
-                    ? $"「{region.Name}」 기울기 보정을 껐습니다."
-                    : $"「{region.Name}」 글자를 {region.ShearDegrees:0.#}도 세워서 읽습니다 - 이탤릭 글꼴에 씁니다.";
                 break;
 
             case nameof(NamedRegion.KeepReading):
@@ -226,7 +325,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         var clash = Regions.Any(other => !ReferenceEquals(other, region) && string.Equals(other.Name, name, StringComparison.OrdinalIgnoreCase));
 
-        if (name.Length == 0 || clash)
+        if (!RegionBook.IsValidName(name) || clash)
         {
             _isRevertingName = true;
             try { region.Name = old; }
@@ -234,7 +333,8 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             StatusText = name.Length == 0
                 ? "이름을 비울 수 없습니다 - 스크립트가 이 이름으로 부릅니다."
-                : $"「{name}」 은(는) 이미 있는 이름입니다 - 스크립트가 어느 쪽을 볼지 모르게 됩니다.";
+                : clash ? $"「{name}」 은(는) 이미 있는 이름입니다 - 스크립트가 어느 쪽을 볼지 모르게 됩니다."
+                : "이름에 점(.)은 못 씁니다 - 스크립트가 「자리.칸」 으로 가릅니다.";
             return;
         }
 
@@ -264,7 +364,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     private void AddRegion(Rect rect, string how)
     {
         var name = NextName();
-        var region = new NamedRegion { Name = name, Rect = rect, Ink = true };
+        var region = new NamedRegion { Name = name, Rect = rect };
 
         RegionBook.Put(region);
         SaveRegions();
@@ -282,9 +382,56 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>새 자리가 생겼다. 화면은 영역 목록을 앞으로 띄우고 이름 칸을 편집 상태로 연다.</summary>
     protected virtual void OnRegionCreated(NamedRegion region) { }
 
+    /// <summary>새 칸이 생겼다. 화면은 영역 목록의 그 칸 줄 이름을 편집 상태로 연다.</summary>
+    protected virtual void OnCellCreated(RegionCell cell) { }
+
+    private void DoAddCell() => Guard(() =>
+    {
+        if (SelectedRegion is not { } region) return;
+
+        var name = string.Empty;
+        for (var n = region.Cells.Count + 1; name.Length == 0 || region.FindCell(name) is not null; n++) name = $"칸{n}";
+
+        // 자리 가운데에 폭 절반 - 손잡이로 맞춘다.
+        var cell = new RegionCell { Name = name, Rect = new Rect(0.25, 0, 0.5, 1) };
+
+        region.Cells.Add(cell);
+        WatchCell(cell);
+        SaveRegions();
+
+        SelectedCell = cell;
+        ShowRegions = true;
+        RegionsRevision++;
+
+        StatusText = $"「{region.Name}.{name}」 칸을 더했습니다. 미리보기에서 끌어 맞추고, 이름을 고치세요." +
+                     (IsInputForwardingEnabled ? " 미리보기에서 옮기려면 입력 전달을 끄세요." : string.Empty);
+
+        OnCellCreated(cell);
+    });
+
     private void DoRemoveRegion() => Guard(() =>
     {
         if (SelectedRegion is not { } region) return;
+
+        // 칸을 골랐으면 칸을 지운다. 자리에는 칸이 늘 하나 이상이다.
+        if (SelectedCell is { } cell && region.Cells.Contains(cell))
+        {
+            if (region.Cells.Count <= 1)
+            {
+                StatusText = $"「{region.Name}」 자리에는 칸이 하나뿐이라 지울 수 없습니다 - 자리를 지우려면 자리 줄을 고르세요.";
+                return;
+            }
+
+            region.Cells.Remove(cell);
+            cell.PropertyChanged -= OnCellPropertyChanged;
+            _savedCellNames.Remove(cell);
+            SelectedCell = null;
+            SaveRegions();
+            RegionsRevision++;
+
+            StatusText = $"「{region.Name}.{cell.Name}」 칸을 지웠습니다.";
+            return;
+        }
 
         RegionBook.Remove(region.Name);
         SaveRegions();
@@ -314,7 +461,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         var name = "글자";
         for (var n = 2; RegionBook.Find(name) is not null; n++) name = $"글자{n}";
 
-        RegionBook.Put(new NamedRegion { Name = name, Rect = old, Ink = false });
+        RegionBook.Put(new NamedRegion { Name = name, Rect = old });
         SaveRegions();
         LoadRegions();
 
@@ -410,7 +557,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </summary>
     /// <remarks>
     /// <b>이게 없으면 자리를 못 맞춘다.</b> 끌어 놓고 맞는지 보려면 스크립트를 짜서 돌려야 하는데, 한 번에
-    /// 몇십 초가 걸린다. 여기서는 누르는 즉시 읽은 글이 뜬다 - 비면 자리를 조금 넓히거나 전처리를 켜고 끈다.
+    /// 몇십 초가 걸린다. 여기서는 누르는 즉시 읽은 글이 뜬다 - 비면 자리가 글자를 덮고 있는지 본다.
     /// </remarks>
     private void DoTestRegion() => Guard(() =>
     {
@@ -427,79 +574,45 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (!EnsureOcrEngine(out var problem) || _ocr is not { } ocr)
         {
-            StatusText = $"글자 읽기 엔진이 없습니다 - Windows OCR 언어 팩을 확인하세요. {problem}";
+            StatusText = $"글자 읽기 엔진을 열지 못했습니다. {problem}";
             return;
         }
 
-        var deadline = Environment.TickCount64 + 1500;
-        System.Windows.Media.Imaging.BitmapSource? crop = null;
+        // 칸을 골랐으면 그 칸, 자리를 골랐으면 칸들을 차례로.
+        var cell = SelectedCell is { } picked && region.Cells.Contains(picked) ? picked : null;
+        var label = cell is null ? region.Name : $"{region.Name}.{cell.Name}";
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var texts = new List<string>();
 
-        while (Environment.TickCount64 < deadline && (!Hub.TryCropFrame(region.Rect, out crop) || crop is null))
-            System.Threading.Thread.Sleep(50);
-
-        if (crop is null)
+        foreach (var target in RegionTargets.Of(region, cell))
         {
-            StatusText = "프레임이 안 옵니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.";
-            return;
-        }
+            var deadline = Environment.TickCount64 + 1500;
+            System.Windows.Media.Imaging.BitmapSource? crop = null;
 
-        // 손질(그대로 키우기·밝은 글자만·어두운 글자만) × 두 언어(쓰던 것·영문)를 다 해 보고 가장 잘 읽은 것을 고른다.
-        // 게임마다 글자가 달라 어느 손질이 맞는지 해 보기 전에는 모른다(실측 2026-09-16: 오버워치 탄약은 밝은 글자만 0/12,
-        // 그대로 키우기 10/12). 언어도 갈린다 - 이름은 한국어로만 읽히고, 숫자는 한국어가 225 를 22512h5 로 낸다.
-        var english = Vision.Ocr.OcrEngineFactory.TryCreate("en-US");
-        var best = string.Empty;
-        var how = string.Empty;
-        var bestPreprocessor = region.Preprocess;
-        var bestLanguage = region.Language;
+            while (Environment.TickCount64 < deadline && (!RegionTargets.TryCrop(Hub, target, out crop) || crop is null))
+                System.Threading.Thread.Sleep(50);
 
-        foreach (var preprocessor in Vision.Ocr.OcrPreprocessors.All)
-        {
-            var prepared = preprocessor.Prepare(crop, region.PreprocessOptions);
-
-            foreach (var (engine, label) in new[] { (ocr, ocr.Language), (english, "en-US") })
+            if (crop is null)
             {
-                if (engine is null) continue;
-
-                var read = engine.RecognizeAsync(prepared).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
-
-                if (read.Length <= best.Length) continue;
-
-                best = read;
-                how = $"{preprocessor.Name}·{label}";
-                bestPreprocessor = preprocessor;
-                bestLanguage = label;
+                StatusText = "프레임이 안 옵니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.";
+                return;
             }
+
+            var read = ocr.RecognizeAsync(crop).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
+
+            target.Cell.LastText = read;
+            texts.Add(read);
         }
 
-        english?.Dispose();
+        var (text, numbers) = RegionTargets.Combine(texts);
 
-        // 가장 잘 읽은 손질·언어를 자리에 적어 둔다 - 다음부터 계속 읽기·스크립트가 그것으로 읽는다.
-        if (best.Length > 0 && (region.Preprocess.Id != bestPreprocessor.Id || !string.Equals(region.Language, bestLanguage, StringComparison.OrdinalIgnoreCase)))
-        {
-            region.Preprocessor = bestPreprocessor.Id;
-            region.Language = bestLanguage;
-            SaveRegions();
-        }
+        if (cell is null) region.LastText = text;
 
-        region.LastText = best;
-
-        var digits = new string([.. best.Where(char.IsDigit)]);
-
-        StatusText = best.Length == 0
-            ? $"「{region.Name}」 에서 아무것도 못 읽었습니다. 자리를 조금 넓히거나 글자만 덮이게 줄여 보세요."
-            : $"「{region.Name}」 → 「{best}」{(digits.Length > 0 ? $"  (숫자 {digits})" : string.Empty)}  [{how}]";
+        StatusText = text.Length == 0
+            ? $"「{label}」 에서 아무것도 못 읽었습니다. 칸이 글자를 덮고 있는지 보세요."
+            : $"「{label}」 → 「{text}」{(numbers.Length > 0 ? $"  (숫자 {string.Join(", ", numbers)})" : string.Empty)}  [{ocr.Name} {watch.Elapsed.TotalMilliseconds:0}ms]";
 
         // 상태 줄은 다음 갱신이 덮는다. 나중에 "왜 안 읽혔지" 를 되짚으려면 로그에 남아야 한다.
-        Logger.Debug($"영역 읽기: 「{region.Name}」 {region.Rect} → 「{best}」 [{how}]");
+        Logger.Debug($"영역 읽기: 「{label}」 {region.Rect} → 「{text}」 [{ocr.Name}]");
     });
-
-    /// <summary>작은 글자는 키워야 읽힌다. 전처리를 안 할 때 쓰는 길.</summary>
-    private static System.Windows.Media.Imaging.BitmapSource Enlarge(System.Windows.Media.Imaging.BitmapSource crop)
-    {
-        var scaled = new System.Windows.Media.Imaging.TransformedBitmap(crop, new System.Windows.Media.ScaleTransform(6, 6));
-
-        scaled.Freeze();
-
-        return scaled;
-    }
 }

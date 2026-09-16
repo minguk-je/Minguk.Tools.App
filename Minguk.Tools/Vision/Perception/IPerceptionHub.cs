@@ -77,4 +77,7 @@ public interface IPerceptionHub
 
     /// <summary>마지막 프레임의 한 부분(0~1 비율)을 그림으로 잘라 준다. 프레임이 없으면 false.</summary>
     bool TryCropFrame(Rect ratio, out BitmapSource? crop);
+
+    /// <summary>마지막 프레임의 크기(픽셀). 돌린 칸을 감쌀 상자를 구할 때 쓴다(<c>RegionTargets.Bounds</c>). 프레임이 없으면 false.</summary>
+    bool TryGetFrameSize(out int width, out int height);
 }

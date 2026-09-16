@@ -167,9 +167,6 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         IsMobDetectionOn = GetSettingOrLegacy(nameof(IsMobDetectionOn), false);
         IsTrackingOn = GetSettingOrLegacy(nameof(IsTrackingOn), true);
         IsNameplateOcrOn = GetSettingOrLegacy(nameof(IsNameplateOcrOn), false);
-
-        var ocrLanguage = GetSettingOrLegacy(nameof(SelectedOcrLanguage), Vision.Ocr.OcrEngineFactory.PreferredLanguage);
-        SelectedOcrLanguage = OcrLanguages.Contains(ocrLanguage) ? ocrLanguage : OcrLanguages[0];
     }
 
     protected override void SaveSettings()
@@ -181,7 +178,6 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         SetSetting(nameof(IsMobDetectionOn), IsMobDetectionOn);
         SetSetting(nameof(IsTrackingOn), IsTrackingOn);
         SetSetting(nameof(IsNameplateOcrOn), IsNameplateOcrOn);
-        SetSetting(nameof(SelectedOcrLanguage), SelectedOcrLanguage ?? string.Empty);
     }
 
     protected override void ReleaseResources()

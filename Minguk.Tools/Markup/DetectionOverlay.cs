@@ -207,6 +207,8 @@ public sealed class DetectionOverlay : FrameworkElement
         pen.Freeze();
         dc.DrawRectangle(null, pen, rect);
 
+        DrawCells(dc, rect, region, unit);
+
         var formatted = Text(region.Name, 11d, Brushes.White);
 
         // 이름표는 사각형 위에. 위가 좁으면 안쪽에 넣는다 - 화면 밖으로 나가면 안 보인다.
@@ -219,6 +221,33 @@ public sealed class DetectionOverlay : FrameworkElement
         dc.DrawRectangle(background, null, new Rect(rect.X, top, formatted.Width + (6 * unit), formatted.Height + (2 * unit)));
         dc.DrawText(formatted, new Point(rect.X + (3 * unit), top + unit));
     }
+
+    /// <summary>
+    /// 자리 안의 칸 - 초록 점선(편집기의 칸 항목과 같은 색). 돌린 칸은 가운데를 중심으로 돌려 그린다.
+    /// </summary>
+    /// <remarks>자리 전체를 덮는 돌리지 않은 칸 하나뿐이면(새 자리·옛 파일) 자리 테두리와 겹쳐 안 그린다.</remarks>
+    private static void DrawCells(DrawingContext dc, Rect rect, Minguk.Tools.Vision.Regions.NamedRegion region, double unit)
+    {
+        if (region.Cells.Count == 1 && region.Cells[0] is { X: 0, Y: 0, Width: 1, Height: 1 } whole && Math.Abs(whole.Angle) < 0.01) return;
+
+        var pen = new Pen(new SolidColorBrush(CellColour), 1d * unit) { DashStyle = new DashStyle([3, 2], 0) };
+        pen.Freeze();
+
+        foreach (var cell in region.Cells)
+        {
+            var cellBox = new Rect(rect.X + (cell.X * rect.Width), rect.Y + (cell.Y * rect.Height), cell.Width * rect.Width, cell.Height * rect.Height);
+            var turned = Math.Abs(cell.Angle) >= 0.01;
+
+            if (turned) dc.PushTransform(new RotateTransform(cell.Angle, cellBox.X + (cellBox.Width / 2), cellBox.Y + (cellBox.Height / 2)));
+
+            dc.DrawRectangle(null, pen, cellBox);
+
+            if (turned) dc.Pop();
+        }
+    }
+
+    /// <summary>칸의 색. 편집기(RegionChrome.xaml 의 RegionCellBrush)와 같다.</summary>
+    private static readonly Color CellColour = Color.FromRgb(0x4C, 0xD9, 0x64);
 
     /// <summary>이름 붙인 자리의 색. 글자 영역(노랑)·몹(초록)과 달라야 한다.</summary>
     private static readonly Color NamedColour = Color.FromRgb(120, 200, 255);

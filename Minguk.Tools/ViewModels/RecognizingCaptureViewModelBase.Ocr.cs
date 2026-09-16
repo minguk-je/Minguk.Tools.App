@@ -59,43 +59,15 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (!EnsureOcrEngine(out var problem))
         {
-            OcrStatus = $"글자 읽기 엔진을 만들지 못했습니다 - Windows OCR 언어 팩을 확인하세요. {problem}";
+            OcrStatus = $"글자 읽기 엔진을 열지 못했습니다. {problem}";
             return;
         }
 
         // 픽셀이 CPU 로 안 내려오면 읽을 것이 없다. 검출과 같은 길.
         EnsureCpuReadback("글자를 읽으려면 픽셀이 필요합니다");
 
-        OcrStatus = $"글자 {_liveRegions.Length}곳 읽는 중 ({_ocr!.Language})";
+        OcrStatus = $"글자 {_liveRegions.Length}곳 읽는 중 ({_ocr!.Name})";
     });
-
-    /// <summary>
-    /// 깔린 OCR 언어들. 없으면 팩터리의 기본 하나만 보여 준다.
-    /// </summary>
-    /// <remarks>
-    /// 한국어 팩은 숫자 0 을 "이" 로 읽기도 하고, 영어 팩은 한글을 못 읽는다. 읽을 것이 숫자면
-    /// en-US, 이름표면 ko 로 고른다. 한 번에 한 언어다 - 둘 다 돌려 고르는 것은 필요해지면.
-    /// </remarks>
-    public IReadOnlyList<string> OcrLanguages { get; } =
-        WindowsOcrEngine.AvailableLanguages.Count > 0 ? WindowsOcrEngine.AvailableLanguages : [OcrEngineFactory.PreferredLanguage];
-
-    /// <summary>읽을 언어. 바꾸면 엔진을 새로 만든다(다음 읽기부터).</summary>
-    public string? SelectedOcrLanguage
-    {
-        get => GetProperty(() => SelectedOcrLanguage);
-        set => SetProperty(() => SelectedOcrLanguage, value, () =>
-        {
-            // 엔진은 언어에 묶여 있다. 버리면 다음 읽기에서 새 언어로 다시 만든다.
-            lock (_ocrGate)
-            {
-                _ocr?.Dispose();
-                _ocr = null;
-            }
-
-            if (_liveRegions.Length > 0 || IsNameplateOcrOn) StatusText = $"OCR 언어를 {SelectedOcrLanguage} 로 바꿨습니다.";
-            if (_liveRegions.Length > 0) UpdateLiveRegions();
-        });
-    }
 
     private readonly object _ocrGate = new();
 
@@ -106,7 +78,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// OCR 엔진을 한 번만 만든다. 영역 읽기와 이름표 읽기가 같이 쓴다.
     /// </summary>
     /// <remarks>
-    /// UI 스레드(토글)와 검출 스레드(이름표) 어디서든 부른다. 언어를 바꾸면 엔진을 버리므로,
+    /// UI 스레드(토글)와 검출 스레드(이름표) 어디서든 부른다. 학습이 시작·끝나면 엔진을 버리므로(<see cref="DropOcrEngine"/>),
     /// 읽기 직전에 늘 여기로 확보해야 한다 - 안 그러면 설정을 되살리는 순서에 따라 이름표가
     /// 조용히 빈 글로 나온다(실제로 그랬다).
     /// </remarks>
@@ -120,7 +92,10 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             try
             {
-                _ocr = OcrEngineFactory.Create(SelectedOcrLanguage ?? OcrEngineFactory.PreferredLanguage);
+                _ocr = OcrEngineFactory.Create(out var fallback);
+
+                if (fallback is not null) DispatcherService?.BeginInvoke(() => StatusText = fallback);
+
                 return true;
             }
             catch (Exception ex)
@@ -129,6 +104,23 @@ public abstract partial class RecognizingCaptureViewModelBase
                 return false;
             }
         }
+    }
+
+    /// <summary>
+    /// 엔진을 버린다. 다음 읽기가 그때에 맞는 쪽(학습 중이면 CPU, 아니면 GPU)으로 다시 만든다.
+    /// </summary>
+    /// <remarks>놓기는 백그라운드에서 - 읽는 중이면 엔진이 그 읽기가 끝나기를 기다린다(<see cref="Vision.Ocr.Paddle.PaddleOcrEngine.Dispose"/>).</remarks>
+    private void DropOcrEngine()
+    {
+        IOcrEngine? stale;
+
+        lock (_ocrGate)
+        {
+            stale = _ocr;
+            _ocr = null;
+        }
+
+        if (stale is not null) _ = Task.Run(stale.Dispose);
     }
 
     // ── 몹 머리 위 이름표 ─────────────────────────────────────────────────
@@ -256,7 +248,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         var names = new string[found.Count];
 
         if (found.Count == 0 || _frameCopy is null || _frameCopyWidth == 0) return names;
-        if (!EnsureOcrEngine(out _)) return names;
+        if (!EnsureOcrEngine(out _) || _ocr is not { } ocr) return names;
 
         var width = _frameCopyWidth;
         var height = _frameCopyHeight;
@@ -284,8 +276,7 @@ public abstract partial class RecognizingCaptureViewModelBase
                 var crop = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, w * 4);
                 crop.Freeze();
 
-                // 빨간 글자만 남겨 키운다. 그대로 넣으면 빈 글이 나온다 - NameplateInk 의 사연.
-                names[i] = _ocr.RecognizeAsync(NameplateInk.Prepare(crop)).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
+                names[i] = ocr.RecognizeAsync(crop).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
             }
             catch (Exception ex)
             {
@@ -303,7 +294,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     {
         var live = _liveRegions;
 
-        if (live.Length == 0 || _ocr is null || !e.HasPixels) return;
+        if (live.Length == 0 || !e.HasPixels) return;
 
         var now = Environment.TickCount64;
         if (now - _lastOcrTicks < OcrIntervalMs) return;
@@ -311,12 +302,18 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         _lastOcrTicks = now;
 
-        (Vision.Regions.NamedRegion Region, BitmapSource Crop)[] crops;
+        (Vision.Regions.NamedRegion Region, Vision.Regions.RegionTarget Target, BitmapSource Crop, Rect Bounds, int Width, int Height)[] crops;
 
         try
         {
-            // 픽셀은 이 콜백이 돌아가면 사라진다. 자리만 지금 복사한다.
-            crops = [.. live.Where(region => region.Width > 0 && region.Height > 0).Select(region => (region, CropFrame(e, region.Rect)))];
+            // 픽셀은 이 콜백이 돌아가면 사라진다. 칸(돌린 칸은 감싸는 상자)만 지금 복사하고, 세우기·읽기는 백그라운드에서.
+            crops = [.. live.Where(region => region.Width > 0 && region.Height > 0)
+                .SelectMany(region => Vision.Regions.RegionTargets.Of(region, null).Select(target =>
+                {
+                    var bounds = Vision.Regions.RegionTargets.Bounds(target, e.Width, e.Height);
+
+                    return (region, target, CropFrame(e, bounds), bounds, e.Width, e.Height);
+                }))];
         }
         catch (Exception ex)
         {
@@ -348,70 +345,56 @@ public abstract partial class RecognizingCaptureViewModelBase
         return bitmap;
     }
 
-    /// <summary>언어별 엔진. 자리마다 언어가 다를 수 있어 하나씩 만들어 들고 있는다 - 만드는 데 0.1초가 든다.</summary>
-    private readonly Dictionary<string, Vision.Ocr.IOcrEngine?> _engineByLanguage = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>이 자리를 읽을 엔진. 자리에 언어가 안 적혀 있으면 화면에서 고른 언어.</summary>
-    private Vision.Ocr.IOcrEngine RegionEngine(Vision.Regions.NamedRegion region, Vision.Ocr.IOcrEngine fallback)
-        => region.Language.Length > 0 ? EngineFor(region.Language) ?? fallback : fallback;
-
-    /// <summary>쓴 엔진과 다른 언어의 엔진(숫자에 강한 영문 ↔ 화면 언어). 없으면 null.</summary>
-    private Vision.Ocr.IOcrEngine? OtherEngine(Vision.Ocr.IOcrEngine used)
-    {
-        var wanted = string.Equals(used.Language, "en-US", StringComparison.OrdinalIgnoreCase)
-            ? SelectedOcrLanguage ?? Vision.Ocr.OcrEngineFactory.PreferredLanguage
-            : "en-US";
-
-        return string.Equals(wanted, used.Language, StringComparison.OrdinalIgnoreCase) ? null : EngineFor(wanted);
-    }
-
-    private Vision.Ocr.IOcrEngine? EngineFor(string language)
-    {
-        if (_engineByLanguage.TryGetValue(language, out var engine)) return engine;
-
-        engine = Vision.Ocr.OcrEngineFactory.TryCreate(language);
-        _engineByLanguage[language] = engine;
-
-        return engine;
-    }
-
-    /// <summary>자리마다 그 자리의 손질·언어로 읽어 <c>LastText</c> 에 적는다. 지금 읽기와 같은 길이다.</summary>
-    private async Task ReadRegionsAsync((Vision.Regions.NamedRegion Region, BitmapSource Crop)[] crops)
+    /// <summary>칸마다 읽어 칸의 <c>LastText</c> 에, 자리에는 이은 글을 적는다. 지금 읽기와 같은 길이다.</summary>
+    private async Task ReadRegionsAsync((Vision.Regions.NamedRegion Region, Vision.Regions.RegionTarget Target, BitmapSource Crop, Rect Bounds, int Width, int Height)[] crops)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var results = new List<(Vision.Regions.NamedRegion Region, string Text)>(crops.Length);
+        var results = new List<(Vision.Regions.NamedRegion Region, Vision.Regions.RegionCell Cell, string Text)>(crops.Length);
 
         try
         {
-            if (_ocr is not { } ocr) return;
-
-            foreach (var (region, crop) in crops)
+            if (!EnsureOcrEngine(out var problem) || _ocr is not { } ocr)
             {
-                var prepared = region.Preprocess.Prepare(crop, region.PreprocessOptions);
-                var engine = RegionEngine(region, ocr);
-                var outcome = await engine.RecognizeAsync(prepared);
-                var text = outcome.Text.Replace(Environment.NewLine, " ").Trim();
+                DispatcherService?.BeginInvoke(() => OcrStatus = $"글자 읽기 엔진을 열지 못했습니다. {problem}");
+                return;
+            }
 
-                // 자리에 적어 둔 언어로 안 읽히면 다른 언어로 한 번 더 - 같은 숫자를 ko 는 읽고 en-US 는 못 읽는 자리가 있다.
-                if (text.Length == 0 && OtherEngine(engine) is { } other)
-                    text = (await other.RecognizeAsync(prepared)).Text.Replace(Environment.NewLine, " ").Trim();
+            foreach (var (region, target, crop, bounds, width, height) in crops)
+            {
+                var upright = Vision.Regions.RegionTargets.Upright(crop, bounds, target, width, height);
+                var outcome = await ocr.RecognizeAsync(upright);
 
-                results.Add((region, text));
+                results.Add((region, target.Cell, outcome.Text.Replace(Environment.NewLine, " ").Trim()));
             }
 
             DispatcherService?.BeginInvoke(() => Guard(() =>
             {
-                foreach (var (region, text) in results)
-                    if (region.KeepReading) region.LastText = text;
+                foreach (var group in results.GroupBy(r => r.Region))
+                {
+                    if (!group.Key.KeepReading) continue;
 
-                OcrStatus = $"글자 {results.Count}곳 ({watch.Elapsed.TotalMilliseconds:0}ms)";
+                    foreach (var (_, cell, text) in group) cell.LastText = text;
+
+                    group.Key.LastText = Vision.Regions.RegionTargets.Combine([.. group.Select(r => r.Text)]).Text;
+                }
+
+                OcrStatus = $"글자 {results.Select(r => r.Region).Distinct().Count()}곳 ({watch.Elapsed.TotalMilliseconds:0}ms)";
                 RegionsRevision++;
             }));
+        }
+        catch (ObjectDisposedException)
+        {
+            // 학습이 시작·끝나 엔진을 바꾸는 사이에 걸렸다. 다음 주기에 새 엔진으로 읽는다.
         }
         catch (Exception ex)
         {
             Logger.Error(ex, "자리 글자를 읽지 못했다");
-            DispatcherService?.BeginInvoke(() => OcrStatus = $"글자 읽기 실패 - 로그를 보세요(0x{ex.HResult:X8})");
+
+            var message = Vision.Training.TrainingActivity.IsGpuLost(ex)
+                ? Vision.Training.TrainingActivity.GpuLostMessage
+                : $"글자 읽기 실패 - 로그를 보세요(0x{ex.HResult:X8})";
+
+            DispatcherService?.BeginInvoke(() => OcrStatus = message);
         }
         finally
         {
@@ -447,9 +430,6 @@ public abstract partial class RecognizingCaptureViewModelBase
         _liveRegions = [];
         _ocr?.Dispose();
         _ocr = null;
-
-        foreach (var engine in _engineByLanguage.Values) engine?.Dispose();
-        _engineByLanguage.Clear();
     }
 }
 

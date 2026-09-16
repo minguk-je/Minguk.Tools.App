@@ -24,13 +24,12 @@ public sealed record OcrOutcome(string Text, IReadOnlyList<OcrLine> Lines, TimeS
 /// 그림에서 글자를 읽는다.
 ///
 /// 왜 인터페이스인가
-///   지금은 Windows 내장 OCR 하나다. 그래도 인터페이스로 두는 것은, 인식률이 모자라
-///   다른 엔진(Tesseract, 클라우드)으로 갈아끼울 때 부르는 쪽(캡처 모니터·스크립트)을
-///   안 고치려는 것이다. 팩터리만 고친다.
+///   엔진을 갈아끼울 때 부르는 쪽(캡처 모니터·스크립트)을 안 고치려는 것이다. 팩터리만 고친다.
+///   실제로 그렇게 바꿨다(2026-09-16) - Windows 내장 OCR + 자리마다 손질·언어 고르기에서
+///   PP-OCRv5(<see cref="Paddle.PaddleOcrEngine"/>) 하나로. 부르는 쪽은 그대로였다.
 ///
 /// 되지 않는 경우
-///   Windows OCR 은 언어 팩이 있어야 한다. 없으면 <see cref="OcrEngineFactory.TryCreate"/> 가
-///   null 을 주고, 부르는 쪽은 "설정 > 시간 및 언어에서 언어를 추가하라" 고 말해야 한다.
+///   모델 파일(설치 폴더 Models\Ocr)이 없으면 <see cref="OcrEngineFactory.Create"/> 가 무엇이 없는지 담은 예외를 던진다.
 /// </summary>
 public interface IOcrEngine : IDisposable
 {
