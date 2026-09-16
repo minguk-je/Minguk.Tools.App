@@ -60,7 +60,7 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
             new(SettingsItemKind.Slider, "슬라이더", "끌어서 고르는 숫자.", DevExpressGlyph.Load("Images/Gauges/GaugeStyleLinearHorizontal_16x16.png")),
             new(SettingsItemKind.List, "목록", "여러 줄 값(표) - 물약 목록·스킬 순서.", DevExpressGlyph.Load("Images/Grid/Grid_16x16.png")),
             // LayoutControl 의 크기 조절 막대(AllowHorizontalSizing·AllowVerticalSizing, 사용자 2026-09-17 "LayoutSplitter · 좌우 상하 조정"). 도킹(DockLayoutManager)이 아니다 - 판은 폼이고, 도킹은 VS 창 틀용이다.
-            new(SettingsItemKind.Splitter, "나누기", "구역 안 두 칸 사이의 막대. 끌어서 가로 구역이면 좌우, 세로 구역이면 상하 크기를 나눕니다.", DevExpressGlyph.Load("Images/Grid/ColumnWidth_16x16.png"))
+            new(SettingsItemKind.Splitter, "나누기", "앞 칸의 크기 조절 막대. 칸 오른쪽을 끌어 좌우, 아래쪽을 끌어 상하 크기를 바꿉니다. 바꾼 크기는 양식에 저장됩니다.", DevExpressGlyph.Load("Images/Grid/ColumnWidth_16x16.png"))
         ];
 
         AddItemCommand = new DelegateCommand<SettingsToolboxItem>(DoAddItem, item => IsDesign && HasProject && item is not null, false);

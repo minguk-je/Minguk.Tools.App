@@ -25,7 +25,7 @@ public enum SettingsItemKind
     List,
 
     /// <summary>
-    /// 구역 안 나누기 - 앞 칸에 크기 조절 막대(LayoutControl 의 AllowHorizontalSizing·AllowVerticalSizing)를 켠다. 가로 구역이면 좌우, 세로 구역이면 상하. 값이 없다.
+    /// 구역 안 나누기 - 앞 칸에 상하·좌우 크기 조절 막대(LayoutControl 의 AllowHorizontalSizing·AllowVerticalSizing)를 켠다. 값이 없다.
     /// </summary>
     Splitter
 }
@@ -132,12 +132,12 @@ public sealed class SettingsItem
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<SettingsItem>? Children { get; set; }
 
-    /// <summary>칸 너비(px) - 가로 구역에서 뒤의 「나누기」로 끌어 정한 크기. 없으면 내용에 맞춘다.</summary>
+    /// <summary>칸 너비(px) - 뒤의 「나누기」로 좌우로 끌어 정한 크기. 없으면 내용에 맞춘다.</summary>
     [JsonPropertyName("width")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Width { get; set; }
 
-    /// <summary>칸 높이(px) - 세로 구역에서 뒤의 「나누기」로 끌어 정한 크기. 없으면 내용에 맞춘다.</summary>
+    /// <summary>칸 높이(px) - 뒤의 「나누기」로 상하로 끌어 정한 크기. 없으면 내용에 맞춘다.</summary>
     [JsonPropertyName("height")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Height { get; set; }

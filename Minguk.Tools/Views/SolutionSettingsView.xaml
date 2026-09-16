@@ -217,7 +217,14 @@
                                                      Form="{Binding Form, Mode=OneWay}"
                                                      LayoutChangedCommand="{Binding CanvasLayoutChangedCommand}"
                                                      SizeChangedCommand="{Binding CanvasSizeChangedCommand}"
-                                                     SelectedItem="{Binding SelectedFormItem, Mode=TwoWay}" />
+                                                     SelectedItem="{Binding SelectedFormItem, Mode=TwoWay}">
+                            <dxmvvm:Interaction.Behaviors>
+                                <!-- 디자인에서 고른 칸 지우기(VS 폼 디자이너처럼). 판에 초점이 있을 때만 - 속성 창에서 글을 지우는 Delete 는 칸을 안 지운다. -->
+                                <dxmvvm:KeyToCommand Command="{Binding DeleteItemCommand}"
+                                                     EventName="KeyDown"
+                                                     KeyGesture="Delete" />
+                            </dxmvvm:Interaction.Behaviors>
+                        </settings:SettingsFormCanvas>
                     </dxlc:LayoutItem>
                 </dxlc:LayoutGroup>
 

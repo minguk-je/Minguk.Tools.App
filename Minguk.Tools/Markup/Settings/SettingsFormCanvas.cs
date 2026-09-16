@@ -45,7 +45,9 @@ public sealed class SettingsFormCanvas : ContentControl
 
     public SettingsFormCanvas()
     {
-        Focusable = false;
+        // 디자인에서 누르면 판이 초점을 받는다 - Delete 같은 키를 판에 묶으려면(속성 창에서 글을 지우다 칸이 지워지지 않게 판에 초점이 있을 때만) 초점이 판에 와야 한다.
+        Focusable = true;
+        FocusVisualStyle = null;
         AllowDrop = true;
 
         PreviewDragEnter += OnPreviewDragOver;
@@ -111,7 +113,7 @@ public sealed class SettingsFormCanvas : ContentControl
     }
 
     /// <summary>크기 조절을 켠 칸들 - 손을 떼면 끌어 바뀐 크기를 칸 트리와 견준다.</summary>
-    private readonly List<(FrameworkElement Element, SettingsItem Item, bool Horizontal)> _sizers = [];
+    private readonly List<(FrameworkElement Element, SettingsItem Item)> _sizers = [];
 
     private bool IsDesign => Form?.IsDesign == true;
 
@@ -189,10 +191,10 @@ public sealed class SettingsFormCanvas : ContentControl
     }
 
     /// <summary>
-    /// 구역(또는 판)에 칸들을 넣는다. 「나누기」는 미리보기에서 그리지 않고 <b>앞 칸</b>에 크기 조절(LayoutControl 의 <c>AllowHorizontalSizing</c>·<c>AllowVerticalSizing</c>)을 켠다.
+    /// 구역(또는 판)에 칸들을 넣는다. 「나누기」는 미리보기에서 그리지 않고 <b>앞 칸</b>에 상하·좌우 크기 조절(LayoutControl 의 <c>AllowHorizontalSizing</c>·<c>AllowVerticalSizing</c>)을 켠다.
     /// </summary>
     /// <remarks>
-    /// DevExpress v26 LayoutControl 에는 따로 놓는 LayoutSplitter 요소가 없다(같은 이름은 도킹 쪽) - 칸의 크기 조절을 켜면 그 칸의 오른쪽(가로 구역)·아래쪽(세로 구역)에 막대가 생긴다.
+    /// DevExpress v26 LayoutControl 에는 따로 놓는 LayoutSplitter 요소가 없다(같은 이름은 도킹 쪽) - 칸의 크기 조절을 켜면 그 칸의 오른쪽(좌우)·아래쪽(상하)에 막대가 생긴다.
     /// 앞 칸이 없거나(맨 앞) 앞도 나누기면 아무 일도 안 한다. 디자인에서는 자리표시 칸으로 그려 끌어 옮긴다(크기 조절은 안 켠다 - 덮개가 가로챈다).
     /// </remarks>
     private void AddChildren(Panel panel, IEnumerable<SettingsFieldViewModel> children, bool horizontal, bool design)
@@ -205,10 +207,11 @@ public sealed class SettingsFormCanvas : ContentControl
             {
                 if (previous is { Tag: SettingsItem sized })
                 {
-                    if (horizontal) LayoutControl.SetAllowHorizontalSizing(previous, true);
-                    else LayoutControl.SetAllowVerticalSizing(previous, true);
+                    // 상하·좌우 둘 다(사용자, 2026-09-17 "상하 좌우 조절") - 든 구역의 방향 한쪽만 켜면 세로 구역에서 좌우가 안 됐다.
+                    LayoutControl.SetAllowHorizontalSizing(previous, true);
+                    LayoutControl.SetAllowVerticalSizing(previous, true);
 
-                    _sizers.Add((previous, sized, horizontal));
+                    _sizers.Add((previous, sized));
                 }
 
                 previous = null;
@@ -514,17 +517,24 @@ public sealed class SettingsFormCanvas : ContentControl
     /// </summary>
     private void ReportSizes()
     {
-        foreach (var (element, item, horizontal) in _sizers)
+        foreach (var (element, item) in _sizers)
         {
-            var now = horizontal ? element.Width : element.Height;
-            if (double.IsNaN(now) || now <= 0) continue;
+            var width = Changed(element.Width, item.Width);
+            var height = Changed(element.Height, item.Height);
+
+            if (width is null && height is null) continue;
+
+            var size = new SettingsItemSize(item, width, height);
+            if (SizeChangedCommand?.CanExecute(size) == true) SizeChangedCommand.Execute(size);
+        }
+
+        // 끌어 정한 크기(반올림)가 저장값과 다르면 그 크기, 같거나 아직 안 끌었으면 null.
+        static double? Changed(double now, double? saved)
+        {
+            if (double.IsNaN(now) || now <= 0) return null;
 
             now = Math.Round(now);
-            var saved = horizontal ? item.Width : item.Height;
-            if (saved is { } before && Math.Abs(before - now) < 0.5) continue;
-
-            var size = horizontal ? new SettingsItemSize(item, now, null) : new SettingsItemSize(item, null, now);
-            if (SizeChangedCommand?.CanExecute(size) == true) SizeChangedCommand.Execute(size);
+            return saved is { } before && Math.Abs(before - now) < 0.5 ? null : now;
         }
     }
 
@@ -546,6 +556,7 @@ public sealed class SettingsFormCanvas : ContentControl
         var hit = HitItem(e.GetPosition(_layout));
 
         SetCurrentValue(SelectedItemProperty, hit);
+        Focus();
     }
 
     /// <summary>판 좌표의 가장 안쪽 칸(구역 포함). 없으면 null.</summary>

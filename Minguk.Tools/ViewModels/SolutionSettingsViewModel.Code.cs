@@ -329,7 +329,8 @@ public partial class SolutionSettingsViewModel
                 _savingForm = false;
             }
 
-            SetStatus($"「{size.Item.DisplayLabel}」 의 {(size.Width is not null ? $"너비를 {size.Width:0}" : $"높이를 {size.Height:0}")}px 로 저장했습니다.");
+            var what = string.Join(" · ", new[] { size.Width is { } w ? $"너비 {w:0}px" : null, size.Height is { } h ? $"높이 {h:0}px" : null }.Where(t => t is not null));
+            SetStatus($"「{size.Item.DisplayLabel}」 크기를 저장했습니다 - {what}.");
             return;
         }
     });
