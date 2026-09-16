@@ -1,4 +1,4 @@
-DevExpress WPF 컨트롤, WPF 개발자
+﻿DevExpress WPF 컨트롤, WPF 개발자
 
 ## 이 프로젝트
 
@@ -85,7 +85,9 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
   - 탭 활성화는 한 방향으로만 기다린다(`ScriptDocumentsBehavior._requested`) - 늦게 오는 `DockItemActivated` 와 핑퐁이 났다.
   - 기본 배치를 바꾸면 `DockLayoutVersion` 을 올린다. 도구 모음 자리는 `BarLayout` 설정. 미리보기 | 문서 나누기는 `DesignSplitGroup`(`SetSplit`·`SwapPanes`).
 - **녹화**(`CaptureMonitorViewModel.Recording.cs`, 어댑터 `IVideoRecorder`·`MediaFoundationVideoRecorder`·`VideoRecorderFactory`): 프로젝트 `Recordings\*.mp4`(`ProjectPaths.Recordings`), H.264.
-  **fps 는 화면캡처 fps 콤보 값**이고 더 빨리 오는 프레임은 솎는다(세션을 나눈 다른 화면이 더 높은 fps 를 원하면 세션이 그 fps 로 돈다). 비트레이트는 30fps 8Mbps · 60fps 12Mbps(`DefaultBitrate`).
+  **fps 는 화면캡처 fps 콤보 값**이고 더 빨리 오는 프레임은 솎는다(세션을 나눈 다른 화면이 더 높은 fps 를 원하면 세션이 그 fps 로 돈다). **비트레이트는 화면 크기·fps 에 맞춘다**(`DefaultBitrate` = 가로×세로×fps×0.9비트, 1080p30 ≈ 56Mbps·1분 420MB).
+  8Mbps 고정이던 것을 올렸다(사용자, 2026-09-16 "용량은 상관없어") - 얇은 흰 획이 뭉개져 영상을 캡처 대상으로 놓으면 글자 읽기가 20장 중 3장이었고(화면 사진은 20/20),
+  라벨링에서 뽑아 학습하는 그림도 같이 나빠진다.
   캡처 스레드는 픽셀만 복사해 넘기고 쓰기 스레드가 SinkWriter 를 첫 프레임 크기로 만들어 쓴다(0.2초어치 넘게 밀리면 버린다 - 1080p 30·60fps 실측 버림 0).
   리드백을 알아서 켜는데 그때 세션이 다시 시작되므로 **녹화기는 그 뒤에** 만든다. 입력은 RGB32 + 양수 `DefaultStride`(안 적으면 뒤집힌다), 크기는 짝수로 자른다.
   캡처가 멈추거나 크기가 바뀌면 파일을 닫는다. 길이 제한은 없고 디스크가 한도다.
@@ -197,7 +199,8 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
   - 칸 옆 버튼은 `dxe:ButtonEdit` 안에 넣고 `AllowDefaultButton="False"` 를 같이 적는다(안 적으면 빈 `…` 버튼이 하나 더 붙는다). 그림 버튼은 `GlyphKind="User"` + `Image`(가운데 정렬).
   - `dxlc` 에는 `ItemHeight`·`ShowLabel` 이 없다 - 라벨을 비우려면 `AddColonToLabel="False" Label=""`.
 - 폰트·크기는 `BaseFontFamily`/`BaseFontSize` 를 **DynamicResource** 로. 경량 테마(`UseLightweightThemes`)라 표준 WPF 컨트롤은 테마를 안 탄다.
-- 그리드는 `BaseGridControl`/`BaseTableView`.
+- 그리드는 `BaseGridControl`/`BaseTableView`. **칸 너비는 내용에 맞춘다**(사용자, 2026-09-16) - `dependency:GridControlDependency.IsColumnAutoWidth="True"` + `AutoWidth="True"`,
+  열에는 `Width` 를 안 적는다(적으면 그 값에 묶여 글자가 잘린다). 사용자가 끈 너비를 남겨야 하는 그리드(화면캡처 통계)만 예외로 끈다.
   - 행 번호(`IsRowNumber`)를 쓰면 `IndicatorWidth` 를 숨은 `Border`(`SharedSizeGroup="RowNumberGroup"`)의 폭으로 되돌린다(`CaptureMonitorView.xaml` 예시) - 안 하면 세 자리부터 잘린다.
   - `IsColumnAutoWidth` 를 켜면 열 너비가 Auto 라 사용자가 끈 너비가 안 남는다.
   - 저장된 배치의 `ActualShowSearchPanel` 은 복원 전에 지운다. 하네스도 `DataControlBase.AllowInfiniteGridSize = true`.

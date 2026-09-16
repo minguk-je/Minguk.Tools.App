@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -169,7 +169,7 @@ internal static partial class Program
                           recorder.Error is null && dropRate <= 10,
                           recorder.Error is not null ? recorder.Error.Message
                               : $"{recorder.FramesWritten}/{count}장 · 버림 {recorder.FramesDropped}({dropRate:0}%) · 솎음 {recorder.FramesSkipped} · {megabytes:0.00} MB · " +
-                                $"{MediaFoundationVideoRecorder.DefaultBitrate(fps) / 1_000_000.0:0}Mbps · 닫기까지 {clock.Elapsed.TotalSeconds:0.0}초");
+                                $"{MediaFoundationVideoRecorder.DefaultBitrate(1920, 1080, fps) / 1_000_000.0:0}Mbps · 닫기까지 {clock.Elapsed.TotalSeconds:0.0}초");
 
                     // 앱이 죽을 때 잃는 것은 끝나지 않은 조각 하나 - 1080p 에서도 1초 안쪽이어야 한다(2초 녹화에 조각 2개 넘게).
                     Check($"녹화: 1080p {fps}fps 에서도 조각이 1초 안쪽마다 디스크에 붙는다",
@@ -207,9 +207,13 @@ internal static partial class Program
                       $"넣음 {feed} · 씀 {thin.FramesWritten} · 솎음 {thin.FramesSkipped} · 버림 {thin.FramesDropped}");
             }
 
-            Check("녹화: 비트레이트는 fps 에 맞춘다(30 → 8Mbps, 60 → 12Mbps)",
-                  MediaFoundationVideoRecorder.DefaultBitrate(30) == 8_000_000 && MediaFoundationVideoRecorder.DefaultBitrate(60) == 12_000_000,
-                  $"30 {MediaFoundationVideoRecorder.DefaultBitrate(30):N0} · 60 {MediaFoundationVideoRecorder.DefaultBitrate(60):N0}");
+            // 화질은 게임 화면에 맞춘다(사용자, 2026-09-16) - 크기·fps 에 비례한다. 1080p 30fps ≈ 56Mbps, 60fps ≈ 112Mbps, 1440p 는 그만큼 더.
+            Check("녹화: 비트레이트를 크기·fps 에 맞춘다(1080p30 ≈ 56Mbps · 1080p60 ≈ 112Mbps · 1440p30 ≈ 100Mbps)",
+                  MediaFoundationVideoRecorder.DefaultBitrate(1920, 1080, 30) == 55_987_200
+                  && MediaFoundationVideoRecorder.DefaultBitrate(1920, 1080, 60) == 111_974_400
+                  && MediaFoundationVideoRecorder.DefaultBitrate(2560, 1440, 30) == 99_532_800,
+                  $"1080p30 {MediaFoundationVideoRecorder.DefaultBitrate(1920, 1080, 30):N0} · 1080p60 {MediaFoundationVideoRecorder.DefaultBitrate(1920, 1080, 60):N0}"
+                  + $" · 1440p30 {MediaFoundationVideoRecorder.DefaultBitrate(2560, 1440, 30):N0}");
 
             // 하네스는 Minguk.Image 를 직접 참조하지 않는다 - 앱 출력에 딸려 온 어셈블리를 리플렉션으로 불러 아이콘이 있는지 본다.
             var freeImage = Type.GetType("Minguk.Image.FreeImage, Minguk.Image");

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -184,6 +184,25 @@ public abstract partial class RecognizingCaptureViewModelBase
             case nameof(NamedRegion.Ink):
                 SaveRegions();
                 StatusText = $"「{region.Name}」 전처리(흰 글자만 남기기)를 {(region.Ink ? "켰습니다" : "껐습니다")}.";
+                break;
+
+            case nameof(NamedRegion.Preprocessor):
+                SaveRegions();
+                StatusText = $"「{region.Name}」 손질을 「{region.Preprocess.Name}」 로 바꿨습니다 - {region.Preprocess.Summary}";
+                break;
+
+            case nameof(NamedRegion.Language):
+                SaveRegions();
+                StatusText = region.Language.Length == 0
+                    ? $"「{region.Name}」 언어를 자동으로 - 숫자는 영문으로 먼저 읽고 안 되면 화면 언어로 읽습니다."
+                    : $"「{region.Name}」 을(를) {region.Language} 로 읽습니다.";
+                break;
+
+            case nameof(NamedRegion.ShearDegrees):
+                SaveRegions();
+                StatusText = region.ShearDegrees == 0
+                    ? $"「{region.Name}」 기울기 보정을 껐습니다."
+                    : $"「{region.Name}」 글자를 {region.ShearDegrees:0.#}도 세워서 읽습니다 - 이탤릭 글꼴에 씁니다.";
                 break;
 
             case nameof(NamedRegion.KeepReading):
@@ -424,16 +443,18 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
-        // 네 갈래를 다 해 본다 - 전처리 켜고/끄고 × 쓰던 엔진(대개 한국어)/영문. 사람이 그 자리에 무엇을 담아
-        // 뒀는지 모르기 때문이다. 실측: 플레이어 이름 자리를 만들었는데 영문으로만 읽어 빈 글이 나왔다
-        // (한국어로는 「상제님」 이 읽혔다). 반대로 숫자는 한국어가 225 를 22512h5 로 낸다.
+        // 손질(그대로 키우기·밝은 글자만·어두운 글자만) × 두 언어(쓰던 것·영문)를 다 해 보고 가장 잘 읽은 것을 고른다.
+        // 게임마다 글자가 달라 어느 손질이 맞는지 해 보기 전에는 모른다(실측 2026-09-16: 오버워치 탄약은 밝은 글자만 0/12,
+        // 그대로 키우기 10/12). 언어도 갈린다 - 이름은 한국어로만 읽히고, 숫자는 한국어가 225 를 22512h5 로 낸다.
         var english = Vision.Ocr.OcrEngineFactory.TryCreate("en-US");
         var best = string.Empty;
         var how = string.Empty;
+        var bestPreprocessor = region.Preprocess;
+        var bestLanguage = region.Language;
 
-        foreach (var ink in new[] { region.Ink, !region.Ink })
+        foreach (var preprocessor in Vision.Ocr.OcrPreprocessors.All)
         {
-            var prepared = ink ? Vision.Ocr.HudInk.Prepare(crop) : Enlarge(crop);
+            var prepared = preprocessor.Prepare(crop, region.PreprocessOptions);
 
             foreach (var (engine, label) in new[] { (ocr, ocr.Language), (english, "en-US") })
             {
@@ -444,18 +465,28 @@ public abstract partial class RecognizingCaptureViewModelBase
                 if (read.Length <= best.Length) continue;
 
                 best = read;
-                how = $"{(ink ? "전처리" : "그대로")}·{label}";
+                how = $"{preprocessor.Name}·{label}";
+                bestPreprocessor = preprocessor;
+                bestLanguage = label;
             }
         }
 
         english?.Dispose();
+
+        // 가장 잘 읽은 손질·언어를 자리에 적어 둔다 - 다음부터 계속 읽기·스크립트가 그것으로 읽는다.
+        if (best.Length > 0 && (region.Preprocess.Id != bestPreprocessor.Id || !string.Equals(region.Language, bestLanguage, StringComparison.OrdinalIgnoreCase)))
+        {
+            region.Preprocessor = bestPreprocessor.Id;
+            region.Language = bestLanguage;
+            SaveRegions();
+        }
 
         region.LastText = best;
 
         var digits = new string([.. best.Where(char.IsDigit)]);
 
         StatusText = best.Length == 0
-            ? $"「{region.Name}」 에서 아무것도 못 읽었습니다. 자리를 조금 넓히거나 전처리를 켜고 꺼 보세요."
+            ? $"「{region.Name}」 에서 아무것도 못 읽었습니다. 자리를 조금 넓히거나 글자만 덮이게 줄여 보세요."
             : $"「{region.Name}」 → 「{best}」{(digits.Length > 0 ? $"  (숫자 {digits})" : string.Empty)}  [{how}]";
 
         // 상태 줄은 다음 갱신이 덮는다. 나중에 "왜 안 읽혔지" 를 되짚으려면 로그에 남아야 한다.

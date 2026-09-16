@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -290,8 +290,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// 3: 솔루션 탐색기 왼쪽 · 미리보기|문서 좌우 · 도구 모음 세 줄(2026-09-13). 옛 배치를 그대로 살리면 새 기본이 안 보인다.
     /// 4: 영역 패널을 아래 탭에서 솔루션 탐색기 탭 그룹으로(2026-09-15, 사용자).
     /// 5: 솔루션 탐색기 탭 그룹에 도움말 패널(2026-09-15, 사용자).
+    /// 6: 영역 패널을 아래 탭 줄 맨 왼쪽으로(2026-09-16, 사용자 - 칸이 늘어 좁고, 탭이 있다는 것을 알아채게).
     /// </summary>
-    private const int DockLayoutVersion = 5;
+    private const int DockLayoutVersion = 6;
 
     // ── 미리보기 | 문서 나누기 ──────────────────────────────────────────
 

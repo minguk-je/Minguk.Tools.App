@@ -992,9 +992,19 @@ public class LiveScriptApi
     private int? HudNumber(HudSpot spot, int index)
     {
         var crop = CropFor(spot.Region);
-        var numbers = ReadNumbers(crop, spot.Ink, spot.Scale, out var text);
+        var first = spot.Ink ? OcrPreprocessors.Find("bright") : OcrPreprocessors.Default;
+        var numbers = ReadNumbers(crop, first, OcrPreprocessOptions.Default, out var text);
 
-        if (text.Length == 0) numbers = ReadNumbers(crop, !spot.Ink, spot.Scale, out _);
+        // 손질을 바꿔 한 번 더 - 같은 자리라도 배경이 밝아졌다 어두워졌다 한다.
+        if (text.Length == 0)
+            foreach (var other in OcrPreprocessors.All)
+            {
+                if (other.Id == first.Id) continue;
+
+                numbers = ReadNumbers(crop, other, OcrPreprocessOptions.Default, out text);
+
+                if (text.Length > 0) break;
+            }
 
         return index < numbers.Count ? numbers[index] : null;
     }
@@ -1026,15 +1036,13 @@ public class LiveScriptApi
         return crop;
     }
 
-    /// <summary>조각을 한 길로 읽어 숫자 덩어리들을 순서대로 준다. 읽은 글도 같이 준다.</summary>
-    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, bool ink, double scale, out string text)
-        => ReadNumbers(crop, ink, scale, NumberOcr(), out text);
+    /// <summary>조각을 한 손질로 읽어 숫자 덩어리들을 순서대로 준다. 읽은 글도 같이 준다.</summary>
+    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, IOcrPreprocessor preprocessor, OcrPreprocessOptions options, out string text)
+        => ReadNumbers(crop, preprocessor, options, NumberOcr(), out text);
 
-    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, bool ink, double scale, IOcrEngine engine, out string text)
+    private List<int> ReadNumbers(System.Windows.Media.Imaging.BitmapSource crop, IOcrPreprocessor preprocessor, OcrPreprocessOptions options, IOcrEngine engine, out string text)
     {
-        var prepared = ink
-            ? HudInk.Prepare(crop)
-            : Enlarge(crop, scale);
+        var prepared = preprocessor.Prepare(crop, options);
 
         var outcome = engine.RecognizeAsync(prepared, _token).GetAwaiter().GetResult();
 
@@ -1076,6 +1084,25 @@ public class LiveScriptApi
     /// <summary>화면에서 만들어 둔 자리의 숫자를 읽는다. 없으면 null.</summary>
     public int? ReadNumberAt(string name) => Traced("ReadNumberAt", Quote(name), () => ReadAtCore(name).First);
 
+    /// <summary>그 자리에서 읽은 숫자를 <b>왼쪽에서 순서대로</b> 준다. 「30 40」 이면 [30, 40].</summary>
+    /// <remarks>
+    /// <b>왜 목록인가</b> - HUD 는 「현재 | 최대」 처럼 둘을 붙여 놓는 일이 많다. 앞 숫자만 읽으려고 자리를 좁히면
+    /// 오히려 못 읽는다(실측 2026-09-16: 통째로 14장 중 13장, 앞쪽만 남기면 5장). 넓게 읽고 <b>스크립트가 고른다</b>.
+    ///
+    /// 믿을 범위(탄약 0~40, 체력 0~200)는 게임마다 달라 여기서 정하지 않는다 - 받아서 스크립트가 거른다.
+    /// 구분선이 숫자로 읽히면(「24140」) 덩어리가 하나로 붙어 나오므로, 그런 값은 스크립트에서 버린다.
+    /// </remarks>
+    public int[] ReadNumbersAt(string name) => Traced("ReadNumbersAt", Quote(name), () => ReadAtCore(name).Numbers);
+
+    /// <summary>그 자리의 <paramref name="index"/> 번째 숫자. 「30 40」 에서 0 이 30, 1 이 40. 없으면 null.</summary>
+    // 형식을 못 박는다 - 블록 몸 람다는 Action 쪽으로 붙어 "값을 반환할 수 없다" 가 된다.
+    public int? ReadNumberAt(string name, int index) => Traced<int?>("ReadNumberAt", $"{Quote(name)}, {index}", () =>
+    {
+        var numbers = ReadAtCore(name).Numbers;
+
+        return index >= 0 && index < numbers.Length ? numbers[index] : null;
+    });
+
     /// <summary>그 자리에 읽을 것이 있는가. 글자가 하나라도 나오면 참.</summary>
     /// <remarks>
     /// "재장전 중" 같은 표시가 떴는지 보는 데 쓴다. <b>글자가 없는 표시(아이콘·게이지)는 이걸로 못 본다</b> -
@@ -1083,7 +1110,7 @@ public class LiveScriptApi
     /// </remarks>
     public bool HasTextAt(string name) => Traced("HasTextAt", Quote(name), () => ReadAtCore(name).Text.Length > 0);
 
-    private (string Text, int? First) ReadAtCore(string name)
+    private (string Text, int? First, int[] Numbers) ReadAtCore(string name)
     {
         var book = _host.Regions?.Invoke()
                    ?? throw Guard("영역 목록이 없습니다 - 화면에서 데이터셋 폴더를 골라야 합니다.");
@@ -1094,31 +1121,81 @@ public class LiveScriptApi
                                         ? "지금 만들어 둔 자리가 하나도 없습니다."
                                         : $"있는 것: {string.Join(" · ", book.Regions.Select(r => r.Name))}"));
 
-        var spot = new HudSpot(region.Rect, region.Ink);
-        var crop = CropFor(spot.Region);
+        var crop = CropFor(region.Rect);
+        var preprocessor = region.Preprocess;
+        var options = region.PreprocessOptions;
 
-        // 이름 붙인 자리에는 숫자만 있는 것이 아니다. 사람이 무엇을 담아 뒀는지 모르므로 **두 엔진을 다 해 본다** -
-        // 한국어 팩은 글자를 읽고(「상제님」), 영문 팩은 숫자를 제대로 읽는다(한국어는 225 를 22512h5 로 낸다).
-        // 실측: 플레이어 이름 자리를 만들어 두고 영문으로만 읽어 빈 글이 나왔다.
-        var numbers = ReadNumbers(crop, spot.Ink, spot.Scale, NumberOcr(), out var digitsText);
+        // 언어도 자리마다 갈린다 - 같은 숫자를 ko 는 읽고 en-US 는 못 읽는 자리가 있고(오버워치 영상의 탄약) 반대도 있다.
+        // 자리에 적어 둔 언어를 먼저 쓰고(「지금 읽기」 가 골라 적는다), 없으면 숫자에 강한 영문부터.
+        var first = RegionOcr(region);
+        var numbers = ReadNumbers(crop, preprocessor, options, first, out var digitsText);
 
-        // 전처리를 바꿔 한 번 더. 배경이 밝은지 어두운지에 따라 읽히는 쪽이 다르다.
+        // 자리에 적힌 손질로 안 읽히면 다른 손질로도 해 본다(화면의 "지금 읽기" 가 고르기 전일 수 있다).
         if (digitsText.Length == 0)
-            numbers = ReadNumbers(crop, !spot.Ink, spot.Scale, NumberOcr(), out digitsText);
+            foreach (var other in OcrPreprocessors.All)
+            {
+                if (other.Id == preprocessor.Id) continue;
+
+                numbers = ReadNumbers(crop, other, options, first, out digitsText);
+
+                if (digitsText.Length > 0) break;
+            }
 
         var text = digitsText;
 
-        // 숫자가 하나도 없으면 글자일 수 있다. 쓰던 엔진(대개 한국어)으로 본다.
-        if (numbers.Count == 0 && _host.Ocr?.Invoke() is { } wordy)
+        // 첫 언어로 아무것도 안 나오면 다른 언어로 본다(자리에 언어를 안 적어 뒀을 때).
+        if (numbers.Count == 0 && OtherOcr(region, first) is { } wordy)
         {
-            ReadNumbers(crop, spot.Ink, spot.Scale, wordy, out var wordText);
+            ReadNumbers(crop, preprocessor, options, wordy, out var wordText);
 
-            if (wordText.Length == 0) ReadNumbers(crop, !spot.Ink, spot.Scale, wordy, out wordText);
+            if (wordText.Length == 0)
+                foreach (var other in OcrPreprocessors.All)
+                {
+                    if (other.Id == preprocessor.Id) continue;
+
+                    ReadNumbers(crop, other, options, wordy, out wordText);
+
+                    if (wordText.Length > 0) break;
+                }
             if (wordText.Length > 0) text = wordText;
         }
 
-        return (text, numbers.Count > 0 ? numbers[0] : null);
+        return (text, numbers.Count > 0 ? numbers[0] : null, [.. numbers]);
     }
+
+    /// <summary>
+    /// 자리에 적힌 언어의 엔진. 안 적혀 있으면(자동) 화면에서 고른 언어부터 - 화면의 계속 읽기와 같은 순서다.
+    /// </summary>
+    /// <remarks>자동은 "둘 다 해 본다" 는 뜻이다. 먼저 쓴 쪽이 빈 글이면 <see cref="OtherOcr"/> 로 한 번 더 읽는다.</remarks>
+    private IOcrEngine RegionOcr(Vision.Regions.NamedRegion region)
+        => region.Language.Length > 0
+            ? LanguageOcr(region.Language) ?? NumberOcr()
+            : _host.Ocr?.Invoke() ?? NumberOcr();
+
+    /// <summary>먼저 쓴 엔진과 다른 언어의 엔진(화면 언어 ↔ 영문). 없으면 null - 그러면 한 번만 읽는다.</summary>
+    private IOcrEngine? OtherOcr(Vision.Regions.NamedRegion region, IOcrEngine used)
+    {
+        var wanted = string.Equals(used.Language, "en-US", StringComparison.OrdinalIgnoreCase)
+            ? _host.Ocr?.Invoke()?.Language
+            : "en-US";
+
+        if (wanted is null || string.Equals(wanted, used.Language, StringComparison.OrdinalIgnoreCase)) return null;
+
+        return LanguageOcr(wanted);
+    }
+
+    /// <summary>언어별 엔진 하나씩 만들어 들고 있는다 - 부를 때마다 만들면 한 번에 0.1초가 든다.</summary>
+    private IOcrEngine? LanguageOcr(string language)
+    {
+        if (_languageOcr.TryGetValue(language, out var engine)) return engine;
+
+        engine = OcrEngineFactory.TryCreate(language);
+        _languageOcr[language] = engine;
+
+        return engine;
+    }
+
+    private readonly Dictionary<string, IOcrEngine?> _languageOcr = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>숫자를 읽을 엔진. 영문 팩이 없으면 쓰던 것으로.</summary>
     private IOcrEngine NumberOcr()
@@ -1143,6 +1220,12 @@ public class LiveScriptApi
     public bool 궁극기준비() => UltimateReady();
     public string 읽기(string 이름) => ReadAt(이름);
     public int? 숫자읽기(string 이름) => ReadNumberAt(이름);
+
+    /// <summary>그 자리의 순번째 숫자. 「30 40」 에서 0 이 30, 1 이 40.</summary>
+    public int? 숫자읽기(string 이름, int 순번) => ReadNumberAt(이름, 순번);
+
+    /// <summary>그 자리에서 읽은 숫자를 왼쪽에서 순서대로. 믿을 범위는 스크립트가 고른다.</summary>
+    public int[] 숫자들읽기(string 이름) => ReadNumbersAt(이름);
     public bool 글자있나(string 이름) => HasTextAt(이름);
 
     // ── 키 ───────────────────────────────────────────────────────────────

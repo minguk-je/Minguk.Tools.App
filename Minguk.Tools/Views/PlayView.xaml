@@ -19,7 +19,7 @@
              d:DataContext="{d:DesignInstance {x:Type viewModels:PlayViewModel},
                                               IsDesignTimeCreatable=False}"
              d:DesignHeight="500"
-             d:DesignWidth="900">
+             d:DesignWidth="1200">
 
     <!--
         플레이 화면. 게임 창을 연결하고, 미리보기를 켰다 껐다 하고, 저장해 둔 스크립트를 골라 돌린다.
@@ -112,7 +112,7 @@
 
             <dxb:BarEditItem Content="게임"
                              EditValue="{Binding SelectedTarget}"
-                             EditWidth="420"
+                             EditWidth="300"
                              IsEnabled="{Binding IsNotRunning}"
                              ToolTip="잡을 창. 전체화면 게임은 모니터로 잡는 경우가 많다.">
                 <dxb:BarEditItem.EditSettings>
@@ -181,7 +181,7 @@
 
             <dxb:BarEditItem Content="스크립트"
                              EditValue="{Binding SelectedScript}"
-                             EditWidth="260"
+                             EditWidth="200"
                              IsEnabled="{Binding Player.IsIdle}"
                              ToolTip="Scripts 폴더의 스크립트 파일과 프로젝트(.mtsproj). 스크립트 화면에서 저장하거나 만든 것이 여기 보인다. 프로젝트는 여러 파일·리소스를 한 벌로 돌린다.">
                 <dxb:BarEditItem.EditSettings>
@@ -205,8 +205,8 @@
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding Player.RunOnceCommand}"
                                Content="1회 실행 (F5)"
-                               ToolTip="시작 대기 뒤 게임 창을 앞으로 가져와 스크립트를 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다."
-                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}" />
+                               Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
+                               ToolTip="시작 대기 뒤 게임 창을 앞으로 가져와 스크립트를 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다." />
             <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                Command="{Binding Player.StartLoopCommand}"
                                Content="반복 (F6)"
@@ -267,15 +267,15 @@
         <!-- 출력() 이 적는 줄. 게임을 보는 동안 무슨 일이 있었는지 돌아와서 본다. -->
         <dxe:TextEdit MaxHeight="120"
                       Margin="4,0,4,4"
+                      VerticalContentAlignment="Top"
+                      FontFamily="D2Coding, Consolas, Courier New"
+                      markup:AutoScrollToEnd.IsEnabled="True"
                       AcceptsReturn="True"
                       DockPanel.Dock="Bottom"
                       EditValue="{Binding Live.Console.Text, Mode=OneWay}"
-                      FontFamily="D2Coding, Consolas, Courier New"
                       IsReadOnly="True"
                       TextWrapping="Wrap"
-                      VerticalContentAlignment="Top"
-                      VerticalScrollBarVisibility="Auto"
-                      markup:AutoScrollToEnd.IsEnabled="True" />
+                      VerticalScrollBarVisibility="Auto" />
 
         <!-- 고른 스크립트에 틀린 줄이 있으면 여기 뜬다. 고치는 것은 스크립트 화면에서. -->
         <dxe:TextEdit MaxHeight="80"

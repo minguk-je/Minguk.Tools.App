@@ -348,7 +348,34 @@ public abstract partial class RecognizingCaptureViewModelBase
         return bitmap;
     }
 
-    /// <summary>자리마다 그 자리의 전처리(흰 글자만·그대로 키우기)로 읽어 <c>LastText</c> 에 적는다. 지금 읽기와 같은 전처리다.</summary>
+    /// <summary>언어별 엔진. 자리마다 언어가 다를 수 있어 하나씩 만들어 들고 있는다 - 만드는 데 0.1초가 든다.</summary>
+    private readonly Dictionary<string, Vision.Ocr.IOcrEngine?> _engineByLanguage = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>이 자리를 읽을 엔진. 자리에 언어가 안 적혀 있으면 화면에서 고른 언어.</summary>
+    private Vision.Ocr.IOcrEngine RegionEngine(Vision.Regions.NamedRegion region, Vision.Ocr.IOcrEngine fallback)
+        => region.Language.Length > 0 ? EngineFor(region.Language) ?? fallback : fallback;
+
+    /// <summary>쓴 엔진과 다른 언어의 엔진(숫자에 강한 영문 ↔ 화면 언어). 없으면 null.</summary>
+    private Vision.Ocr.IOcrEngine? OtherEngine(Vision.Ocr.IOcrEngine used)
+    {
+        var wanted = string.Equals(used.Language, "en-US", StringComparison.OrdinalIgnoreCase)
+            ? SelectedOcrLanguage ?? Vision.Ocr.OcrEngineFactory.PreferredLanguage
+            : "en-US";
+
+        return string.Equals(wanted, used.Language, StringComparison.OrdinalIgnoreCase) ? null : EngineFor(wanted);
+    }
+
+    private Vision.Ocr.IOcrEngine? EngineFor(string language)
+    {
+        if (_engineByLanguage.TryGetValue(language, out var engine)) return engine;
+
+        engine = Vision.Ocr.OcrEngineFactory.TryCreate(language);
+        _engineByLanguage[language] = engine;
+
+        return engine;
+    }
+
+    /// <summary>자리마다 그 자리의 손질·언어로 읽어 <c>LastText</c> 에 적는다. 지금 읽기와 같은 길이다.</summary>
     private async Task ReadRegionsAsync((Vision.Regions.NamedRegion Region, BitmapSource Crop)[] crops)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
@@ -360,10 +387,16 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             foreach (var (region, crop) in crops)
             {
-                var prepared = region.Ink ? Vision.Ocr.HudInk.Prepare(crop) : Enlarge(crop);
-                var outcome = await ocr.RecognizeAsync(prepared);
+                var prepared = region.Preprocess.Prepare(crop, region.PreprocessOptions);
+                var engine = RegionEngine(region, ocr);
+                var outcome = await engine.RecognizeAsync(prepared);
+                var text = outcome.Text.Replace(Environment.NewLine, " ").Trim();
 
-                results.Add((region, outcome.Text.Replace(Environment.NewLine, " ").Trim()));
+                // 자리에 적어 둔 언어로 안 읽히면 다른 언어로 한 번 더 - 같은 숫자를 ko 는 읽고 en-US 는 못 읽는 자리가 있다.
+                if (text.Length == 0 && OtherEngine(engine) is { } other)
+                    text = (await other.RecognizeAsync(prepared)).Text.Replace(Environment.NewLine, " ").Trim();
+
+                results.Add((region, text));
             }
 
             DispatcherService?.BeginInvoke(() => Guard(() =>
@@ -414,6 +447,9 @@ public abstract partial class RecognizingCaptureViewModelBase
         _liveRegions = [];
         _ocr?.Dispose();
         _ocr = null;
+
+        foreach (var engine in _engineByLanguage.Values) engine?.Dispose();
+        _engineByLanguage.Clear();
     }
 }
 

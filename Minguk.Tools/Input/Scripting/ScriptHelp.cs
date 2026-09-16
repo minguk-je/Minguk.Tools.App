@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -48,7 +48,7 @@ public static class ScriptHelp
 
         ["Mobs"] = Mobs, ["NearestMob"] = Mobs, ["TargetMob"] = Mobs, ["ReleaseTarget"] = Mobs, ["WaitMob"] = Mobs,
 
-        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["HasTextAt"] = Screen,
+        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
         ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow,

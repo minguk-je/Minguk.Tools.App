@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -389,10 +389,13 @@ internal static class ScriptScreenProbe
 
         // 영역 패널 - 솔루션 탐색기와 같은 탭 그룹, 이름·계속 읽기·전처리 칸에서 바로 고친다(사용자 데이터를 안 건드리게 새 자리·이름 바꾸기는 여기서 안 누른다).
         {
-            var solution = Descendants<DevExpress.Xpf.Docking.LayoutPanel>(window).FirstOrDefault(p => p.Name == "SolutionExplorerPanel");
-            var regionsPanel = Descendants<DevExpress.Xpf.Docking.LayoutPanel>(window).FirstOrDefault(p => p.Name == "RegionsPanel")
-                               ?? (solution?.Parent as DevExpress.Xpf.Docking.LayoutGroup)?.Items.OfType<DevExpress.Xpf.Docking.LayoutPanel>().FirstOrDefault(p => p.Name == "RegionsPanel");
-            var sameGroup = solution?.Parent is DevExpress.Xpf.Docking.TabbedGroup group && regionsPanel is not null && ReferenceEquals(regionsPanel.Parent, group);
+            // 영역은 아래 탭 줄(오류 목록·출력과 같은 그룹) 맨 왼쪽이다(사용자, 2026-09-16 - 칸이 늘어 옆 패널에는 좁고, 탭이 있다는 것을 알아채게).
+            // 안 고른 탭은 시각 트리에 없다 - 도킹의 항목 목록으로 본다.
+            var regionsPanel = Descendants<DevExpress.Xpf.Docking.LayoutPanel>(window).FirstOrDefault(p => p.Name == "RegionsPanel");
+            var bottom = regionsPanel?.Parent as DevExpress.Xpf.Docking.TabbedGroup;
+            var sameGroup = bottom is not null
+                            && bottom.Items.Any(i => i.Name == "ErrorListPanel")
+                            && bottom.Items.IndexOf(regionsPanel!) == 0;
 
             var grid = (regionsPanel?.Content as DependencyObject) is { } content
                 ? Descendants<DevExpress.Xpf.Grid.GridControl>(content).FirstOrDefault()
@@ -401,11 +404,13 @@ internal static class ScriptScreenProbe
                            && grid.Columns["Name"] is { AllowEditing: not DevExpress.Utils.DefaultBoolean.False }
                            && grid.Columns["KeepReading"] is not null
                            && grid.Columns["LastText"] is { AllowEditing: DevExpress.Utils.DefaultBoolean.False }
+                           && grid.Columns["Preprocessor"] is not null
+                           && grid.Columns["Language"] is not null
                            && grid.Columns["X"] is { Visible: false };
 
             if (sameGroup && editable)
-                Console.WriteLine("[PASS] 영역 패널이 솔루션 탐색기 탭 그룹에 있고, 그리드는 이름·계속 읽기·읽은 글자·전처리(자리 열은 숨김)");
-            else { Console.WriteLine($"[FAIL] 영역 패널 자리·그리드가 틀렸다 - 같은 탭 그룹 {sameGroup} · 그리드 {grid is not null} · 칸 {editable}"); failures++; }
+                Console.WriteLine("[PASS] 영역 패널이 아래 탭 줄 맨 왼쪽이고, 그리드는 이름·계속 읽기·읽은 글자·손질·언어(자리 열은 숨김)");
+            else { Console.WriteLine($"[FAIL] 영역 패널 자리·그리드가 틀렸다 - 아래 탭 맨 왼쪽 {sameGroup} · 그리드 {grid is not null} · 칸 {editable}"); failures++; }
         }
 
         vm.Regions.Remove(region);

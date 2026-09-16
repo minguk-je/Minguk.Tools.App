@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
@@ -23,6 +23,9 @@ public sealed class NamedRegion : INotifyPropertyChanged
 {
     private string _name = string.Empty;
     private bool _ink = true;
+    private string _preprocessor = string.Empty;
+    private double _shearDegrees;
+    private string _language = string.Empty;
     private bool _keepReading;
     private string _lastText = string.Empty;
 
@@ -60,6 +63,55 @@ public sealed class NamedRegion : INotifyPropertyChanged
         get => _ink;
         set => Set(ref _ink, value);
     }
+
+    /// <summary>
+    /// 읽기 전 손질 이름(<see cref="Ocr.OcrPreprocessors"/> 의 Id - plain·bright·dark). 비어 있으면 옛 <see cref="Ink"/> 를 따른다.
+    /// </summary>
+    /// <remarks>
+    /// 게임마다 글자가 달라 한 가지 손질로 못 덮는다(실측 2026-09-16: 오버워치 탄약은 "밝은 글자만" 0/12, "그대로 키우기" 10/12).
+    /// 자리마다 골라 저장한다 - 화면의 <c>지금 읽기</c> 가 손질을 모두 해 보고 가장 잘 읽은 것을 알려 준다.
+    /// </remarks>
+    [JsonPropertyName("prep")]
+    public string Preprocessor
+    {
+        get => _preprocessor;
+        set => Set(ref _preprocessor, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// 이 자리를 읽을 언어 태그("ko"·"en-US"). 비어 있으면 자동 - 숫자는 영문, 안 되면 쓰던 언어로 한 번 더.
+    /// </summary>
+    /// <remarks>
+    /// 같은 숫자라도 언어 팩에 따라 읽히고 안 읽힌다(실측 2026-09-16: 오버워치 영상의 탄약은 ko 가 읽고 en-US 는 빈 글,
+    /// 다른 스크린샷은 반대). 「지금 읽기」 가 둘 다 해 보고 잘 읽은 쪽을 여기에 적는다.
+    /// </remarks>
+    [JsonPropertyName("lang")]
+    public string Language
+    {
+        get => _language;
+        set => Set(ref _language, value ?? string.Empty);
+    }
+
+    /// <summary>글자가 오른쪽으로 기운 각도(도). 0 이면 손대지 않는다. 이탤릭 HUD 는 10~12도.</summary>
+    [JsonPropertyName("shear")]
+    public double ShearDegrees
+    {
+        get => _shearDegrees;
+        set => Set(ref _shearDegrees, value);
+    }
+
+    /// <summary>
+    /// 이 자리를 읽을 때 쓰는 손질과 옵션. 저장된 이름이 없으면 옛 <see cref="Ink"/>(true = 밝은 글자만)를 따른다.
+    /// </summary>
+    [JsonIgnore]
+    public Ocr.IOcrPreprocessor Preprocess
+        => Preprocessor.Length > 0
+            ? Ocr.OcrPreprocessors.Find(Preprocessor)
+            : Ink ? Ocr.OcrPreprocessors.Find("bright") : Ocr.OcrPreprocessors.Default;
+
+    /// <summary>이 자리의 전처리 옵션(기울기). 목표 높이는 공통 기본값.</summary>
+    [JsonIgnore]
+    public Ocr.OcrPreprocessOptions PreprocessOptions => new(Ocr.OcrPreprocessOptions.DefaultTargetHeight, ShearDegrees);
 
     /// <summary>
     /// 화면(스크립트·플레이)이 이 자리를 0.5초마다 읽어 <see cref="LastText"/> 에 적을지. 저장한다.

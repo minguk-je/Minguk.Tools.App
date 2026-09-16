@@ -55,6 +55,9 @@ internal static partial class Program
         if (args.Contains("--onnx-agree")) return OnnxAgree.Run(args);
         if (args.Contains("--ocr-crop")) return OcrCropCheck.Run(args);
 
+        // 자리 하나를 여러 장·여러 손질로 읽어 어느 조합이 잘 읽는지 표로 낸다.
+        if (args.Contains("--ocr-tune")) return OcrTuneCheck.Run(args);
+
         // 설계 2단계: ONNX 검출기가 무엇을 어디서 찾는지 본다(사각형을 그려 파일로 남긴다).
         if (args.Contains("--onnx-detect")) return OnnxDetect.Run(args);
 

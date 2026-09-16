@@ -41,7 +41,7 @@ public sealed class MediaFoundationVideoRecorder : IVideoRecorder
     private readonly BlockingCollection<Frame> _queue;
     private readonly Thread _writerThread;
     private readonly int _frameRate;
-    private readonly int _bitrate;
+    private int _bitrate;
 
     /// <summary>프레임 사이 간격(Stopwatch 틱)과 다음 프레임을 받을 시각. 고른 fps 보다 빨리 오는 프레임은 솎는다.</summary>
     private readonly double _frameInterval;
@@ -67,12 +67,12 @@ public sealed class MediaFoundationVideoRecorder : IVideoRecorder
     /// 저장할 초당 프레임 - 화면캡처 fps 콤보 값. <b>이보다 빨리 오는 프레임은 솎는다</b>: 캡처 세션을 나눠 쓰는 다른 화면이 더 높은 fps 를
     /// 원하면 세션은 그 fps 로 돈다(<c>SharedCaptureHub</c> 는 큰 값을 쓴다). 실제 시각은 프레임마다 받은 timestamp 다.
     /// </param>
-    /// <param name="bitrate">평균 비트레이트(bps). 안 주면 fps 에 맞춘다(<see cref="DefaultBitrate"/>).</param>
+    /// <param name="bitrate">평균 비트레이트(bps). 안 주면 첫 프레임 크기·fps 로 정한다(<see cref="DefaultBitrate"/>).</param>
     public MediaFoundationVideoRecorder(string filePath, int frameRate = 30, int? bitrate = null)
     {
         FilePath = Path.GetFullPath(filePath);
         _frameRate = Math.Clamp(frameRate, 1, 240);
-        _bitrate = Math.Max(500_000, bitrate ?? DefaultBitrate(_frameRate));
+        _requestedBitrate = bitrate is { } given ? Math.Max(500_000, given) : null;
         _frameInterval = Stopwatch.Frequency / (double)_frameRate;
         _queueLimit = Math.Max(6, _frameRate / 5);
         _queue = new BlockingCollection<Frame>(_queueLimit);
@@ -83,17 +83,28 @@ public sealed class MediaFoundationVideoRecorder : IVideoRecorder
         _writerThread.Start();
     }
 
+    /// <summary>픽셀 하나에 쓰는 비트. 0.9 면 게임 화면과 눈으로 구별하기 어렵다(1080p 30fps ≈ 56Mbps).</summary>
+    /// <remarks>
+    /// <b>화질을 게임 화면에 맞춘다</b>(사용자, 2026-09-16 - "용량은 상관없어"). 녹화 영상은 두 가지로 쓰인다:
+    /// 캡처 대상으로 걸어 글자를 읽고, 라벨링에서 그림을 뽑아 학습한다. 8Mbps 에서는 HUD 의 얇은 흰 획이 먼저 뭉개져
+    /// 같은 자리가 화면 사진으로는 20장 중 20장, 영상에서 뽑은 장으로는 20장 중 3장만 읽혔다(실측). 뭉갠 그림으로 학습하면 모델도 같이 나빠진다.
+    /// </remarks>
+    public const double BitsPerPixel = 0.9;
+
     /// <summary>
-    /// fps 에 맞춘 비트레이트. 30fps 이하 8Mbps(1080p 1분에 약 60MB), 그 위는 fps 에 비례해 3/4 만큼 늘린다(60fps 12Mbps).
+    /// 크기·fps 에 맞춘 비트레이트. 1080p 30fps ≈ 56Mbps(1분에 약 420MB), 60fps ≈ 112Mbps.
     /// </summary>
-    /// <remarks>비트레이트를 그대로 두고 fps 만 올리면 한 장에 쓰는 비트가 줄어 움직임이 많은 장면이 뭉개진다. 프레임이 촘촘하면 장마다 차이가 작아 두 배까지는 안 든다.</remarks>
-    public static int DefaultBitrate(int frameRate)
-        => frameRate <= 30 ? 8_000_000 : (int)Math.Min(40_000_000, 8_000_000 * (frameRate / 30.0) * 0.75);
+    /// <remarks>넓은 화면일수록, fps 가 높을수록 그만큼 올린다 - 고정값은 2560x1440 이나 60fps 에서 모자란다. 8Mbps 아래·200Mbps 위로는 안 간다.</remarks>
+    public static int DefaultBitrate(int width, int height, int frameRate)
+        => (int)Math.Clamp((double)width * height * frameRate * BitsPerPixel, 8_000_000, 200_000_000);
 
     public string Name => "Media Foundation H.264 (조각 mp4)";
 
     /// <summary>저장하는 초당 프레임(고른 값).</summary>
     public int FrameRate => _frameRate;
+
+    /// <summary>사람이 준 비트레이트. 없으면 첫 프레임 크기를 보고 정한다.</summary>
+    private readonly int? _requestedBitrate;
 
     /// <summary>고른 fps 보다 빨리 와서 솎은 장수. 버림(<see cref="FramesDropped"/>, 쓰기가 밀림)과 다르다 - 정상이다.</summary>
     public int FramesSkipped => Volatile.Read(ref _framesSkipped);
@@ -341,6 +352,9 @@ public sealed class MediaFoundationVideoRecorder : IVideoRecorder
             {
                 output.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Video);
                 output.Set(MediaTypeAttributeKeys.Subtype, H264Subtype);
+                // 크기는 첫 프레임에서 정해진다 - 비트레이트도 여기서 그 크기에 맞춘다.
+                _bitrate = _requestedBitrate ?? DefaultBitrate(_width, _height, _frameRate);
+
                 output.Set(MediaTypeAttributeKeys.AvgBitrate, (uint)_bitrate);
                 output.Set(MediaTypeAttributeKeys.InterlaceMode, InterlaceProgressive);
                 output.Set(MediaTypeAttributeKeys.FrameSize, MediaFactory.PackSize((uint)_width, (uint)_height));

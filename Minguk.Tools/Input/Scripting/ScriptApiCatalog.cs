@@ -86,6 +86,7 @@ public static class ScriptApiCatalog
         new("HealthMax", "체력최대", "", "체력 최대치.", ScriptApiMode.Live),
         new("Ultimate", "궁극기", "", "궁극기 충전(%). 다 찼으면 숫자가 없어 null.", ScriptApiMode.Live),
         new("UltimateReady", "궁극기준비", "", "궁극기가 다 찼는가.", ScriptApiMode.Live),
+        new("ReadNumbersAt", "숫자들읽기", "name", "이름 붙인 자리에서 읽은 숫자를 왼쪽에서 순서대로 준다. 「30 40」 이면 [30, 40] - 믿을 범위는 스크립트가 고른다.", ScriptApiMode.Live),
         new("HasTextAt", "글자있나", "name", "이름 붙인 자리에 읽을 글자가 있는가. 화면의 \"영역 지정\" 으로 만든 이름.", ScriptApiMode.Live),
         new("Key", "키", "name", "이름으로 키 한 번. \"F\", \"Space\", \"Enter\", \"Ctrl+Shift+1\".", ScriptApiMode.Live),
         new("KeyDown", "누르기", "name", "키를 누른 채로 둔다. 떼기 전까지.", ScriptApiMode.Live),
