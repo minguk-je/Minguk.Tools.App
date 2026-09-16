@@ -491,6 +491,18 @@ internal static class ScriptScreenProbe
                 else { Console.WriteLine($"[FAIL] 영역 그리드 열 너비가 자동이 아니다 - {string.Join(", ", widths)}"); failures++; }
             }
 
+            // 트리도 열 머리글이 기본으로 보인다(사용자, 2026-09-16 - BaseTreeListView 가 늘 꺼 영역 그리드에 머리글이 없었다).
+            // 열이 하나뿐인 솔루션 탐색기는 XAML 에서 끈다.
+            if (grid?.View is DevExpress.Xpf.Grid.TreeListView regionView)
+            {
+                var explorer = Descendants<DevExpress.Xpf.Grid.TreeListView>(window).FirstOrDefault(v => v.KeyFieldName == "Id");
+                var regionHeaders = regionView.ShowColumnHeaders;
+                var explorerHeaders = explorer?.ShowColumnHeaders;
+
+                if (regionHeaders && explorerHeaders == false) Console.WriteLine("[PASS] 영역 그리드는 열 머리글이 보이고(열 3개), 솔루션 탐색기는 안 보인다");
+                else { Console.WriteLine($"[FAIL] 열 머리글 - 영역 {regionHeaders} · 솔루션 탐색기 {explorerHeaders?.ToString() ?? "(못 찾음)"}"); failures++; }
+            }
+
             // 미리보기에서 고르면 트리 줄도 따라간다(사용자, 2026-09-16). 캔버스가 누를 때 바꾸는 것과 같은 속성으로 고른다.
             if (grid is not null && region.Cells.Count > 1)
             {

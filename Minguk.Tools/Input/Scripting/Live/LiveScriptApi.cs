@@ -1091,11 +1091,11 @@ public class LiveScriptApi
         var dot = text.IndexOf('.');
 
         if (dot >= 0 && book.Find(text[..dot]) is { } region)
-            return $"「{region.Name}」 자리에 「{text[(dot + 1)..].Trim()}」 칸이 없습니다. 있는 칸: {string.Join(" · ", region.Cells.Select(c => c.Name))}";
+            return $"「{region.Name}」 영역에 「{text[(dot + 1)..].Trim()}」 구역이 없습니다. 있는 구역: {string.Join(" · ", region.Cells.Select(c => c.Name))}";
 
-        return $"「{text}」 라는 자리가 없습니다. 스크립트 화면의 영역 패널에서 [새 자리] 로 만들어 두세요 - 칸은 「자리.칸」 으로 부릅니다. " +
+        return $"「{text}」 라는 영역이 없습니다. 스크립트 화면의 영역 패널에서 [새 영역] 으로 만들어 두세요 - 구역은 「영역.구역」 으로 부릅니다. " +
                (book.Regions.Count == 0
-                   ? "지금 만들어 둔 자리가 하나도 없습니다."
+                   ? "지금 만들어 둔 영역이 하나도 없습니다."
                    : $"있는 것: {string.Join(" · ", book.Regions.Select(r => r.Name))}");
     }
 

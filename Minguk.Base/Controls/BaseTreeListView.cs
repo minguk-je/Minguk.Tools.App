@@ -44,7 +44,7 @@ public class BaseTreeListView : TreeListView
         this.SearchPanelHorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
         this.ShowAutoFilterRow = false;
         this.ShowCheckboxes = false;
-        this.ShowColumnHeaders = false;
+        this.ShowColumnHeaders = true; // 기본은 보인다(사용자, 2026-09-16). 열이 하나뿐인 트리는 쓰는 화면의 XAML 에서 끈다(솔루션 탐색기).
         this.ShowCriteriaInAutoFilterRow = true;
         this.ShowDataNavigator = false;
         this.ShowEditFormOnDoubleClick = false;

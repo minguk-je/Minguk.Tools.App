@@ -81,7 +81,7 @@ public sealed class RegionBook
 
         region.Name = region.Name.Trim();
 
-        if (region.Name.Length == 0) throw new ArgumentException("이름이 없는 자리는 넣을 수 없습니다.", nameof(region));
+        if (region.Name.Length == 0) throw new ArgumentException("이름이 없는 영역은 넣을 수 없습니다.", nameof(region));
 
         var existing = Find(region.Name);
 

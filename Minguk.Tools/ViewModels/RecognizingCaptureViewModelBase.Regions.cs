@@ -184,7 +184,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         SaveRegions();
         RegionsRevision++;
 
-        StatusText = $"「{edit.Region.Name}.{edit.Cell.Name}」 칸을 고쳤습니다 - " +
+        StatusText = $"「{edit.Region.Name}.{edit.Cell.Name}」 구역을 고쳤습니다 - " +
                      $"{edit.Cell.X * 100:0.0}%, {edit.Cell.Y * 100:0.0}%  {edit.Cell.Width * 100:0.0}% x {edit.Cell.Height * 100:0.0}%" +
                      (Math.Abs(edit.Cell.Angle) < 0.01 ? string.Empty : $"  {edit.Cell.Angle:0.#}°");
     });
@@ -200,7 +200,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         SaveRegions();
         RegionsRevision++;
 
-        StatusText = $"「{edit.Region.Name}」 자리를 고쳤습니다 - " +
+        StatusText = $"「{edit.Region.Name}」 영역을 고쳤습니다 - " +
                      $"{edit.Region.X * 100:0.0}%, {edit.Region.Y * 100:0.0}%  {edit.Region.Width * 100:0.0}% x {edit.Region.Height * 100:0.0}%";
     });
 
@@ -267,9 +267,9 @@ public abstract partial class RecognizingCaptureViewModelBase
             try { cell.Name = old; }
             finally { _isRevertingName = false; }
 
-            StatusText = name.Length == 0 ? "칸 이름을 비울 수 없습니다 - 스크립트가 「자리.칸」 으로 부릅니다."
-                : clash ? $"「{region.Name}」 자리에 「{name}」 칸이 이미 있습니다."
-                : "이름에 점(.)은 못 씁니다 - 스크립트가 「자리.칸」 으로 가릅니다.";
+            StatusText = name.Length == 0 ? "구역 이름을 비울 수 없습니다 - 스크립트가 「영역.구역」 으로 부릅니다."
+                : clash ? $"「{region.Name}」 영역에 「{name}」 구역이 이미 있습니다."
+                : "이름에 점(.)은 못 씁니다 - 스크립트가 「영역.구역」 으로 가릅니다.";
             return;
         }
 
@@ -284,7 +284,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         SaveRegions();
         RegionsRevision++;
 
-        StatusText = $"칸 이름을 「{region.Name}.{old}」 → 「{region.Name}.{name}」 으로 바꿨습니다. 스크립트에서 부르던 곳이 있으면 같이 고치세요.";
+        StatusText = $"구역 이름을 「{region.Name}.{old}」 → 「{region.Name}.{name}」 으로 바꿨습니다. 스크립트에서 부르던 곳이 있으면 같이 고치세요.";
     }
 
     private void SaveRegions() => Guard(() =>
@@ -334,7 +334,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             StatusText = name.Length == 0
                 ? "이름을 비울 수 없습니다 - 스크립트가 이 이름으로 부릅니다."
                 : clash ? $"「{name}」 은(는) 이미 있는 이름입니다 - 스크립트가 어느 쪽을 볼지 모르게 됩니다."
-                : "이름에 점(.)은 못 씁니다 - 스크립트가 「자리.칸」 으로 가릅니다.";
+                : "이름에 점(.)은 못 씁니다 - 스크립트가 「영역.구역」 으로 가릅니다.";
             return;
         }
 
@@ -373,7 +373,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
         ShowRegions = true;
 
-        StatusText = $"「{name}」 자리를 만들었습니다({how}). 이름을 바로 고치고 Enter." +
+        StatusText = $"「{name}」 영역을 만들었습니다({how}). 이름을 바로 고치고 Enter." +
                      (IsInputForwardingEnabled ? " 미리보기에서 옮기려면 입력 전달을 끄세요." : string.Empty);
 
         if (SelectedRegion is { } created) OnRegionCreated(created);
@@ -390,8 +390,8 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (SelectedRegion is not { } region) return;
 
         var name = string.Empty;
-        // 칸1 부터 비어 있는 번호(기본 칸은 「전체」 라 겹치지 않는다).
-        for (var n = 1; name.Length == 0 || region.FindCell(name) is not null; n++) name = $"칸{n}";
+        // 구역1 부터 비어 있는 번호(기본 구역은 「전체」 라 겹치지 않는다). 옛 파일의 「칸1」 은 NamedRegion 이 그대로 읽는다.
+        for (var n = 1; name.Length == 0 || region.FindCell(name) is not null; n++) name = $"구역{n}";
 
         // 자리 가운데에 폭 절반 - 손잡이로 맞춘다.
         var cell = new RegionCell { Name = name, Rect = new Rect(0.25, 0, 0.5, 1) };
@@ -404,7 +404,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         ShowRegions = true;
         RegionsRevision++;
 
-        StatusText = $"「{region.Name}.{name}」 칸을 더했습니다. 미리보기에서 끌어 맞추고, 이름을 고치세요." +
+        StatusText = $"「{region.Name}.{name}」 구역을 더했습니다. 미리보기에서 끌어 맞추고, 이름을 고치세요." +
                      (IsInputForwardingEnabled ? " 미리보기에서 옮기려면 입력 전달을 끄세요." : string.Empty);
 
         OnCellCreated(cell);
@@ -419,7 +419,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             if (region.Cells.Count <= 1)
             {
-                StatusText = $"「{region.Name}」 자리에는 칸이 하나뿐이라 지울 수 없습니다 - 자리를 지우려면 자리 줄을 고르세요.";
+                StatusText = $"「{region.Name}」 영역에는 구역이 하나뿐이라 지울 수 없습니다 - 영역을 지우려면 영역 줄을 고르세요.";
                 return;
             }
 
@@ -430,7 +430,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             SaveRegions();
             RegionsRevision++;
 
-            StatusText = $"「{region.Name}.{cell.Name}」 칸을 지웠습니다.";
+            StatusText = $"「{region.Name}.{cell.Name}」 구역을 지웠습니다.";
             return;
         }
 
@@ -438,15 +438,15 @@ public abstract partial class RecognizingCaptureViewModelBase
         SaveRegions();
         LoadRegions();
 
-        StatusText = $"「{region.Name}」 자리를 지웠습니다.";
+        StatusText = $"「{region.Name}」 영역을 지웠습니다.";
     });
 
-    /// <summary>안 겹치는 새 이름. 「자리1」「자리2」….</summary>
+    /// <summary>안 겹치는 새 이름. 「영역1」「영역2」…(사용자, 2026-09-16 - 화면 말은 영역·구역).</summary>
     private string NextName()
     {
         for (var n = 1; ; n++)
         {
-            var candidate = $"자리{n}";
+            var candidate = $"영역{n}";
 
             if (RegionBook.Find(candidate) is null) return candidate;
         }
@@ -532,7 +532,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             return true;
         }
 
-        AddRegion(rect, "미리보기에서 끈 자리");
+        AddRegion(rect, "미리보기에서 끌어 만듦");
         return true;
     }
 
@@ -610,7 +610,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (cell is null) region.LastText = text;
 
         StatusText = text.Length == 0
-            ? $"「{label}」 에서 아무것도 못 읽었습니다. 칸이 글자를 덮고 있는지 보세요."
+            ? $"「{label}」 에서 아무것도 못 읽었습니다. 구역이 글자를 덮고 있는지 보세요."
             : $"「{label}」 → 「{text}」{(numbers.Length > 0 ? $"  (숫자 {string.Join(", ", numbers)})" : string.Empty)}  [{ocr.Name} {watch.Elapsed.TotalMilliseconds:0}ms]";
 
         // 상태 줄은 다음 갱신이 덮는다. 나중에 "왜 안 읽혔지" 를 되짚으려면 로그에 남아야 한다.

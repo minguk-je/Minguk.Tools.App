@@ -209,6 +209,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
   열에는 `Width` 를 안 적는다(적으면 그 값에 묶여 글자가 잘린다). 사용자가 끈 너비를 남겨야 하는 그리드(화면캡처 통계)만 예외로 끈다.
   - 행 번호(`IsRowNumber`)를 쓰면 `IndicatorWidth` 를 숨은 `Border`(`SharedSizeGroup="RowNumberGroup"`)의 폭으로 되돌린다(`CaptureMonitorView.xaml` 예시) - 안 하면 세 자리부터 잘린다.
   - `IsColumnAutoWidth` 를 켜면 열 너비가 Auto 라 사용자가 끈 너비가 안 남는다.
+  - 트리(`BaseTreeListView`)도 열 머리글이 **기본으로 보인다**(사용자, 2026-09-16 - 늘 꺼져 영역 그리드에 머리글이 없었다). 열이 하나뿐인 트리는 그 화면 XAML 에서 `ShowColumnHeaders="False"`(솔루션 탐색기).
   - 저장된 배치의 `ActualShowSearchPanel` 은 복원 전에 지운다. 하네스도 `DataControlBase.AllowInfiniteGridSize = true`.
 - `ItemsSource` 가 있는 콤보는 **`SelectedItem`**(`Mode=TwoWay, UpdateSourceTrigger=PropertyChanged`)으로 묶는다 - `EditValue` 면 화면과 실제 동작이 어긋난다.
 - DevExpress 내장 SVG(`dx:DXImage`)는 없는 경로면 런타임에 터진다 - 아이콘은 확인된 Axialis(`image:FreeImage`)를 쓴다.
