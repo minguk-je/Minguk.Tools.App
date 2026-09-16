@@ -10,8 +10,8 @@ namespace Minguk.Tools.Markup.Regions;
 /// </summary>
 /// <remarks>
 /// 참조한 <c>MoveThumb</c> 을 옮긴 것이다. 그쪽은 <c>Canvas.Left/Top</c> 을 직접 고쳤는데, 여기서는 그림(칸이면 자리) 밖으로 못 나가게
-/// 하고 비율로 되돌려 저장해야 해서 캔버스(<see cref="RegionCanvas"/>)에 맡긴다. 변위는 Thumb 이 제 좌표계로 준다 -
-/// 미리보기 확대는 캔버스와 같아 그대로 쓰고, 돌린 칸이면 캔버스가 화면 좌표로 돌린다.
+/// 하고 비율로 되돌려 저장해야 해서 캔버스(<see cref="RegionCanvas"/>)에 맡긴다. Thumb 의 변위는 안 쓴다 - 손잡이 자리 기준이라
+/// 배치가 따라오기 전에 겹쳐 커서보다 앞서 나갔다. 캔버스가 끌기 시작점에서 지금 마우스까지로 놓는다.
 /// </remarks>
 public sealed class RegionMoveThumb : Thumb
 {
@@ -20,7 +20,8 @@ public sealed class RegionMoveThumb : Thumb
         DragStarted += (_, _) => Item?.Owner?.BeginDrag(Item);
         DragDelta += (_, e) =>
         {
-            Item?.Owner?.MoveBy(Item, e.HorizontalChange, e.VerticalChange);
+            // 변위(e.HorizontalChange)는 안 쓴다 - 캔버스가 끌기 시작점에서 지금 마우스까지로 놓는다(RegionCanvas 의 "손잡이 끌기").
+            if (Item is { Owner: { } canvas } item) canvas.DragMove(item);
             e.Handled = true;
         };
         DragCompleted += (_, _) => Item?.Owner?.EndDrag(Item);
@@ -65,7 +66,7 @@ public sealed class RegionResizeThumb : Thumb
     private void OnDragDelta(object sender, DragDeltaEventArgs e)
     {
         if (Item is { Owner: { } canvas } item)
-            canvas.ResizeBy(item, HorizontalAlignment, VerticalAlignment, e.HorizontalChange, e.VerticalChange);
+            canvas.DragResize(item, HorizontalAlignment, VerticalAlignment);
 
         e.Handled = true;
     }

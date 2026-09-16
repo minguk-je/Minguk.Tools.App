@@ -40,6 +40,10 @@ public sealed class RegionCanvas : Canvas
     private RegionItemBase? _dragging;
     private bool _dragMoved;
 
+    /// <summary>끌기를 시작할 때 마우스(캔버스 좌표)와 항목 사각형. 끄는 동안은 늘 여기서부터의 전체 이동량으로 놓는다.</summary>
+    private Point _dragStartMouse;
+    private Rect _dragStartRect;
+
     public RegionCanvas()
     {
         IsHitTestVisible = false;
@@ -327,6 +331,31 @@ public sealed class RegionCanvas : Canvas
         Select(item);
         _dragging = item;
         _dragMoved = false;
+        _dragStartMouse = Mouse.GetPosition(this);
+        _dragStartRect = RectOf(item);
+    }
+
+    // ── 손잡이 끌기 ──────────────────────────────────────────────────────
+    //    Thumb 의 DragDelta 변위는 "손잡이 자기 자리 기준" 이라, 항목(과 어도너의 손잡이)이 새 자리로 배치되기 전에 다음 마우스 이동이
+    //    오면 같은 거리를 또 준다 - 입력이 배치보다 먼저 돌아 한 번 끈 거리가 겹쳐, 영역이 커서보다 앞서 나갔다(사용자, 2026-09-16
+    //    "adorner 포인터랑 마우스 포인터가 안 맞는다"). 크기 손잡이는 어도너 층이 한 박자 더 늦어 더 어긋났다.
+    //    그래서 끄는 동안은 변위를 더하지 않고, 시작할 때 잰 마우스·사각형에서 지금 마우스까지의 전체 이동량(캔버스 좌표)으로 놓는다.
+    //    캔버스 좌표는 미리보기 확대(LayoutTransform) 안이라 배율을 따로 안 곱하고, 돌린 칸도 화면 방향 그대로다.
+
+    /// <summary>끄는 중인 항목을 지금 마우스 자리로 옮긴다(옮기기 손잡이).</summary>
+    internal void DragMove(RegionItemBase item)
+    {
+        if (!ReferenceEquals(item, _dragging)) return;
+
+        MoveFrom(item, _dragStartRect, Mouse.GetPosition(this) - _dragStartMouse);
+    }
+
+    /// <summary>끄는 중인 항목의 잡은 변을 지금 마우스 자리까지 끈다(크기 손잡이).</summary>
+    internal void DragResize(RegionItemBase item, HorizontalAlignment horizontal, VerticalAlignment vertical)
+    {
+        if (!ReferenceEquals(item, _dragging)) return;
+
+        ResizeFrom(item, _dragStartRect, horizontal, vertical, Mouse.GetPosition(this) - _dragStartMouse);
     }
 
     /// <summary>손잡이 변위(항목의 돌린 좌표계)를 캔버스 좌표로. 자리는 안 돌아 그대로다.</summary>
@@ -341,37 +370,43 @@ public sealed class RegionCanvas : Canvas
         return new Vector((dx * cos) - (dy * sin), (dx * sin) + (dy * cos));
     }
 
-    /// <summary>안쪽을 끈 만큼 옮긴다. 자리는 그림 밖으로, 칸은 자리 밖으로 안 나간다.</summary>
-    public void MoveBy(RegionItemBase item, double dx, double dy)
-    {
-        var delta = ToCanvasDelta(item, dx, dy);
+    /// <summary>안쪽을 끈 만큼 옮긴다(항목 좌표 변위). 자리는 그림 밖으로, 칸은 자리 밖으로 안 나간다. 하네스가 마우스 없이 부른다.</summary>
+    public void MoveBy(RegionItemBase item, double dx, double dy) => MoveFrom(item, RectOf(item), ToCanvasDelta(item, dx, dy));
 
+    /// <summary>시작 사각형에서 캔버스 좌표 이동량만큼 옮긴다.</summary>
+    private void MoveFrom(RegionItemBase item, Rect start, Vector delta)
+    {
         switch (item)
         {
             case RegionItem region when ImageArea is { IsEmpty: false } area:
-                ApplyRegion(region, RegionGeometry.Move(RectOf(region), delta.X, delta.Y, area), area);
+                ApplyRegion(region, RegionGeometry.Move(start, delta.X, delta.Y, area), area);
                 break;
 
             case RegionCellItem cell when RegionRectOf(cell) is { IsEmpty: false } owner:
-                ApplyCell(cell, RegionGeometry.Move(RectOf(cell), delta.X, delta.Y, owner), cell.CellAngle, owner);
+                ApplyCell(cell, RegionGeometry.Move(start, delta.X, delta.Y, owner), cell.CellAngle, owner);
                 break;
         }
     }
 
-    /// <summary>잡은 변을 끈 만큼 늘리거나 줄인다. 반대편은 그대로다(돌린 칸은 화면에서 제자리).</summary>
+    /// <summary>잡은 변을 끈 만큼 늘리거나 줄인다(항목 좌표 변위). 반대편은 그대로다(돌린 칸은 화면에서 제자리). 하네스가 마우스 없이 부른다.</summary>
     public void ResizeBy(RegionItemBase item, HorizontalAlignment horizontal, VerticalAlignment vertical, double dx, double dy)
+        => ResizeFrom(item, RectOf(item), horizontal, vertical, ToCanvasDelta(item, dx, dy));
+
+    /// <summary>시작 사각형에서 캔버스 좌표 이동량만큼 잡은 변을 끈다.</summary>
+    private void ResizeFrom(RegionItemBase item, Rect start, HorizontalAlignment horizontal, VerticalAlignment vertical, Vector delta)
     {
         switch (item)
         {
             case RegionItem region when ImageArea is { IsEmpty: false } area:
-                ApplyRegion(region, RegionGeometry.Resize(RectOf(region), horizontal, vertical, dx, dy, MinimumOf(area), area), area);
+                ApplyRegion(region, RegionGeometry.Resize(start, horizontal, vertical, delta.X, delta.Y, MinimumOf(area), area), area);
                 break;
 
             case RegionCellItem cell when RegionRectOf(cell) is { IsEmpty: false } owner:
             {
+                // 안 돌린 칸은 캔버스 이동량이 곧 칸의 가로·세로 변위다. 돌린 칸은 ResizeRotated 가 칸의 축으로 돌린다.
                 var rect = Math.Abs(cell.CellAngle) < 0.01
-                    ? RegionGeometry.Resize(RectOf(cell), horizontal, vertical, dx, dy, CellMinimum, owner)
-                    : RegionGeometry.ResizeRotated(RectOf(cell), cell.CellAngle, horizontal, vertical, ToCanvasDelta(cell, dx, dy).X, ToCanvasDelta(cell, dx, dy).Y, CellMinimum);
+                    ? RegionGeometry.Resize(start, horizontal, vertical, delta.X, delta.Y, CellMinimum, owner)
+                    : RegionGeometry.ResizeRotated(start, cell.CellAngle, horizontal, vertical, delta.X, delta.Y, CellMinimum);
 
                 ApplyCell(cell, rect, cell.CellAngle, owner);
                 break;
