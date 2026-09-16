@@ -23,7 +23,7 @@ namespace Minguk.Tools.Capture;
 /// - <see cref="TargetFps"/> 보다 촘촘한 프레임은 솎는다(WGC 와 같은 <see cref="FrameRateLimiter"/>). 늦어지면(풀기가 느림) 기다리지 않고 시계를 다시 맞춘다.
 /// - 입력은 받지 않는다 - 부르는 쪽(PreviewInputRouter·실시간 스크립트)이 대상 종류로 막는다.
 /// </remarks>
-public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
+public sealed class VideoFileCaptureSession : IScreenCaptureAdapter, IPausableCapture
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -44,6 +44,9 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
     private volatile bool _running;
     private bool _disposed;
 
+    /// <summary>열려 있으면 튼다. 닫히면 재생 스레드가 다음 장 앞에서 기다리고, 열리면 멈춘 시간만큼 시계를 민다.</summary>
+    private readonly ManualResetEventSlim _playing = new(true);
+
     private int _targetFps;
     private readonly FrameRateLimiter _limiter = new();
 
@@ -61,6 +64,15 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
     public CaptureTarget Target { get; }
 
     public bool IsRunning => _running;
+
+    /// <summary>재생을 멈추고 잇는다 - 영상 시각이 멈춘 자리에서 이어진다(되감거나 건너뛰지 않는다).</summary>
+    public bool TrySetPaused(bool paused)
+    {
+        if (paused) _playing.Reset();
+        else _playing.Set();
+
+        return true;
+    }
 
     public int TargetFps
     {
@@ -276,6 +288,17 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter
 
             while (!stopping.IsSet)
             {
+                if (!_playing.IsSet)
+                {
+                    var pausedAt = Stopwatch.GetTimestamp();
+
+                    WaitHandle.WaitAny([_playing.WaitHandle, stopping.WaitHandle]);
+                    if (stopping.IsSet) break;
+
+                    // 멈춘 동안은 영상 시각이 안 간다 - 안 밀면 계속하자마자 반 초 넘게 늦었다고 보고 그 사이를 건너뛴다.
+                    clockStart += Stopwatch.GetTimestamp() - pausedAt;
+                }
+
                 using var sample = reader.ReadSample(SourceReaderIndex.FirstVideoStream, SourceReaderControlFlag.None, out _, out var flags, out var sampleTime);
 
                 if ((flags & SourceReaderFlag.Error) != 0)

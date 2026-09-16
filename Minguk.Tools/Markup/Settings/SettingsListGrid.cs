@@ -48,13 +48,15 @@ public sealed class SettingsListGrid
             ShowGroupPanel = false,
             AllowEditing = editable,
             NewItemRowPosition = editable ? NewItemRowPosition.Bottom : NewItemRowPosition.None,
+            // 바탕은 Tab 이 표 밖으로 초점을 뺀다 - 새 행 줄에서 Tab 을 치면 다음 칸이 아니라 표를 떠나 적던 행이 날아갔다(실측 --list-typing).
+            AllowLeaveFocusOnTab = false,
             ShowSearchPanelMode = ShowSearchPanelMode.Never
         };
         Grid.View = view;
 
         foreach (var column in columns)
         {
-            var gridColumn = new GridColumn { FieldName = column.Name, Header = string.IsNullOrWhiteSpace(column.Label) ? column.Name : column.Label };
+            var gridColumn = new GridColumn { FieldName = column.Name, Header = string.IsNullOrWhiteSpace(column.Label) ? column.Name : column.Label, MinWidth = 60 };
 
             gridColumn.EditSettings = column.Kind switch
             {

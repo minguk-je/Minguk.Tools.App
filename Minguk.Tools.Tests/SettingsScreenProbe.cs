@@ -134,6 +134,9 @@ public static class SettingsScreenProbe
                 var dataRows = grid.ItemsSource is System.Data.DataView table ? table.Count : -1;
                 Expect(dataRows == 2 && grid.Columns.Count == 3, "목록 칸이 열·행을 그린다(맨 아래는 새 행 줄)", $"열 {grid.Columns.Count} · 행 {dataRows}");
 
+                var narrowest = grid.Columns.Min(c => c.ActualWidth);
+                Expect(narrowest >= 60 - 0.5, "목록 칸 열은 짧아도 60 보다 좁지 않다", string.Join(", ", grid.Columns.Select(c => $"{c.FieldName} {c.ActualWidth:0}")));
+
                 var mine = bindingErrors.Where(e => e.Contains("Settings")).Distinct().ToList();
                 Expect(mine.Count == 0, "바인딩 오류 없음", string.Join(" / ", mine.Take(5)));
 
@@ -282,6 +285,52 @@ public static class SettingsScreenProbe
 
                 vm.IsDesign = false;
                 await Pump(500);
+
+                // ── 플레이 설정 값 창 ── 플레이 화면 [설정] 과 같이 WindowService 로 띄운다(값만, 완성품의 프로젝트 폴더).
+                {
+                    var host = new System.Windows.Controls.Grid();
+                    var windows = new DevExpress.Mvvm.UI.WindowService
+                    {
+                        ViewTemplate = new DataTemplate { VisualTree = new FrameworkElementFactory(typeof(PlaySettingsView)) },
+                        WindowShowMode = DevExpress.Mvvm.UI.WindowShowMode.Default
+                    };
+                    DevExpress.Mvvm.UI.Interactivity.Interaction.GetBehaviors(host).Add(windows);
+                    var hostWindow = new Window { Width = 200, Height = 100, Left = -3000, Top = -3000, ShowInTaskbar = false, Content = host };
+                    hostWindow.Show();
+                    await Pump(300);
+
+                    var playVm = SolutionSettingsViewModel.CreateForPlay(project);
+                    ((DevExpress.Mvvm.IWindowService)windows).Title = playVm.Caption;
+                    DevExpress.Mvvm.WindowServiceExtensions.Show(windows, playVm);
+                    await Pump(1200);
+
+                    var playWindow = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.Content is PlaySettingsView || Descendants<PlaySettingsView>(w).Any());
+                    var playCanvas = playWindow is null ? null : Descendants<SettingsFormCanvas>(playWindow).SingleOrDefault();
+                    var playNames = playCanvas is null ? [] : Descendants<LayoutItem>(playCanvas).Where(i => i.Tag is SettingsItem).Select(i => ((SettingsItem)i.Tag).Name).ToList();
+                    Expect(playWindow is not null && playNames.Contains("물약HP") && playNames.Contains("보스") && playWindow.Title == "설정 - 설정검사 / 테스트런"
+                           && !Descendants<DevExpress.Xpf.PropertyGrid.PropertyGridControl>(playWindow).Any(),
+                        "플레이 설정 창: 값만 보이는 판이 완성품 프로젝트의 칸을 그린다(디자인·속성 없음)",
+                        $"창 {playWindow?.Title ?? "없음"} · 칸 {string.Join(", ", playNames)}");
+
+                    if (playCanvas is not null && playWindow is not null)
+                    {
+                        var playItems = Descendants<LayoutItem>(playCanvas).Where(i => i.Tag is SettingsItem).ToList();
+                        Descendants<SpinEdit>(ItemOf(playItems, "물약HP")).Single().EditValue = 55m;
+                        await Pump(300);
+                        Expect(Num(settings.Find("물약HP")!) == 55, "플레이 설정 창: 값을 바꾸면 스크립트가 읽는 값이 바뀐다", settings.Find("물약HP")!.Value?.ToJsonString() ?? "(없음)");
+
+                        await System.Threading.Tasks.Task.Run(() => SolutionSettings.ForProject(project).SetValue("자동줍기", JsonValue.Create(true)));
+                        await Pump(400);
+                        var playCheck = Descendants<CheckEdit>(ItemOf(playItems, "자동줍기")).Single();
+                        Expect(playCheck.IsChecked == true, "플레이 설정 창: 스크립트가 쓴 값이 곧바로 보인다", $"체크 {playCheck.IsChecked}");
+
+                        playWindow.Close();
+                        await Pump(300);
+                        Expect(!((DevExpress.Mvvm.IWindowService)windows).IsWindowAlive, "플레이 설정 창: 닫으면 창이 사라진다", $"살아 있음 {((DevExpress.Mvvm.IWindowService)windows).IsWindowAlive}");
+                    }
+
+                    hostWindow.Close();
+                }
 
                 Console.WriteLine($"[INFO] 화면을 찍었다: {Path.Combine(outputFolder, "minguk-settings-preview.png")} · {Path.Combine(outputFolder, "minguk-settings-design.png")}");
             }

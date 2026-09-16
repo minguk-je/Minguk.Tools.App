@@ -59,6 +59,15 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>캐럿이 있는 줄의 중단점을 켜고 끈다. 편집기 여백을 눌러도 된다.</summary>
     public DelegateCommand ToggleBreakpointCommand { get; }
 
+    /// <summary>
+    /// 일시정지(디버그 도구 줄) - 캡처가 돌면 미리보기·몹 찾기·계속 읽기를, 스크립트가 돌면 실행도 함께 멈춘다. 다시 누르거나 F5 로 계속.
+    /// </summary>
+    /// <remarks>스크립트는 다음 API 호출에서 멈추고 누르고 있던 키를 뗀다(<see cref="ScriptPauseGate"/>). 캡처·실행이 둘 다 멈추면 저절로 풀린다.</remarks>
+    public bool IsPaused { get => GetProperty(() => IsPaused); set => SetProperty(() => IsPaused, value, OnIsPausedChanged); }
+
+    /// <summary>일시정지를 누를 수 있는가 - 캡처나 실행이 돌 때(멈춰 있으면 풀 수 있게 늘).</summary>
+    public bool CanPause => IsPaused || IsRunning || Player.IsRunning;
+
     private readonly List<HotkeyClaim> _hotkeyClaims = [];
     private ScriptEditor? _editor;
 
@@ -117,6 +126,51 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         };
 
         Player.RunningChanged += (_, _) => BuildCommand.RaiseCanExecuteChanged();
+
+        // 캡처·실행이 켜지고 꺼질 때 일시정지 단추를 켜고 끄고, 둘 다 멈췄으면 일시정지를 푼다.
+        Player.RunningChanged += (_, _) => SyncPause();
+        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsRunning)) SyncPause(); };
+    }
+
+    // ── 일시정지 ─────────────────────────────────────────────────────────
+
+    private async void OnIsPausedChanged() => await GuardAsync(async () =>
+    {
+        RaisePropertyChanged(nameof(CanPause));
+
+        if (IsPaused)
+        {
+            if (!IsRunning && !Player.IsRunning)
+            {
+                IsPaused = false;
+                return;
+            }
+
+            IsCapturePaused = IsRunning;
+            Live.PauseGate.Pause();
+
+            StatusText = Player.IsRunning
+                ? "일시정지 - 미리보기·몹 찾기를 쉬고, 스크립트는 다음 호출에서 멈춥니다. 계속은 [일시정지] 를 다시 누르거나 F5."
+                : "일시정지 - 미리보기·몹 찾기를 쉽니다. 계속은 [일시정지] 를 다시 누르거나 F5.";
+            return;
+        }
+
+        IsCapturePaused = false;
+
+        if (!Live.PauseGate.IsPaused) return;
+
+        // 단추를 누르느라 앱이 앞에 왔다 - 게임을 앞으로 돌려놓고 연다. 안 그러면 다음 입력이 "대상 창이 앞에 없다" 로 막힌다.
+        if (Player.IsRunning) await ActivateTargetAsync();
+
+        Live.PauseGate.Resume();
+        StatusText = Player.IsRunning ? "계속 - 멈춘 호출부터 이어 갑니다." : "계속";
+    });
+
+    private void SyncPause()
+    {
+        RaisePropertyChanged(nameof(CanPause));
+
+        if (IsPaused && !IsRunning && !Player.IsRunning) IsPaused = false;
     }
 
     // ── VS 메뉴 ──────────────────────────────────────────────────────────
@@ -454,7 +508,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     {
         Logger.Debug($"실행/계속 요청: 멈춤={Live.Debug.IsPaused}, 쉬는 중={Player.IsIdle}, 앞 창={ForegroundWindow.Describe()}");
 
-        if (Live.Debug.IsPaused) Live.Debug.Continue();
+        if (IsPaused) IsPaused = false;
+        else if (Live.Debug.IsPaused) Live.Debug.Continue();
         else if (Player.IsIdle) Player.RunOnce();
     }
 

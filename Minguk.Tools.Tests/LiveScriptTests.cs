@@ -414,6 +414,71 @@ internal static partial class Program
             Check("멈춘 채로 중지하면 끝난다", finished && run.Result.Count == 0, $"끝 {finished}");
         }
 
+        // ── 몹.이름표: 부를 때만 화면을 읽는다(안 부르면 프레임도 안 청한다) ──
+        {
+            var quiet = new FakeHub(monitor);
+            var (quietErrors, _, _) = Run(new RoslynScriptEngine(), "foreach (var m in 몹들()) 출력(m.이름);", quiet, monitor, CancellationToken.None);
+
+            var asking = new FakeHub(monitor);
+            var calls = new List<ScriptCall>();
+            var (askErrors, _, _) = Run(new RoslynScriptEngine(), "출력(몹들()[0].이름표);", asking, monitor, CancellationToken.None, calls.Add);
+
+            Check("몹.이름표: 안 부르면 화면을 안 읽고, 부르면 그때 몹 위를 읽으러 간다",
+                  quietErrors.Count == 0 && !quiet.WantsFrames && asking.WantsFrames && calls.Any(c => c.Name == "Nameplate")
+                  && askErrors.Count == 1 && askErrors[0].Message.Contains("프레임"),
+                  $"안 부름: 프레임 청함 {quiet.WantsFrames} · 부름: 청함 {asking.WantsFrames} · 호출 {string.Join(",", calls.Select(c => c.Name))} · {(askErrors.Count > 0 ? askErrors[0].Message : "(오류 없음)")}");
+        }
+
+        // ── 일시정지: 쉬는 도중에도 멈추고, 누르던 키를 떼고, 계속하면 남은 만큼 쉬고 끝난다. 멈춘 채 중지해도 끝난다 ──
+        foreach (var stopWhilePaused in new[] { false, true })
+        {
+            var gate = new ScriptPauseGate();
+            var adapter = new RecordingAdapter();
+            var printed = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var host = new LiveScriptHost
+            {
+                Service = new InputService(adapter),
+                RequiresForeground = false,
+                Target = () => monitor,
+                Hub = new FakeHub(monitor),
+                Print = printed.Enqueue,
+                Watch = (_, _) => { },
+                PauseGate = gate,
+                HoldTimeMs = 1
+            };
+
+            using var cts = new CancellationTokenSource();
+            var api = new LiveScriptApi(host, cts.Token);
+            var run = System.Threading.Tasks.Task.Run(() => new RoslynScriptEngine().RunLiveAsync("누르기(\"W\"); 쉬기(600); 떼기(\"W\"); 출력(\"끝\");", api, null, cts.Token).GetAwaiter().GetResult());
+
+            var pressedDeadline = Environment.TickCount64 + 15000;
+            while (!adapter.Calls.Contains("Press 87") && Environment.TickCount64 < pressedDeadline) Thread.Sleep(10);
+            Thread.Sleep(150);
+            gate.Pause();
+            Thread.Sleep(800);
+
+            var stillRunning = !run.IsCompleted;
+            var released = adapter.Calls.Contains("Release 87");
+            var noticed = printed.Any(p => p.StartsWith("일시정지"));
+
+            if (stopWhilePaused)
+            {
+                cts.Cancel();
+                var finished = run.Wait(3000);
+                Check("일시정지한 채 중지하면 끝난다", stillRunning && finished && run.Result.Count == 0 && !printed.Contains("끝"), $"멈춰 있었음 {stillRunning} · 끝 {finished}");
+            }
+            else
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                gate.Resume();
+                var finished = run.Wait(5000);
+
+                Check("일시정지: 쉬기 도중에 멈추고 누르던 키를 떼고, 계속하면 남은 만큼 쉬고 끝난다",
+                    stillRunning && released && noticed && finished && run.Result.Count == 0 && printed.Contains("끝") && watch.ElapsedMilliseconds >= 300,
+                    $"멈춰 있었음 {stillRunning} · 뗌 {released} · 알림 {noticed} · 끝 {finished} · 계속 뒤 {watch.ElapsedMilliseconds}ms · {string.Join(", ", adapter.Calls.Where(c => c.Contains(" 87")))}");
+            }
+        }
+
         // ── 문법 검사는 돌리지 않고 줄 번호를 준다 ──
         {
             var adapter = new RecordingAdapter();

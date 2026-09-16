@@ -41,7 +41,7 @@ public partial class SolutionSettingsViewModel
             ProjectDirectory = null;
             _settings = null;
             Layers = [];
-            SetStatus("솔루션을 열고 프로젝트를 고르면 설정 화면을 만들 수 있습니다.");
+            SetStatus(IsValuesOnly ? "완성품의 프로젝트 폴더를 찾지 못했습니다." : "솔루션을 열고 프로젝트를 고르면 설정 화면을 만들 수 있습니다.");
             _canvas?.Build(SettingsForm.NewRoot(), design: false);
             RaiseCommands();
             return;
@@ -523,6 +523,8 @@ public partial class SolutionSettingsViewModel
 
         if (warnings.Count > 0)
             SetStatus($"⚠ 칸 {warnings.Count}개에 경고가 있습니다 - {warnings[0].Warning}", error: true);
+        else if (IsValuesOnly && !_settings.Entries().Any())
+            SetStatus("이 프로젝트에는 설정 칸이 없습니다. 빌더의 솔루션 → 설정 탭에서 칸을 놓으면 여기서 값을 바꿀 수 있습니다.");
         else
             SetStatus(IsDesign ? "칸을 끌어 옮기고, 고른 칸은 오른쪽 속성에서 고칩니다." : "값을 바꾸면 곧바로 저장합니다. 도는 스크립트도 다음 호출부터 바뀐 값을 봅니다.");
     }

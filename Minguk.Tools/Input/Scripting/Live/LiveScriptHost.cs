@@ -47,6 +47,9 @@ public sealed class LiveScriptHost
     /// <summary>API 를 한 번 부를 때마다. 호출 로그 칸이 받는다. 없으면 안 남긴다.</summary>
     public Action<ScriptCall>? Trace { get; init; }
 
+    /// <summary>화면의 일시정지. API 를 부를 때마다 여기서 기다린다. 없으면 안 멈춘다.</summary>
+    public ScriptPauseGate? PauseGate { get; init; }
+
     /// <summary>키·버튼을 누르고 있는 시간.</summary>
     public int HoldTimeMs { get; init; } = 30;
 

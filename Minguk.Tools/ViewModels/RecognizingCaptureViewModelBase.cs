@@ -166,7 +166,6 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         // 모델(68MB)을 읽느라 조금 늦게 뜬다 - 그 값을 치르기로 한 것이다. 끄고 닫았으면 꺼진 채로 열린다.
         IsMobDetectionOn = GetSettingOrLegacy(nameof(IsMobDetectionOn), false);
         IsTrackingOn = GetSettingOrLegacy(nameof(IsTrackingOn), true);
-        IsNameplateOcrOn = GetSettingOrLegacy(nameof(IsNameplateOcrOn), false);
     }
 
     protected override void SaveSettings()
@@ -177,7 +176,6 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         SetSetting(nameof(DetectMinimumScore), DetectMinimumScore);
         SetSetting(nameof(IsMobDetectionOn), IsMobDetectionOn);
         SetSetting(nameof(IsTrackingOn), IsTrackingOn);
-        SetSetting(nameof(IsNameplateOcrOn), IsNameplateOcrOn);
     }
 
     protected override void ReleaseResources()

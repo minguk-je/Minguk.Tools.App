@@ -115,6 +115,16 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
 
         public void OnFpsChanged() => Reconcile();
 
+        /// <summary>손잡이가 멈춤을 바꿨다. 안쪽 세션이 멈출 수 있으면 true.</summary>
+        public bool OnPauseChanged()
+        {
+            lock (_gate)
+            {
+                Reconcile();
+                return _session is IPausableCapture;
+            }
+        }
+
         /// <summary>
         /// 세션 하나를 손잡이들의 요구에 맞춘다 - 도는 손잡이가 없으면 놓고, 있으면 만들고, 리드백이 모자라면
         /// 새로 만들고, fps 는 가장 큰 값으로.
@@ -151,10 +161,14 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
 
                     _session = session;
                     _sessionHasReadback = wantsReadback;
+
+                    if (session is IPausableCapture newPausable && running.Any(h => h.WantsPause)) newPausable.TrySetPaused(true);
                     return;
                 }
 
                 if (_session.TargetFps != fps) _session.TargetFps = fps;
+
+                if (_session is IPausableCapture pausable) pausable.TrySetPaused(running.Any(h => h.WantsPause));
             }
         }
 
@@ -191,7 +205,7 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
     }
 
     /// <summary>화면이 드는 손잡이. 예전 세션과 같은 얼굴이라 화면 코드는 그대로다.</summary>
-    private sealed class Handle : IScreenCaptureAdapter
+    private sealed class Handle : IScreenCaptureAdapter, IPausableCapture
     {
         private readonly Shared _shared;
         private int _targetFps = 60;
@@ -204,6 +218,15 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
         }
 
         public bool WantsReadback { get; }
+
+        /// <summary>이 화면이 멈추기를 원한다. 세션은 하나라 하나라도 원하면 멈춘다(영상만 - <see cref="IPausableCapture"/>).</summary>
+        public bool WantsPause { get; private set; }
+
+        public bool TrySetPaused(bool paused)
+        {
+            WantsPause = paused;
+            return _shared.OnPauseChanged();
+        }
 
         public string Name => _shared.Session?.Name is { } inner ? $"{inner} (공유 {_shared.Count})" : "공유 캡처";
 

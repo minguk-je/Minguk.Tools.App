@@ -210,6 +210,28 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// <summary>캡처 중에는 대상을 못 바꾸게 막는다. XAML 에서 부정 컨버터를 쓰지 않으려고 둔 프로퍼티다.</summary>
     public bool IsNotRunning => !IsRunning;
 
+    private volatile bool _isCapturePaused;
+
+    /// <summary>
+    /// 캡처 일시정지 - 세션은 그대로 두고 받은 프레임을 흘린다. 미리보기는 마지막 장에 멈추고, 몹 찾기·계속 읽기·스크립트에 프레임 올리기도 쉰다.
+    /// </summary>
+    /// <remarks>세션을 끊지 않아 계속하면 곧바로 이어진다. 캡처 스레드가 읽어 필드로 둔다. 캡처를 멈추면 풀린다. 통계·저장·담기(F8)는 그대로 돈다.</remarks>
+    public bool IsCapturePaused
+    {
+        get => _isCapturePaused;
+        set
+        {
+            if (_isCapturePaused == value) return;
+
+            _isCapturePaused = value;
+
+            // 영상은 재생도 멈춘다 - 프레임만 흘리면 재생 시계가 계속 가서 계속했을 때 그만큼 건너뛰었다.
+            if (_captureSession is IPausableCapture pausable) pausable.TrySetPaused(value);
+
+            RaisePropertyChanged(nameof(IsCapturePaused));
+        }
+    }
+
     /// <summary>
     /// GPU 프레임을 CPU 메모리로 내린다. 추론을 CPU 에서 돌리거나 화면을 저장하려면 필요하다.
     /// 켜면 프레임마다 GPU→CPU 복사가 붙으므로 그만큼 느려진다 — 그 비용이 리드백(ms) 열에 찍힌다.
@@ -608,6 +630,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         try
         {
             DisposeSession();
+            IsCapturePaused = false;
             IsRunning = false;
             StatusText = "중지됨";
             MessengerUtility.SendMainMessage("캡처를 중지했습니다.");
@@ -707,6 +730,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         var collectSource = Interlocked.Exchange(ref _isCollectFrameRequested, 0);
         if (collectSource != 0)
             TryCollectFrame(e, collectSource == CollectFromHotkey);
+
+        if (_isCapturePaused) return;
 
         // 몹 찾기·글자 읽기처럼 프레임을 보는 일은 파생 화면이 한다. 여기서 기다리면 프레임이 밀린다.
         OnFramePixels(e);

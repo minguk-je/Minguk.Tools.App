@@ -140,7 +140,7 @@
                                    ShowBorder="False" />
             </dxb:StatusBarControl>
 
-            <dxlc:LayoutControl Padding="4"
+            <dxlc:LayoutControl Padding="0,4,0,0"
                                 Orientation="Horizontal">
 
                 <!-- ── 도구 상자 ── 디자인일 때만. -->
@@ -229,7 +229,7 @@
                         -->
                         <dxprg:PropertyGridControl ExpandCategoriesWhenSelectedObjectChanged="True"
                                                    SelectedObject="{Binding SelectedEditor}"
-                                                   ShowCategories="True"
+                                                   ShowCategories="Visible"
                                                    ShowDescriptionIn="ToolTip"
                                                    ShowMenuButtonInRows="False"
                                                    ShowProperties="All"
@@ -237,20 +237,20 @@
                                                    SortMode="NoSort">
                             <dxprg:PropertyDefinition Path="Items">
                                 <dxprg:PropertyDefinition.EditSettings>
-                                    <dxe:MemoEditSettings ShowIcon="False"
-                                                          MemoTextWrapping="Wrap"
+                                    <dxe:MemoEditSettings MemoTextWrapping="Wrap"
                                                           MemoVerticalScrollBarVisibility="Auto"
                                                           PopupHeight="160"
-                                                          PopupWidth="280" />
+                                                          PopupWidth="280"
+                                                          ShowIcon="False" />
                                 </dxprg:PropertyDefinition.EditSettings>
                             </dxprg:PropertyDefinition>
                             <dxprg:PropertyDefinition Path="Columns">
                                 <dxprg:PropertyDefinition.EditSettings>
-                                    <dxe:MemoEditSettings ShowIcon="False"
-                                                          MemoTextWrapping="Wrap"
+                                    <dxe:MemoEditSettings MemoTextWrapping="Wrap"
                                                           MemoVerticalScrollBarVisibility="Auto"
                                                           PopupHeight="160"
-                                                          PopupWidth="280" />
+                                                          PopupWidth="280"
+                                                          ShowIcon="False" />
                                 </dxprg:PropertyDefinition.EditSettings>
                             </dxprg:PropertyDefinition>
                             <!-- 목록 처음 행 - 글로는 못 적어 … 이 표 대화 상자를 띄운다. 단추는 늘 보이게(안 누르면 무엇으로 고치는지 모른다). -->

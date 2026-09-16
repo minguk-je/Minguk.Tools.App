@@ -1,0 +1,90 @@
+﻿<UserControl x:Class="Minguk.Tools.Views.PlaySettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
+             xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+             xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
+             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:settings="clr-namespace:Minguk.Tools.Markup.Settings"
+             xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+             Style="{DynamicResource BaseControlStyle}"
+             FontFamily="{DynamicResource BaseFontFamily}"
+             FontSize="{DynamicResource BaseFontSize}"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance {x:Type viewModels:SolutionSettingsViewModel},
+                                              IsDesignTimeCreatable=False}"
+             d:DesignHeight="600"
+             d:DesignWidth="460">
+
+    <!--
+        플레이 중에 띄우는 설정 값 창 - 플레이 화면 [설정] 이 WindowService 로 띄운다(창이라 게임 옆·다른 모니터에 둔다).
+        화면 모델은 설정 탭과 같은 SolutionSettingsViewModel(CreateForPlay) - 디자인·도구 상자·속성 없이 판만.
+        데이터 문맥은 WindowService 가 넣는다(ViewModelSource 를 적지 않는다).
+    -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Minguk.Base;component/Resource/Style.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <dxmvvm:Interaction.Behaviors>
+        <!-- 스크립트가 값을 쓰면 스크립트 스레드에서 알려 온다. 판에 닿는 일은 이것으로 넘긴다. -->
+        <dxmvvm:DispatcherService />
+
+        <!-- 창을 닫으면 저장·구독 풀기(OnDestroy). -->
+        <dxmvvm:CurrentWindowService ClosingCommand="{Binding OnClosingCommand}" />
+
+        <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
+                               EventName="Loaded" />
+    </dxmvvm:Interaction.Behaviors>
+
+    <DockPanel LastChildFill="True">
+        <dxb:ToolBarControl AllowCustomizationMenu="False"
+                            AllowQuickCustomization="False"
+                            DockPanel.Dock="Top"
+                            TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                            TextBlock.FontSize="{DynamicResource BaseFontSize}">
+            <dxb:BarEditItem Content="편집 대상"
+                             EditWidth="200"
+                             Hint="솔루션 공통: 모든 프로젝트가 보는 값. 이 프로젝트: 공통 칸의 값을 이 런에서만 덮어쓰기(스크립트의 설정저장 도 여기에 쓴다)."
+                             IsEnabled="{Binding HasProject}">
+                <dxb:BarEditItem.EditSettings>
+                    <dxe:ComboBoxEditSettings IsTextEditable="False"
+                                              ItemsSource="{Binding Layers}" />
+                </dxb:BarEditItem.EditSettings>
+                <dxb:BarEditItem.EditValue>
+                    <Binding Mode="TwoWay"
+                             Path="SelectedLayer"
+                             UpdateSourceTrigger="PropertyChanged" />
+                </dxb:BarEditItem.EditValue>
+            </dxb:BarEditItem>
+        </dxb:ToolBarControl>
+
+        <dxb:StatusBarControl AllowCustomizationMenu="False"
+                              DockPanel.Dock="Bottom"
+                              TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                              TextBlock.FontSize="{DynamicResource BaseFontSize}">
+            <dxb:BarStaticItem AutoSizeMode="Fill"
+                               Content="{Binding StatusText, Mode=OneWay}"
+                               ShowBorder="False" />
+        </dxb:StatusBarControl>
+
+        <dxlc:LayoutControl Padding="4"
+                            Orientation="Vertical">
+            <dxlc:LayoutItem VerticalAlignment="Stretch"
+                             AddColonToLabel="False"
+                             Label="">
+                <settings:SettingsFormCanvas>
+                    <dxmvvm:Interaction.Behaviors>
+                        <dxmvvm:UIObjectService x:Name="CanvasObjectService" />
+                    </dxmvvm:Interaction.Behaviors>
+                </settings:SettingsFormCanvas>
+            </dxlc:LayoutItem>
+        </dxlc:LayoutControl>
+    </DockPanel>
+</UserControl>

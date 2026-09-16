@@ -178,11 +178,18 @@ public sealed class SettingsFormCanvas : ContentControl
     /// <summary>편집기 + ↺ 한 줄. 값이 바뀌면 <see cref="_updaters"/> 로 편집기를 고친다.</summary>
     private FrameworkElement CreateEditor(SettingsItem item, LayoutItem owner, bool design)
     {
+        // 글자 ↺ 는 단추가 글자 높이로 줄어 작고 뭉개졌다(사용자, 2026-09-17) - 16px 그림을 늘리지 않고, 단추는 편집기 높이(24)의 정사각형.
         var reset = new SimpleButton
         {
-            Content = "↺",
-            Padding = new Thickness(4, 0, 4, 0),
+            Glyph = Minguk.Image.FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/undo.png"),
+            GlyphWidth = 16,
+            GlyphHeight = 16,
+            Width = 24,
+            Height = 24,
+            Padding = new Thickness(0),
             Margin = new Thickness(4, 0, 0, 0),
+            UseLayoutRounding = true,
+            SnapsToDevicePixels = true,
             VerticalAlignment = item.Kind == SettingsItemKind.List ? VerticalAlignment.Top : VerticalAlignment.Center,
             ToolTip = "덮어쓴 값을 빼서 아래 층(솔루션 공통·처음 값)의 값을 씁니다.",
             Visibility = Visibility.Collapsed,

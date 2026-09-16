@@ -112,6 +112,9 @@ internal static partial class Program
         // 영역·구역 손잡이를 실제 마우스로 끌어 끄는 동안 커서를 따라오는지 잰다. 커서를 가져간다.
         if (args.Contains("--region-drag")) return RegionDragProbe.Run(args);
 
+        // 설정 목록 칸 표에 실제 키보드로 새 행을 적는다. 커서·키보드를 가져간다.
+        if (args.Contains("--list-typing")) return ListGridTypingProbe.Run();
+
         // libtorch(4GB)와 학습한 모델이 있어야 도는 것이라 평소 검증에는 안 낀다.
         if (args.Contains("--detect-bench")) return DetectBench.Run();
 

@@ -144,9 +144,6 @@ public abstract partial class RecognizingCaptureViewModelBase
         // 이 프레임이 들어온 시각. 검출 결과에 실어 스크립트의 조준이 "겨눈 뒤의 화면인가" 를 가린다.
         var frameTicks = now;
 
-        // 이름표는 원본 해상도에서 읽어야 한다(12px 글자). 이 검출 주기의 프레임을 한 벌 복사해 둔다.
-        if (e.HasPixels && IsNameplateOcrOn) CopyFrameForNameplates(e);
-
         if (tensorDetector is not null && device is { } gpu)
         {
             DetectFromTexture(tensorDetector, gpu, e, frameTicks);
@@ -288,9 +285,8 @@ public abstract partial class RecognizingCaptureViewModelBase
             _latestDetections = found;
             Interlocked.Exchange(ref _latestDetectionTicks, Environment.TickCount64);
 
-            // 몹마다 머리 위 이름표. 한 장 10~20ms 라 검출(수백 ms) 뒤에 이어 붙여도 표가 안 난다.
-            // 이름표는 원본 픽셀이 있어야 읽는다. 텍스처 길에서 리드백을 꺼 두면 없다.
-            var names = IsNameplateOcrOn ? ReadNameplates(found) : new string[found.Count];
+            // 머리 위 이름표는 검출마다 읽지 않는다 - 게임마다 없기도 해 스크립트가 몹.이름표 를 부를 때 읽는다(사용자, 2026-09-17).
+            var names = new string[found.Count];
 
             // 스크립트가 읽어 가는 자리. 화면(Detections)은 UI 스레드 것이라 스크립트가 못 읽는다.
             Hub.PublishDetections(found, names, size.Width, size.Height, frameTicks);

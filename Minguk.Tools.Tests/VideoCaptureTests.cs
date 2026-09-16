@@ -108,6 +108,33 @@ internal static partial class Program
                       $"받은 {seen.Length}장 · 처음 {frames}장에 {firstLap:0.00}초 · 되감기 {loops}번 · 알림 '{notice}' · {clock.Elapsed.TotalSeconds:0.0}초");
             }
 
+            // ── 일시정지: 공유 손잡이로 멈추면 프레임이 안 오고, 이으면 멈춘 자리부터 다시 온다 ──
+            {
+                var hub = CaptureSessionHubFactory.Create((t, readback) => ScreenCaptureAdapterFactory.Create(t, readback));
+                using var handle = hub.Acquire(target, cpuReadback: false);
+                var count = 0;
+
+                handle.FrameArrived += (_, _) => Interlocked.Increment(ref count);
+                handle.TargetFps = 0;
+                handle.Start();
+                Thread.Sleep(500);
+
+                var paused = handle is IPausableCapture pausable && pausable.TrySetPaused(true);
+                Thread.Sleep(100);
+                var atPause = Volatile.Read(ref count);
+                Thread.Sleep(700);
+                var duringPause = Volatile.Read(ref count) - atPause;
+
+                ((IPausableCapture)handle).TrySetPaused(false);
+                Thread.Sleep(400);
+                var afterResume = Volatile.Read(ref count) - atPause - duringPause;
+                handle.Stop();
+
+                Check("영상 대상: 일시정지하면 재생이 멈추고(프레임 없음), 이으면 멈춘 자리부터 녹화 속도대로 다시 온다",
+                      paused && duringPause <= 1 && afterResume is >= 8 and <= 16,
+                      $"멈춤 {paused} · 멈춘 0.7초에 {duringPause}장 · 이은 0.4초에 {afterResume}장");
+            }
+
             // ── fps 솎기 ──
             {
                 using var session = ScreenCaptureAdapterFactory.Create(target, cpuReadback: false);

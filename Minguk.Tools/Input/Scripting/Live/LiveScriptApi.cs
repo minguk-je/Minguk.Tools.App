@@ -648,7 +648,18 @@ public class LiveScriptApi
 
         if (milliseconds >= 500) _host.Trace?.Invoke(new ScriptCall(DateTime.Now, "Wait", milliseconds.ToString(), "", 0));
 
-        if (_token.WaitHandle.WaitOne(milliseconds)) ThrowIfStopping();
+        // 쉬는 도중에 일시정지하면 남은 시간은 계속한 뒤에 마저 쉰다(멈춘 시간만큼 끝을 민다).
+        var end = Environment.TickCount64 + milliseconds;
+
+        while (true)
+        {
+            end += WaitWhilePaused();
+
+            var left = end - Environment.TickCount64;
+            if (left <= 0) return;
+
+            if (_token.WaitHandle.WaitOne((int)Math.Min(left, 50))) ThrowIfStopping();
+        }
     }
 
     public void 글자(string text) => Type(text);
@@ -711,16 +722,19 @@ public class LiveScriptApi
         if (target is null || !CaptureTargetBounds.TryGet(target, out var bounds)) return [];
 
         var mobs = new List<ScriptMob>(snapshot.Found.Count);
+        _nameplates ??= new ScriptNameplateReader(ReadNameplateCore);
 
         for (var i = 0; i < snapshot.Found.Count; i++)
         {
             var d = snapshot.Found[i];
             var center = PreviewInputMapper.MapRatioToScreen(new Point(d.Box.CenterX, d.Box.CenterY), bounds);
-            var caption = i < snapshot.Names.Count ? snapshot.Names[i] ?? string.Empty : string.Empty;
-
             mobs.Add(new ScriptMob(d.Label, d.Score,
                 (int)Math.Round(center.X), (int)Math.Round(center.Y),
-                (int)Math.Round(d.Box.Width * bounds.Width), (int)Math.Round(d.Box.Height * bounds.Height), caption));
+                (int)Math.Round(d.Box.Width * bounds.Width), (int)Math.Round(d.Box.Height * bounds.Height), string.Empty)
+            {
+                Box = d.Box,
+                Reader = _nameplates
+            });
         }
 
         return mobs;
@@ -906,6 +920,17 @@ public class LiveScriptApi
 
     /// <summary>프레임 한 장을 기다리는 시간(ms). 리드백이 꺼져 있다가 켜지는 중이면 그때부터 다시 이만큼 기다린다.</summary>
     private const int FrameWaitMs = 1500;
+
+    private ScriptNameplateReader? _nameplates;
+
+    /// <summary>몹 사각형 위 이름표를 지금 화면에서 읽는다(<c>몹.이름표</c>). 칸이 화면 밖이면 빈 글.</summary>
+    private string ReadNameplateCore(Minguk.Tools.Vision.Labeling.LabelBox box)
+        => Traced("Nameplate", $"{box.CenterX:0.###}, {box.CenterY:0.###}", () =>
+        {
+            var region = Minguk.Tools.Vision.Ocr.NameplateRegion.Above(box);
+
+            return region.IsEmpty ? string.Empty : ReadTextCore(region.X, region.Y, region.Width, region.Height);
+        });
 
     private string ReadTextCore(double x, double y, double width, double height)
     {
@@ -1384,6 +1409,8 @@ public class LiveScriptApi
     /// <summary>부른 것·인자·결과·걸린 시간을 남긴다. 터지면 그 사연도 남기고 그대로 던진다.</summary>
     private T Traced<T>(string name, string arguments, Func<T> body)
     {
+        WaitWhilePaused();
+
         var watch = Stopwatch.StartNew();
 
         try
@@ -1471,6 +1498,24 @@ public class LiveScriptApi
     {
         lock (_gate) _heldKeys.Remove(key);
         _host.Service.Adapter.ReleaseKey(key);
+    }
+
+    /// <summary>
+    /// 화면이 일시정지를 걸었으면 풀릴 때까지 붙든다. 멈추기 전에 누르고 있던 키·버튼을 뗀다 - 누른 채 멈추면 게임 캐릭터가 계속 달리고 쏜다.
+    /// </summary>
+    /// <returns>멈춰 있던 시간(ms).</returns>
+    private long WaitWhilePaused()
+    {
+        if (_host.PauseGate is not { } gate) return 0;
+
+        var paused = gate.WaitWhilePaused(_token, () =>
+        {
+            ReleaseAll();
+            _host.Print("일시정지 - 누르고 있던 키·버튼을 뗐습니다. 계속(F5)하면 여기서 이어 갑니다.");
+        });
+
+        ThrowIfStopping();
+        return paused;
     }
 
     private void ThrowIfStopping()

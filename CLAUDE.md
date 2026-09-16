@@ -75,7 +75,7 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
 |---|---|---|
 | 화면캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 대상·fps·미리보기·프레임 저장·담기(F8)·**녹화(mp4)**·통계 |
 | 스크립트 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | VS 모양 편집기. 몹 찾기·추적·글자 읽기를 보며 쓰고 돌린다, 빌드, 담기(F8) |
-| 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 완성품(.mtsx)을 골라 1회(F5)·반복(F6). 편집 없음. 모델·영역은 완성품의 프로젝트 폴더(`RecognitionRoot`) |
+| 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 완성품(.mtsx)을 골라 1회(F5)·반복(F6). 편집 없음. 모델·영역·설정은 완성품의 프로젝트 폴더(`RecognitionRoot`). `설정` 은 값 창(`PlaySettingsView`) |
 
 - 바탕 둘: `CaptureViewModelBase`(잡기·미리보기·입력 전달·저장·담기·통계) 위에 `RecognizingCaptureViewModelBase`(`.Detect.cs`·`.Ocr.cs`·`.Regions.cs`). 캡처는 첫 바탕만 - 모델 메모리를 물리지 않는다.
   파생 화면은 `RestoreSettings/SaveSettings/ReleaseResources` 에서 반드시 `base` 를 부른다. 바탕 이름은 `...Base` 로 끝낸다(`ViewModel` 로 끝나면 로거 이름이 겹친다).
@@ -241,6 +241,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 모�
 dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 입력 경로 전체 (커서·키보드를 가져간다)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --canvas-drag         # 라벨 캔버스 실제 마우스 끌기 (커서)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --region-drag [--busy] # 영역·구역 손잡이 실제 마우스 끌기 - 끄는 동안 커서와 벌어짐 (커서)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --list-typing           # 설정 목록 칸 표 새 행 줄에 실제 키보드로 적기(Tab·Enter, 대화 상자 창) (커서·키보드)
 ```
 
 - 화면(XAML)을 고쳤으면 `--views` - XAML 은 빌드를 통과하고 런타임에 터진다. 그 화면을 찍는 검사가 있으면 그것도.

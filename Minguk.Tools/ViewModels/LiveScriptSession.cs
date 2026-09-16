@@ -63,6 +63,9 @@ public sealed class LiveScriptSession : IDisposable
     /// <summary>중단점·한 줄씩·멈춘 자리. XAML 이 <c>Live.Debug.*</c> 로 묶는다.</summary>
     public ScriptDebugSession Debug { get; }
 
+    /// <summary>화면의 일시정지 - 스크립트가 다음 API 호출에서 멈춘다. 소스·빌드한 것 모두.</summary>
+    public ScriptPauseGate PauseGate { get; } = new();
+
     public IPerceptionHub Hub { get; init; } = PerceptionHubFactory.Default;
 
     /// <summary>
@@ -252,6 +255,7 @@ public sealed class LiveScriptSession : IDisposable
         Print = Console.Print,
         Watch = Console.Watch,
         Trace = Console.Trace,
+        PauseGate = PauseGate,
         HoldTimeMs = player.HoldTimeMs,
         AimScale = player.AimScale,
         // 늘 물린다. 켜고 끄는 것은 IsAimScaleAuto 가 부를 때마다 본다 - 도중에 켜도 바로 먹게.
@@ -269,6 +273,7 @@ public sealed class LiveScriptSession : IDisposable
 
     public void Dispose()
     {
+        PauseGate.Resume();
         _api?.ReleaseAll();
         _emergency.Dispose();
     }

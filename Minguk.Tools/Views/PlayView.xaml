@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
              xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
              xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
              xmlns:dxlc="http://schemas.devexpress.com/winfx/2008/xaml/layoutcontrol"
@@ -11,6 +12,7 @@
              xmlns:markup="clr-namespace:Minguk.Tools.Markup"
              xmlns:parts="clr-namespace:Minguk.Tools.Views.Parts"
              xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+             xmlns:views="clr-namespace:Minguk.Tools.Views"
              Style="{DynamicResource BaseControlStyle}"
              FontFamily="{DynamicResource BaseFontFamily}"
              FontSize="{DynamicResource BaseFontSize}"
@@ -43,6 +45,25 @@
 
         <!-- 폴더 밖의 스크립트를 찾아볼 때. -->
         <dxmvvm:OpenFileDialogService />
+
+        <!-- 설정 값 창 - [설정]. 모달이 아니다(게임 옆에 두고 도는 중에도 바꾼다). 창 제목은 화면 모델이 정한다. -->
+        <dxmvvm:WindowService x:Name="SettingsWindowService"
+                              WindowShowMode="Default"
+                              WindowStartupLocation="CenterOwner">
+            <dxmvvm:WindowService.ViewTemplate>
+                <DataTemplate>
+                    <views:PlaySettingsView />
+                </DataTemplate>
+            </dxmvvm:WindowService.ViewTemplate>
+            <dxmvvm:WindowService.WindowStyle>
+                <Style TargetType="dx:ThemedWindow">
+                    <Setter Property="Width" Value="460" />
+                    <Setter Property="Height" Value="600" />
+                    <Setter Property="ShowIcon" Value="False" />
+                    <Setter Property="ShowInTaskbar" Value="True" />
+                </Style>
+            </dxmvvm:WindowService.WindowStyle>
+        </dxmvvm:WindowService>
 
         <dxmvvm:EventToCommand Command="{Binding OnInitializedCommand}"
                                EventName="Loaded" />
@@ -98,10 +119,6 @@
                                           MinValue="1" />
                 </dxb:BarEditItem.EditSettings>
             </dxb:BarEditItem>
-            <dxb:BarCheckItem BarItemDisplayMode="Content"
-                              Content="이름표 읽기"
-                              IsChecked="{Binding IsNameplateOcrOn}"
-                              ToolTip="찾은 몹마다 머리 위 글자를 읽어 캡션에 붙인다. 한국어(ko)여야 한글이 읽힌다." />
         </dxb:MainMenuControl>
 
         <dxb:ToolBarControl AllowCustomizationMenu="False"
@@ -199,6 +216,11 @@
                                Command="{Binding BrowseScriptCommand}"
                                Content="찾아보기..."
                                ToolTip="폴더 밖의 스크립트를 고른다." />
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding ShowSettingsCommand}"
+                               Content="설정"
+                               Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/gear.png'}"
+                               ToolTip="고른 완성품 프로젝트의 설정 값을 창으로 띄운다. 도는 중에도 바꾸면 스크립트가 다음에 읽을 때부터 바뀐 값을 쓴다." />
 
             <dxb:BarItemSeparator />
 

@@ -1,3 +1,5 @@
+using System.IO;
+
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
 
@@ -20,6 +22,27 @@ namespace Minguk.Tools.ViewModels;
 public partial class SolutionSettingsViewModel : DocumentViewModelBase
 {
     public static SolutionSettingsViewModel Create() => ViewModelSource.Create(() => new SolutionSettingsViewModel());
+
+    /// <summary>
+    /// 플레이 화면이 창으로 띄우는 값 화면 - 디자인 없이 그 프로젝트 폴더의 설정 값만 바꾼다(<c>PlaySettingsView</c>).
+    /// </summary>
+    /// <remarks>솔루션 탭이 고른 프로젝트가 아니라 완성품의 프로젝트를 본다. 창이라 부모(셸)가 들어오지 않는다.</remarks>
+    public static SolutionSettingsViewModel CreateForPlay(string projectDirectory)
+    {
+        var vm = Create();
+        vm._fixedProject = projectDirectory;
+        vm.IsValuesOnly = true;
+        vm.Caption = $"설정 - {Path.GetFileName(Path.GetDirectoryName(projectDirectory))} / {Path.GetFileName(projectDirectory)}";
+        return vm;
+    }
+
+    /// <summary>값만 바꾸는 창인가(플레이). 디자인은 켜지 않는다.</summary>
+    public bool IsValuesOnly { get; private set; }
+
+    /// <summary>값 창이 보는 프로젝트 폴더. null 이면 솔루션 탭이 고른 프로젝트.</summary>
+    private string? _fixedProject;
+
+    protected override bool RequiresParentViewModel => !IsValuesOnly;
 
     public SolutionSettingsViewModel()
     {
@@ -71,7 +94,7 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
         _restoredLayer = GetSetting("Layer", nameof(SettingsLayerKind.Solution));
     }
 
-    protected override void OnLoaded() => OpenProject(Minguk.Tools.Projects.SolutionWorkspace.StartupDirectory);
+    protected override void OnLoaded() => OpenProject(_fixedProject ?? Minguk.Tools.Projects.SolutionWorkspace.StartupDirectory);
 
     protected override void SaveSettings()
     {

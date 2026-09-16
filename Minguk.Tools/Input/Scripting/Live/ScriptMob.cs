@@ -46,8 +46,22 @@ public sealed record ScriptMob(string Name, double Score, int CenterX, int Cente
 
     public int 머리y => HeadY;
 
-    /// <summary>이름표 읽기가 켜져 있으면 머리 위 글자. 아니면 빈 글.</summary>
-    public string 이름표 => Caption;
+    /// <summary>
+    /// 머리 위 글자 - <b>부를 때</b> 지금 화면에서 사각형 위를 잘라 읽는다(몹마다 한 번만 읽고 기억). 이름표가 없는 게임·못 읽으면 빈 글.
+    /// </summary>
+    /// <remarks>
+    /// 모든 게임이 이름표를 띄우지 않아 늘 읽지 않는다(사용자, 2026-09-17) - 한때 「이름표 읽기」 체크로 검출마다 읽었다.
+    /// 몹을 찾은 화면보다 조금 뒤(최대 0.25초) 화면을 읽는다 - 이름표 칸은 사각형보다 넉넉하다(<see cref="Minguk.Tools.Vision.Ocr.NameplateRegion"/>).
+    /// </remarks>
+    public string 이름표 => Nameplate;
+
+    public string Nameplate => Reader?.Read(this) ?? Caption;
+
+    /// <summary>검출 사각형(0~1). 이름표 자리를 여기서 잡는다.</summary>
+    internal Minguk.Tools.Vision.Labeling.LabelBox Box { get; init; }
+
+    /// <summary>이 몹을 준 API 의 이름표 읽기. 같은 실행의 몹은 한 벌을 나눠 가져 같음 비교에 안 걸린다.</summary>
+    internal ScriptNameplateReader? Reader { get; init; }
 
     public override string ToString() => $"{Name} {Score:P0} ({CenterX}, {CenterY})" + (Caption.Length > 0 ? $" 「{Caption}」" : string.Empty);
 }
