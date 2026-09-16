@@ -97,6 +97,7 @@
                 <settings:SettingsFormCanvas DropCommand="{Binding CanvasDropCommand}"
                                              Form="{Binding Form, Mode=OneWay}"
                                              LayoutChangedCommand="{Binding CanvasLayoutChangedCommand}"
+                                             SizeChangedCommand="{Binding CanvasSizeChangedCommand}"
                                              SelectedItem="{Binding SelectedFormItem, Mode=TwoWay}" />
             </dxlc:LayoutItem>
         </dxlc:LayoutControl>

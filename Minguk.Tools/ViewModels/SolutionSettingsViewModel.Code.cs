@@ -295,6 +295,45 @@ public partial class SolutionSettingsViewModel
         Rebuild();
     });
 
+    /// <summary>
+    /// 미리보기에서 「나누기」로 칸 크기를 바꿨다 - 그 칸이 든 층(솔루션 공통·프로젝트)의 양식에 크기를 적고 저장한다.
+    /// </summary>
+    /// <remarks>
+    /// 미리보기 칸은 층 양식의 객체 그대로라(<see cref="PreviewRoot"/>) 그 객체에 적고 그 양식을 저장한다 - 복사본으로 바꿔 끼우면 판이 든 칸이 층에서 떨어져 다음 끌기가 안 저장된다.
+    /// 우리가 저장해 오는 바뀜 알림은 흘려보낸다(판을 다시 지으면 끌던 화면이 깜빡인다).
+    /// </remarks>
+    private void OnCanvasSizeChanged(SettingsItemSize size) => Guard(() =>
+    {
+        if (_settings is null || IsDesign) return;
+
+        var layers = _settings.Solution is null ? new[] { _settings.Project } : new[] { _settings.Solution, _settings.Project };
+
+        foreach (var layer in layers)
+        {
+            SettingsForm form;
+            lock (SettingsLayer.Gate) form = layer.Form;
+
+            if (!form.Root.Flatten().Any(i => ReferenceEquals(i, size.Item))) continue;
+
+            if (size.Width is { } width) size.Item.Width = width;
+            if (size.Height is { } height) size.Item.Height = height;
+
+            _savingForm = true;
+
+            try
+            {
+                layer.SaveForm(form);
+            }
+            finally
+            {
+                _savingForm = false;
+            }
+
+            SetStatus($"「{size.Item.DisplayLabel}」 의 {(size.Width is not null ? $"너비를 {size.Width:0}" : $"높이를 {size.Height:0}")}px 로 저장했습니다.");
+            return;
+        }
+    });
+
     private bool _selectingFromCode;
 
     /// <summary>판에서 칸을 골랐다(누름).</summary>

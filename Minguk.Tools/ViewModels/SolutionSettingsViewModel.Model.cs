@@ -88,6 +88,9 @@ public partial class SolutionSettingsViewModel
     /// <summary>판에 도구 상자의 칸을 놓았다 - 인자는 판이 계산한 자리.</summary>
     public DelegateCommand<SettingsDrop> CanvasDropCommand { get; private set; } = null!;
 
+    /// <summary>미리보기에서 「나누기」 막대로 앞 칸 크기를 바꿨다 - 그 칸이 든 층의 양식에 저장한다.</summary>
+    public DelegateCommand<SettingsItemSize> CanvasSizeChangedCommand { get; private set; } = null!;
+
     /// <summary>디자인에서 손을 뗐다 - 판이 끌어 옮긴 결과를 칸 트리에 되읽었다. 인자는 바뀌었는가.</summary>
     public DelegateCommand<bool> CanvasLayoutChangedCommand { get; private set; } = null!;
 }

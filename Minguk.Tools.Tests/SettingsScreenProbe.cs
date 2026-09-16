@@ -305,6 +305,25 @@ public static class SettingsScreenProbe
                     var sizing = hpItem is not null && LayoutControl.GetAllowVerticalSizing(hpItem);
                     Expect(sizing && !drawnSplitter, "미리보기: 나누기 앞 칸(세로 구역)에 상하 크기 조절이 켜지고, 나누기 자체는 안 그린다", $"상하 조절 {sizing} · 나누기 그림 {drawnSplitter}");
 
+                    // 막대를 끈 것처럼 - LayoutControl 이 끄는 동안 칸 Height 를 고치고, 손을 떼면 판이 알린다. 양식에 저장되고 다시 그려도 그 크기다.
+                    if (hpItem is not null)
+                    {
+                        hpItem.Height = 120;
+                        ((UIElement)canvas.Content).RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+                            { RoutedEvent = UIElement.PreviewMouseLeftButtonUpEvent });
+                        await Pump(500);
+
+                        var savedHeight = Saved().Find("물약HP")?.Height;
+
+                        vm.IsDesign = true;
+                        await Pump(800);
+                        vm.IsDesign = false;
+                        await Pump(800);
+
+                        var redrawn = Descendants<LayoutItem>(canvas).FirstOrDefault(i => i.Tag is SettingsItem { Name: "물약HP" })?.Height;
+                        Expect(savedHeight == 120 && redrawn == 120, "나누기로 끌어 바꾼 크기가 양식에 저장되고, 다시 그려도 그 크기다", $"저장 {savedHeight} · 다시 그림 {redrawn}");
+                    }
+
                     vm.IsDesign = true;
                     await Pump(800);
                 }

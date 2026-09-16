@@ -100,6 +100,19 @@ public sealed class SettingsFormCanvas : ContentControl
         set => SetValue(LayoutChangedCommandProperty, value);
     }
 
+    public static readonly DependencyProperty SizeChangedCommandProperty = DependencyProperty.Register(
+        nameof(SizeChangedCommand), typeof(ICommand), typeof(SettingsFormCanvas));
+
+    /// <summary>「나누기」 막대를 끌어 앞 칸 크기를 바꿨다(손을 뗄 때) - 인자 <see cref="SettingsItemSize"/>. 화면 모델이 그 칸이 든 양식에 저장한다.</summary>
+    public ICommand? SizeChangedCommand
+    {
+        get => (ICommand?)GetValue(SizeChangedCommandProperty);
+        set => SetValue(SizeChangedCommandProperty, value);
+    }
+
+    /// <summary>크기 조절을 켠 칸들 - 손을 떼면 끌어 바뀐 크기를 칸 트리와 견준다.</summary>
+    private readonly List<(FrameworkElement Element, SettingsItem Item, bool Horizontal)> _sizers = [];
+
     private bool IsDesign => Form?.IsDesign == true;
 
     /// <summary>그린 뿌리 칸.</summary>
@@ -117,6 +130,7 @@ public sealed class SettingsFormCanvas : ContentControl
         Unsubscribe();
         ClearDropIndicator();
         _selection = null;
+        _sizers.Clear();
 
         if (form is null)
         {
@@ -189,10 +203,12 @@ public sealed class SettingsFormCanvas : ContentControl
         {
             if (child.Item.Kind == SettingsItemKind.Splitter && !design)
             {
-                if (previous is not null)
+                if (previous is { Tag: SettingsItem sized })
                 {
                     if (horizontal) LayoutControl.SetAllowHorizontalSizing(previous, true);
                     else LayoutControl.SetAllowVerticalSizing(previous, true);
+
+                    _sizers.Add((previous, sized, horizontal));
                 }
 
                 previous = null;
@@ -236,6 +252,7 @@ public sealed class SettingsFormCanvas : ContentControl
             };
 
             AddChildren(group, field.Children, item.Orientation == SettingsOrientation.Horizontal, design);
+            ApplySize(group, item);
 
             return group;
         }
@@ -258,6 +275,7 @@ public sealed class SettingsFormCanvas : ContentControl
         }
 
         layoutItem.Content = editor;
+        ApplySize(layoutItem, item);
 
         return layoutItem;
     }
@@ -484,9 +502,42 @@ public sealed class SettingsFormCanvas : ContentControl
     /// 디자인에서 손을 떼면 - 끌어 옮겼을 수 있으니 먼저 알리고(되읽기), 누른 자리의 칸을 고른다.
     /// </summary>
     /// <remarks>사용자 배치 덮개가 누름을 먹어 칸의 이벤트로는 못 받는다 - 자리로 찾는다(가장 안쪽 칸).</remarks>
+    /// <summary>저장된 크기(나누기로 끌어 정한 것)를 건다.</summary>
+    private static void ApplySize(FrameworkElement element, SettingsItem item)
+    {
+        if (item.Width is > 0 and var width) element.Width = width;
+        if (item.Height is > 0 and var height) element.Height = height;
+    }
+
+    /// <summary>
+    /// 미리보기에서 손을 뗐다 - 「나누기」 막대로 앞 칸 크기를 바꿨으면 알린다. LayoutControl 은 끄는 동안 칸의 <c>Width</c>·<c>Height</c> 를 고친다.
+    /// </summary>
+    private void ReportSizes()
+    {
+        foreach (var (element, item, horizontal) in _sizers)
+        {
+            var now = horizontal ? element.Width : element.Height;
+            if (double.IsNaN(now) || now <= 0) continue;
+
+            now = Math.Round(now);
+            var saved = horizontal ? item.Width : item.Height;
+            if (saved is { } before && Math.Abs(before - now) < 0.5) continue;
+
+            var size = horizontal ? new SettingsItemSize(item, now, null) : new SettingsItemSize(item, null, now);
+            if (SizeChangedCommand?.CanExecute(size) == true) SizeChangedCommand.Execute(size);
+        }
+    }
+
     private void OnLayoutMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (!IsDesign || _layout is null) return;
+        if (_layout is null) return;
+
+        if (!IsDesign)
+        {
+            // 막대를 놓은 뒤 LayoutControl 이 크기를 마저 적으므로 한 박자 늦게 본다.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, ReportSizes);
+            return;
+        }
 
         // 끌어 옮겼을 수 있다 - 칸 트리에 되읽고 알린다(화면 모델이 바뀌었으면 저장).
         var changed = ReadBack();

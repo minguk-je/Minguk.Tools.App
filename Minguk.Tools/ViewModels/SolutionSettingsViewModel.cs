@@ -74,6 +74,7 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
         ResetValuesCommand = new DelegateCommand(DoResetValues, () => HasProject && !IsDesign, false);
         CanvasDropCommand = new DelegateCommand<SettingsDrop>(OnCanvasDropped, false);
         CanvasLayoutChangedCommand = new DelegateCommand<bool>(OnCanvasLayoutChanged, false);
+        CanvasSizeChangedCommand = new DelegateCommand<SettingsItemSize>(OnCanvasSizeChanged, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────

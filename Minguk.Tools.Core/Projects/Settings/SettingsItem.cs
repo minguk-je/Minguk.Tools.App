@@ -132,6 +132,16 @@ public sealed class SettingsItem
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<SettingsItem>? Children { get; set; }
 
+    /// <summary>칸 너비(px) - 가로 구역에서 뒤의 「나누기」로 끌어 정한 크기. 없으면 내용에 맞춘다.</summary>
+    [JsonPropertyName("width")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Width { get; set; }
+
+    /// <summary>칸 높이(px) - 세로 구역에서 뒤의 「나누기」로 끌어 정한 크기. 없으면 내용에 맞춘다.</summary>
+    [JsonPropertyName("height")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Height { get; set; }
+
     /// <summary>값을 드는 칸인가. 구역만 아니다.</summary>
     [JsonIgnore]
     public bool HasValue => Kind is not (SettingsItemKind.Group or SettingsItemKind.Splitter);
