@@ -61,6 +61,8 @@
                     <Setter Property="Height" Value="600" />
                     <Setter Property="ShowIcon" Value="False" />
                     <Setter Property="ShowInTaskbar" Value="True" />
+                    <!-- 최대화는 없다(사용자, 2026-09-17) - 게임 옆에 두는 작은 창이다. 크기는 끌어서 바꾸고 다음에 그 자리·크기로 뜬다. -->
+                    <Setter Property="ControlBoxButtonSet" Value="Close, Minimize" />
                 </Style>
             </dxmvvm:WindowService.WindowStyle>
         </dxmvvm:WindowService>

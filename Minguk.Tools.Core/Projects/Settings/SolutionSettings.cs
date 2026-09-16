@@ -261,6 +261,7 @@ public sealed class SolutionSettings
         SettingsItemKind.Combo => "콤보",
         SettingsItemKind.Slider => "슬라이더",
         SettingsItemKind.List => "목록",
+        SettingsItemKind.Splitter => "나누기",
         _ => kind.ToString()
     };
 }

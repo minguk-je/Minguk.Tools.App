@@ -22,7 +22,12 @@ public enum SettingsItemKind
     Slider,
 
     /// <summary>여러 줄 값(GridControl). 값은 행 배열.</summary>
-    List
+    List,
+
+    /// <summary>
+    /// 구역 안 나누기 - 앞 칸에 크기 조절 막대(LayoutControl 의 AllowHorizontalSizing·AllowVerticalSizing)를 켠다. 가로 구역이면 좌우, 세로 구역이면 상하. 값이 없다.
+    /// </summary>
+    Splitter
 }
 
 /// <summary>구역 안에서 칸을 놓는 방향.</summary>
@@ -129,7 +134,7 @@ public sealed class SettingsItem
 
     /// <summary>값을 드는 칸인가. 구역만 아니다.</summary>
     [JsonIgnore]
-    public bool HasValue => Kind != SettingsItemKind.Group;
+    public bool HasValue => Kind is not (SettingsItemKind.Group or SettingsItemKind.Splitter);
 
     /// <summary>화면에 보일 이름 - 라벨이 없으면 키.</summary>
     [JsonIgnore]

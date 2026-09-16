@@ -18,6 +18,7 @@ using Minguk.Tools.Markup.Settings;
 using Minguk.Tools.Projects;
 using Minguk.Tools.Projects.Settings;
 using Minguk.Tools.ViewModels;
+using Minguk.Tools.ViewModels.Settings;
 using Minguk.Tools.Views;
 
 namespace Minguk.Tools.Tests;
@@ -108,20 +109,22 @@ public static class SettingsScreenProbe
                 var written = settings.Find("물약HP")!;
                 Expect(written.Source == SettingsLayerKind.Solution && Num(written) == 77, "숫자 칸을 바꾸면 편집 대상 층(솔루션 공통)에 들어간다", $"{written.Source} · {written.Value?.ToJsonString()}");
 
-                // 이 프로젝트로 바꿔 덮어쓰기 - 라벨이 굵어지고 ↺ 가 보인다.
+                // 이 프로젝트로 바꿔 덮어쓰기 - 라벨이 굵어진다. 칸마다 붙던 ↺ 는 뺐다(사용자, 2026-09-17).
                 vm.SelectedLayer = vm.Layers.First(l => l.Kind == SettingsLayerKind.Project);
                 await Pump(800);
                 items = [.. Descendants<LayoutItem>(canvas).Where(i => i.Tag is SettingsItem)];
                 Descendants<SpinEdit>(ItemOf(items, "물약HP")).Single().EditValue = 12m;
                 await Pump(300);
                 var overridden = ItemOf(items, "물약HP");
-                var resetVisible = Descendants<SimpleButton>(overridden).Any(b => b.IsVisible);
-                Expect(settings.Find("물약HP")!.IsProjectValue && overridden.LabelStyle is not null && resetVisible,
-                    "이 프로젝트에서 바꾸면 덮어쓰기 - 라벨이 굵고 ↺ 가 보인다", $"프로젝트 값 {settings.Find("물약HP")!.IsProjectValue} · 굵게 {overridden.LabelStyle is not null} · ↺ {resetVisible}");
+                var noButtons = !Descendants<SimpleButton>(canvas).Any();
+                Expect(settings.Find("물약HP")!.IsProjectValue && overridden.LabelStyle is not null && noButtons,
+                    "이 프로젝트에서 바꾸면 덮어쓰기 - 라벨이 굵고, 칸에 되돌리기 단추가 없다", $"프로젝트 값 {settings.Find("물약HP")!.IsProjectValue} · 굵게 {overridden.LabelStyle is not null} · 단추 없음 {noButtons}");
 
-                Descendants<SimpleButton>(overridden).First(b => b.IsVisible).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                // [초기값] - 편집 대상 층의 덮어쓴 값을 모두 뺀다(단추는 묻고 부르는 것 - 여기서는 묻지 않는 쪽을 부른다).
+                var removedCount = vm.ResetOverriddenValues();
                 await Pump(300);
-                Expect(Num(settings.Find("물약HP")!) == 77 && !Descendants<SimpleButton>(overridden).Any(b => b.IsVisible), "↺ 를 누르면 솔루션 값으로 돌아간다", $"{settings.Find("물약HP")!.Value?.ToJsonString()}");
+                Expect(removedCount >= 1 && Num(settings.Find("물약HP")!) == 77 && overridden.LabelStyle is null && vm.ResetValuesCommand.CanExecute(null),
+                    "[초기값] 을 누르면 덮어쓴 값이 빠지고 솔루션 값으로 돌아간다", $"뺀 {removedCount}개 · {settings.Find("물약HP")!.Value?.ToJsonString()} · 굵게 {overridden.LabelStyle is not null}");
 
                 // ── 스크립트(다른 스레드)가 쓴 값이 편집기에 보인다 ──
                 await System.Threading.Tasks.Task.Run(() => SolutionSettings.ForProject(project).SetValue("자동줍기", JsonValue.Create(false)));
@@ -182,10 +185,9 @@ public static class SettingsScreenProbe
 
                 // 속성 창 - 긴 글(목록 열)은 잘려 보이므로 누르면 넓게 펼쳐 고친다(MemoEdit 팝업).
                 {
-                    var selectOnCanvas = typeof(SolutionSettingsViewModel).GetMethod("OnCanvasSelectedItemChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
                     var restore = vm.SelectedEditor?.Item;
                     var listItem = Descendants<LayoutItem>(canvas).First(i => i.Tag is SettingsItem { Name: "물약목록" });
-                    selectOnCanvas.Invoke(vm, [canvas, (SettingsItem)listItem.Tag]);
+                    vm.SelectedFormItem = (SettingsItem)listItem.Tag; // 판을 누른 것과 같다(판이 SelectedItem 에 쓴다)
                     await Pump(500);
 
                     var propertyGrid = Descendants<DevExpress.Xpf.PropertyGrid.PropertyGridControl>(window).Single();
@@ -242,7 +244,7 @@ public static class SettingsScreenProbe
                     if (fallback?.Value is { } previous) settings.SetValue("물약목록", previous.DeepClone(), SettingsLayerKind.Solution);
                     await Pump(300);
 
-                    selectOnCanvas.Invoke(vm, [canvas, restore]);
+                    vm.SelectedFormItem = restore;
                     await Pump(300);
                 }
 
@@ -282,6 +284,30 @@ public static class SettingsScreenProbe
                 canvas.Drop(SettingsItemKind.Slider, new Point(layoutRoot.ActualWidth - 3, layoutRoot.ActualHeight - 3));
                 await Pump(800);
                 Expect(Saved().Root.Children!.Last().Name == "슬라이더1", "빈 자리에 놓으면 맨 끝에 들어간다", string.Join(", ", Saved().Root.Children!.Select(c => c.Name)));
+
+                // ── 나누기 ── 세로 구역 「물약」 의 「물약HP」 뒤에 놓으면 저장되고, 미리보기에서 물약HP 에 상하 크기 조절이 켜진다(나누기 자체는 안 그린다).
+                {
+                    // 판에 그려진 칸(고치는 양식 그 객체) - 파일에서 새로 읽은 객체로는 화면 모델이 자리를 못 찾는다.
+                    var potionHp = (SettingsItem)Descendants<LayoutItem>(canvas).First(i => i.Tag is SettingsItem { Name: "물약HP" }).Tag;
+                    vm.SelectedFormItem = potionHp;
+                    await Pump(300);
+                    vm.AddItemCommand.Execute(vm.Toolbox.First(t => t.Kind == SettingsItemKind.Splitter));
+                    await Pump(800);
+
+                    var potionKids = Saved().Root.Children!.First(c => c.Label == "물약").Children!.Select(c => c.Kind.ToString()).ToList();
+                    Expect(potionKids.Count >= 2 && potionKids[1] == nameof(SettingsItemKind.Splitter), "나누기를 칸 뒤에 놓으면 양식에 저장된다", string.Join(", ", potionKids));
+
+                    vm.IsDesign = false;
+                    await Pump(800);
+
+                    var hpItem = Descendants<LayoutItem>(canvas).FirstOrDefault(i => i.Tag is SettingsItem { Name: "물약HP" });
+                    var drawnSplitter = Descendants<LayoutItem>(canvas).Any(i => i.Tag is SettingsItem { Kind: SettingsItemKind.Splitter });
+                    var sizing = hpItem is not null && LayoutControl.GetAllowVerticalSizing(hpItem);
+                    Expect(sizing && !drawnSplitter, "미리보기: 나누기 앞 칸(세로 구역)에 상하 크기 조절이 켜지고, 나누기 자체는 안 그린다", $"상하 조절 {sizing} · 나누기 그림 {drawnSplitter}");
+
+                    vm.IsDesign = true;
+                    await Pump(800);
+                }
 
                 vm.IsDesign = false;
                 await Pump(500);
@@ -323,6 +349,11 @@ public static class SettingsScreenProbe
                         await Pump(400);
                         var playCheck = Descendants<CheckEdit>(ItemOf(playItems, "자동줍기")).Single();
                         Expect(playCheck.IsChecked == true, "플레이 설정 창: 스크립트가 쓴 값이 곧바로 보인다", $"체크 {playCheck.IsChecked}");
+
+                        // 창 자리·크기를 옮기면 화면 모델에 적힌다(닫을 때 저장, 다음에 그 자리로 뜬다).
+                        playWindow.Left = -21000; playWindow.Top = -21000; playWindow.Width = 520; playWindow.Height = 640;
+                        await Pump(300);
+                        Expect(playVm.WindowBounds == "-21000,-21000,520,640", "플레이 설정 창: 창을 옮기고 키우면 자리·크기가 적힌다", playVm.WindowBounds ?? "(없음)");
 
                         playWindow.Close();
                         await Pump(300);

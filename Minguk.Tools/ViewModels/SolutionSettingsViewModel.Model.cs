@@ -2,7 +2,6 @@ using System.Collections.Generic;
 
 using DevExpress.Mvvm;
 
-using Minguk.Tools.Markup.Settings;
 using Minguk.Tools.Projects.Settings;
 using Minguk.Tools.ViewModels.Settings;
 
@@ -31,6 +30,9 @@ public partial class SolutionSettingsViewModel
     public DelegateCommand ReloadCommand { get; private set; } = null!;
 
     public DelegateCommand OpenFolderCommand { get; private set; } = null!;
+
+    /// <summary>편집 대상 층에서 덮어쓴 값을 모두 뺀다 - 칸들이 아래 층 값(솔루션 공통·처음 값)으로 돌아간다. 편집 대상 콤보 뒤 [초기값].</summary>
+    public DelegateCommand ResetValuesCommand { get; private set; } = null!;
 
     /// <summary>목록 칸의 처음 행을 표 대화 상자로 고친다 - 속성 창 `처음 행` 의 ….</summary>
     public DelegateCommand EditListRowsCommand { get; private set; } = null!;
@@ -65,10 +67,27 @@ public partial class SolutionSettingsViewModel
     /// <summary>상태 글이 오류인가(빨갛게).</summary>
     public bool IsStatusError { get => GetProperty(() => IsStatusError); private set => SetProperty(() => IsStatusError, value); }
 
+    /// <summary>
+    /// 값 창(플레이·스크립트의 [설정])의 자리·크기 <c>왼쪽,위,너비,높이</c>. 창이 옮겨지거나 커질 때마다 <c>WindowBoundsBehavior</c> 가 적고, 닫을 때 저장한다.
+    /// </summary>
+    public string? WindowBounds { get => GetProperty(() => WindowBounds); set => SetProperty(() => WindowBounds, value); }
+
+    private const string WindowBoundsKey = "ValuesWindowBounds";
+
     /// <summary>양식 파일 자리 - 상태 표시줄에 보인다.</summary>
     public string? FormPath { get => GetProperty(() => FormPath); private set => SetProperty(() => FormPath, value); }
 
-    // ── 컨트롤 참조 ──────────────────────────────────────────────────────
+    // ── 판 ── 화면 모델은 판 컨트롤을 모른다(사용자, 2026-09-17 "MVVM 으로"). 판은 아래를 바인딩으로 받는다.
 
-    private SettingsFormCanvas? _canvas;
+    /// <summary>판에 그릴 것 - 칸 모델 트리(<see cref="SettingsFieldViewModel"/>)와 디자인인가. 새 객체를 넣으면 판이 다시 짓는다.</summary>
+    public SettingsFormState? Form { get => GetProperty(() => Form); private set => SetProperty(() => Form, value); }
+
+    /// <summary>판에서 고른 칸(디자인). 판을 누르면 판이 쓰고, 칸을 놓거나 지우면 화면 모델이 쓴다.</summary>
+    public SettingsItem? SelectedFormItem { get => GetProperty(() => SelectedFormItem); set => SetProperty(() => SelectedFormItem, value, OnSelectedFormItemChanged); }
+
+    /// <summary>판에 도구 상자의 칸을 놓았다 - 인자는 판이 계산한 자리.</summary>
+    public DelegateCommand<SettingsDrop> CanvasDropCommand { get; private set; } = null!;
+
+    /// <summary>디자인에서 손을 뗐다 - 판이 끌어 옮긴 결과를 칸 트리에 되읽었다. 인자는 바뀌었는가.</summary>
+    public DelegateCommand<bool> CanvasLayoutChangedCommand { get; private set; } = null!;
 }

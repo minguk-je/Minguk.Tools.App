@@ -102,6 +102,28 @@ public static class PlayScreenProbe
                     Console.WriteLine("[PASS] 상태 표시줄이 맨 아래에 있다");
                 else { Console.WriteLine($"[FAIL] 상태 표시줄이 맨 아래에 없다 ({(status is null ? "없음" : "위치 틀림")})"); failures++; }
 
+                // [설정] 창 - 화면의 WindowService 스타일 그대로 띄워 최대화 단추가 없는지 본다(사용자, 2026-09-17).
+                {
+                    var service = DevExpress.Mvvm.UI.Interactivity.Interaction.GetBehaviors(view).OfType<DevExpress.Mvvm.UI.WindowService>().Single(b => b.Name == "SettingsWindowService");
+                    var project = Path.Combine(Path.GetTempPath(), "minguk-play-screen-" + Guid.NewGuid().ToString("N")[..8], "런");
+                    Directory.CreateDirectory(project);
+
+                    var settingsVm = Minguk.Tools.ViewModels.SolutionSettingsViewModel.CreateForPlay(project);
+                    DevExpress.Mvvm.WindowServiceExtensions.Show(service, settingsVm);
+                    await Pump(800);
+
+                    var settingsWindow = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.Content is PlaySettingsView || Descendants<PlaySettingsView>(w).Any());
+                    var buttons = (settingsWindow as ThemedWindow)?.ControlBoxButtonSet.ToString() ?? "(ThemedWindow 아님)";
+
+                    if (settingsWindow is ThemedWindow themed && !themed.ControlBoxButtonSet.HasFlag(ControlBoxButtons.MaximizeRestore) && themed.ControlBoxButtonSet.HasFlag(ControlBoxButtons.Close))
+                        Console.WriteLine($"[PASS] [설정] 창에 최대화 단추가 없다 - {buttons}");
+                    else { Console.WriteLine($"[FAIL] [설정] 창 단추가 틀렸다 - {buttons}"); failures++; }
+
+                    settingsWindow?.Close();
+                    await Pump(200);
+                    try { Directory.Delete(Path.GetDirectoryName(project)!, true); } catch (Exception) { }
+                }
+
                 var mine = bindingErrors.Where(e => e.Contains("Play")).Distinct().ToList();
                 if (mine.Count > 0)
                 {

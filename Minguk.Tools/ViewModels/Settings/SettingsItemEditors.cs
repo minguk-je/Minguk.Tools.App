@@ -76,9 +76,13 @@ public abstract class SettingsItemEditor : INotifyPropertyChanged
         SettingsItemKind.Check => new CheckEditor(item),
         SettingsItemKind.Combo => new ComboEditor(item),
         SettingsItemKind.List => new ListEditor(item),
+        SettingsItemKind.Splitter => new SplitterEditor(item),
         _ => new TextEditor(item)
     };
 }
+
+/// <summary>나누기 막대 - 고칠 것이 없다(방향은 든 구역을 따른다). 툴팁만.</summary>
+public sealed class SplitterEditor(SettingsItem item) : SettingsItemEditor(item);
 
 /// <summary>구역.</summary>
 public sealed class GroupEditor(SettingsItem item) : SettingsItemEditor(item)

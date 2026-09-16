@@ -4,7 +4,6 @@ using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
 
 using Minguk.Image;
-using Minguk.Tools.Markup.Settings;
 using Minguk.Tools.Projects.Settings;
 using Minguk.Tools.ViewModels.Settings;
 
@@ -59,7 +58,9 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
             new(SettingsItemKind.Check, "체크", "켜고 끄기.", DevExpressGlyph.Load("Images/Content/CheckBox_16x16.png")),
             new(SettingsItemKind.Combo, "콤보", "정해 둔 항목 중 하나.", DevExpressGlyph.Load("Images/Filter Elements/ComboBox_16x16.png")),
             new(SettingsItemKind.Slider, "슬라이더", "끌어서 고르는 숫자.", DevExpressGlyph.Load("Images/Gauges/GaugeStyleLinearHorizontal_16x16.png")),
-            new(SettingsItemKind.List, "목록", "여러 줄 값(표) - 물약 목록·스킬 순서.", DevExpressGlyph.Load("Images/Grid/Grid_16x16.png"))
+            new(SettingsItemKind.List, "목록", "여러 줄 값(표) - 물약 목록·스킬 순서.", DevExpressGlyph.Load("Images/Grid/Grid_16x16.png")),
+            // LayoutControl 의 크기 조절 막대(AllowHorizontalSizing·AllowVerticalSizing, 사용자 2026-09-17 "LayoutSplitter · 좌우 상하 조정"). 도킹(DockLayoutManager)이 아니다 - 판은 폼이고, 도킹은 VS 창 틀용이다.
+            new(SettingsItemKind.Splitter, "나누기", "구역 안 두 칸 사이의 막대. 끌어서 가로 구역이면 좌우, 세로 구역이면 상하 크기를 나눕니다.", DevExpressGlyph.Load("Images/Grid/ColumnWidth_16x16.png"))
         ];
 
         AddItemCommand = new DelegateCommand<SettingsToolboxItem>(DoAddItem, item => IsDesign && HasProject && item is not null, false);
@@ -70,28 +71,18 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
         ReloadCommand = new DelegateCommand(DoReload, () => HasProject, false);
         OpenFolderCommand = new DelegateCommand(DoOpenFolder, () => HasProject, false);
         EditListRowsCommand = new DelegateCommand(DoEditListRows, () => IsDesign && SelectedEditor is ListEditor, false);
+        ResetValuesCommand = new DelegateCommand(DoResetValues, () => HasProject && !IsDesign, false);
+        CanvasDropCommand = new DelegateCommand<SettingsDrop>(OnCanvasDropped, false);
+        CanvasLayoutChangedCommand = new DelegateCommand<bool>(OnCanvasLayoutChanged, false);
     }
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
 
-    protected override void InitializeControls()
-    {
-        _canvas = FindControl<SettingsFormCanvas>("CanvasObjectService");
-
-        if (_canvas is null) return;
-
-        _canvas.EntryOf = name => _settings?.Find(name);
-        _canvas.IsOverridden = IsOverridden;
-        _canvas.ValueEdited += OnCanvasValueEdited;
-        _canvas.ValueReset += OnCanvasValueReset;
-        _canvas.SelectedItemChanged += OnCanvasSelectedItemChanged;
-        _canvas.LayoutMayHaveChanged += OnCanvasLayoutMayHaveChanged;
-        _canvas.ToolDropped += OnCanvasToolDropped;
-    }
-
     protected override void RestoreSettings()
     {
         _restoredLayer = GetSetting("Layer", nameof(SettingsLayerKind.Solution));
+
+        if (IsValuesOnly) WindowBounds = GetSetting(WindowBoundsKey, string.Empty);
     }
 
     protected override void OnLoaded() => OpenProject(_fixedProject ?? Minguk.Tools.Projects.SolutionWorkspace.StartupDirectory);
@@ -99,22 +90,12 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
     protected override void SaveSettings()
     {
         if (SelectedLayer is { } layer) SetSetting("Layer", layer.Kind.ToString());
+        if (IsValuesOnly && !string.IsNullOrEmpty(WindowBounds)) SetSetting(WindowBoundsKey, WindowBounds);
     }
 
     protected override void ReleaseResources()
     {
-        if (IsDesign) CommitCanvas();
-
         DetachLayers();
         _settings?.Flush();
-
-        if (_canvas is not null)
-        {
-            _canvas.ValueEdited -= OnCanvasValueEdited;
-            _canvas.ValueReset -= OnCanvasValueReset;
-            _canvas.SelectedItemChanged -= OnCanvasSelectedItemChanged;
-            _canvas.LayoutMayHaveChanged -= OnCanvasLayoutMayHaveChanged;
-            _canvas.ToolDropped -= OnCanvasToolDropped;
-        }
     }
 }

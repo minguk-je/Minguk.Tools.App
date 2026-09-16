@@ -8,7 +8,6 @@ using System.Text.Json.Nodes;
 using DevExpress.Mvvm;
 
 using Minguk.Base.Utilities;
-using Minguk.Tools.Markup.Settings;
 using Minguk.Tools.Projects.Settings;
 using Minguk.Tools.ViewModels.Settings;
 
@@ -42,7 +41,8 @@ public partial class SolutionSettingsViewModel
             _settings = null;
             Layers = [];
             SetStatus(IsValuesOnly ? "완성품의 프로젝트 폴더를 찾지 못했습니다." : "솔루션을 열고 프로젝트를 고르면 설정 화면을 만들 수 있습니다.");
-            _canvas?.Build(SettingsForm.NewRoot(), design: false);
+            _fields.Clear();
+            Form = new SettingsFormState(new SettingsFieldViewModel(SettingsForm.NewRoot(), null), IsDesign: false);
             RaiseCommands();
             return;
         }
@@ -97,18 +97,49 @@ public partial class SolutionSettingsViewModel
 
     // ── 그리기 ───────────────────────────────────────────────────────────
 
-    /// <summary>판을 다시 짓는다. 디자인은 편집 대상 층 양식, 미리보기는 합친 양식.</summary>
+    /// <summary>이름 → 미리보기 칸 모델. 층이 바뀌면 그 칸만 맞춘다.</summary>
+    private readonly Dictionary<string, SettingsFieldViewModel> _fields = new(StringComparer.Ordinal);
+
+    /// <summary>판을 다시 짓는다 - 칸 모델 트리를 새로 만들어 <see cref="Form"/> 에 넣는다. 디자인은 편집 대상 층 양식(그 객체 그대로), 미리보기는 합친 양식.</summary>
     private void Rebuild()
     {
-        if (_canvas is null || _settings is null) return;
+        if (_settings is null) return;
 
-        if (IsDesign)
+        _fields.Clear();
+
+        Form = IsDesign
+            ? new SettingsFormState(CreateField(_working?.Root ?? SettingsForm.NewRoot(), design: true), IsDesign: true)
+            : new SettingsFormState(CreateField(PreviewRoot(), design: false), IsDesign: false);
+
+        SelectedFormItemFromCode(_selected);
+    }
+
+    private SettingsFieldViewModel CreateField(SettingsItem item, bool design)
+    {
+        var field = new SettingsFieldViewModel(item, design || !item.HasValue ? null : OnFieldEdited);
+
+        foreach (var child in item.Children ?? [])
+            field.Children.Add(CreateField(child, design));
+
+        if (item.HasValue && _settings?.Find(item.Name) is { } entry)
         {
-            _canvas.Build(_working?.Root ?? SettingsForm.NewRoot(), design: true, _selected);
-            return;
+            field.Sync(entry, !design && IsOverridden(entry));
+            if (!design) _fields[item.Name] = field;
         }
 
-        _canvas.Build(PreviewRoot(), design: false);
+        return field;
+    }
+
+    /// <summary>층의 값으로 칸 모델을 맞춘다. 이름이 null 이면 전부.</summary>
+    private void SyncFields(string? name)
+    {
+        if (_settings is null) return;
+
+        foreach (var (key, field) in _fields)
+        {
+            if (name is not null && key != name) continue;
+            if (_settings.Find(key) is { } entry) field.Sync(entry, IsOverridden(entry));
+        }
     }
 
     /// <summary>
@@ -154,31 +185,65 @@ public partial class SolutionSettingsViewModel
 
     // ── 미리보기: 값 ─────────────────────────────────────────────────────
 
-    private void OnCanvasValueEdited(object? sender, (string Name, JsonNode? Value) e) => Guard(() =>
+    /// <summary>미리보기에서 사람이 값을 바꿨다(판이 칸 모델에 씀) - 편집 대상 층에 저장한다. 안 되면 칸을 층의 값으로 되돌린다.</summary>
+    private void OnFieldEdited(SettingsFieldViewModel field, JsonNode? value) => Guard(() =>
     {
         if (_settings is null) return;
 
+        var name = field.Item.Name;
+
         try
         {
-            _settings.SetValue(e.Name, e.Value, TargetKind);
-            SetStatus($"「{e.Name}」 을(를) {(TargetKind == SettingsLayerKind.Solution ? "솔루션 공통" : "이 프로젝트")}에 저장했습니다.");
+            _settings.SetValue(name, value, TargetKind);
+            SetStatus($"「{name}」 을(를) {(TargetKind == SettingsLayerKind.Solution ? "솔루션 공통" : "이 프로젝트")}에 저장했습니다.");
         }
         catch (Exception ex) when (ex is KeyNotFoundException or InvalidCastException)
         {
             SetStatus(ex.Message, error: true);
-            _canvas?.Refresh(e.Name);
+            SyncFields(name);
         }
     });
 
-    private void OnCanvasValueReset(object? sender, string name) => Guard(() =>
+    /// <summary>
+    /// [초기값] - 편집 대상 층에서 덮어쓴 값을 모두 뺀다. 프로젝트 칸은 늘 프로젝트 층에 쓰므로 거기서 뺀다(<see cref="IsOverridden"/> 과 같은 규칙).
+    /// </summary>
+    /// <remarks>되돌릴 수 없어 한 번 묻는다. 도는 스크립트가 쓴 값도 빠진다.</remarks>
+    private void DoResetValues() => Guard(() =>
     {
-        if (_settings?.Find(name) is not { } entry) return;
+        if (_settings is null) return;
 
-        var layer = entry.Layer == SettingsLayerKind.Project ? SettingsLayerKind.Project : TargetKind;
+        var overridden = _settings.Entries().Where(IsOverridden).ToList();
 
-        _settings.ResetValue(name, layer);
-        SetStatus($"「{name}」 의 덮어쓴 값을 뺐습니다.");
+        if (overridden.Count == 0)
+        {
+            SetStatus("덮어쓴 값이 없습니다 - 모두 처음 값(또는 솔루션 공통 값)입니다.");
+            return;
+        }
+
+        var target = SelectedLayer?.Title ?? "이 층";
+        var names = string.Join(", ", overridden.Take(8).Select(e => e.Item.DisplayLabel)) + (overridden.Count > 8 ? $" 외 {overridden.Count - 8}개" : string.Empty);
+
+        if (MessageBoxService is { } box
+            && box.ShowMessage($"「{target}」 에서 덮어쓴 값 {overridden.Count}개를 빼고 처음 값으로 돌립니다.\n\n{names}\n\n되돌릴 수 없습니다. 계속할까요?",
+                               "초기값", MessageButton.YesNo, MessageIcon.Question) != MessageResult.Yes)
+            return;
+
+        ResetOverriddenValues();
     });
+
+    /// <summary>묻지 않고 뺀다 - [초기값] 이 물은 뒤 부르고, 검사 하네스가 바로 부른다. 뺀 개수를 준다.</summary>
+    public int ResetOverriddenValues()
+    {
+        if (_settings is null) return 0;
+
+        var overridden = _settings.Entries().Where(IsOverridden).ToList();
+
+        foreach (var entry in overridden)
+            _settings.ResetValue(entry.Item.Name, entry.Layer == SettingsLayerKind.Project ? SettingsLayerKind.Project : TargetKind);
+
+        SetStatus($"덮어쓴 값 {overridden.Count}개를 빼고 처음 값으로 돌렸습니다.");
+        return overridden.Count;
+    }
 
     /// <summary>층이 바뀌었다(스크립트가 값을 썼거나, 파일을 다시 읽었거나, 우리가 저장했거나). 아무 스레드에서나 온다.</summary>
     private void OnLayerChanged(object? sender, string? name)
@@ -187,11 +252,11 @@ public partial class SolutionSettingsViewModel
 
         void Apply() => Guard(() =>
         {
-            if (_canvas is null) return;
+            if (Form is null) return;
 
             if (name is not null)
             {
-                _canvas.Refresh(name);
+                SyncFields(name);
                 return;
             }
 
@@ -211,7 +276,6 @@ public partial class SolutionSettingsViewModel
 
         if (!IsDesign)
         {
-            CommitCanvas();
             Select(null);
         }
         else
@@ -227,32 +291,48 @@ public partial class SolutionSettingsViewModel
     {
         if (_switching || _settings is null) return;
 
-        // 층을 바꾸기 전에 고치던 양식을 넣는다.
-        if (IsDesign) CommitCanvas();
-
         LoadWorking();
         Rebuild();
     });
 
-    private void OnCanvasSelectedItemChanged(object? sender, SettingsItem? item) => Guard(() =>
+    private bool _selectingFromCode;
+
+    /// <summary>판에서 칸을 골랐다(누름).</summary>
+    private void OnSelectedFormItemChanged()
     {
-        CommitCanvas();
-        Select(item);
-    });
+        if (_selectingFromCode) return;
 
-    private void OnCanvasLayoutMayHaveChanged(object? sender, EventArgs e) => Guard(CommitCanvas);
-
-    /// <summary>판에서 끌어 옮긴 결과를 되읽어 바뀌었으면 저장한다.</summary>
-    private void CommitCanvas()
-    {
-        if (!IsDesign || _canvas is null || _working is null || !ReferenceEquals(_canvas.Root, _working.Root)) return;
-
-        if (_canvas.ReadBack()) SaveWorking("배치를 저장했습니다.");
+        Guard(() => Select(SelectedFormItem));
     }
+
+    /// <summary>화면 모델이 고른 칸을 판에 알린다 - 되돌아와 다시 고르지 않게.</summary>
+    private void SelectedFormItemFromCode(SettingsItem? item)
+    {
+        _selectingFromCode = true;
+
+        try
+        {
+            SelectedFormItem = item;
+        }
+        finally
+        {
+            _selectingFromCode = false;
+        }
+    }
+
+    /// <summary>
+    /// 판이 끌어 옮긴 결과를 칸 트리(고치는 양식 그 객체)에 되읽었다 - 바뀌었으면 저장한다. 판은 손을 뗄 때마다·칸을 놓기 전에 부른다.
+    /// </summary>
+    private void OnCanvasLayoutChanged(bool changed) => Guard(() =>
+    {
+        if (IsDesign && changed && Form is { IsDesign: true } form && _working is not null && ReferenceEquals(form.Root.Item, _working.Root))
+            SaveWorking("배치를 저장했습니다.");
+    });
 
     private void Select(SettingsItem? item)
     {
         _selected = item;
+        SelectedFormItemFromCode(item);
 
         if (item is null)
         {
@@ -293,7 +373,7 @@ public partial class SolutionSettingsViewModel
     });
 
     /// <summary>도구 상자에서 판으로 끌어 놓았다 - 판이 계산한 자리에 넣는다.</summary>
-    private void OnCanvasToolDropped(object? sender, SettingsDrop drop) => Guard(() =>
+    private void OnCanvasDropped(SettingsDrop drop) => Guard(() =>
     {
         if (!IsDesign || Toolbox.FirstOrDefault(t => t.Kind == drop.Kind) is not { } tool) return;
 
@@ -303,8 +383,6 @@ public partial class SolutionSettingsViewModel
     private void AddItem(SettingsToolboxItem tool, SettingsItem? anchor, SettingsDropPlacement placement)
     {
         if (_working is null || _settings is null) return;
-
-        CommitCanvas();
 
         var item = new SettingsItem { Kind = tool.Kind };
 
@@ -331,6 +409,10 @@ public partial class SolutionSettingsViewModel
                 break;
             case SettingsItemKind.List:
                 item.Columns = [new SettingsColumn { Name = "이름" }, new SettingsColumn { Name = "값", Kind = SettingsItemKind.Number }];
+                break;
+            case SettingsItemKind.Splitter:
+                // 값·이름이 없다 - 라벨은 상태 글("「나누기」 칸을 지웠습니다")에만 쓰인다.
+                item.Label = "나누기";
                 break;
         }
 
@@ -372,8 +454,6 @@ public partial class SolutionSettingsViewModel
     {
         if (_working is null || _selected is null) return;
 
-        CommitCanvas();
-
         if (FindParent(_working.Root, _selected) is not { } parent) return;
 
         var label = _selected.DisplayLabel;
@@ -387,8 +467,6 @@ public partial class SolutionSettingsViewModel
     private void DoMove(int delta) => Guard(() =>
     {
         if (_working is null || _selected is null) return;
-
-        CommitCanvas();
 
         if (FindParent(_working.Root, _selected) is not { } parent) return;
 
@@ -547,5 +625,6 @@ public partial class SolutionSettingsViewModel
         ReloadCommand.RaiseCanExecuteChanged();
         OpenFolderCommand.RaiseCanExecuteChanged();
         EditListRowsCommand.RaiseCanExecuteChanged();
+        ResetValuesCommand.RaiseCanExecuteChanged();
     }
 }

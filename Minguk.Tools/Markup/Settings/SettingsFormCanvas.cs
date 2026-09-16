@@ -9,12 +9,15 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 
+using DevExpress.Mvvm;
+
 using DevExpress.Xpf.Core;
 using DevExpress.Xpf.Editors;
 using DevExpress.Xpf.Grid;
 using DevExpress.Xpf.LayoutControl;
 
 using Minguk.Tools.Projects.Settings;
+using Minguk.Tools.ViewModels.Settings;
 
 namespace Minguk.Tools.Markup.Settings;
 
@@ -22,7 +25,10 @@ namespace Minguk.Tools.Markup.Settings;
 /// 설정 양식 트리(<see cref="SettingsItem"/>)를 DevExpress <see cref="LayoutControl"/> 로 그리는 판. 설정 탭 가운데(<c>docs/솔루션-설정.md</c>).
 /// </summary>
 /// <remarks>
-/// <b>미리보기</b>: 칸마다 편집기를 달고, 바꾸면 <see cref="ValueEdited"/>. 지금 층에서 덮어쓴 값은 라벨을 굵게, 옆에 ↺.
+/// <b>MVVM</b>(사용자, 2026-09-17) - 화면 모델은 이 컨트롤을 모른다. <see cref="Form"/>(칸 모델 트리 <see cref="SettingsFieldViewModel"/>)·<see cref="SelectedItem"/>·
+/// <see cref="DropCommand"/>·<see cref="LayoutChangedCommand"/> 를 바인딩으로 받는다. 화면 모델이 <c>FindControl</c> 로 판을 찾아 <c>Build</c>·<c>Refresh</c> 를 부르던 것을 걷어냈다.
+///
+/// <b>미리보기</b>: 칸마다 편집기를 달고, 바꾸면 칸 모델의 <see cref="SettingsFieldViewModel.Value"/> 에 쓴다. 칸 모델이 바뀌면(스크립트가 씀) 편집기를 고친다. 덮어쓴 값은 라벨을 굵게.
 /// <b>디자인</b>: <c>IsCustomization</c> 으로 끌어 옮긴다. 옮긴 결과는 <see cref="ReadBack"/> 이 컨트롤 트리를 걸어 양식 트리로 되읽는다 -
 /// LayoutControl 이 옆에 놓을 때 이름 없는 가로 묶음을 스스로 만들기도 해서, 표시(Tag)가 없는 묶음은 라벨 없는 구역으로 받는다.
 ///
@@ -32,7 +38,8 @@ public sealed class SettingsFormCanvas : ContentControl
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
-    private readonly Dictionary<string, Action<SettingsEntry>> _updaters = new(StringComparer.Ordinal);
+    /// <summary>그린 칸 모델마다 편집기를 고치는 일. 다시 지을 때 구독을 푼다.</summary>
+    private readonly List<(SettingsFieldViewModel Field, System.ComponentModel.PropertyChangedEventHandler Handler)> _subscriptions = [];
     private LayoutControl? _layout;
     private bool _pushing;
 
@@ -45,45 +52,81 @@ public sealed class SettingsFormCanvas : ContentControl
         PreviewDragOver += OnPreviewDragOver;
         PreviewDragLeave += OnPreviewDragLeave;
         PreviewDrop += OnPreviewDrop;
+
+        Unloaded += (_, _) => Unsubscribe();
     }
 
-    /// <summary>칸의 합친 값. 미리보기에서 편집기에 넣을 값을 여기서 묻는다.</summary>
-    public Func<string, SettingsEntry?>? EntryOf { get; set; }
+    public static readonly DependencyProperty FormProperty = DependencyProperty.Register(
+        nameof(Form), typeof(SettingsFormState), typeof(SettingsFormCanvas),
+        new PropertyMetadata(null, (d, e) => ((SettingsFormCanvas)d).Build(e.NewValue as SettingsFormState)));
 
-    /// <summary>지금 층에서 덮어쓴 값인가(굵게·↺).</summary>
-    public Func<SettingsEntry, bool>? IsOverridden { get; set; }
+    /// <summary>그릴 것 - 뿌리 칸 모델과 디자인인가. 새 객체가 오면 다시 짓는다.</summary>
+    public SettingsFormState? Form
+    {
+        get => (SettingsFormState?)GetValue(FormProperty);
+        set => SetValue(FormProperty, value);
+    }
 
-    public bool IsDesign { get; private set; }
+    public static readonly DependencyProperty SelectedItemProperty = DependencyProperty.Register(
+        nameof(SelectedItem), typeof(SettingsItem), typeof(SettingsFormCanvas),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, e) => ((SettingsFormCanvas)d).ShowSelection(e.NewValue as SettingsItem)));
 
-    /// <summary>그린 뿌리.</summary>
-    public SettingsItem? Root { get; private set; }
+    /// <summary>디자인에서 고른 칸(구역도 된다). 누르면 판이 쓰고, 화면 모델이 쓰면 테두리를 옮긴다.</summary>
+    public SettingsItem? SelectedItem
+    {
+        get => (SettingsItem?)GetValue(SelectedItemProperty);
+        set => SetValue(SelectedItemProperty, value);
+    }
 
-    /// <summary>디자인에서 고른 칸이 바뀌었다(구역도 된다). 빈 곳을 누르면 null.</summary>
-    public event EventHandler<SettingsItem?>? SelectedItemChanged;
+    public static readonly DependencyProperty DropCommandProperty = DependencyProperty.Register(
+        nameof(DropCommand), typeof(ICommand), typeof(SettingsFormCanvas));
 
-    /// <summary>미리보기에서 사람이 값을 바꿨다.</summary>
-    public event EventHandler<(string Name, JsonNode? Value)>? ValueEdited;
+    /// <summary>도구 상자의 칸을 판에 놓았다 - 인자 <see cref="SettingsDrop"/>.</summary>
+    public ICommand? DropCommand
+    {
+        get => (ICommand?)GetValue(DropCommandProperty);
+        set => SetValue(DropCommandProperty, value);
+    }
 
-    /// <summary>↺ 를 눌렀다.</summary>
-    public event EventHandler<string>? ValueReset;
+    public static readonly DependencyProperty LayoutChangedCommandProperty = DependencyProperty.Register(
+        nameof(LayoutChangedCommand), typeof(ICommand), typeof(SettingsFormCanvas));
 
-    /// <summary>디자인에서 칸을 끌어 옮겼을 수 있다 - 되읽을 때가 됐다.</summary>
-    public event EventHandler? LayoutMayHaveChanged;
+    /// <summary>
+    /// 디자인에서 손을 뗐다 - 끌어 옮긴 결과를 칸 트리에 되읽은 뒤 부른다. 인자는 순서·묶음이 바뀌었는가(bool). 화면 모델이 바뀌었으면 저장한다.
+    /// </summary>
+    public ICommand? LayoutChangedCommand
+    {
+        get => (ICommand?)GetValue(LayoutChangedCommandProperty);
+        set => SetValue(LayoutChangedCommandProperty, value);
+    }
+
+    private bool IsDesign => Form?.IsDesign == true;
+
+    /// <summary>그린 뿌리 칸.</summary>
+    private SettingsItem? Root => Form?.Root.Item;
 
     // ── 그리기 ───────────────────────────────────────────────────────────
 
-    public void Build(SettingsItem root, bool design, SettingsItem? select = null)
+    private void Build(SettingsFormState? form)
     {
         if (_layout is not null)
         {
             _layout.PreviewMouseLeftButtonUp -= OnLayoutMouseUp;
         }
 
-        _updaters.Clear();
+        Unsubscribe();
         ClearDropIndicator();
+        _selection = null;
 
-        Root = root;
-        IsDesign = design;
+        if (form is null)
+        {
+            _layout = null;
+            Content = null;
+            return;
+        }
+
+        var root = form.Root.Item;
+        var design = form.IsDesign;
 
         var layout = new LayoutControl
         {
@@ -96,10 +139,9 @@ public sealed class SettingsFormCanvas : ContentControl
             VerticalAlignment = VerticalAlignment.Stretch
         };
 
-        foreach (var child in root.Children ?? [])
-            layout.Children.Add(CreateElement(child, design));
+        AddChildren(layout, form.Root.Children, root.Orientation == SettingsOrientation.Horizontal, design);
 
-        if (root.Children is not { Count: > 0 })
+        if (form.Root.Children.Count == 0)
         {
             layout.Children.Add(new LayoutItem
             {
@@ -127,13 +169,59 @@ public sealed class SettingsFormCanvas : ContentControl
             layout.Loaded += (_, _) =>
             {
                 layout.IsCustomization = true;
-                if (select is not null) Select(select);
+                ShowSelection(SelectedItem);
             };
         }
     }
 
-    private FrameworkElement CreateElement(SettingsItem item, bool design)
+    /// <summary>
+    /// 구역(또는 판)에 칸들을 넣는다. 「나누기」는 미리보기에서 그리지 않고 <b>앞 칸</b>에 크기 조절(LayoutControl 의 <c>AllowHorizontalSizing</c>·<c>AllowVerticalSizing</c>)을 켠다.
+    /// </summary>
+    /// <remarks>
+    /// DevExpress v26 LayoutControl 에는 따로 놓는 LayoutSplitter 요소가 없다(같은 이름은 도킹 쪽) - 칸의 크기 조절을 켜면 그 칸의 오른쪽(가로 구역)·아래쪽(세로 구역)에 막대가 생긴다.
+    /// 앞 칸이 없거나(맨 앞) 앞도 나누기면 아무 일도 안 한다. 디자인에서는 자리표시 칸으로 그려 끌어 옮긴다(크기 조절은 안 켠다 - 덮개가 가로챈다).
+    /// </remarks>
+    private void AddChildren(Panel panel, IEnumerable<SettingsFieldViewModel> children, bool horizontal, bool design)
     {
+        FrameworkElement? previous = null;
+
+        foreach (var child in children)
+        {
+            if (child.Item.Kind == SettingsItemKind.Splitter && !design)
+            {
+                if (previous is not null)
+                {
+                    if (horizontal) LayoutControl.SetAllowHorizontalSizing(previous, true);
+                    else LayoutControl.SetAllowVerticalSizing(previous, true);
+                }
+
+                previous = null;
+                continue;
+            }
+
+            var element = CreateElement(child, design);
+            panel.Children.Add(element);
+            previous = child.Item.Kind == SettingsItemKind.Splitter ? null : element;
+        }
+    }
+
+    private FrameworkElement CreateElement(SettingsFieldViewModel field, bool design)
+    {
+        var item = field.Item;
+
+        // 나누기(디자인에서만 여기 온다) - 골라 옮기고 지울 수 있게 얇은 자리표시. 미리보기에서는 AddChildren 이 앞 칸에 크기 조절을 켠다.
+        if (item.Kind == SettingsItemKind.Splitter)
+        {
+            return new LayoutItem
+            {
+                Tag = item,
+                AddColonToLabel = false,
+                Label = "",
+                ToolTip = "나누기 - 미리보기에서 앞 칸 가장자리에 크기 조절 막대가 생깁니다.",
+                Content = new TextBlock { Text = "↔ 나누기", Opacity = 0.6, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center }
+            };
+        }
+
         if (item.Kind == SettingsItemKind.Group)
         {
             var group = new LayoutGroup
@@ -147,8 +235,7 @@ public sealed class SettingsFormCanvas : ContentControl
                 ToolTip = string.IsNullOrWhiteSpace(item.Tooltip) ? null : item.Tooltip
             };
 
-            foreach (var child in item.Children ?? [])
-                group.Children.Add(CreateElement(child, design));
+            AddChildren(group, field.Children, item.Orientation == SettingsOrientation.Horizontal, design);
 
             return group;
         }
@@ -161,7 +248,7 @@ public sealed class SettingsFormCanvas : ContentControl
             ToolTip = string.IsNullOrWhiteSpace(item.Tooltip) ? null : item.Tooltip
         };
 
-        var editor = CreateEditor(item, layoutItem, design);
+        var editor = CreateEditor(field, layoutItem, design);
 
         if (item.Kind == SettingsItemKind.List)
         {
@@ -175,28 +262,13 @@ public sealed class SettingsFormCanvas : ContentControl
         return layoutItem;
     }
 
-    /// <summary>편집기 + ↺ 한 줄. 값이 바뀌면 <see cref="_updaters"/> 로 편집기를 고친다.</summary>
-    private FrameworkElement CreateEditor(SettingsItem item, LayoutItem owner, bool design)
+    /// <summary>편집기 하나. 칸 모델이 바뀌면(값·굵게·경고) 편집기와 라벨을 고친다.</summary>
+    /// <remarks>
+    /// 칸마다 붙던 되돌리기(↺) 단추는 뺐다(사용자, 2026-09-17 "굳이 없어도") - 덮어쓴 칸은 라벨이 굵고, 되돌리기는 도구 줄의 [초기값] 이 층째로 한다.
+    /// </remarks>
+    private FrameworkElement CreateEditor(SettingsFieldViewModel field, LayoutItem owner, bool design)
     {
-        // 글자 ↺ 는 단추가 글자 높이로 줄어 작고 뭉개졌다(사용자, 2026-09-17) - 16px 그림을 늘리지 않고, 단추는 편집기 높이(24)의 정사각형.
-        var reset = new SimpleButton
-        {
-            Glyph = Minguk.Image.FreeImage.Instance?.CacheImageSource("axialis/basic/16x16/undo.png"),
-            GlyphWidth = 16,
-            GlyphHeight = 16,
-            Width = 24,
-            Height = 24,
-            Padding = new Thickness(0),
-            Margin = new Thickness(4, 0, 0, 0),
-            UseLayoutRounding = true,
-            SnapsToDevicePixels = true,
-            VerticalAlignment = item.Kind == SettingsItemKind.List ? VerticalAlignment.Top : VerticalAlignment.Center,
-            ToolTip = "덮어쓴 값을 빼서 아래 층(솔루션 공통·처음 값)의 값을 씁니다.",
-            Visibility = Visibility.Collapsed,
-            IsEnabled = !design
-        };
-        reset.Click += (_, _) => ValueReset?.Invoke(this, item.Name);
-
+        var item = field.Item;
         FrameworkElement editor;
         Action<JsonNode?> push;
 
@@ -219,7 +291,7 @@ public sealed class SettingsFormCanvas : ContentControl
                     {
                         if (_pushing || spin.EditValue is null) return;
                         var value = Convert.ToDouble(spin.EditValue, CultureInfo.InvariantCulture);
-                        Raise(item, decimals == 0 ? JsonValue.Create((long)Math.Round(value)) : JsonValue.Create(Math.Round(value, decimals)));
+                        Raise(field, decimals == 0 ? JsonValue.Create((long)Math.Round(value)) : JsonValue.Create(Math.Round(value, decimals)));
                     };
                     push = node => spin.EditValue = node is JsonValue v ? (decimal)SettingsValue.ToDouble(v) : 0m;
                     editor = spin;
@@ -242,7 +314,7 @@ public sealed class SettingsFormCanvas : ContentControl
                         var value = Math.Round(Convert.ToDouble(track.EditValue ?? 0, CultureInfo.InvariantCulture) / (item.Step ?? 1)) * (item.Step ?? 1);
                         number.Text = value.ToString("0.##", CultureInfo.CurrentCulture);
                         if (_pushing) return;
-                        Raise(item, value == Math.Floor(value) ? JsonValue.Create((long)value) : JsonValue.Create(value));
+                        Raise(field, value == Math.Floor(value) ? JsonValue.Create((long)value) : JsonValue.Create(value));
                     };
                     push = node =>
                     {
@@ -263,7 +335,7 @@ public sealed class SettingsFormCanvas : ContentControl
                     check.EditValueChanged += (_, _) =>
                     {
                         if (_pushing) return;
-                        Raise(item, JsonValue.Create(check.IsChecked == true));
+                        Raise(field, JsonValue.Create(check.IsChecked == true));
                     };
                     push = node => check.IsChecked = node is JsonValue v && v.GetValueKind() == System.Text.Json.JsonValueKind.True;
                     editor = check;
@@ -275,7 +347,7 @@ public sealed class SettingsFormCanvas : ContentControl
                     combo.SelectedIndexChanged += (_, _) =>
                     {
                         if (_pushing || combo.SelectedItem is not string text) return;
-                        Raise(item, JsonValue.Create(text));
+                        Raise(field, JsonValue.Create(text));
                     };
                     push = node => combo.SelectedItem = node is JsonValue v ? v.GetValue<string>() : null;
                     editor = combo;
@@ -283,7 +355,7 @@ public sealed class SettingsFormCanvas : ContentControl
                 }
             case SettingsItemKind.List:
                 {
-                    var (grid, pushList) = CreateList(item, design);
+                    var (grid, pushList) = CreateList(field, design);
                     push = pushList;
                     editor = grid;
                     break;
@@ -294,7 +366,7 @@ public sealed class SettingsFormCanvas : ContentControl
                     text.EditValueChanged += (_, _) =>
                     {
                         if (_pushing) return;
-                        Raise(item, JsonValue.Create(text.EditValue?.ToString() ?? string.Empty));
+                        Raise(field, JsonValue.Create(text.EditValue?.ToString() ?? string.Empty));
                     };
                     push = node => text.EditValue = node is JsonValue v ? v.GetValue<string>() : string.Empty;
                     editor = text;
@@ -308,52 +380,41 @@ public sealed class SettingsFormCanvas : ContentControl
             editor.IsEnabled = false;
         }
 
-        _updaters[item.Name] = entry =>
+        void Update(bool value)
         {
-            _pushing = true;
-
-            try
+            if (value)
             {
-                if (!editor.IsKeyboardFocusWithin) push(entry.Value);
+                _pushing = true;
+
+                try
+                {
+                    // 글을 치던 칸은 덮지 않는다 - 치는 동안 스크립트가 같은 칸에 쓰면 치던 것이 날아간다.
+                    if (!editor.IsKeyboardFocusWithin) push(field.Value);
+                }
+                finally
+                {
+                    _pushing = false;
+                }
             }
-            finally
-            {
-                _pushing = false;
-            }
 
-            var overridden = !design && IsOverridden?.Invoke(entry) == true;
+            owner.LabelStyle = !design && field.IsOverridden ? BoldLabel : null;
+            owner.ToolTip = field.ToolTip;
+            owner.Label = field.Label;
+        }
 
-            reset.Visibility = overridden ? Visibility.Visible : Visibility.Collapsed;
-            owner.LabelStyle = overridden ? BoldLabel : null;
-            owner.ToolTip = JoinTooltip(item.Tooltip, entry.Warning);
-
-            if (entry.Warning is not null)
-                owner.Label = "⚠ " + item.DisplayLabel;
-            else
-                owner.Label = item.DisplayLabel;
+        System.ComponentModel.PropertyChangedEventHandler handler = (_, e) =>
+        {
+            if (e.PropertyName is nameof(SettingsFieldViewModel.Value) or null or "")
+                Update(value: true);
+            else if (e.PropertyName is nameof(SettingsFieldViewModel.IsOverridden) or nameof(SettingsFieldViewModel.Warning) or nameof(SettingsFieldViewModel.Label))
+                Update(value: false);
         };
 
-        if (EntryOf?.Invoke(item.Name) is { } first) _updaters[item.Name](first);
+        field.PropertyChanged += handler;
+        _subscriptions.Add((field, handler));
+        Update(value: true);
 
-        // 체크는 칸이 작아 ↺ 를 줄 끝에 두면 어느 칸의 것인지 안 보인다 - 바로 옆에 붙인다.
-        var compact = item.Kind == SettingsItemKind.Check;
-        var panel = new DockPanel { LastChildFill = !compact };
-
-        if (compact)
-        {
-            DockPanel.SetDock(editor, System.Windows.Controls.Dock.Left);
-            DockPanel.SetDock(reset, System.Windows.Controls.Dock.Left);
-            panel.Children.Add(editor);
-            panel.Children.Add(reset);
-        }
-        else
-        {
-            DockPanel.SetDock(reset, System.Windows.Controls.Dock.Right);
-            panel.Children.Add(reset);
-            panel.Children.Add(editor);
-        }
-
-        return panel;
+        return editor;
     }
 
     private static readonly Style BoldLabel = CreateBoldLabel();
@@ -366,64 +427,43 @@ public sealed class SettingsFormCanvas : ContentControl
         return style;
     }
 
-    private static string? JoinTooltip(string? tooltip, string? warning)
-    {
-        if (string.IsNullOrWhiteSpace(warning)) return string.IsNullOrWhiteSpace(tooltip) ? null : tooltip;
-        return string.IsNullOrWhiteSpace(tooltip) ? warning : tooltip + "\n\n" + warning;
-    }
-
     /// <summary>목록 칸 - 표는 <see cref="SettingsListGrid"/>(처음 행 대화 상자와 같다). 행을 더하고 고치고 지우면 통째로 값을 낸다.</summary>
-    private (FrameworkElement Grid, Action<JsonNode?> Push) CreateList(SettingsItem item, bool design)
+    private (FrameworkElement Grid, Action<JsonNode?> Push) CreateList(SettingsFieldViewModel field, bool design)
     {
         SettingsListGrid? list = null;
-        list = new SettingsListGrid(item.Columns ?? [], editable: !design, () =>
+        list = new SettingsListGrid(field.Item.Columns ?? [], editable: !design, () =>
         {
             if (_pushing) return;
-            Raise(item, list!.Read());
+            Raise(field, list!.Read());
         });
 
         return (list.Grid, list.Push);
     }
 
-    private void Raise(SettingsItem item, JsonNode? value)
+    /// <summary>사람이 값을 바꿨다 - 칸 모델에 쓴다(화면 모델이 저장한다).</summary>
+    private void Raise(SettingsFieldViewModel field, JsonNode? value)
     {
         if (IsDesign) return;
 
-        ValueEdited?.Invoke(this, (item.Name, value));
+        field.Value = value;
     }
 
-    /// <summary>값이 바뀌었다 - 편집기를 고친다. 이름이 null 이면 전부.</summary>
-    public void Refresh(string? name)
+    private void Unsubscribe()
     {
-        if (EntryOf is null) return;
-
-        if (name is not null)
-        {
-            if (_updaters.TryGetValue(name, out var update) && EntryOf(name) is { } entry) update(entry);
-            return;
-        }
-
-        foreach (var (key, update) in _updaters)
-        {
-            if (EntryOf(key) is { } entry) update(entry);
-        }
+        foreach (var (field, handler) in _subscriptions) field.PropertyChanged -= handler;
+        _subscriptions.Clear();
     }
 
     // ── 디자인: 고르기·되읽기 ────────────────────────────────────────────
 
     private SelectionAdorner? _selection;
 
-    /// <summary>고른 칸.</summary>
-    public SettingsItem? SelectedItem { get; private set; }
-
     /// <summary>
-    /// 칸을 고른다 - 테두리를 그린다. 이 판의 LayoutControl 은 고른 요소 목록을 밖에 열어 두지 않아(26.1 실측: <c>SelectedElements</c> 없음)
+    /// 고른 칸의 테두리를 그린다. 이 판의 LayoutControl 은 고른 요소 목록을 밖에 열어 두지 않아(26.1 실측: <c>SelectedElements</c> 없음)
     /// 고르기와 표시를 판이 직접 한다.
     /// </summary>
-    public void Select(SettingsItem? item)
+    private void ShowSelection(SettingsItem? item)
     {
-        SelectedItem = item;
-
         if (_selection is not null)
         {
             AdornerLayer.GetAdornerLayer(_selection.AdornedElement)?.Remove(_selection);
@@ -448,12 +488,13 @@ public sealed class SettingsFormCanvas : ContentControl
     {
         if (!IsDesign || _layout is null) return;
 
-        LayoutMayHaveChanged?.Invoke(this, EventArgs.Empty);
+        // 끌어 옮겼을 수 있다 - 칸 트리에 되읽고 알린다(화면 모델이 바뀌었으면 저장).
+        var changed = ReadBack();
+        if (LayoutChangedCommand?.CanExecute(changed) == true) LayoutChangedCommand.Execute(changed);
 
         var hit = HitItem(e.GetPosition(_layout));
 
-        Select(hit);
-        SelectedItemChanged?.Invoke(this, hit);
+        SetCurrentValue(SelectedItemProperty, hit);
     }
 
     /// <summary>판 좌표의 가장 안쪽 칸(구역 포함). 없으면 null.</summary>
@@ -467,9 +508,6 @@ public sealed class SettingsFormCanvas : ContentControl
     public const string DragFormat = "Minguk.Tools.SettingsItemKind";
 
     private DropIndicatorAdorner? _dropIndicator;
-
-    /// <summary>도구 상자의 칸을 판에 놓았다.</summary>
-    public event EventHandler<SettingsDrop>? ToolDropped;
 
     /// <summary>
     /// 판 좌표에 놓으면 어디에 들어가는가. 구역 한가운데면 그 안, 구역 위·아래 끝 띠나 칸이면 그 앞·뒤(구역 방향을 따라 가로면 좌우 반),
@@ -507,7 +545,12 @@ public sealed class SettingsFormCanvas : ContentControl
 
         if (!IsDesign) return;
 
-        ToolDropped?.Invoke(this, DropTargetAt(kind, point));
+        // 놓기 전에 끌어 옮긴 것을 되읽는다 - 화면 모델이 칸을 넣고 양식을 저장하기 전에 트리가 화면과 같아야 한다.
+        var changed = ReadBack();
+        if (LayoutChangedCommand?.CanExecute(changed) == true) LayoutChangedCommand.Execute(changed);
+
+        var drop = DropTargetAt(kind, point);
+        if (DropCommand?.CanExecute(drop) == true) DropCommand.Execute(drop);
     }
 
     private static bool TryGetKind(DragEventArgs e, out SettingsItemKind kind)
@@ -688,7 +731,7 @@ public sealed class SettingsFormCanvas : ContentControl
     /// 디자인에서 끌어 옮긴 결과를 양식 트리로 되읽는다. 칸 객체는 그대로 쓰고 <c>Children</c> 만 다시 채운다.
     /// </summary>
     /// <returns>순서·묶음이 바뀌었으면 true.</returns>
-    public bool ReadBack()
+    private bool ReadBack()
     {
         if (_layout is null || Root is null || !IsDesign) return false;
 
@@ -746,20 +789,3 @@ public sealed class SettingsFormCanvas : ContentControl
         }
     }
 }
-
-/// <summary>놓는 자리가 기준 칸의 어디인가.</summary>
-public enum SettingsDropPlacement
-{
-    /// <summary>판 맨 끝(기준 칸 없음).</summary>
-    End,
-
-    Before,
-
-    After,
-
-    /// <summary>구역 안 맨 끝.</summary>
-    Inside
-}
-
-/// <summary>도구 상자에서 놓은 것 - 칸 종류와 자리.</summary>
-public sealed record SettingsDrop(SettingsItemKind Kind, SettingsItem? Anchor, SettingsDropPlacement Placement);
