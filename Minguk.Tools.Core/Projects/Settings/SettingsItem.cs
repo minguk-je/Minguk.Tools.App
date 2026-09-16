@@ -146,6 +146,10 @@ public sealed class SettingsItem
     [JsonIgnore]
     public bool HasValue => Kind is not (SettingsItemKind.Group or SettingsItemKind.Splitter);
 
+    /// <summary>아래 칸까지 통째로 복제한다(양식 파일과 같은 JSON 으로) - 설정 탭 디자인의 복사·붙여넣기.</summary>
+    public SettingsItem Clone()
+        => System.Text.Json.JsonSerializer.Deserialize<SettingsItem>(System.Text.Json.JsonSerializer.Serialize(this, SolutionSettingsFiles.Json), SolutionSettingsFiles.Json)!;
+
     /// <summary>화면에 보일 이름 - 라벨이 없으면 키.</summary>
     [JsonIgnore]
     public string DisplayLabel => string.IsNullOrWhiteSpace(Label) ? Name : Label;

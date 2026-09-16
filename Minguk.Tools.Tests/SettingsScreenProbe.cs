@@ -258,6 +258,27 @@ public static class SettingsScreenProbe
                 savedForm = SettingsForm.Load(Path.Combine(Path.GetDirectoryName(project)!, SolutionSettingsFiles.FormFile));
                 Expect(savedForm.Find("글자1") is null, "판에서 Delete 를 누르면 고른 칸이 양식에서 빠진다", string.Join(", ", savedForm.ValueItems().Select(i => i.Name)));
 
+                // ── 복사·붙여넣기 ── 구역 「물약」 을 복사해 붙이면 뒤에 들어가고 안의 칸 이름이 겹치지 않게 새로 붙는다. 확인 뒤 지운다.
+                {
+                    var potionGroup = (SettingsItem)Descendants<LayoutGroup>(canvas).First(g => g.Tag is SettingsItem { Label: "물약" }).Tag;
+                    vm.SelectedFormItem = potionGroup;
+                    await Pump(300);
+
+                    vm.CopyItemCommand.Execute(null);
+                    var canPaste = vm.PasteItemCommand.CanExecute(null);
+                    vm.PasteItemCommand.Execute(null);
+                    await Pump(800);
+
+                    var groups = Saved().Root.Children!.Where(c => c.Label == "물약").ToList();
+                    var allNames = Saved().ValueItems().Select(i => i.Name).ToList();
+                    var pastedNames = groups.Count == 2 ? groups[1].Flatten().Where(i => i.HasValue).Select(i => i.Name).ToList() : [];
+                    Expect(canPaste && groups.Count == 2 && pastedNames.Count > 0 && allNames.Distinct().Count() == allNames.Count && !pastedNames.Intersect(groups[0].Flatten().Select(i => i.Name)).Any(),
+                        "구역을 복사·붙여넣기 하면 뒤에 들어가고 안의 칸 이름이 새로 붙는다", $"붙이기 가능 {canPaste} · 물약 구역 {groups.Count}개 · 붙인 칸 {string.Join(", ", pastedNames)} · 상태 {vm.StatusText} · 뿌리 {string.Join(", ", Saved().Root.Children!.Select(c => c.Kind + ":" + c.Label))}");
+
+                    vm.DeleteItemCommand.Execute(null);
+                    await Pump(500);
+                }
+
                 // ── 도구 상자에서 끌어 놓기 ── 실제 끌기(DoDragDrop)는 마우스가 있어야 해서 판의 놓기(Drop)를 자리로 부른다.
                 Point CenterOf(string name, double yRatio = 0.5)
                 {

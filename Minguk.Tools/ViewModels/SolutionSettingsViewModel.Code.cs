@@ -458,7 +458,19 @@ public partial class SolutionSettingsViewModel
 
         if (item.HasValue) item.Name = UniqueName(tool.Title);
 
-        // 기준 칸이 이 양식에 없으면(판을 그린 뒤 양식이 바뀌었다) 맨 끝에 둔다.
+        Insert(item, anchor, placement);
+
+        _selected = item;
+        SaveWorking($"「{tool.Title}」 칸을 놓았습니다{(item.HasValue ? $" - 스크립트에서 설정(\"{item.Name}\") 로 읽습니다" : "")}.");
+        Rebuild();
+        Select(item);
+    }
+
+    /// <summary>고치는 양식에 칸을 넣는다 - 구역 안(맨 끝) · 기준 칸 앞·뒤 · 맨 끝. 기준 칸이 이 양식에 없으면(판을 그린 뒤 양식이 바뀌었다) 맨 끝.</summary>
+    private void Insert(SettingsItem item, SettingsItem? anchor, SettingsDropPlacement placement)
+    {
+        if (_working is null) return;
+
         var parent = anchor is null ? null : FindParent(_working.Root, anchor);
 
         if (placement == SettingsDropPlacement.Inside && anchor is { Kind: SettingsItemKind.Group } && (parent is not null || ReferenceEquals(anchor, _working.Root)))
@@ -474,18 +486,19 @@ public partial class SolutionSettingsViewModel
         {
             _working.Root.Children!.Add(item);
         }
-
-        _selected = item;
-        SaveWorking($"「{tool.Title}」 칸을 놓았습니다{(item.HasValue ? $" - 스크립트에서 설정(\"{item.Name}\") 로 읽습니다" : "")}.");
-        Rebuild();
-        Select(item);
     }
 
-    private string UniqueName(string title)
+    private string UniqueName(string title) => UniqueName(title, null);
+
+    /// <summary>제목 뒤에 빈 번호. 저장된 양식·다른 층·고치는 양식·<paramref name="taken"/>(같이 붙여 넣는 칸들)과 안 겹친다.</summary>
+    private string UniqueName(string title, IReadOnlySet<string>? taken)
     {
+        var working = _working?.Root.Flatten().Select(i => i.Name).ToHashSet(StringComparer.Ordinal) ?? [];
+
         for (var n = 1; ; n++)
         {
             var name = title + n;
+            if (working.Contains(name) || taken?.Contains(name) == true) continue;
             if (_settings!.CheckNewName(name, TargetKind) is null) return name;
         }
     }
@@ -502,6 +515,60 @@ public partial class SolutionSettingsViewModel
         SaveWorking($"「{label}」 칸을 지웠습니다. 값은 파일에 남아 칸을 되살리면 돌아옵니다([안 쓰는 값 정리] 로 지웁니다).");
         Select(null);
         Rebuild();
+    });
+
+    /// <summary>
+    /// 복사한 칸 - 앱 안 한 벌(화면이 여럿이어도 같이 본다). 시스템 클립보드는 안 쓴다 - 화면 모델이 WPF 클립보드를 모르게, 그리고 붙여 넣을 곳은 설정 탭뿐이다.
+    /// </summary>
+    private static SettingsItem? _clipboard;
+
+    /// <summary>복사한 원본 칸 - 그 칸을 고른 채 붙이면 안이 아니라 뒤에 넣는다(구역을 복사해 붙이면 자기 안으로 들어갔다).</summary>
+    private static WeakReference<SettingsItem>? _clipboardSource;
+
+    /// <summary>Ctrl+C - 고른 칸을 복제해 담는다(담은 뒤 원본을 고쳐도 복사본은 그대로).</summary>
+    private void DoCopyItem() => Guard(() =>
+    {
+        if (_selected is null) return;
+
+        _clipboard = _selected.Clone();
+        _clipboardSource = new WeakReference<SettingsItem>(_selected);
+        SetStatus($"「{_selected.DisplayLabel}」 칸을 복사했습니다 - 붙여 넣을 곳을 고르고 Ctrl+V.");
+        RaiseCommands();
+    });
+
+    /// <summary>
+    /// Ctrl+V - 복사한 칸을 한 번 더 복제해 넣는다(여러 번 붙여 넣어도 서로 다른 객체). 값을 드는 칸은 이름을 새로 붙인다 - 이름 끝 숫자를 떼고 빈 번호를 찾는다(「글자1」 → 「글자2」).
+    /// </summary>
+    /// <remarks>넣을 자리는 도구 상자 두 번 누르기와 같다 - 단 복사한 칸 자신을 고른 채면 그 뒤(구역을 복사해 곧바로 붙이면 옆에 하나 더). 값은 복사하지 않는다 - 새 이름이라 처음 값에서 시작한다.</remarks>
+    private void DoPasteItem() => Guard(() =>
+    {
+        if (_clipboard is null || _working is null || _settings is null) return;
+
+        var item = _clipboard.Clone();
+        var taken = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var valued in item.Flatten().Where(i => i.HasValue))
+        {
+            var stem = valued.Name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
+            if (stem.Length == 0) stem = SolutionSettings.KindName(valued.Kind);
+
+            valued.Name = UniqueName(stem, taken);
+            taken.Add(valued.Name);
+        }
+
+        var pastingOnSource = _clipboardSource?.TryGetTarget(out var source) == true && ReferenceEquals(source, _selected);
+
+        if (_selected is { Kind: SettingsItemKind.Group } group && !ReferenceEquals(group, _working.Root) && !pastingOnSource)
+            Insert(item, group, SettingsDropPlacement.Inside);
+        else if (_selected is not null)
+            Insert(item, _selected, SettingsDropPlacement.After);
+        else
+            Insert(item, null, SettingsDropPlacement.End);
+
+        _selected = item;
+        SaveWorking($"「{item.DisplayLabel}」 칸을 붙여 넣었습니다.");
+        Rebuild();
+        Select(item);
     });
 
     private void DoMove(int delta) => Guard(() =>
@@ -659,6 +726,8 @@ public partial class SolutionSettingsViewModel
     {
         AddItemCommand.RaiseCanExecuteChanged();
         DeleteItemCommand.RaiseCanExecuteChanged();
+        CopyItemCommand.RaiseCanExecuteChanged();
+        PasteItemCommand.RaiseCanExecuteChanged();
         MoveUpCommand.RaiseCanExecuteChanged();
         MoveDownCommand.RaiseCanExecuteChanged();
         RemoveUnusedCommand.RaiseCanExecuteChanged();

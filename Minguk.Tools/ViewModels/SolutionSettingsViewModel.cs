@@ -65,6 +65,8 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
 
         AddItemCommand = new DelegateCommand<SettingsToolboxItem>(DoAddItem, item => IsDesign && HasProject && item is not null, false);
         DeleteItemCommand = new DelegateCommand(DoDeleteItem, () => IsDesign && SelectedEditor is not null, false);
+        CopyItemCommand = new DelegateCommand(DoCopyItem, () => IsDesign && SelectedEditor is not null, false);
+        PasteItemCommand = new DelegateCommand(DoPasteItem, () => IsDesign && HasProject && _clipboard is not null, false);
         MoveUpCommand = new DelegateCommand(() => DoMove(-1), () => IsDesign && SelectedEditor is not null, false);
         MoveDownCommand = new DelegateCommand(() => DoMove(1), () => IsDesign && SelectedEditor is not null, false);
         RemoveUnusedCommand = new DelegateCommand(DoRemoveUnused, () => HasProject, false);

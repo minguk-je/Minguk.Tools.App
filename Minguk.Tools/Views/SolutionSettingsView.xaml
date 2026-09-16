@@ -109,9 +109,15 @@
                 <dxb:BarButtonItem Command="{Binding MoveDownCommand}"
                                    Content="▼"
                                    Hint="고른 칸을 뒤로 옮깁니다." />
+                <dxb:BarButtonItem Command="{Binding CopyItemCommand}"
+                                   Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/clip_copy.png'}"
+                                   Hint="고른 칸을 복사합니다 (Ctrl+C). 구역이면 안의 칸까지." />
+                <dxb:BarButtonItem Command="{Binding PasteItemCommand}"
+                                   Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/clip_paste.png'}"
+                                   Hint="복사한 칸을 붙여 넣습니다 (Ctrl+V). 고른 구역이면 그 안, 고른 칸이면 그 뒤. 이름은 겹치지 않게 새로 붙습니다." />
                 <dxb:BarButtonItem Command="{Binding DeleteItemCommand}"
                                    Glyph="{image:FreeImage ResourceName='axialis/basic/16x16/delete.png'}"
-                                   Hint="고른 칸을 지웁니다. 값은 파일에 남습니다." />
+                                   Hint="고른 칸을 지웁니다 (Delete). 값은 파일에 남습니다." />
                 <dxb:BarItemSeparator />
                 <dxb:BarButtonItem Command="{Binding ReloadCommand}"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
@@ -223,6 +229,13 @@
                                 <dxmvvm:KeyToCommand Command="{Binding DeleteItemCommand}"
                                                      EventName="KeyDown"
                                                      KeyGesture="Delete" />
+                                <!-- 복사·붙여넣기도 판에 초점이 있을 때만 - 속성 창 글상자의 Ctrl+C·V 는 글을 복사한다. -->
+                                <dxmvvm:KeyToCommand Command="{Binding CopyItemCommand}"
+                                                     EventName="KeyDown"
+                                                     KeyGesture="Ctrl+C" />
+                                <dxmvvm:KeyToCommand Command="{Binding PasteItemCommand}"
+                                                     EventName="KeyDown"
+                                                     KeyGesture="Ctrl+V" />
                             </dxmvvm:Interaction.Behaviors>
                         </settings:SettingsFormCanvas>
                     </dxlc:LayoutItem>

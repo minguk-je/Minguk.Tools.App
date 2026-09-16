@@ -21,6 +21,12 @@ public partial class SolutionSettingsViewModel
 
     public DelegateCommand DeleteItemCommand { get; private set; } = null!;
 
+    /// <summary>고른 칸(구역이면 안의 칸까지)을 복사한다 - Ctrl+C. 앱 안에만 담는다(다른 층·다른 프로젝트 설정 탭에 붙여 넣을 수 있다).</summary>
+    public DelegateCommand CopyItemCommand { get; private set; } = null!;
+
+    /// <summary>복사한 칸을 붙여 넣는다 - Ctrl+V. 고른 구역이면 그 안, 고른 칸이면 그 뒤, 없으면 맨 끝. 이름은 겹치지 않게 새로 붙인다.</summary>
+    public DelegateCommand PasteItemCommand { get; private set; } = null!;
+
     public DelegateCommand MoveUpCommand { get; private set; } = null!;
 
     public DelegateCommand MoveDownCommand { get; private set; } = null!;
