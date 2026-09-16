@@ -50,9 +50,90 @@ internal static class RegionDragProbe
     /// </summary>
     private static bool _busy;
 
+    /// <summary><c>--hit</c>: 끌지 않고, 테두리 안팎 몇 px 자리에서 어느 요소가 마우스를 받는지만 잰다(커서 안 가져감).</summary>
+    private static bool _hit;
+
+    private static async Task<int> RunHitAllAsync()
+    {
+        var failures = 0;
+
+        foreach (var (zoom, scroll) in new[] { (1.0, new Vector()), (2.0, new Vector()), (8.0, new Vector(1400, 1000)) })
+        {
+            var fixture = await Fixture.OpenAsync(zoom, scroll);
+
+            try
+            {
+                foreach (var cell in new[] { false, true })
+                {
+                    fixture.Canvas.SelectedCell = null;
+                    fixture.Canvas.SelectedRegion = fixture.Region;
+                    if (cell) fixture.Canvas.SelectedCell = fixture.HalfCell;
+                    await Settle();
+
+                    RegionItemBase item = cell ? fixture.Canvas.CellItems.Single(c => ReferenceEquals(c.Cell, fixture.HalfCell)) : fixture.Canvas.Items.Single();
+                    var what = $"배율 {zoom} · {(cell ? "구역" : "영역")}";
+                    var window = fixture.Window;
+
+                    Console.WriteLine($"[INFO] {what} - InverseZoom {item.InverseZoom:0.###} · 항목 {item.ActualWidth:0.#}x{item.ActualHeight:0.#}");
+
+                    // 보이는 손잡이(Rectangle) 가운데가 어느 요소에 맞나.
+                    var layer = AdornerLayer.GetAdornerLayer(item);
+                    var adorner = layer?.GetAdorners(item)?.FirstOrDefault();
+                    if (adorner is not null)
+                    {
+                        foreach (var grip in Descendants<System.Windows.Shapes.Rectangle>(adorner).Where(r => r.ActualWidth > 0 && r.ActualWidth < 20 && r.Fill is not null))
+                        {
+                            var center = grip.PointToScreen(new Point(grip.ActualWidth / 2, grip.ActualHeight / 2));
+                            var gripSize = grip.PointToScreen(new Point(grip.ActualWidth, grip.ActualHeight)) - grip.PointToScreen(new Point(0, 0));
+                            Console.WriteLine($"   손잡이 {grip.HorizontalAlignment}/{grip.VerticalAlignment} 화면 크기 {gripSize.X:0.#}x{gripSize.Y:0.#} · 가운데 누르면 → {HitName(window, center)}");
+                        }
+
+                        foreach (var thumb in Descendants<RegionResizeThumb>(adorner))
+                        {
+                            var a = thumb.PointToScreen(new Point(0, 0));
+                            var z = thumb.PointToScreen(new Point(thumb.ActualWidth, thumb.ActualHeight));
+                            Console.WriteLine($"   잡는 띠 {thumb.HorizontalAlignment}/{thumb.VerticalAlignment} 화면 ({a.X:0},{a.Y:0})~({z.X:0},{z.Y:0})");
+                        }
+                    }
+
+                    // 오른쪽 변 가운데에서 가로로 -10~+10 화면 px.
+                    var edge = item.PointToScreen(new Point(item.ActualWidth, item.ActualHeight / 2));
+                    Console.WriteLine($"   오른쪽 변 화면 x={edge.X:0.#}");
+                    foreach (var dx in new[] { -10, -6, -4, -2, 0, 2, 4, 6, 10 })
+                        Console.WriteLine($"     변{dx:+0;-0;0}px → {HitName(window, new Point(edge.X + dx, edge.Y))}");
+                }
+            }
+            finally
+            {
+                fixture.Window.Close();
+            }
+        }
+
+        return failures;
+    }
+
+    private static string HitName(Window window, Point screen)
+    {
+        var local = window.PointFromScreen(screen);
+        var hit = window.InputHitTest(local) as DependencyObject;
+        var d = hit;
+
+        while (d is not null)
+        {
+            if (d is RegionResizeThumb r) return $"크기 손잡이 {r.HorizontalAlignment}/{r.VerticalAlignment} ({r.Cursor})";
+            if (d is RegionMoveThumb) return "옮기기(안쪽)";
+            if (d is RegionRotateThumb) return "회전";
+            if (d is RegionItemBase) return "항목";
+            d = VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d);
+        }
+
+        return hit?.GetType().Name ?? "없음";
+    }
+
     public static int Run(string[] args)
     {
         _busy = args.Contains("--busy");
+        _hit = args.Contains("--hit");
         var failures = 0;
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
 
@@ -60,7 +141,7 @@ internal static class RegionDragProbe
         {
             try
             {
-                failures = await RunAllAsync();
+                failures = _hit ? await RunHitAllAsync() : await RunAllAsync();
             }
             catch (Exception ex)
             {

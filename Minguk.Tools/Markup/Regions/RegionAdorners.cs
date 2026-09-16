@@ -25,6 +25,10 @@ public sealed class RegionResizeAdorner : Adorner
     public RegionResizeAdorner(RegionItem item) : base(item)
     {
         SnapsToDevicePixels = true;
+
+        // 반올림을 끈다 - 안의 여백·크기가 확대 역수를 곱한 소수(8배면 손잡이 여백 -0.375)라, DevExpress 창에서 물려받은 레이아웃 반올림이
+        // 캔버스 1px(화면 8~10px) 단위로 뭉개 그리는 손잡이는 안쪽·잡는 띠는 바깥쪽으로 갈렸다(사용자, 2026-09-17, --script-screen 이 잡는다).
+        UseLayoutRounding = false;
         _chrome = new RegionResizeChrome { DataContext = item };
         _visuals = new VisualCollection(this) { _chrome };
     }
@@ -54,6 +58,10 @@ public sealed class RegionSizeAdorner : Adorner
     public RegionSizeAdorner(RegionItemBase item) : base(item)
     {
         SnapsToDevicePixels = true;
+
+        // 반올림을 끈다 - 안의 여백·크기가 확대 역수를 곱한 소수(8배면 손잡이 여백 -0.375)라, DevExpress 창에서 물려받은 레이아웃 반올림이
+        // 캔버스 1px(화면 8~10px) 단위로 뭉개 그리는 손잡이는 안쪽·잡는 띠는 바깥쪽으로 갈렸다(사용자, 2026-09-17, --script-screen 이 잡는다).
+        UseLayoutRounding = false;
         _chrome = new RegionSizeChrome { DataContext = item };
         _visuals = new VisualCollection(this) { _chrome };
     }
@@ -83,6 +91,10 @@ public sealed class RegionCellAdorner : Adorner
     public RegionCellAdorner(RegionCellItem item) : base(item)
     {
         SnapsToDevicePixels = true;
+
+        // 반올림을 끈다 - 안의 여백·크기가 확대 역수를 곱한 소수(8배면 손잡이 여백 -0.375)라, DevExpress 창에서 물려받은 레이아웃 반올림이
+        // 캔버스 1px(화면 8~10px) 단위로 뭉개 그리는 손잡이는 안쪽·잡는 띠는 바깥쪽으로 갈렸다(사용자, 2026-09-17, --script-screen 이 잡는다).
+        UseLayoutRounding = false;
         _chrome = new RegionCellChrome { DataContext = item };
         _visuals = new VisualCollection(this) { _chrome };
     }

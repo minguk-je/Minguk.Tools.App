@@ -254,6 +254,14 @@ internal static class ScriptScreenProbe
     /// 실제 Thumb 끌기는 커서를 가져가야 해서 여기서 안 한다. 손잡이가 부르는 것과 같은 <c>MoveBy</c>·<c>ResizeBy</c> 를 부른다.
     /// 목록은 파일(regions.json)을 안 거치고 VM 의 컬렉션에 바로 넣는다 - 사용자 데이터셋 폴더를 건드리면 안 된다.
     /// </remarks>
+    private static T? FindAncestor<T>(DependencyObject child) where T : DependencyObject
+    {
+        for (var d = VisualTreeHelper.GetParent(child); d is not null; d = VisualTreeHelper.GetParent(d))
+            if (d is T found) return found;
+
+        return null;
+    }
+
     private static async System.Threading.Tasks.Task<int> CheckRegionCanvas(Window window, ScriptStudioViewModel vm)
     {
         var failures = 0;
@@ -431,6 +439,63 @@ internal static class ScriptScreenProbe
                     Console.WriteLine($"[PASS] 칸 끌기·돌리기가 VM 의 칸으로 온다 - 옮김 {moved} · 자리 밖 막음 {pinned} · 45° {rotated}");
                 else { Console.WriteLine($"[FAIL] 칸 끌기가 틀렸다 - 옮김 {moved}({current.X:0.###}) · 자리 밖 막음 {pinned} · 돌림 {rotated}({maximum.Angle})"); failures++; }
 
+                // 크게 확대(8·10배)해도 보이는 손잡이 자리에서 그 손잡이가 잡힌다(사용자, 2026-09-17 "테두리는 안쪽인데 마우스는 바깥쪽").
+                vm.SelectedCell = current;
+                foreach (var zoom in new[] { 8.0, 10.0 })
+                {
+                    vm.PreviewZoom = zoom;
+                    await Pump(300);
+                    // 칸 오른쪽 아래 모서리를 미리보기 뷰포트 가운데로 스크롤한다(편집기 스크롤은 Focusable=False 라 BringIntoView 가 안 먹는다).
+                    var scroller = FindAncestor<System.Windows.Controls.ScrollViewer>(canvas);
+                    if (scroller is not null)
+                    {
+                        var at = currentItem.TranslatePoint(new Point(currentItem.ActualWidth, currentItem.ActualHeight), scroller);
+                        scroller.ScrollToHorizontalOffset(scroller.HorizontalOffset + at.X - (scroller.ViewportWidth / 2));
+                        scroller.ScrollToVerticalOffset(scroller.VerticalOffset + at.Y - (scroller.ViewportHeight / 2));
+                        await Pump(300);
+                    }
+
+                    var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(currentItem);
+                    var adorner = layer?.GetAdorners(currentItem)?.FirstOrDefault();
+                    var misses = new List<string>();
+
+                    string HitAt(Point inWindow)
+                    {
+                        for (var d = window.InputHitTest(inWindow) as DependencyObject; d is not null; d = VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d))
+                        {
+                            if (d is Minguk.Tools.Markup.Regions.RegionResizeThumb r) return $"{r.HorizontalAlignment}/{r.VerticalAlignment}";
+                            if (d is Minguk.Tools.Markup.Regions.RegionMoveThumb) return "옮기기";
+                            if (d is Minguk.Tools.Markup.Regions.RegionRotateThumb) return "회전";
+                        }
+                        return "없음(" + (window.InputHitTest(inWindow)?.GetType().Name ?? "-") + ")";
+                    }
+
+                    // 뷰포트 안에 보이는 네모 손잡이만(회전 손잡이 줄기는 폭이 2 미만이라 뺀다). 8배면 칸이 뷰포트보다 커 나머지는 화면 밖이다.
+                    var view = scroller is null ? Rect.Empty : new Rect(scroller.TranslatePoint(new Point(0, 0), window), new Size(scroller.ViewportWidth, scroller.ViewportHeight));
+                    var grips = (adorner is null ? [] : Descendants<System.Windows.Shapes.Rectangle>(adorner))
+                        .Where(r => r.Fill is not null && r.ActualWidth * zoom is > 4 and < 20 && r.ActualHeight * zoom is > 4 and < 20)
+                        .Where(r => view.Contains(r.TranslatePoint(new Point(r.ActualWidth / 2, r.ActualHeight / 2), window)))
+                        .ToList();
+
+                    foreach (var grip in grips)
+                    {
+                        var got = HitAt(grip.TranslatePoint(new Point(grip.ActualWidth / 2, grip.ActualHeight / 2), window));
+                        var want = $"{(grip.HorizontalAlignment == HorizontalAlignment.Center ? HorizontalAlignment.Stretch : grip.HorizontalAlignment)}/{(grip.VerticalAlignment == VerticalAlignment.Center ? VerticalAlignment.Stretch : grip.VerticalAlignment)}";
+                        if (got != want) misses.Add($"손잡이 {want} → {got}");
+                    }
+
+                    // 오른쪽 변(모서리에서 화면 40px 위 - 뷰포트 안)에서 화면 px 로 안팎.
+                    var toScreen = currentItem.TranslatePoint(new Point(1, 0), window) - currentItem.TranslatePoint(new Point(0, 0), window);
+                    var edge = currentItem.TranslatePoint(new Point(currentItem.ActualWidth, currentItem.ActualHeight), window) - new Vector(0, 40);
+                    var band = string.Join(" ", new[] { -10, -6, -3, 0, 3, 6, 10 }.Select(dx => $"{dx:+0;-0;0}:{HitAt(new Point(edge.X + dx, edge.Y))}"));
+                    var inside = HitAt(new Point(edge.X - 3, edge.Y)) == "Right/Stretch" && HitAt(new Point(edge.X + 3, edge.Y)) == "Right/Stretch" && HitAt(new Point(edge.X - 10, edge.Y)) == "옮기기";
+
+                    if (grips.Count >= 1 && misses.Count == 0 && inside)
+                        Console.WriteLine($"[PASS] 배율 {zoom} 칸 - 뷰포트에 보이는 손잡이 {grips.Count}개 자리에서 그 손잡이가 잡히고, 변 안팎 3px 은 크기·10px 안은 옮기기 ({band})");
+                    else { Console.WriteLine($"[FAIL] 배율 {zoom} 칸 - 손잡이 {grips.Count}개 · 어긋남 [{string.Join(", ", misses)}] · 변 {band} · 항목 1px = 화면 {toScreen.X:0.##}px · 역수 {currentItem.InverseZoom}"); failures++; }
+                }
+
+                vm.PreviewZoom = 1;
                 vm.SelectedCell = null;
                 vm.SelectedRegion = region;
                 await Pump(200);

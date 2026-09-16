@@ -301,7 +301,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     public virtual ObservableCollection<int> FpsOptions { get; set; } = new(new[] { 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 });
 
     /// <summary>미리보기 확대 콤보의 프리셋. 0.5 = 절반, 1 = 창에 맞춤, 8 = 여덟 배. 직접 입력·휠도 되므로 사이 값도 된다.</summary>
-    public virtual ObservableCollection<double> ZoomOptions { get; set; } = new(new[] { 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 });
+    public virtual ObservableCollection<double> ZoomOptions { get; set; } = new(new[] { 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0 });
 
     /// <summary>
     /// 미리보기에서 누른 것을 대상 창으로 넘길지.
@@ -1250,8 +1250,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// <summary>가장 작게. 1 이 창에 맞춘 크기고, 0.5 는 그 절반으로 더 축소해 본다(넓게 훑을 때).</summary>
     public const double MinimumZoom = 0.5;
 
-    /// <summary>여덟 배까지. 그 위는 한 화면에 들어오는 것이 너무 적어 자리를 잊는다.</summary>
-    public const double MaximumZoom = 8;
+    /// <summary>열 배까지(사용자, 2026-09-17 - 8 에서 올림, 작은 HUD 글자에 칸을 맞출 때). 그 위는 한 화면에 들어오는 것이 너무 적어 자리를 잊는다.</summary>
+    public const double MaximumZoom = 10;
 
     public ICommand ZoomInCommand => new DelegateCommand(() => PreviewZoom *= 1.25);
 

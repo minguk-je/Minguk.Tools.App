@@ -21,6 +21,9 @@ public abstract class RegionItemBase : ContentControl
 
     protected RegionItemBase()
     {
+        // 어도너와 같은 까닭 - 항목 템플릿(테두리·이름표·옮기기 손잡이)도 확대 역수를 곱한 소수라 반올림하면 확대에서 어긋난다.
+        UseLayoutRounding = false;
+
         Loaded += (_, _) => { if (IsSelected) ShowAdorner(); };
         Unloaded += (_, _) => HideAdorner();
     }

@@ -217,8 +217,8 @@ public sealed class LabelCanvas : FrameworkElement
     /// <summary>가장 작게. 1 이 창에 맞춘 크기고, 0.5 는 그 절반(캡처 미리보기와 같은 범위).</summary>
     public const double MinimumZoom = 0.5;
 
-    /// <summary>여덟 배까지. 그 위는 한 화면에 들어오는 것이 너무 적어 자리를 잊는다.</summary>
-    public const double MaximumZoom = 8;
+    /// <summary>열 배까지(사용자, 2026-09-17 - 8 에서 올림, 작은 HUD 글자에 칸을 맞출 때). 그 위는 한 화면에 들어오는 것이 너무 적어 자리를 잊는다.</summary>
+    public const double MaximumZoom = 10;
 
     private static object CoerceZoom(DependencyObject d, object value)
         => Math.Clamp(Math.Round((double)value, 2), MinimumZoom, MaximumZoom);

@@ -77,7 +77,7 @@ public partial class LabelingViewModel
     }
 
     /// <summary>확대 콤보의 프리셋. 캡처 미리보기와 같은 값이다.</summary>
-    public ObservableCollection<double> ZoomOptions { get; } = new([0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0]);
+    public ObservableCollection<double> ZoomOptions { get; } = new([0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0]);
 
     // ── 데이터셋 ─────────────────────────────────────────────────────────
 
