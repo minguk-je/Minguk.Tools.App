@@ -526,6 +526,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
             Vision.Labeling.LabelClasses.FileName or Vision.Labeling.LabelPalette.FileName => true,
             "data.yaml" or "coco.json" or "labels.cache" => true,
             Vision.Regions.RegionBook.FileName => true,
+            Projects.Settings.SolutionSettingsFiles.FormFile or Projects.Settings.SolutionSettingsFiles.ValuesFile => true,
             var n when n.StartsWith("detector.", StringComparison.Ordinal) => true,
             var n when n.EndsWith(".bak", StringComparison.Ordinal) => true,
             _ => false

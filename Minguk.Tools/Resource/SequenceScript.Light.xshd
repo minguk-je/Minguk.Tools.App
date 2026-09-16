@@ -187,6 +187,10 @@
             <Word>ResourcePath</Word><Word>리소스경로</Word>
             <Word>ResourceText</Word><Word>리소스글</Word>
             <Word>ResourceBytes</Word><Word>리소스바이트</Word>
+            <Word>Setting</Word><Word>설정</Word>
+            <Word>SetSetting</Word><Word>설정저장</Word>
+            <Word>SettingList</Word><Word>설정목록</Word>
+            <Word>HasSetting</Word><Word>설정있나</Word>
             <Word>PlaySound</Word><Word>소리</Word>
         </Keywords>
 

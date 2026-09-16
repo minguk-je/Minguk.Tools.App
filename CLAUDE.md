@@ -13,6 +13,7 @@ TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 �
 | `docs/몹-검출.md` | 라벨 형식, ONNX 모델·DirectML 함정, 학습, 실시간 몹 찾기, OCR·이름 붙인 자리, 라벨링 화면 |
 | `docs/실시간-스크립트.md` | 실시간 API·안전장치, 목표·조준, 입력 경로, 전역 단축키, 디버그 |
 | `docs/스크립트-프로젝트-설계.md` · `docs/스크립트-설계.md` | 스크립트 화면(VS 모양)·프로젝트 파일 |
+| `docs/솔루션-설정.md` | 설정 탭(사용자가 칸을 놓아 만드는 설정 화면)·솔루션/프로젝트 두 층·스크립트 `설정()` |
 | `docs/ONNX-모델-학습.md` · `docs/몹-찾기-속도-설계.md` | 학습 절차 · 추론 속도 |
 
 ## 짜임
@@ -23,7 +24,7 @@ Minguk Tools (틀)
 │  ├ 환경설정                 ← 모듈(Minguk.Tools.Training). 작업공간·학습 경로를 정한다
 │  ├ 솔루션                   ← AutomationMainView. 솔루션이 없으면 시작 창
 │  │    위 : 작업공간 → [솔루션 ▾] → [프로젝트 ▾]  [새 프로젝트][새 공유 프로젝트][새 솔루션]
-│  │    아래 탭 : 화면캡처 · 라벨링 · 스크립트   ← 고른 프로젝트를 따라간다
+│  │    아래 탭 : 화면캡처 · 라벨링 · 스크립트 · 설정   ← 고른 프로젝트를 따라간다
 │  └ 플레이                   ← bin 의 완성품(.mtsx)을 돌린다
 └ 입력 테스트                 ← 입력 경로 점검(계획 모드)
 제목 표시줄 : 최상위 · 테마      창 제목 : Minguk Tools (프로젝트 이름 안 넣음)
@@ -35,6 +36,9 @@ Minguk Tools (틀)
   프레임 저장(`ProjectPaths.Captures`), 스크립트 화면이 여는 `.mtsproj`. 솔루션이 없을 때만 옛 자리(`LegacyRoot`)를 본다.
   이름 주의: `Minguk.Tools.Input.Scripting` 안에서 `Projects.` 는 `Input.Scripting.Projects` 로 잡혀 `global::Minguk.Tools.Projects` 로 적는다.
 - 자세한 것(솔루션 탭 문서·프로젝트 바꾸기·공유 프로젝트·솔루션 탐색기)은 `docs/프로젝트-설계.md`.
+- **설정 탭**(사용자, 2026-09-16): 사람이 칸(글자·숫자·체크·콤보·슬라이더·구역·목록)을 놓아 설정 화면을 만들고 스크립트가 `설정<int>("이름")`·`설정저장` 으로 읽고 쓴다.
+  두 층 - 솔루션 폴더·프로젝트 폴더의 `settings.form.json`(양식)·`settings.values.json`(값), 찾는 순서 프로젝트 값 → 솔루션 값 → 기본값. 이름 하나에 정의 하나(만들 때 막고, 이미 겹치면 프로젝트가 이김).
+  폴더마다 앱에 한 벌(`SettingsLayer.For`)이라 도는 스크립트와 설정 탭이 곧바로 서로 본다. 자세한 것은 `docs/솔루션-설정.md`.
 
 ## 화면 하나 추가하는 법
 
@@ -228,6 +232,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --solution            # 솔�
 dotnet run --project Minguk.Tools.Tests -c Debug -- --script-screen       # 스크립트 화면 화면 밖 띄우기·바인딩 오류·정렬·PNG (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --labeling-screen     # 라벨링 화면 패널 높이·정렬·PNG (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --environment-screen  # 환경설정 화면 두 칸·아이콘·정렬·PNG (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --settings-screen     # 설정 탭 미리보기·디자인·값 쓰기·정렬·PNG (안전, 임시 폴더)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --detect-check        # 모델이 라벨을 다시 찾는지(재현율)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --backend=SendInput   # 입력 경로 전체 (커서·키보드를 가져간다)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --canvas-drag         # 라벨 캔버스 실제 마우스 끌기 (커서)

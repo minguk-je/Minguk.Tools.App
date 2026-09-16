@@ -36,6 +36,7 @@ public static class SolutionProbe
             failures += CheckFindUnder(root);
             failures += CheckSharedProject(root);
             failures += CheckDataNotListed();
+            failures += SolutionSettingsProbe.Run(root);
         }
         finally
         {
@@ -60,7 +61,7 @@ public static class SolutionProbe
     private static int CheckDataNotListed()
     {
         string[] hidden = ["Images", "images/a.png", "Labels/a.txt", "Captures", "Recordings/x.mp4", "classes.txt", "class-colors.json", "data.yaml", "coco.json",
-                           "labels.cache", "regions.json", "detector.onnx", "detector.yolo11n.onnx.json", "detector.zip.bak", "bin/x.mtsx"];
+                           "labels.cache", "regions.json", "settings.form.json", "settings.values.json", "detector.onnx", "detector.yolo11n.onnx.json", "detector.zip.bak", "bin/x.mtsx"];
         string[] shown = ["main.csx", "스크립트.csx", "Resources", "Resources/images/a.png", "Resources/regions.json", "공용/도우미.csx", "ImagesTool.csx"];
 
         var wrongHidden = hidden.Where(p => !Minguk.Tools.ViewModels.ScriptProjectWorkspace.IsIgnored(p)).ToList();

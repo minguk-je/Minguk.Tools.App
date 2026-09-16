@@ -34,7 +34,7 @@ public static class ScriptHelp
     private const string MobProperties = "5. 몹의 속성 (몹.이름 처럼)";
     private const string Screen = "6. 화면 글자 읽기";
     private const string Flow = "7. 흐름 · 출력";
-    private const string Resources = "8. 리소스";
+    private const string Resources = "8. 리소스 · 설정";
     private const string Other = "9. 기타";
 
     /// <summary>함수 영문 이름 → 분류.</summary>
@@ -53,7 +53,8 @@ public static class ScriptHelp
 
         ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow,
 
-        ["ResourcePath"] = Resources, ["ResourceText"] = Resources, ["ResourceBytes"] = Resources, ["PlaySound"] = Resources
+        ["ResourcePath"] = Resources, ["ResourceText"] = Resources, ["ResourceBytes"] = Resources, ["PlaySound"] = Resources,
+        ["Setting"] = Resources, ["SetSetting"] = Resources, ["SettingList"] = Resources, ["HasSetting"] = Resources
     };
 
     /// <summary>함수 영문 이름 → 예시.</summary>
@@ -80,7 +81,10 @@ public static class ScriptHelp
         ["IsStopped"] = "while (!중지되었나())\n{\n    // 반복할 일\n    쉬기(10);\n}",
         ["Print"] = "출력($\"탄약 {숫자읽기(\"탄약\")}\");",
         ["Watch"] = "보기(\"쏜 발수\", 쏜발수);",
-        ["ResourceText"] = "var 설정 = 리소스글(\"설정.json\");",
+        ["ResourceText"] = "var 표 = 리소스글(\"몹표.json\");",
+        ["Setting"] = "var hp = 설정<int>(\"물약HP\");     // 설정 탭에서 만든 칸\nif (체력() < hp) 키(\"1\");",
+        ["SetSetting"] = "설정저장(\"사냥횟수\", 설정<int>(\"사냥횟수\") + 1);",
+        ["SettingList"] = "foreach (var 줄 in 설정목록(\"물약목록\"))\n    if (줄.Get<bool>(\"켜기\")) 출력(줄[\"키\"]);",
         ["PlaySound"] = "소리(\"알림.wav\");"
     };
 

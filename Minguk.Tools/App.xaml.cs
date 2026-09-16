@@ -128,6 +128,7 @@ public partial class App : Application
             builder.Services.AddTransient<PlayView>();
             builder.Services.AddTransient<InputAutomationView>();
             builder.Services.AddTransient<LabelingView>();
+            builder.Services.AddTransient<SolutionSettingsView>();
 
             // Automation 화면. 아래 탭(화면캡처 등)도 같은 DI 에서 꺼낸다 - 안쪽 TabbedDocumentUIService 가 같은 ViewLocator 를 쓴다.
             builder.Services.AddTransient<AutomationMainView>();

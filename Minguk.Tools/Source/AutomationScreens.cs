@@ -35,7 +35,8 @@ public static class AutomationScreens
         [
             new("화면캡처", "Minguk.Tools.Views.CaptureMonitorView", FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/screen.png")),
             new("라벨링", "Minguk.Tools.Views.LabelingView", FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/picture-edit.png")),
-            new("스크립트", "Minguk.Tools.Views.ScriptStudioView", FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/document-edit.png"))
+            new("스크립트", "Minguk.Tools.Views.ScriptStudioView", FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/document-edit.png")),
+            new("설정", "Minguk.Tools.Views.SolutionSettingsView", FreeImage.Instance?.CacheByteArray("axialis/basic/16x16/gear.png"))
         ]);
 
         return screens;
