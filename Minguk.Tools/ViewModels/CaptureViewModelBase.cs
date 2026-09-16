@@ -813,7 +813,10 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         var inContent = content is null ? default : args.GetPosition(content);
         var inView = scroller is null ? default : args.GetPosition(scroller);
 
-        PreviewZoom *= args.Delta > 0 ? 1.25 : 1 / 1.25;
+        _zoomingAtPointer = true;
+
+        try { PreviewZoom *= args.Delta > 0 ? 1.25 : 1 / 1.25; }
+        finally { _zoomingAtPointer = false; }
 
         if (scroller is null || content is null) return;
 
@@ -1183,7 +1186,40 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     public double PreviewZoom
     {
         get => GetProperty(() => PreviewZoom);
-        set => SetProperty(() => PreviewZoom, Math.Clamp(Math.Round(value, 2), MinimumZoom, MaximumZoom));
+        set => SetProperty(() => PreviewZoom, Math.Clamp(Math.Round(value, 2), MinimumZoom, MaximumZoom), OnPreviewZoomChanged);
+    }
+
+    /// <summary>휠로 바꾸는 중인가 - 휠은 마우스 아래를 기준으로 제가 맞추므로 가운데 잡기를 건너뛴다.</summary>
+    private bool _zoomingAtPointer;
+
+    /// <summary>
+    /// 배율이 바뀌면 화면 한가운데를 보게 맞춘다(사용자, 2026-09-16 - "위치는 무조건 센터로").
+    /// </summary>
+    /// <remarks>
+    /// 스크롤 위치를 안 건드리면 왼쪽 위가 보인다 - 콤보·버튼으로 확대하거나 저장해 둔 배율로 화면을 열 때
+    /// 미리보기가 엉뚱한 곳을 보고 있었다. 휠 확대만 예외다(마우스 아래를 기준으로 제가 맞춘다).
+    /// 배치가 끝나야 스크롤 범위가 정해지므로 한 박자 뒤에 건다.
+    /// </remarks>
+    private void OnPreviewZoomChanged()
+    {
+        if (_zoomingAtPointer) return;
+
+        CenterPreview();
+    }
+
+    /// <summary>미리보기를 한가운데로. 배율을 바꿀 때와 대상·크기가 바뀔 때 부른다.</summary>
+    protected void CenterPreview()
+    {
+        if (PreviewScroller is null) return;
+
+        DispatcherService?.BeginInvoke(() =>
+        {
+            if (PreviewScroller is not { } scroller) return;
+
+            scroller.UpdateLayout();
+            scroller.ScrollToHorizontalOffset(Math.Max(0, (scroller.ExtentWidth - scroller.ViewportWidth) / 2));
+            scroller.ScrollToVerticalOffset(Math.Max(0, (scroller.ExtentHeight - scroller.ViewportHeight) / 2));
+        });
     }
 
     /// <summary>가장 작게. 1 이 창에 맞춘 크기고, 0.5 는 그 절반으로 더 축소해 본다(넓게 훑을 때).</summary>
@@ -1745,6 +1781,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         RefreshTargetsCommand.RaiseCanExecuteChanged();
         SaveFrameCommand.RaiseCanExecuteChanged();
         CollectFrameCommand.RaiseCanExecuteChanged();
+
+        // 잡기 시작하면 그림이 새로 들어와 크기가 바뀐다 - 그때도 한가운데를 보게 한다.
+        if (IsRunning) CenterPreview();
 
         OnRunningStateChanged();
     }

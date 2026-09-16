@@ -199,7 +199,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
   - 칸 옆 버튼은 `dxe:ButtonEdit` 안에 넣고 `AllowDefaultButton="False"` 를 같이 적는다(안 적으면 빈 `…` 버튼이 하나 더 붙는다). 그림 버튼은 `GlyphKind="User"` + `Image`(가운데 정렬).
   - `dxlc` 에는 `ItemHeight`·`ShowLabel` 이 없다 - 라벨을 비우려면 `AddColonToLabel="False" Label=""`.
 - 폰트·크기는 `BaseFontFamily`/`BaseFontSize` 를 **DynamicResource** 로. 경량 테마(`UseLightweightThemes`)라 표준 WPF 컨트롤은 테마를 안 탄다.
-- 그리드는 `BaseGridControl`/`BaseTableView`. **칸 너비는 내용에 맞춘다**(사용자, 2026-09-16) - `dependency:GridControlDependency.IsColumnAutoWidth="True"` + `AutoWidth="True"`,
+- 그리드는 `BaseGridControl`/`BaseTableView`. **칸 너비는 내용에 맞춘다**(사용자, 2026-09-16) - `dependency:GridControlDependency.IsColumnAutoWidth="True"`(`AutoWidth` 는 안 쓴다),
   열에는 `Width` 를 안 적는다(적으면 그 값에 묶여 글자가 잘린다). 사용자가 끈 너비를 남겨야 하는 그리드(화면캡처 통계)만 예외로 끈다.
   - 행 번호(`IsRowNumber`)를 쓰면 `IndicatorWidth` 를 숨은 `Border`(`SharedSizeGroup="RowNumberGroup"`)의 폭으로 되돌린다(`CaptureMonitorView.xaml` 예시) - 안 하면 세 자리부터 잘린다.
   - `IsColumnAutoWidth` 를 켜면 열 너비가 Auto 라 사용자가 끈 너비가 안 남는다.

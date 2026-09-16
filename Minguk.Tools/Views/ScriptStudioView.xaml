@@ -1034,7 +1034,6 @@
                                         <controls:BaseTableView dependency:GridControlDependency.IsColumnAutoWidth="True"
                                                                 AllowBestFit="True"
                                                                 AllowEditing="True"
-                                                                AutoWidth="True"
                                                                 EditorShowMode="Default"
                                                                 ShowGroupPanel="False"
                                                                 ShowSearchPanelMode="Never">
