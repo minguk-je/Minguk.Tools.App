@@ -323,6 +323,12 @@ public static class SettingsScreenProbe
                     var potionKids = Saved().Root.Children!.First(c => c.Label == "물약").Children!.Select(c => c.Kind.ToString()).ToList();
                     Expect(potionKids.Count >= 2 && potionKids[1] == nameof(SettingsItemKind.Splitter), "나누기를 칸 뒤에 놓으면 양식에 저장된다", string.Join(", ", potionKids));
 
+                    // 디자인 자리표시는 늘어나지 않고 위·왼쪽에 붙는다 - 구역 높이·너비만큼 긴 막대가 되지 않게.
+                    await Pump(300);
+                    var placeholder = Descendants<LayoutItem>(canvas).FirstOrDefault(i => i.Tag is SettingsItem { Kind: SettingsItemKind.Splitter });
+                    Expect(placeholder is { VerticalAlignment: VerticalAlignment.Top, HorizontalAlignment: HorizontalAlignment.Left } && placeholder.ActualHeight < 40,
+                        "디자인: 나누기 자리표시가 늘어나지 않고 위에 붙는다", $"{placeholder?.VerticalAlignment}/{placeholder?.HorizontalAlignment} · 높이 {placeholder?.ActualHeight:0}");
+
                     vm.IsDesign = false;
                     await Pump(800);
 

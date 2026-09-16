@@ -234,6 +234,9 @@ public sealed class SettingsFormCanvas : ContentControl
             return new LayoutItem
             {
                 Tag = item,
+                // 늘리지 않고 위·왼쪽에 붙인다(사용자, 2026-09-17) - 가로 구역에서 세로로 늘어나 판 높이만큼 긴 막대가 됐다.
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Left,
                 AddColonToLabel = false,
                 Label = "",
                 ToolTip = "나누기 - 미리보기에서 앞 칸 가장자리에 크기 조절 막대가 생깁니다.",
