@@ -180,7 +180,7 @@
                 </dxb:BarEditItem>
             </dxb:Bar>
 
-            <!-- ── 디버그 ── VS 의 "▶ 시작" 자리. 실행 · 일시정지 · 중지 · 한 줄 | 중단점 | 빌드 -->
+            <!-- ── 디버그 ── VS 의 "▶ 시작" 자리. 실행 · 실행 일시정지 · 중지 · 한 줄 | 중단점 | 빌드 -->
             <dxb:Bar x:Name="DebugBar"
                      AllowQuickCustomization="False"
                      Caption="디버그">
@@ -193,11 +193,14 @@
                                    Content="실행(F5)"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
                                    Hint="스크립트 시작/계속 (F5) - 캡처가 켜져 있어야 몹·글자를 본다.시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다." />
-                <!-- 일시정지 - 캡처(미리보기·몹 찾기)와 도는 스크립트를 함께 멈춘다. Pause 키는 비상 정지라 단축키가 아니다. -->
+                <!--
+                    실행 일시정지 - 도는 스크립트만 멈춘다. 캡처는 캡처 도구 모음의 「캡처 일시정지」(사용자, 2026-09-17 - 한 단추가 둘 다 멈추니 실행 옆에서 실행용으로만 읽혔다).
+                    Pause 키는 비상 정지라 단축키가 아니다.
+                -->
                 <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
-                                  Content="일시정지"
+                                  Content="실행 일시정지"
                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_pause.png'}"
-                                  Hint="캡처가 돌면 미리보기·몹 찾기·계속 읽기를, 스크립트가 돌면 실행도 함께 멈춘다. 스크립트는 다음 호출에서 멈추고 누르고 있던 키를 뗀다. 다시 누르거나 F5 로 계속."
+                                  Hint="도는 스크립트를 멈춘다 - 다음 호출에서 멈추고 누르고 있던 키를 뗀다. 다시 누르거나 F5 로 계속.&#10;캡처(미리보기·몹 찾기)는 캡처 도구 모음의 [캡처 일시정지]."
                                   IsChecked="{Binding IsPaused, Mode=TwoWay}"
                                   IsEnabled="{Binding CanPause, Mode=OneWay}" />
                 <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
@@ -298,6 +301,12 @@
                                    Content="캡처 중지"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}"
                                    Hint="캡처를 멈춘다." />
+                <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                                  Content="캡처 일시정지"
+                                  Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_pause.png'}"
+                                  Hint="캡처를 끊지 않고 쉰다 - 미리보기는 마지막 장에 멈추고 몹 찾기·계속 읽기를 쉰다(영상 대상은 재생도 멈춘다). 다시 누르면 계속.&#10;도는 스크립트는 멈추지 않는다 - 스크립트는 디버그 도구 모음의 [실행 일시정지]."
+                                  IsChecked="{Binding IsCapturePaused, Mode=TwoWay}"
+                                  IsEnabled="{Binding IsRunning, Mode=OneWay}" />
                 <dxb:BarItemSeparator />
                 <dxb:BarEditItem Content="FPS"
                                  EditValue="{Binding CaptureTargetFps}"
@@ -511,7 +520,7 @@
                                        Content="시작/계속(_S)"
                                        Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
                                        KeyGesture="F5" />
-                    <dxb:BarCheckItem Content="일시정지(_K)"
+                    <dxb:BarCheckItem Content="실행 일시정지(_K)"
                                       Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_pause.png'}"
                                       IsChecked="{Binding IsPaused, Mode=TwoWay}"
                                       IsEnabled="{Binding CanPause, Mode=OneWay}" />
@@ -543,6 +552,10 @@
                     <dxb:BarButtonItem Command="{Binding DoStopCommand}"
                                        Content="캡처 중지(_T)"
                                        Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_stop.png'}" />
+                    <dxb:BarCheckItem Content="캡처 일시정지(_P)"
+                                      Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/record-control_pause.png'}"
+                                      IsChecked="{Binding IsCapturePaused, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsRunning, Mode=OneWay}" />
                     <dxb:BarItemSeparator />
                     <dxb:BarButtonItem Command="{Binding CollectFrameCommand}"
                                        Content="데이터셋에 담기(_C)"

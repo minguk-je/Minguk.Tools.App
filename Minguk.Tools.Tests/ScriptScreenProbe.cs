@@ -280,6 +280,23 @@ internal static class ScriptScreenProbe
 
         if (canvas is null) { Console.WriteLine("[FAIL] 영역 캔버스를 못 찾았다"); return 1; }
 
+        // 영역 보기 체크와 그려진 것이 늘 같다 - 한 번도 안 켠 캔버스가 자리를 그리다가 켰다 끄면 사라졌다(사용자, 2026-09-17).
+        {
+            var fresh = new Minguk.Tools.Markup.Regions.RegionCanvas { Regions = vm.Regions, Source = vm.PreviewImage };
+            var overlay = Descendants<Minguk.Tools.Markup.DetectionOverlay>(window).FirstOrDefault();
+
+            vm.ShowRegions = false;
+            await Pump(100);
+            var offMatches = canvas.Visibility != Visibility.Visible && overlay is { ShowRegions: false };
+            vm.ShowRegions = true;
+            await Pump(100);
+            var onMatches = canvas.Visibility == Visibility.Visible && overlay is { ShowRegions: true };
+
+            var ok = fresh.Visibility != Visibility.Visible && offMatches && onMatches;
+            Console.WriteLine($"[{(ok ? "OK" : "FAIL")}] 영역 보기 체크와 미리보기가 같다(새 캔버스 {fresh.Visibility} · 끔 {offMatches} · 켬 {onMatches})");
+            if (!ok) failures++;
+        }
+
         var item = canvas.Items.FirstOrDefault();
 
         if (item is null || !canvas.IsHitTestVisible || canvas.Visibility != Visibility.Visible)
@@ -699,6 +716,28 @@ internal static class ScriptScreenProbe
 
         if (named.Count == 5) Console.WriteLine($"[PASS] 도구 모음 배치 저장·복원 - {stream.Length:N0}바이트, 이름 5개");
         else { Console.WriteLine($"[FAIL] 도구 모음 배치에 이름이 다 안 들어 있다 - {string.Join(",", named)} ({stream.Length}바이트)"); failures++; }
+
+        // 일시정지는 둘 - 디버그에는 실행 일시정지(IsPaused), 캡처에는 캡처 일시정지(IsCapturePaused)(사용자, 2026-09-17).
+        {
+            string? PauseBinding(string bar, string content) => manager.Bars.FirstOrDefault(b => b.Name == bar)?.Items.OfType<DevExpress.Xpf.Bars.BarCheckItem>()
+                .FirstOrDefault(i => Equals(i.Content, content)) is { } item
+                ? System.Windows.Data.BindingOperations.GetBinding(item, DevExpress.Xpf.Bars.BarCheckItem.IsCheckedProperty)?.Path.Path
+                : null;
+
+            var run = PauseBinding("DebugBar", "실행 일시정지");
+            var capture = PauseBinding("CaptureBar", "캡처 일시정지");
+
+            // 캡처가 안 돌면 캡처 일시정지는 안 걸린다, 실행 일시정지는 캡처를 건드리지 않는다.
+            vm.IsCapturePaused = true;
+            var idleRefused = !vm.IsCapturePaused;
+            vm.IsPaused = true;
+            await Pump(50);
+            var runOnly = !vm.IsPaused && !vm.IsCapturePaused;
+
+            var ok = run == "IsPaused" && capture == "IsCapturePaused" && idleRefused && runOnly;
+            Console.WriteLine($"[{(ok ? "PASS" : "FAIL")}] 일시정지 둘 - 디버그 「실행 일시정지」({run}) · 캡처 「캡처 일시정지」({capture}) · 캡처 꺼져 있으면 안 걸림 {idleRefused} · 실행 없으면 안 걸림 {runOnly}");
+            if (!ok) failures++;
+        }
 
         return failures;
     }

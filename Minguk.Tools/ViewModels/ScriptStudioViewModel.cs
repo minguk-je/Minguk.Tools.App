@@ -60,13 +60,16 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     public DelegateCommand ToggleBreakpointCommand { get; }
 
     /// <summary>
-    /// 일시정지(디버그 도구 줄) - 캡처가 돌면 미리보기·몹 찾기·계속 읽기를, 스크립트가 돌면 실행도 함께 멈춘다. 다시 누르거나 F5 로 계속.
+    /// 실행 일시정지(디버그 도구 줄) - 도는 스크립트만 멈춘다. 다시 누르거나 F5 로 계속. 캡처는 캡처 도구 모음의 「캡처 일시정지」(<see cref="CaptureViewModelBase.IsCapturePaused"/>)가 따로 든다.
     /// </summary>
-    /// <remarks>스크립트는 다음 API 호출에서 멈추고 누르고 있던 키를 뗀다(<see cref="ScriptPauseGate"/>). 캡처·실행이 둘 다 멈추면 저절로 풀린다.</remarks>
+    /// <remarks>
+    /// 스크립트는 다음 API 호출에서 멈추고 누르고 있던 키를 뗀다(<see cref="ScriptPauseGate"/>). 실행이 끝나면 저절로 풀린다.
+    /// 예전에는 캡처까지 한 단추로 멈췄는데 실행 옆에 있어 실행용으로만 읽혔다(사용자, 2026-09-17) - 둘로 나눴다.
+    /// </remarks>
     public bool IsPaused { get => GetProperty(() => IsPaused); set => SetProperty(() => IsPaused, value, OnIsPausedChanged); }
 
-    /// <summary>일시정지를 누를 수 있는가 - 캡처나 실행이 돌 때(멈춰 있으면 풀 수 있게 늘).</summary>
-    public bool CanPause => IsPaused || IsRunning || Player.IsRunning;
+    /// <summary>실행 일시정지를 누를 수 있는가 - 스크립트가 돌 때(멈춰 있으면 풀 수 있게 늘).</summary>
+    public bool CanPause => IsPaused || Player.IsRunning;
 
     private readonly List<HotkeyClaim> _hotkeyClaims = [];
     private ScriptEditor? _editor;
@@ -127,9 +130,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         Player.RunningChanged += (_, _) => BuildCommand.RaiseCanExecuteChanged();
 
-        // 캡처·실행이 켜지고 꺼질 때 일시정지 단추를 켜고 끄고, 둘 다 멈췄으면 일시정지를 푼다.
+        // 실행이 켜지고 꺼질 때 실행 일시정지 단추를 켜고 끄고, 끝났으면 일시정지를 푼다.
         Player.RunningChanged += (_, _) => SyncPause();
-        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsRunning)) SyncPause(); };
     }
 
     // ── 일시정지 ─────────────────────────────────────────────────────────
@@ -140,22 +142,16 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         if (IsPaused)
         {
-            if (!IsRunning && !Player.IsRunning)
+            if (!Player.IsRunning)
             {
                 IsPaused = false;
                 return;
             }
 
-            IsCapturePaused = IsRunning;
             Live.PauseGate.Pause();
-
-            StatusText = Player.IsRunning
-                ? "일시정지 - 미리보기·몹 찾기를 쉬고, 스크립트는 다음 호출에서 멈춥니다. 계속은 [일시정지] 를 다시 누르거나 F5."
-                : "일시정지 - 미리보기·몹 찾기를 쉽니다. 계속은 [일시정지] 를 다시 누르거나 F5.";
+            StatusText = "실행 일시정지 - 스크립트는 다음 호출에서 멈춥니다. 계속은 [실행 일시정지] 를 다시 누르거나 F5.";
             return;
         }
-
-        IsCapturePaused = false;
 
         if (!Live.PauseGate.IsPaused) return;
 
@@ -170,7 +166,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     {
         RaisePropertyChanged(nameof(CanPause));
 
-        if (IsPaused && !IsRunning && !Player.IsRunning) IsPaused = false;
+        if (IsPaused && !Player.IsRunning) IsPaused = false;
     }
 
     // ── VS 메뉴 ──────────────────────────────────────────────────────────
@@ -343,8 +339,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>
     /// 도구 줄 배치 판. 올리면 저장된 옛 자리를 버리고 XAML 의 기본 배치로 시작한다 - 안 올리면 옛 자리가 새 배치를 덮는다.
     /// 1: 성격별로 두 줄(사용자, 2026-09-17) - 윗줄 표준·디버그·실행 설정, 아랫줄 캡처·인식. 시작 대기는 실행 설정으로, 빌드는 디버그 끝으로.
+    /// 2: 일시정지를 둘로 - 디버그 「실행 일시정지」, 캡처 「캡처 일시정지」(2026-09-17).
     /// </summary>
-    private const int BarLayoutVersion = 1;
+    private const int BarLayoutVersion = 2;
 
     /// <summary>
     /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.

@@ -46,7 +46,10 @@ public sealed class RegionCanvas : Canvas
 
     public RegionCanvas()
     {
+        // IsEditing 기본값(false)과 맞춰 접어 둔다 - 안 그러면 한 번도 안 켠 채로는 항목이 보여, 영역 보기가 꺼져 있는데 자리가 그려지다가
+        // 켰다 끄면 사라졌다(사용자, 2026-09-17).
         IsHitTestVisible = false;
+        Visibility = Visibility.Collapsed;
         SizeChanged += (_, _) => Rebuild();
     }
 

@@ -215,13 +215,17 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// <summary>
     /// 캡처 일시정지 - 세션은 그대로 두고 받은 프레임을 흘린다. 미리보기는 마지막 장에 멈추고, 몹 찾기·계속 읽기·스크립트에 프레임 올리기도 쉰다.
     /// </summary>
-    /// <remarks>세션을 끊지 않아 계속하면 곧바로 이어진다. 캡처 스레드가 읽어 필드로 둔다. 캡처를 멈추면 풀린다. 통계·저장·담기(F8)는 그대로 돈다.</remarks>
+    /// <remarks>
+    /// 세션을 끊지 않아 계속하면 곧바로 이어진다. 캡처 스레드가 읽어 필드로 둔다. 캡처를 멈추면 풀린다. 통계·저장·담기(F8)는 그대로 돈다.
+    /// 캡처 도구 모음의 「캡처 일시정지」 - 스크립트 실행 일시정지와 따로다(사용자, 2026-09-17 "실행 옆에 있으니 실행 후 일시정지 같아").
+    /// </remarks>
     public bool IsCapturePaused
     {
         get => _isCapturePaused;
         set
         {
             if (_isCapturePaused == value) return;
+            if (value && !IsRunning) return;
 
             _isCapturePaused = value;
 
@@ -229,6 +233,11 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             if (_captureSession is IPausableCapture pausable) pausable.TrySetPaused(value);
 
             RaisePropertyChanged(nameof(IsCapturePaused));
+
+            if (IsRunning)
+                StatusText = value
+                    ? "캡처 일시정지 - 미리보기는 마지막 장에 멈추고 몹 찾기·계속 읽기를 쉽니다. 다시 누르면 계속."
+                    : "캡처 계속";
         }
     }
 
@@ -1798,6 +1807,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     private void OnRunningChanged()
     {
+        if (!IsRunning) IsCapturePaused = false;
+
         RaisePropertyChanged(() => IsNotRunning);
         RaisePropertyChanged(nameof(PreviewHint));
 
