@@ -67,7 +67,7 @@ public static class ScriptApiCatalog
         new("Wait", "쉬기", "milliseconds", "아무것도 보내지 않고 쉰다(ms). 실시간 모드에서는 이 사이에 중지가 먹는다."),
 
         // ── 실시간만: 화면을 읽거나 흐름을 다룬다 ──
-        new("Aim", "조준", "x, y", "그 화면 좌표를 향해 마우스를 움직인 양으로 옮긴다. 커서를 잡는 게임에서 조준할 때(이동()은 안 먹는다). 겨눈 뒤 새 화면이 오기 전에는 다시 안 겨누고 false.", ScriptApiMode.Live),
+        new("Aim", "조준", "몹 | x, y", "몹을 주면 조준 스레드가 8ms 마다 멈추지 않고 머리를 따라가고, 부를 때마다 새 화면을 기다렸다 몸에 들어와 있으면 true(한 화면에 한 번). 좌표를 주면 한 번 움직이고 8px 안이면 true. 커서를 잡는 게임용(이동()은 안 먹는다).", ScriptApiMode.Live),
         new("MoveBy", "상대이동", "dx, dy", "지금 자리에서 이만큼 움직인다.", ScriptApiMode.Live),
         new("MouseDown", "버튼누르기", "button", "마우스 버튼을 누른 채로 둔다. 떼기 전까지.", ScriptApiMode.Live),
         new("MouseUp", "버튼떼기", "button", "누르고 있던 마우스 버튼을 뗀다.", ScriptApiMode.Live),

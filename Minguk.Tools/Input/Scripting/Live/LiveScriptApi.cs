@@ -51,7 +51,7 @@ public enum LiveScriptOutcome
 /// 상속으로 그대로 스코프에 들어와, 스크립팅 전역과 똑같이 이름만으로 불린다. 진입점 이름을 우리가 쥐므로
 /// Roslyn 을 올려도 안 깨진다 - 스크립팅 내부(제출 factory)에 기대지 않는다.
 /// </remarks>
-public class LiveScriptApi
+public class LiveScriptApi : IDisposable
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -61,6 +61,12 @@ public class LiveScriptApi
     private readonly HashSet<MouseButton> _heldButtons = [];
     private readonly Queue<long> _inputTicks = new();
     private readonly object _gate = new();
+
+    /// <summary>배율·표본을 지키는 잠금 - 조준 스레드(<see cref="AimLoop"/>)와 스크립트 스레드가 같이 본다.</summary>
+    private readonly object _aimGate = new();
+
+    /// <summary>조준 스레드. 처음 <c>조준(몹)</c> 을 부를 때 만든다.</summary>
+    private AimLoop? _aim;
 
     public LiveScriptApi(LiveScriptHost host, CancellationToken token)
     {
@@ -171,24 +177,77 @@ public class LiveScriptApi
     public bool Aim(int x, int y) => Traced("Aim", $"{x}, {y}", () => AimCore(x, y, _host.AimTolerancePx, _host.AimTolerancePx));
 
     /// <summary>
-    /// 몹을 겨눈다. <b>머리</b>를 보고, <b>몸에 들어오면</b> 맞은 것으로 친다.
+    /// 몹을 겨눈다 - <b>조준 스레드</b>(<see cref="AimLoop"/>)에 붙여 8ms 마다 멈추지 않고 <b>머리</b>를 따라가게 하고, <b>몸에 들어와 있으면</b> 맞은 것(true)으로 친다.
     /// </summary>
     /// <remarks>
-    /// <b>좌표로 겨누는 것과 무엇이 다른가</b> - <c>조준(x, y)</c> 는 그 점에서 8px 안에 들어와야 맞았다고 한다.
-    /// 총은 그렇게까지 정확할 필요가 없다. 사람도 머리를 보고 쏘되 몸에 걸치면 그냥 쏜다 - 한 픽셀을 더 맞추려고
-    /// 한 바퀴를 더 도는 사이에 몹이 움직인다.
+    /// <b>부르면 어떻게 되나</b> - 처음 부르면 그 몹을 붙잡고 스레드가 움직이기 시작한다. 그 뒤로는 부를 때마다 <b>새 화면이 한 장 올 때까지</b>(몹 찾기 주기, 최대
+    /// <see cref="AimFrameWaitMs"/>) 기다렸다가 맞았는지 돌려준다 - 그래서 <c>while { 몹 = 목표(); if (조준(몹)) 클릭(); }</c> 반복문이 몹 찾기 박자에 맞춰 돌고,
+    /// 그동안 마우스는 스레드가 계속 움직인다. 맞았다는 답은 한 화면에 한 번만 준다(예측만으로 연달아 쏘지 않게).
+    /// 붙잡은 것은 <c>목표풀기()</c>·다른 마우스 입력(상대이동·끌기·좌표 조준)·일시정지·중지에서 놓고, 400ms 넘게 못 보면 스스로 놓는다(그때 <c>목표()</c> 가 새로 고른다).
     ///
-    /// 그래서 겨누는 곳은 <see cref="ScriptMob.머리y"/>(위에서 18%)이고, 맞았다고 보는 범위는 <b>사각형 반쪽</b>
-    /// (가로 너비÷2, 세로 높이÷2)이다. 즉 조준점이 몹 사각형 안에 있으면 참이다.
-    /// 범위를 머리에서 재지 않고 <b>사각형 가운데</b>에서 재는 것이 중요하다 - 머리에서 높이의 반을 재면
-    /// 그 범위가 사각형 위로 삐져나가 머리 위 허공에서도 참이 된다.
+    /// <b>좌표로 겨누는 것과 무엇이 다른가</b> - <c>조준(x, y)</c> 는 한 번 움직이고 그 점에서 8px 안에 들어와야 맞았다고 한다.
+    /// 총은 그렇게까지 정확할 필요가 없다. 사람도 머리를 보고 쏘되 몸에 걸치면 그냥 쏜다. 겨누는 곳은 <see cref="ScriptMob.머리y"/>(위에서 18%)이고,
+    /// 맞았다고 보는 범위는 <b>몸 사각형</b>(가운데에서 재야 한다 - 머리에서 높이의 반을 재면 머리 위 허공에서도 참이 된다).
     /// </remarks>
     public bool Aim(ScriptMob mob)
     {
         ArgumentNullException.ThrowIfNull(mob);
 
-        return Traced("Aim", mob.ToString(), () => AimCore(mob.HeadX, mob.HeadY, mob.Width / 2, mob.Height / 2, mob.CenterX, mob.CenterY));
+        return Traced("Aim", mob.ToString(), () => AimTracked(mob));
     }
+
+    /// <summary>새 화면을 기다리는 상한(ms). 몹 찾기가 0.1초에 한 번이라 보통 그 안에 온다. 넘으면 지금 예측으로 답한다.</summary>
+    private const int AimFrameWaitMs = 400;
+
+    private bool AimTracked(ScriptMob mob)
+    {
+        ThrowIfStopping();
+        EnsureForeground();
+
+        var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
+
+        if (!CaptureTargetBounds.TryGet(target, out var bounds))
+            throw Guard("대상 창의 자리를 알 수 없습니다 - 창이 닫혔거나 최소화됐습니다.");
+
+        var loop = _aim ??= new AimLoop(new AimLoop.Host(
+            Bounds: () => _host.Target() is { } t && CaptureTargetBounds.TryGet(t, out var b) ? b : null,
+            Latest: () => _host.Hub.Latest,
+            Scale: () => AimScale,
+            Move: (dx, dy) => _host.Service.Adapter.MoveMouseBy(dx, dy),
+            MayMove: IsTargetInFront,
+            Learn: LearnSample,
+            Pause: _host.PauseGate,
+            Token: _token));
+
+        var frames = loop.FramesConsumed;
+
+        loop.Engage(mob, _seenFrameTicks, bounds);
+
+        // 다른 것이 시야를 움직인 뒤가 아니다 - 좌표 조준의 배율 배우기는 스레드가 도는 동안 쓰지 않는다.
+        _lastAim = null;
+
+        var deadline = Environment.TickCount64 + AimFrameWaitMs;
+
+        while (true)
+        {
+            if (!loop.IsEngaged) return false;
+
+            // 맞아 있으면 이 화면에서 아직 안 쐈을 때만 바로 참. 이미 쐈으면 다음 화면까지 기다린다.
+            if (loop.IsOnTarget() && loop.TryClaimHit()) return true;
+
+            if (loop.FramesConsumed != frames || Environment.TickCount64 >= deadline)
+                return loop.IsOnTarget() && loop.TryClaimHit();
+
+            Wait(4);
+        }
+    }
+
+    /// <summary>입력을 보내도 되는가 - 앞 창 확인만(예외 없이). 조준 스레드가 박자마다 본다.</summary>
+    private bool IsTargetInFront()
+        => !_host.RequiresForeground
+           || _host.Target() is not { Kind: CaptureTargetKind.Window, Handle: var handle }
+           || handle == IntPtr.Zero
+           || ForegroundWindow.IsInFront(handle);
 
     /// <summary>지금 자리에서 이만큼 움직인다. 배율 없이 그대로.</summary>
     public void MoveBy(int deltaX, int deltaY) => Traced("MoveBy", $"{deltaX}, {deltaY}", () =>
@@ -196,6 +255,7 @@ public class LiveScriptApi
         BeforeInput();
         ForgetAim();
         _host.Service.Adapter.MoveMouseBy(deltaX, deltaY);
+        _aim?.NoteSent(deltaX, deltaY);
     });
 
     /// <summary>버튼을 누른 채로 둔다. <c>버튼떼기</c> 전까지. 비상 정지도 뗄 수 있게 적어 둔다.</summary>
@@ -319,6 +379,8 @@ public class LiveScriptApi
         // 휘어 간 것이 반올림으로 남았을 수 있다. 마지막에 딱 맞춘다.
         if (sentX != deltaX || sentY != deltaY)
             _host.Service.Adapter.MoveMouseBy(deltaX - sentX, deltaY - sentY);
+
+        _aim?.NoteSent(deltaX, deltaY);
     }
 
     /// <summary>천천히 떼고 천천히 멈춘다(smoothstep). 0~1 을 0~1 로 옮기되 양 끝의 기울기가 0 이다.</summary>
@@ -448,7 +510,13 @@ public class LiveScriptApi
     /// <summary>마지막 조준의 거리(px)와 보낸 양(카운트). 다음 새 화면에서 얼마나 줄었는지로 배율을 배운다.</summary>
     private (double OffsetX, double OffsetY, int CountX, int CountY)? _lastAim;
 
-    private double AimScale => _aimScale ??= _host.AimScale;
+    private double AimScale
+    {
+        get
+        {
+            lock (_aimGate) return _aimScale ??= _host.AimScale;
+        }
+    }
 
     /// <summary>스크립트가 마지막으로 본 화면(몹들·가장가까운몹)의 프레임 시각. 0 이면 아직 안 봄.</summary>
     private long _seenFrameTicks;
@@ -479,8 +547,12 @@ public class LiveScriptApi
         }
     }
 
-    /// <summary>조준 말고 다른 것이 시야를 움직였다. 다음 거리 변화는 배율 탓이 아니다.</summary>
-    private void ForgetAim() => _lastAim = null;
+    /// <summary>조준 말고 다른 것이 시야를 움직였다. 다음 거리 변화는 배율 탓이 아니고, 조준 스레드도 놓는다(두 손이 한 마우스를 잡으면 안 된다).</summary>
+    private void ForgetAim()
+    {
+        _lastAim = null;
+        _aim?.Disengage();
+    }
 
     /// <remarks>
     /// <b>같은 화면으로 두 번 겨누지 않는다</b> - 검출은 0.5~1초에 한 번인데 반복문은 0.1초마다 돈다. 같은 몹 자리로
@@ -505,6 +577,9 @@ public class LiveScriptApi
         }
 
         BeforeInput();
+
+        // 좌표 조준은 한 번짜리 - 스레드가 잡고 있던 몹은 놓는다.
+        _aim?.Disengage();
 
         var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
 
@@ -557,13 +632,29 @@ public class LiveScriptApi
     /// </remarks>
     private void LearnAimScale(double offsetX, double offsetY)
     {
-        if (_host.AimScaleLearned is null || _host.IsAimScaleAuto?.Invoke() == false || _lastAim is not { } last) return;
+        if (_lastAim is not { } last) return;
 
         // 많이 움직인 축으로 본다. 위아래는 대개 몇 px 이라 잡음이 크다.
         var (before, after, sent) = Math.Abs(last.CountX) >= Math.Abs(last.CountY)
             ? (last.OffsetX, offsetX, last.CountX)
             : (last.OffsetY, offsetY, last.CountY);
 
+        LearnSample(before, after, sent);
+    }
+
+    /// <summary>
+    /// 표본 하나 - 한 축에서 <paramref name="before"/>px 떨어져 있을 때 <paramref name="sent"/> 카운트를 보냈더니 <paramref name="after"/>px 가 됐다.
+    /// 좌표 조준(한 번짜리)과 조준 스레드(프레임마다)가 같이 부른다. 스레드가 부르므로 잠금 아래.
+    /// </summary>
+    private void LearnSample(double before, double after, double sent)
+    {
+        if (_host.AimScaleLearned is null || _host.IsAimScaleAuto?.Invoke() == false) return;
+
+        lock (_aimGate) LearnSampleCore(before, after, sent);
+    }
+
+    private void LearnSampleCore(double before, double after, double sent)
+    {
         // 너무 가깝거나 너무 먼 조준으로는 안 배운다 - 실측(오버워치 1920x1080)에서 잰 값이 이렇게 갈렸다.
         //   40~400px : 3.10 · 3.24 · 4.00 · 4.17 · 4.20  ← 일관된다
         //   21px     : 1.83   검출 사각형이 프레임마다 몇 px 씩 흔들려 잰 값이 통째로 뒤집힌다
@@ -602,17 +693,18 @@ public class LiveScriptApi
 
         var sorted = _aimSamples.OrderBy(v => v).ToArray();
         var median = sorted[sorted.Length / 2];
+        var current = _aimScale ??= _host.AimScale;
 
         // 그래도 한 번에 크게 바꾸지 않는다. 게임 안에서 감도가 바뀌는 일은 없으니 서둘 이유가 없다.
-        var next = Math.Clamp(Math.Clamp(median, AimScale / 1.5, AimScale * 1.5), MinAimScale, MaxAimScale);
+        var next = Math.Clamp(Math.Clamp(median, current / 1.5, current * 1.5), MinAimScale, MaxAimScale);
 
-        if (Math.Abs(next - AimScale) / AimScale < 0.02) return;
+        if (Math.Abs(next - current) / current < 0.02) return;
 
-        Logger.Info($"배율 {AimScale:0.00} → {next:0.00} ({before:0} → {after:0}, 보낸 {sent}, 잰 값 {measured:0.00}, " +
+        Logger.Info($"배율 {current:0.00} → {next:0.00} ({before:0} → {after:0}, 보낸 {sent:0}, 잰 값 {measured:0.00}, " +
                     $"가운뎃값 {median:0.00} of [{string.Join(" ", sorted.Select(v => v.ToString("0.0")))}])");
 
         _aimScale = next;
-        _host.AimScaleLearned(next);
+        _host.AimScaleLearned!(next);
     }
 
     /// <summary>
@@ -760,6 +852,19 @@ public class LiveScriptApi
     {
         var mobs = MobsCore();
 
+        // 조준 스레드가 붙잡고 있으면 그것이 목표다 - 스레드가 프레임마다 같은 몹을 잇고 예측하므로 여기서 따로 찾지 않는다(둘이 다른 몹을 고르면 안 된다).
+        // 놓쳤으면(400ms 넘게 못 봄) 스레드가 스스로 놓고, 아래에서 새로 고른다.
+        if (_aim is { IsEngaged: true } loop)
+        {
+            if (_host.Target() is { } target && CaptureTargetBounds.TryGet(target, out var bounds) && loop.CurrentMob(bounds, _nameplates) is { } tracked)
+            {
+                _locked = tracked;
+                return tracked;
+            }
+
+            ReleaseTargetCore();
+        }
+
         if (_locked is { } locked)
         {
             // 지난 조준이 민 만큼 옮겨 놓고 그 자리에서 가장 가까운 것을 본다.
@@ -774,12 +879,12 @@ public class LiveScriptApi
 
             if (best.Mob is not null && best.Distance <= radius)
             {
-                _locked = best.Mob;
+                _locked = Smooth(best.Mob, predictedX, predictedY, locked);
                 _lockShiftX = 0;
                 _lockShiftY = 0;
                 _lockedMissTicks = 0;
 
-                return best.Mob;
+                return _locked;
             }
 
             // 놓쳤다. 죽었는지 잠깐 가려졌는지 모르니 조금 기다려 본다.
@@ -799,7 +904,19 @@ public class LiveScriptApi
         var picked = NearestOf(mobs);
 
         // 멀리 있는 새 목표는 한 번 더 보고 움직인다 - 아래 Confirm 참고.
+        var candidate = _candidate;
         if (picked is not null && !Confirmed(picked)) return null;
+
+        // 두 번 본 먼 목표는 두 사각형의 가운데로 첫 조준을 한다 - 크게 도는 한 번이 한 장의 흔들림에 머리를 빗나가지 않게(Smooth 참고).
+        // 화면은 그사이 안 돌았다(움직이지 않고 돌아갔으므로) - 그대로 섞어도 된다.
+        if (picked is not null && candidate is not null && !ReferenceEquals(candidate, picked) && ReferenceEquals(_candidate, picked))
+            picked = picked with
+            {
+                CenterX = (int)Math.Round((picked.CenterX + candidate.CenterX) / 2.0),
+                CenterY = (int)Math.Round((picked.CenterY + candidate.CenterY) / 2.0),
+                Width = (int)Math.Round((picked.Width + candidate.Width) / 2.0),
+                Height = (int)Math.Round((picked.Height + candidate.Height) / 2.0)
+            };
 
         _locked = picked;
         _lockShiftX = 0;
@@ -847,6 +964,33 @@ public class LiveScriptApi
         return near;
     }
 
+    /// <summary>
+    /// 고정한 목표의 자리·크기를 프레임 사이에서 이어 준다 - 새로 본 사각형으로 바로 바꾸지 않고 예상 자리에서 일부만 따라간다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜</b>(사용자, 2026-09-18 "화면 이동하고 나서 머리로 이동하는 게 부자연스럽다") - 검출 사각형은 같은 몹이 가만히 있어도
+    /// 프레임마다 흔들린다. 실측(오버워치 사격장 로그, 조준·클릭 없이 이어 본 같은 목표 2,666쌍): 가운데가 세로 중간값 17px(표준편차 28)·
+    /// 가로 11px. 머리 자리는 사각형 높이로 잡으니 높이 흔들림까지 더해진다. 그래서 크게 돌아 머리에 거의 닿은 뒤에도, 새 화면마다
+    /// 흔들린 머리로 따로 한 번 더 움직여 "돌고 멈췄다가 머리로" 가 됐다.
+    ///
+    /// 세로·크기는 더 믿지 않는다(<see cref="SmoothVertical"/>) - 사격장 봇·사람은 주로 옆으로 움직이고 위아래로는 거의 안 움직인다.
+    /// 가로는 몹이 실제로 움직이므로 많이 따라간다(<see cref="SmoothHorizontal"/>). 예상 자리는 조준이 민 만큼 옮긴 것이라 화면이 돌아도 뒤처지지 않는다.
+    /// </remarks>
+    private static ScriptMob Smooth(ScriptMob seen, double predictedX, double predictedY, ScriptMob previous)
+        => seen with
+        {
+            CenterX = (int)Math.Round(predictedX + ((seen.CenterX - predictedX) * SmoothHorizontal)),
+            CenterY = (int)Math.Round(predictedY + ((seen.CenterY - predictedY) * SmoothVertical)),
+            Width = (int)Math.Round(previous.Width + ((seen.Width - previous.Width) * SmoothVertical)),
+            Height = (int)Math.Round(previous.Height + ((seen.Height - previous.Height) * SmoothVertical))
+        };
+
+    /// <summary>고정한 목표의 가로 자리를 새 사각형 쪽으로 이만큼 옮긴다(0~1). 몹이 옆으로 달리므로 크게.</summary>
+    private const double SmoothHorizontal = 0.6;
+
+    /// <summary>고정한 목표의 세로 자리·크기를 새 사각형 쪽으로 이만큼 옮긴다(0~1). 흔들림은 크고 실제 움직임은 작아 작게.</summary>
+    private const double SmoothVertical = 0.35;
+
     /// <summary>두 번 연속 봐야 믿는 거리(px). 이 안쪽이면 바로 겨눈다.</summary>
     private const double ConfirmDistancePx = 300;
 
@@ -860,6 +1004,7 @@ public class LiveScriptApi
         _lockedMissTicks = 0;
         _lockShiftX = 0;
         _lockShiftY = 0;
+        _aim?.Disengage();
     }
 
     private ScriptMob? NearestOf(IReadOnlyList<ScriptMob> mobs)
@@ -1243,6 +1388,9 @@ public class LiveScriptApi
         ushort[] held;
         MouseButton[] buttons;
 
+        // 조준 스레드도 멈춘다 - 멈춘 뒤에도 마우스가 돌면 안 된다.
+        _aim?.Disengage();
+
         lock (_gate)
         {
             held = [.. _heldKeys];
@@ -1266,6 +1414,13 @@ public class LiveScriptApi
 
         // 묶어 둔 설정 쓰기를 낸다 - 멈춘 뒤 앱을 바로 꺼도 쓴 값이 남게.
         _settings?.Flush();
+    }
+
+    /// <summary>한 바퀴가 끝났다 - 조준 스레드를 내린다. 스크립트가 제 발로 끝나면 토큰이 안 취소돼 스레드가 남는다.</summary>
+    public void Dispose()
+    {
+        _aim?.Dispose();
+        _aim = null;
     }
 
     // ── 흐름 ─────────────────────────────────────────────────────────────
@@ -1456,12 +1611,15 @@ public class LiveScriptApi
     private void BeforeInput()
     {
         ThrowIfStopping();
-
-        if (_host.RequiresForeground && _host.Target() is { Kind: CaptureTargetKind.Window, Handle: var handle } && handle != IntPtr.Zero
-            && !ForegroundWindow.IsInFront(handle))
-            throw Guard($"대상 창이 앞에 없어 입력을 보내지 않았습니다(앞 창: {ForegroundWindow.Describe()}). 게임에서 F5 로 시작하거나, 시작 대기 안에 게임으로 넘어가세요.");
-
+        EnsureForeground();
         Throttle();
+    }
+
+    /// <summary>대상 창이 앞에 없으면 멈춘다(SendInput·Interception 경로) - 엉뚱한 창에 입력이 들어가는 사고.</summary>
+    private void EnsureForeground()
+    {
+        if (!IsTargetInFront())
+            throw Guard($"대상 창이 앞에 없어 입력을 보내지 않았습니다(앞 창: {ForegroundWindow.Describe()}). 게임에서 F5 로 시작하거나, 시작 대기 안에 게임으로 넘어가세요.");
     }
 
     /// <summary>초당 상한을 넘으면 넘긴 만큼 기다린다.</summary>

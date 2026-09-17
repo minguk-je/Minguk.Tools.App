@@ -282,6 +282,9 @@ public abstract partial class RecognizingCaptureViewModelBase
             // 누르기·자동 라벨도 이 결과를 쓴다 - 화면에 보이는 것과 누르는 것이 달라선 안 된다.
             var found = IsTrackingOn ? _tracker.Update(raw) : raw;
 
+            // 도는 사이에 몹 찾기를 껐다 - 결과를 버린다. 안 그러면 끄면서 비운 사각형이 이 결과로 다시 그려져 남았다(사용자, 2026-09-18).
+            if (!IsMobDetectionOn) return;
+
             _latestDetections = found;
             Interlocked.Exchange(ref _latestDetectionTicks, Environment.TickCount64);
 
@@ -295,6 +298,9 @@ public abstract partial class RecognizingCaptureViewModelBase
             DispatcherService?.BeginInvoke(() => Guard(() =>
             {
                 Detections.Clear();
+
+                // 이 줄이 UI 스레드에 닿기 전에 껐을 수도 있다.
+                if (!IsMobDetectionOn) return;
 
                 for (var i = 0; i < found.Count; i++)
                 {
@@ -344,6 +350,8 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (!IsMobDetectionOn)
         {
+            // 화면 사각형과 함께 마지막 결과도 버린다(허브 것은 PublishPerceptionState 가 버린다).
+            _latestDetections = null;
             Detections.Clear();
             DetectionStatus = null;
             ClickDetectionCommand.RaiseCanExecuteChanged();

@@ -200,6 +200,7 @@ public sealed class LiveScriptSession : IDisposable
     private void Cleanup(LiveScriptApi? api)
     {
         api?.ReleaseAll();
+        api?.Dispose();
         _onUi(_emergency.Disarm);
         Hub.WantsFrames = false;
         Debug.Reset();

@@ -67,7 +67,7 @@ public static class ScriptHelp
         ["Walk"] = "걷기(\"W\", 500);      // 0.5초 앞으로\n걷기(\"W+A\", 300);    // 대각선",
         ["Click"] = "클릭();\n클릭(\"Right\");\n클릭(100);            // 0.1초 누르고 떼기",
         ["ClickAt"] = "이동클릭(960, 540, \"Left\");",
-        ["Aim"] = "var 몹 = 목표();\nif (몹 is not null && 조준(몹.머리x, 몹.머리y))\n    클릭();",
+        ["Aim"] = "var 몹 = 목표();\nif (몹 is not null && 조준(몹))   // 스레드가 계속 따라간다\n    클릭();",
         ["DragBy"] = "상대끌기(200, 0, \"Right\");   // 카메라 오른쪽으로",
         ["Mobs"] = "foreach (var 몹 in 몹들())\n    출력(몹);",
         ["NearestMob"] = "var 몹 = 가장가까운몹();\nif (몹 is not null) 이동(몹.중심x, 몹.중심y);",
@@ -106,7 +106,7 @@ public static class ScriptHelp
                 "솔루션에 공유 프로젝트를 만들고(솔루션 탭 [새 공유 프로젝트]), 쓸 프로젝트의 솔루션 탐색기에서 추가 > 공유 프로젝트 참조. 그 뒤로는 같은 프로젝트의 함수처럼 부른다.", ""),
             new(Basics, "계속 반복하기", "",
                 "중지되었나() 를 반복문 조건에 둔다 - 중지나 비상 정지를 누르면 빠져나온다. 반복 안에 쉬기() 를 조금 두면 CPU 를 덜 쓴다.",
-                "while (!중지되었나())\n{\n    var 몹 = 목표();\n    if (몹 is null) { 쉬기(50); continue; }\n\n    if (조준(몹.머리x, 몹.머리y)) 클릭();\n}"),
+                "while (!중지되었나())\n{\n    var 몹 = 목표();\n    if (몹 is null) { 쉬기(50); continue; }\n\n    if (조준(몹)) 클릭();\n}"),
             new(Basics, "실행 · 멈추기", "",
                 "F5 실행/계속 · F6 중지 · F10 한 줄씩 · F9 중단점 · Ctrl+Shift+B 빌드(bin 에 .mtsx - 플레이 화면에서 돌린다).\n" +
                 "F5·F6·F10 은 게임 창이 앞에 있어도 먹는다. 도는 동안 Pause 는 비상 정지 - 멈추고 누르고 있던 키·버튼을 모두 뗀다.", ""),
@@ -130,7 +130,7 @@ public static class ScriptHelp
         [
             new(MobProperties, "몹.이름", "Name", "몹 이름(라벨링에서 붙인 몹 이름).", "if (몹.이름 == \"허수아비\") 클릭();"),
             new(MobProperties, "몹.중심x · 몹.중심y", "CenterX · CenterY", "사각형 가운데 - 화면 픽셀이라 이동()·이동클릭() 에 그대로 넣는다.", "이동(몹.중심x, 몹.중심y);"),
-            new(MobProperties, "몹.머리x · 몹.머리y", "HeadX · HeadY", "머리 자리(위에서 18% 내려온 곳). 조준() 에 넣는다.", "조준(몹.머리x, 몹.머리y);"),
+            new(MobProperties, "몹.머리x · 몹.머리y", "HeadX · HeadY", "머리 자리(위에서 18% 내려온 곳). 조준(몹) 이 겨누는 곳이다.", "출력(몹.머리y);"),
             new(MobProperties, "몹.너비 · 몹.높이", "Width · Height", "사각형 크기(픽셀). 크면 가깝다.", "if (몹.높이 > 200) 걷기(\"S\", 300);"),
             new(MobProperties, "몹.점수", "Score", "찾은 확신(0~1).", "if (몹.점수 < 0.5) continue;"),
             new(MobProperties, "몹.이름표", "Caption", "머리 위 글자 - 부를 때 지금 화면에서 사각형 위를 잘라 읽는다. 이름표가 없는 게임이거나 못 읽으면 빈 글.", "if (몹.이름표.Contains(\"보스\")) 소리(\"경고.wav\");")
