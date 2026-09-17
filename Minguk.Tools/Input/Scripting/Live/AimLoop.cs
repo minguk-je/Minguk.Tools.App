@@ -19,7 +19,11 @@ namespace Minguk.Tools.Input.Scripting.Live;
 ///
 /// <b>모형</b> - 목표의 자리는 <b>화면 가운데(조준점) 기준 거리(px)</b>로 든다. 우리가 보낸 마우스 카운트는 화면을 돌려 그 거리를 <c>카운트 ÷ 배율</c> 만큼 줄인다.
 /// <c>지금 거리 = 본 거리 + 속도 × 지난 시간 − (그 뒤 보낸 카운트) ÷ 배율</c>. 보낸 카운트는 시각과 함께 적어 둔다(<see cref="_sent"/>) - 프레임은 보낸 입력이
-/// 화면에 오르기까지의 지연(<see cref="InputToFrameMs"/>) 앞의 것까지만 반영하므로, 프레임 시각 − 지연 뒤에 보낸 것만 뺀다.
+/// 화면에 오르기까지의 지연(<see cref="_latencyMs"/>) 앞의 것까지만 반영하므로, 프레임 시각 − 지연 뒤에 보낸 것만 뺀다.
+/// <b>지연은 넉넉히 잡고, 흔들리는 동안의 화면은 덜 믿는다</b>(사용자, 2026-09-18 "너무 휙휙" → "조금 더 스무스하게"). 지연을 짧게 잡으면(40ms) 아직 안 보인 입력을
+/// 반영된 줄 알고 더 보내 지나치고, 길게 잡으면 덜 보내 느릴 뿐이다 - 틀려도 안전한 쪽(<see cref="_latencyMs"/> = 110)으로 못 박는다. 후보를 견줘 스스로 고르게
+/// 했더니(오차가 8·9·13 처럼 비슷해) 40↔70↔100 을 오가며 예측이 튀어 큰 조준의 79% 가 지나쳤다(실측). 대신 <b>보내는 양이 막 바뀌는 중</b>(휙 돌기 시작·끝)에 온 화면은
+/// 지연이 40 인지 200 인지에 따라 답이 크게 갈리므로(<see cref="Trust"/>) 그만큼 덜 받아들이고 제 모형(보낸 양 ÷ 배율)을 믿는다. 꾸준히 따라가는 중에는 어느 지연이든 같아 그대로 믿는다.
 ///
 /// <b>움직임</b> - 남은 거리를 시간 상수 <see cref="TauMs"/> 로 줄이는 1차 접근(박자마다 남은 것의 일정 비율). 멀면 빠르고 가까울수록 느려져 스스로 지나치지 않는다.
 /// 한 박자 상한(<see cref="MaxStepCounts"/>)과 <b>빨라질 때만</b> 가속 상한(<see cref="MaxAccelCounts"/>) - 느려지는 쪽을 막으면 새 화면에서 목표가 가까이
@@ -29,7 +33,7 @@ namespace Minguk.Tools.Input.Scripting.Live;
 /// 받아들인다(가로 <see cref="GainX"/>·세로 <see cref="GainY"/> - 검출 사각형은 가만히 있는 몹도 세로 17px 흔들린다, 실측). 속도는 두 프레임 사이의 자리 변화에서
 /// 우리가 돌린 만큼을 되돌려 재고 지수 평균한다. 못 찾으면 <see cref="LockGraceMs"/> 동안은 예측으로 이어 가고, 넘으면 놓는다(<see cref="IsEngaged"/> false).
 ///
-/// <b>배율 배우기</b>는 예전 규칙 그대로 <see cref="LiveScriptApi"/> 에 맡긴다 - 다만 프레임 직전에도 움직이고 있었으면(지연 안의 입력이 섞인다) 그 표본은 안 준다.
+/// <b>배율 배우기</b>는 예전 규칙 그대로 <see cref="LiveScriptApi"/> 에 맡긴다 - 표본은 멈춰 서 있던 프레임(닻)에서 지금까지 길게 재어, 지연을 모르는 부분이 총량의 15% 아래일 때 닻마다 한 번 준다.
 ///
 /// 스레드는 처음 붙일 때 만들고, 붙인 것이 없으면 잔다. 일시정지·중지·앞 창 바뀜이면 움직이지 않는다. 입력 어댑터는 스크립트 스레드와 같이 쓴다(SendInput·드라이버 모두 스레드에 안전).
 /// </remarks>
@@ -52,19 +56,36 @@ internal sealed class AimLoop : IDisposable
     private const double TickMs = 8;
 
     /// <summary>남은 거리를 줄이는 시간 상수(ms). 한 박자에 남은 것의 약 12% - 100ms 뒤 19% 남는다.</summary>
-    private const double TauMs = 60;
+    private const double TauMs = 95;
 
     /// <summary>한 박자에 보내는 상한(카운트). 옛 조준의 상한(130ms 에 1,200)과 비슷한 속도다.</summary>
-    private const double MaxStepCounts = 80;
+    private const double MaxStepCounts = 45;
 
-    /// <summary>빨라질 때 박자 사이 걸음 변화 상한(카운트). 정지에서 상한 속도까지 4박자(32ms).</summary>
-    private const double MaxAccelCounts = 20;
+    /// <summary>빨라질 때 박자 사이 걸음 변화 상한(카운트). 정지에서 상한 속도까지 6박자(48ms) - 휙 튀어 나가지 않게.</summary>
+    private const double MaxAccelCounts = 8;
+
+    /// <summary>멀리서 겨눌 때 일부러 남기는 비율. 20px 부터 늘어 80px 넘으면 이만큼 - 사람도 크게 꺾을 때는 살짝 못 미치게 꺾고 끝에서 다듬는다.</summary>
+    private const double ShortfallFraction = 0.1;
 
     /// <summary>이보다 가까우면 안 움직인다(px). 검출 떨림에 마우스가 떨지 않게.</summary>
-    private const double DeadbandPx = 0.75;
+    private const double DeadbandPx = 1.5;
 
-    /// <summary>보낸 입력이 캡처된 화면에 보이기까지(ms). 프레임 시각에서 이만큼 앞선 뒤의 입력은 그 프레임에 아직 없다.</summary>
-    private const int InputToFrameMs = 40;
+    /// <summary>
+    /// 보낸 입력이 캡처된 화면에 보이기까지(ms). 프레임 시각에서 이만큼 앞선 뒤의 입력은 그 프레임에 아직 없는 것으로 본다.
+    /// 실측은 80~100ms 쯤(붙인 뒤 움직임이 화면에 처음 보이기까지 중간값 164ms − 프레임 주기 절반 − 가속) - 틀려도 안전한 쪽으로 조금 길게.
+    /// </summary>
+    private readonly int _latencyMs = 110;
+
+    /// <summary>지연이 이 사이 어디인지 모른다고 본다(ms). 이 띠 안에 보낸 양이 프레임 사이에 바뀐 만큼이 그 화면의 불확실함이다.</summary>
+    private const int LatencyMinMs = 40;
+
+    private const int LatencyMaxMs = 200;
+
+    /// <summary>불확실함(px)이 이만큼이면 화면을 절반만 믿는다.</summary>
+    private const double UncertaintyHalfPx = 12;
+
+    /// <summary>예측과의 차이가 이보다 작으면(px) 검출 떨림으로 보고 절반만 받아들인다 - 붙은 뒤 좌우로 떨지 않게.</summary>
+    private const double JitterPx = 8;
 
     /// <summary>못 본 채 예측으로 이어 가는 시간(ms). 넘으면 놓는다 - 잠깐 가려진 것과 죽은 것을 구별할 길이 없다.</summary>
     private const int LockGraceMs = 400;
@@ -76,14 +97,14 @@ internal sealed class AimLoop : IDisposable
     private const double MaxVelocityPxPerMs = 1.5;
 
     /// <summary>새 사각형과 예측의 차이를 받아들이는 비율. 몹은 옆으로 달리므로 가로는 크게, 세로·크기는 흔들림이 커 작게.</summary>
-    private const double GainX = 0.7;
+    private const double GainX = 0.55;
 
-    private const double GainY = 0.45;
+    private const double GainY = 0.4;
 
     private const double GainSize = 0.35;
 
     /// <summary>속도 지수 평균의 새 값 비중.</summary>
-    private const double VelocityAlphaX = 0.5;
+    private const double VelocityAlphaX = 0.35;
 
     private const double VelocityAlphaY = 0.25;
 
@@ -157,10 +178,17 @@ internal sealed class AimLoop : IDisposable
         /// <summary>처음 못 본 시각. 0 이면 보고 있다.</summary>
         public long FirstMissTicks;
 
+        /// <summary>지난 프레임 때 불확실한 띠(지연 40~200ms) 안에 보낸 양(카운트).</summary>
+        public double BandX;
+        public double BandY;
+
         /// <summary>배율 배우기의 닻 - 마지막으로 멈춰 서 있던 프레임의 시각과 날것 자리. 붙인 순간에 처음 놓는다.</summary>
         public long AnchorTicks;
         public double AnchorX;
         public double AnchorY;
+
+        /// <summary>이 닻으로 이미 표본을 줬는가 - 닻 하나에 표본 하나.</summary>
+        public bool AnchorUsed;
     }
 
     /// <summary>붙잡고 따라가는 중인가. 놓쳤거나(<see cref="LockGraceMs"/>) 뗐으면 false.</summary>
@@ -287,7 +315,7 @@ internal sealed class AimLoop : IDisposable
             if (Math.Abs(ex) > t.W / 2 * OnTargetFraction || Math.Abs(bodyY) > t.H / 2 * OnTargetFraction) return false;
 
             // 마지막 화면 뒤로 몸 반쪽 넘게 움직였으면 아직 화면으로 확인된 자리가 아니다 - 배율이 틀리면 예측은 붙었다는데 실제로는 멀어, 허공에 쏜다.
-            var (sx, sy) = SentBetween(t.SeenTicks - InputToFrameMs, long.MaxValue);
+            var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, long.MaxValue);
             var scale = Math.Max(0.01, _host.Scale());
 
             return Math.Abs(sx) / scale <= t.W / 2 && Math.Abs(sy) / scale <= t.H / 2;
@@ -428,43 +456,58 @@ internal sealed class AimLoop : IDisposable
             }
 
             var gap = frame - t.SeenTicks;
-            var (sentX, sentY) = SentBetween(t.SeenTicks - InputToFrameMs, frame - InputToFrameMs);
+            var (sentX, sentY) = SentBetween(t.SeenTicks - _latencyMs, frame - _latencyMs);
 
-            // 속도 - 두 프레임 사이 자리 변화에서 우리가 돌린 만큼을 되돌린다(보낸 카운트는 거리를 줄였으니 더한다).
+            // 이 화면을 얼마나 믿을까 - 지연을 모르는 띠(40~200ms 앞) 안에 보낸 양이 지난 프레임 때와 달라진 만큼이 불확실함이다.
+            // 휙 돌기 시작·끝에서 크고(지연에 따라 답이 갈린다), 가만히 있거나 꾸준히 따라가는 중에는 0 에 가깝다.
+            var (bandX, bandY) = SentBetween(frame - LatencyMaxMs, frame - LatencyMinMs);
+            var trustX = Trust(Math.Abs(bandX - t.BandX) / scale);
+            var trustY = Trust(Math.Abs(bandY - t.BandY) / scale);
+
+            t.BandX = bandX;
+            t.BandY = bandY;
+
+            // 속도 - 두 프레임 사이 자리 변화에서 우리가 돌린 만큼을 되돌린다(보낸 카운트는 거리를 줄였으니 더한다). 못 믿을 화면으로는 덜 고친다.
             if (t.HasObservation && gap > 0 && gap <= MaxVelocityGapMs)
             {
                 var rawVx = (obsX - t.ObsX + (sentX / scale)) / gap;
                 var rawVy = (obsY - t.ObsY + (sentY / scale)) / gap;
 
-                t.Vx = Math.Clamp(t.Vx + ((rawVx - t.Vx) * VelocityAlphaX), -MaxVelocityPxPerMs, MaxVelocityPxPerMs);
-                t.Vy = Math.Clamp(t.Vy + ((rawVy - t.Vy) * VelocityAlphaY), -MaxVelocityPxPerMs, MaxVelocityPxPerMs);
+                t.Vx = Math.Clamp(t.Vx + ((rawVx - t.Vx) * VelocityAlphaX * trustX), -MaxVelocityPxPerMs, MaxVelocityPxPerMs);
+                t.Vy = Math.Clamp(t.Vy + ((rawVy - t.Vy) * VelocityAlphaY * trustY), -MaxVelocityPxPerMs, MaxVelocityPxPerMs);
             }
             else
             {
                 t.Vx = t.Vy = 0;
             }
 
-            // 배율 표본 - <b>멈춰 선 프레임 사이</b>로 잰다(닻 → 지금 보낸 것 전부 ÷ 줄어든 거리). 움직이는 중의 프레임은 지연 안의 입력이
-            // 반영됐는지 몰라 못 믿는데, 붙을 때까지는 늘 움직이고 있어 프레임마다 재면 표본이 거의 안 나온다. 닻은 붙인 순간과 멈춰 선 프레임마다 다시 놓는다.
+            // 배율 표본 - <b>닻(멈춰 서 있던 프레임) → 지금</b> 보낸 총량 ÷ 줄어든 거리. 프레임마다 재면 지연 안의 입력이 반영됐는지 몰라 못 믿는데, 닻에서부터 길게 재면
+            // 그 모르는 부분(띠 안에 보낸 양)이 총량에 견줘 작아진다 - 15% 아래일 때 한 번 준다. 완전히 멈춰 서기를 기다리면 배율이 많이 틀린 동안에는(끝없이 조금씩
+            // 고쳐 가느라) 표본이 영영 안 나온다. 몹이 달리는 중(속도 120px/s 넘게)에는 줄어든 거리에 몹의 움직임이 섞여 안 준다. 닻은 다시 멈춰 서면 새로 놓는다.
             {
-                var (lateX, lateY) = SentBetween(frame - (2 * InputToFrameMs), frame);
-                var (totalX, totalY) = SentBetween(t.AnchorTicks - InputToFrameMs, frame - InputToFrameMs);
+                var (totalX, totalY) = SentBetween(t.AnchorTicks - _latencyMs, frame - _latencyMs);
                 var horizontal = Math.Abs(totalX) >= Math.Abs(totalY);
                 var total = horizontal ? totalX : totalY;
-                var late = horizontal ? lateX : lateY;
+                var band = horizontal ? bandX : bandY;
+                var still = Math.Abs(t.Vx) <= 0.12 && Math.Abs(t.Vy) <= 0.12;
 
-                if (Math.Abs(late) <= (Math.Abs(total) * 0.1) + 8)
+                if (!t.AnchorUsed && still && Math.Abs(total) >= 60 && Math.Abs(band) <= Math.Abs(total) * 0.15)
                 {
-                    if (Math.Abs(total) >= 15) _host.Learn(horizontal ? t.AnchorX : t.AnchorY, horizontal ? obsX : obsY, total);
+                    _host.Learn(horizontal ? t.AnchorX : t.AnchorY, horizontal ? obsX : obsY, total);
+                    t.AnchorUsed = true;
+                }
 
+                if (Math.Abs(bandX) + Math.Abs(bandY) <= 6)
+                {
                     t.AnchorTicks = frame;
                     t.AnchorX = obsX;
                     t.AnchorY = obsY;
+                    t.AnchorUsed = false;
                 }
             }
 
-            t.OffX = px + ((obsX - px) * GainX);
-            t.OffY = py + ((obsY - py) * GainY);
+            t.OffX = px + ((obsX - px) * GainX * trustX * Calm(obsX - px));
+            t.OffY = py + ((obsY - py) * GainY * trustY * Calm(obsY - py));
             t.W += (w - t.W) * GainSize;
             t.H += (h - t.H) * GainSize;
             t.SeenTicks = frame;
@@ -476,9 +519,15 @@ internal sealed class AimLoop : IDisposable
             t.Score = snapshot.Found[bestIndex].Score;
             t.Box = snapshot.Found[bestIndex].Box;
 
-            Logger.Debug($"추적: 거리({t.OffX:0}, {t.OffY:0}) 본 것({obsX:0}, {obsY:0}) 속도({t.Vx * 1000:0}, {t.Vy * 1000:0})px/s 보냄({sentX}, {sentY}) 크기 {t.W:0}x{t.H:0}");
+            Logger.Debug($"추적: 거리({t.OffX:0}, {t.OffY:0}) 본 것({obsX:0}, {obsY:0}) 속도({t.Vx * 1000:0}, {t.Vy * 1000:0})px/s 보냄({sentX}, {sentY}) 크기 {t.W:0}x{t.H:0} 믿음 {trustX:0.00}");
         }
     }
+
+    /// <summary>불확실함(px) → 이 화면을 받아들이는 비율(0~1). <see cref="UncertaintyHalfPx"/> 에서 절반.</summary>
+    private static double Trust(double uncertaintyPx) => 1 / (1 + (uncertaintyPx / UncertaintyHalfPx));
+
+    /// <summary>예측과의 차이가 떨림 크기면 절반만 - 검출 사각형은 가만히 있는 몹도 가로 11px·세로 17px 흔들린다(실측).</summary>
+    private static double Calm(double innovationPx) => Math.Abs(innovationPx) < JitterPx ? 0.5 : 1;
 
     /// <summary>한 박자 - 지금 예측한 남은 거리의 일정 비율을 보낸다.</summary>
     private void Step(long now)
@@ -491,12 +540,18 @@ internal sealed class AimLoop : IDisposable
 
             var (ex, ey) = Predict(t, now);
             var scale = Math.Max(0.01, _host.Scale());
-            var dx = Math.Abs(ex) < DeadbandPx ? 0 : ex * scale;
-            var dy = Math.Abs(ey) < DeadbandPx ? 0 : ey * scale;
+            // 멀리서는 일부러 조금 못 미치게 겨눈다(최대 10%) - 배율이 과하면 모형만 믿고 간 만큼 지나치는데, 못 미친 것은 느려진 뒤의 화면으로 마저 당기면 된다.
+            var distance = Math.Sqrt(Sq(ex) + Sq(ey));
+            var reach = 1 - (ShortfallFraction * Math.Clamp((distance - 20) / 60, 0, 1));
+            var dx = Math.Abs(ex) < DeadbandPx ? 0 : ex * scale * reach;
+            var dy = Math.Abs(ey) < DeadbandPx ? 0 : ey * scale * reach;
 
             var alpha = 1 - Math.Exp(-TickMs / TauMs);
-            var wantX = dx * alpha;
-            var wantY = dy * alpha;
+
+            // 남은 거리의 일정 비율 + 몹이 가는 만큼(속도 앞먹임) - 비율만으로는 달리는 몹을 늘 속도×시간 상수만큼 뒤에서 쫓는다.
+            var follow = now - t.SeenTicks <= StaleVelocityMs ? TickMs * scale : 0;
+            var wantX = (dx * alpha) + (t.Vx * follow);
+            var wantY = (dy * alpha) + (t.Vy * follow);
 
             var magnitude = Math.Sqrt(Sq(wantX) + Sq(wantY));
 
@@ -541,7 +596,7 @@ internal sealed class AimLoop : IDisposable
     {
         var age = Math.Max(0, now - t.SeenTicks);
         var coast = Math.Min(age, StaleVelocityMs);
-        var (sx, sy) = SentBetween(t.SeenTicks - InputToFrameMs, long.MaxValue);
+        var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, long.MaxValue);
         var scale = Math.Max(0.01, _host.Scale());
 
         return (t.OffX + (t.Vx * coast) - (sx / scale), t.OffY + (t.Vy * coast) - (sy / scale));
@@ -551,7 +606,7 @@ internal sealed class AimLoop : IDisposable
     private (double X, double Y) PredictAt(Track t, long frame)
     {
         var gap = Math.Clamp(frame - t.SeenTicks, 0, StaleVelocityMs);
-        var (sx, sy) = SentBetween(t.SeenTicks - InputToFrameMs, frame - InputToFrameMs);
+        var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, frame - _latencyMs);
         var scale = Math.Max(0.01, _host.Scale());
 
         return (t.OffX + (t.Vx * gap) - (sx / scale), t.OffY + (t.Vy * gap) - (sy / scale));
