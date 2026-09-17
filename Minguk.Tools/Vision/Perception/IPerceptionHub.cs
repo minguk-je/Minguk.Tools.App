@@ -24,6 +24,29 @@ public sealed record DetectionSnapshot(
     /// 조준이 "내가 겨눈 뒤의 화면인가" 를 가릴 때 이것을 본다.
     /// </remarks>
     public long FrameTicks { get; init; }
+
+    /// <summary>
+    /// 이 프레임에서 검출기가 찾은 그대로 - 화면용 추적(<see cref="DetectionTracker"/>)을 안 거친 것. 안 실었으면 null(<see cref="Found"/> 가 곧 날것).
+    /// </summary>
+    /// <remarks>
+    /// <b>조준 스레드는 이것을 본다</b>(사용자, 2026-09-18 "움직임이 너무 허술해"). <see cref="Found"/> 는 추적기가 직전 자리와 6:4 로 섞고, 못 이으면 옛 사각형을 두 번 더
+    /// 그대로 내준다 - 화면이 가만히 있을 때는 떨림을 줄여 주지만, <b>조준이 화면을 돌리는 중</b>에는 사각형이 옛 화면 좌표에 끌려 늦는다. 휙 돌면(제 크기의 1.5배 넘게)
+    /// 아예 못 이어 0.3초 동안 옛 자리를 주고, 새 자리는 두 번 보일 때까지 안 나온다. 실측 로그: 344 카운트를 보냈는데 본 자리가 -60 → -60 → -60 → +48 → +75,
+    /// 조준은 "몹이 그만큼 달아났다" 로 읽고 더 밀어 -159px 에서 +75px 로 지나친 뒤 1초에 걸쳐 돌아왔다. 조준 스레드는 제가 돌린 만큼을 알고 스스로 잇고 섞는다.
+    /// </remarks>
+    public IReadOnlyList<Detection>? Raw { get; init; }
+
+    /// <summary>조준이 볼 것 - 날것이 있으면 날것.</summary>
+    public IReadOnlyList<Detection> ForAiming => Raw ?? Found;
+
+    /// <summary>
+    /// 바로 앞 검출(한 장만 - 그 앞은 끊어 둔다). 없으면 null.
+    /// </summary>
+    /// <remarks>
+    /// 조준 스레드가 몹을 <b>붙이는 순간에 그 몹의 속도</b>를 알려고 본다(실측 2026-09-18): 사격장 봇은 늘 옆으로 걷는데(150px/s), 붙인 뒤에야 속도를 재기 시작하면 휙 꺾는 동안은
+    /// 못 재서(우리가 돌리는 중의 화면은 못 믿는다) 0.3초쯤 선 봇인 줄 알고 겨눈다 - 꺾기가 늘 봇 뒤 20~35px 에 떨어졌다. 붙이기 전의 두 장은 우리가 가만히 있을 때라 깨끗하다.
+    /// </remarks>
+    public DetectionSnapshot? Previous { get; init; }
 }
 
 /// <summary>
@@ -70,7 +93,8 @@ public interface IPerceptionHub
     void PublishState(bool capturing, bool detecting, CaptureTarget? target);
 
     /// <param name="frameTicks">검출이 본 프레임이 들어온 시각(TickCount64). 모르면 0.</param>
-    void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0);
+    /// <param name="raw">추적을 안 거친 이 프레임의 검출(<see cref="DetectionSnapshot.Raw"/>). <paramref name="found"/> 가 이미 날것이면 null.</param>
+    void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0, IReadOnlyList<Detection>? raw = null);
 
     /// <summary>프레임 한 벌을 복사해 둔다. Bgra32, 줄 간격 = 너비*4.</summary>
     void PublishFrame(byte[] bgra, int width, int height);

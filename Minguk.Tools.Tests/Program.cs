@@ -158,6 +158,9 @@ internal static partial class Program
         // 가져가지 않는다 - 시각 쪽만 고쳤을 때 이것만 돌리면 된다.
         if (args.Contains("--vision")) return RunVisionOnly();
 
+        // 조준 스레드만 - 닫힌 고리 가짜 허브로 붙기·지나침·배율 배우기(약 30초). 입력은 가짜 어댑터라 안 나간다.
+        if (args.Contains("--aim")) return RunAimOnly();
+
         // 같은 검증을 경로만 바꿔 돌린다. 경로마다 실제로 입력이 나가는지 따로 봐야 한다.
         var backend = ParseBackend(args);
 
@@ -261,6 +264,29 @@ internal static partial class Program
     }
 
     /// <summary>글자 읽기 검사만 돌린다. 커서·키보드를 안 건드린다.</summary>
+    private static int RunAimOnly()
+    {
+        Console.WriteLine("조준 스레드 검증");
+        Console.WriteLine();
+
+        try
+        {
+            if (Minguk.Tools.Capture.CaptureTarget.EnumerateMonitors().FirstOrDefault() is { } monitor) TestAimLoop(monitor);
+            else Check("조준 스레드 (모니터 없음, 건너뜀)", true, "");
+        }
+        catch (Exception ex)
+        {
+            Fail("예외", ex.ToString());
+        }
+
+        foreach (var line in Results) Console.WriteLine(line);
+
+        Console.WriteLine();
+        Console.WriteLine(_failures == 0 ? "== 전체 통과 ==" : $"== 실패 {_failures}건 ==");
+
+        return _failures == 0 ? 0 : 1;
+    }
+
     private static int RunOcrOnly()
     {
         Console.WriteLine("글자 읽기 검증");

@@ -203,133 +203,7 @@ internal static partial class Program
                   errors.Count > 0 ? errors[0].ToString() : $"사각형 머리 흔들림 {rawSwing}px · 목표 머리 {string.Join(" ", heads)}");
         }
 
-        // ── 조준 스레드: 몹을 주면 멈추지 않고 따라가 붙고, 움직이는 몹도 쫓고, 목표풀기면 선다(사용자, 2026-09-18 "돌고 멈췄다가 머리로" 가 여전히 부자연스러워 스레드로) ──
-        {
-            const double scale = 3.5;
-
-            // 가만히 있는 몹 300px 옆 - 붙을 때까지 마우스가 쉬지 않고 움직여야 한다.
-            {
-                var adapter = new RecordingAdapter();
-                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 300 };
-                var printed = new List<string>();
-                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = printed.Add, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale };
-
-                using (var api = new LiveScriptApi(host, CancellationToken.None))
-                {
-                    var errors = new RoslynScriptEngine().RunLiveAsync("for (var i = 0; i < 12; i++) { var m = 목표(); if (m is null) { 출력(\"없음\"); break; } 출력(조준(m)); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
-
-                    List<(long Ticks, int Dx, int Dy)> moves;
-                    lock (adapter.Moves) moves = adapter.Moves.ToList();
-                    var final = Math.Abs(hub.TrueOffset(Environment.TickCount64));
-
-                    // 걸음마다의 참 거리(그 걸음까지 보낸 것 반영). 다가가는 동안(30px 밖)은 쉬지 않아야 하고, 반대편으로 지나치면 안 된다.
-                    var trail = moves.Select(m => (m.Ticks, Offset: hub.TrueOffset(m.Ticks))).ToList();
-                    var approaching = trail.TakeWhile(p => p.Offset > 30).ToList();
-                    var gaps = approaching.Zip(approaching.Skip(1), (a, b) => b.Ticks - a.Ticks).ToList();
-                    var longestGap = gaps.Count > 0 ? gaps.Max() : 0;
-                    var overshoot = trail.Count > 0 ? Math.Max(0, -trail.Min(p => p.Offset)) : 0;
-                    var reach = trail.FirstOrDefault(p => p.Offset <= 20).Ticks is var at and > 0 ? at - trail[0].Ticks : -1;
-                    var biggest = moves.Count > 0 ? moves.Max(m => Math.Abs(m.Dx)) : 0;
-                    var hits = printed.Count(p => p == "True");
-
-                    Check("조준(몹): 다가가는 동안 8ms 박자로 쉬지 않고(가장 긴 틈 40ms 아래, 한 걸음 60 카운트 아래) 지나치지 않고(15px 아래) 0.6초 안에 20px, 끝에는 15px 안에 붙고 맞았다고 한다",
-                          errors.Count == 0 && final <= 15 && moves.Count >= 15 && longestGap <= 40 && biggest <= 60 && overshoot <= 15 && reach is > 0 and <= 600 && hits >= 3,
-                          errors.Count > 0 ? errors[0].ToString() : $"걸음 {moves.Count} · 가장 긴 틈 {longestGap}ms · 가장 큰 걸음 {biggest} · 20px 까지 {reach}ms · 지나침 {overshoot:0}px · 남은 {final:0}px · 맞음 {hits}/{printed.Count}");
-                }
-            }
-
-            // 옆으로 달리는 몹(200px/s) - 속도를 배워 따라잡고 붙어 있는다.
-            {
-                var adapter = new RecordingAdapter();
-                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 150, VelocityPxPerMs = 0.2 };
-                var printed = new List<string>();
-                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = printed.Add, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale };
-
-                using (var api = new LiveScriptApi(host, CancellationToken.None))
-                {
-                    var samples = new List<double>();
-                    var errors = new RoslynScriptEngine().RunLiveAsync("for (var i = 0; i < 20; i++) { var m = 목표(); if (m is null) break; 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
-
-                    // 마지막 0.6초 동안의 참 거리 - 앞은 따라잡는 중이라 뺀다.
-                    var now = Environment.TickCount64;
-                    List<(long Ticks, int Dx, int Dy)> recent;
-                    lock (adapter.Moves) recent = adapter.Moves.Where(m => now - m.Ticks <= 600).ToList();
-                    foreach (var m in recent) samples.Add(Math.Abs(hub.TrueOffset(m.Ticks)));
-
-                    var worst = samples.Count > 0 ? samples.Max() : double.NaN;
-
-                    Check("조준(몹): 200px/s 로 달리는 몹을 따라잡아 마지막 0.6초 동안 몸 너비(30px) 안에 붙어 있는다",
-                          errors.Count == 0 && samples.Count > 0 && worst <= 30,
-                          errors.Count > 0 ? errors[0].ToString() : $"마지막 0.6초 표본 {samples.Count} · 가장 먼 {worst:0}px · 평균 {samples.Average():0}px");
-                }
-            }
-
-            // 목표풀기 뒤에는 서고, 목표() 는 스레드가 예측한 자리(같은 몹)를 준다.
-            {
-                var adapter = new RecordingAdapter();
-                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 200 };
-                var printed = new List<string>();
-                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = printed.Add, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale };
-
-                using (var api = new LiveScriptApi(host, CancellationToken.None))
-                {
-                    var errors = new RoslynScriptEngine().RunLiveAsync("var a = 목표(); 조준(a); var b = 목표(); 출력(b.이름); 목표풀기(); 쉬기(150); 출력(\"멈춤\"); 쉬기(150);", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
-
-                    long last;
-                    lock (adapter.Moves) last = adapter.Moves.Count > 0 ? adapter.Moves[^1].Ticks : 0;
-                    var stopped = Environment.TickCount64 - last >= 120;
-
-                    Check("목표풀기 뒤에는 조준 스레드가 서고, 목표() 는 붙잡은 몹을 준다",
-                          errors.Count == 0 && printed.Count == 2 && printed[0] == "일반 봇" && adapter.Moves.Count > 0 && stopped,
-                          errors.Count > 0 ? errors[0].ToString() : $"출력 {string.Join("/", printed)} · 걸음 {adapter.Moves.Count} · 마지막 걸음 뒤 {Environment.TickCount64 - last}ms");
-                }
-            }
-            // 배율이 15% 과해도(자동 배우기가 위로 튄 실측 상황) 크게 지나치지 않는다 - 휙 도는 동안의 화면은 덜 믿고, 느려진 뒤의 화면으로 마저 맞춘다.
-            {
-                var adapter = new RecordingAdapter();
-                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 300 };
-                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = _ => { }, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale * 1.15 };
-
-                using (var api = new LiveScriptApi(host, CancellationToken.None))
-                {
-                    var errors = new RoslynScriptEngine().RunLiveAsync("for (var i = 0; i < 12; i++) { var m = 목표(); if (m is null) break; 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
-
-                    List<(long Ticks, int Dx, int Dy)> moves;
-                    lock (adapter.Moves) moves = adapter.Moves.ToList();
-
-                    var trail = moves.Select(m => hub.TrueOffset(m.Ticks)).ToList();
-                    var overshoot = trail.Count > 0 ? Math.Max(0, -trail.Min()) : 0;
-                    var final = Math.Abs(hub.TrueOffset(Environment.TickCount64));
-
-                    // 300px 의 15% 는 45px - 모형만 믿고 끝까지 가면 그만큼 지나친다.
-                    Check("조준(몹): 배율이 15% 과해도 300px 조준에서 30px 넘게 지나치지 않고 15px 안에 붙는다",
-                          errors.Count == 0 && overshoot <= 30 && final <= 15,
-                          errors.Count > 0 ? errors[0].ToString() : $"지나침 {overshoot:0}px · 남은 {final:0}px");
-                }
-            }
-
-            // 배율이 틀려도 스레드가 붙고, 멈춰 선 뒤 보낸 총량 ÷ 줄어든 거리로 배율을 배운다(닻 방식 - 움직이는 중의 프레임으로는 안 잰다).
-            {
-                var adapter = new RecordingAdapter();
-                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 150, Respawns = true };
-                var learned = new List<double>();
-                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = _ => { }, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = 2.0, AimScaleLearned = learned.Add };
-
-                using (var api = new LiveScriptApi(host, CancellationToken.None))
-                {
-                    // 붙어 일곱 번 쏜 뒤(멈춰 선 프레임이 나오게 - 진짜 스크립트도 붙은 채 여러 발 쏜다) 놓고(봇이 죽어 새 봇이 150px 옆에 나온다) 다시 붙기를 되풀이한다 - 붙어 멈춰 선 프레임에서 표본 하나.
-                    var errors = new RoslynScriptEngine().RunLiveAsync(
-                        "for (var round = 0; round < 12; round++) { var until = Environment.TickCount64 + 3000; var hits = 0; while (Environment.TickCount64 < until) { var m = 목표(); if (m is null) { 쉬기(20); continue; } if (조준(m) && ++hits >= 7) { 목표풀기(); 쉬기(80); break; } } }",
-                        api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
-
-                    var last = learned.Count > 0 ? learned[^1] : double.NaN;
-
-                    Check("조준(몹): 배율 2.0 으로 시작해도 붙고, 붙을 때마다 표본을 모아 참값(3.5) 쪽으로 배운다",
-                          errors.Count == 0 && learned.Count >= 1 && last >= 2.9 && last <= 4.2 && hub.Spawns >= 8,
-                          errors.Count > 0 ? errors[0].ToString() : $"새 봇 {hub.Spawns}번 · 배움 {learned.Count}번 → {string.Join(" ", learned.Select(v => v.ToString("0.00")))}");
-                }
-            }
-        }
+        TestAimLoop(monitor);
 
         // ── 상대이동: 작은 이동도 합이 정확하다(걸음마다 반올림해도 어긋나지 않게) ──
         {
@@ -646,6 +520,217 @@ internal static partial class Program
         }
     }
 
+    /// <summary>조준 스레드(<see cref="AimLoop"/>) - 닫힌 고리 가짜 허브(<see cref="SimHub"/>)로 붙기·달리는 몹·지나침·배율 배우기를 본다. <c>--aim</c> 은 이것만 돌린다.</summary>
+    private static void TestAimLoop(CaptureTarget monitor)
+    {
+        // ── 조준 스레드: 몹을 주면 멈추지 않고 따라가 붙고, 움직이는 몹도 쫓고, 목표풀기면 선다(사용자, 2026-09-18 "돌고 멈췄다가 머리로" 가 여전히 부자연스러워 스레드로) ──
+        {
+            const double scale = 3.5;
+
+            // 가만히 있는 몹 300px 옆 - 붙을 때까지 마우스가 쉬지 않고 움직여야 한다.
+            {
+                var adapter = new RecordingAdapter();
+                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 300 };
+                var printed = new List<string>();
+                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = printed.Add, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale };
+
+                using (var api = new LiveScriptApi(host, CancellationToken.None))
+                {
+                    var errors = new RoslynScriptEngine().RunLiveAsync("for (var i = 0; i < 12; i++) { var m = 목표(); if (m is null) { 출력(\"없음\"); break; } 출력(조준(m)); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
+
+                    List<(long Ticks, int Dx, int Dy)> moves;
+                    lock (adapter.Moves) moves = adapter.Moves.ToList();
+                    var final = Math.Abs(hub.TrueOffset(Environment.TickCount64));
+
+                    // 걸음마다의 참 거리(그 걸음까지 보낸 것 반영). 다가가는 동안(30px 밖)은 쉬지 않아야 하고, 반대편으로 지나치면 안 된다.
+                    var trail = moves.Select(m => (m.Ticks, Offset: hub.TrueOffset(m.Ticks))).ToList();
+                    var approaching = trail.TakeWhile(p => p.Offset > 30).ToList();
+                    var gaps = approaching.Zip(approaching.Skip(1), (a, b) => b.Ticks - a.Ticks).ToList();
+                    var longestGap = gaps.Count > 0 ? gaps.Max() : 0;
+                    var overshoot = trail.Count > 0 ? Math.Max(0, -trail.Min(p => p.Offset)) : 0;
+                    var reach = trail.FirstOrDefault(p => p.Offset <= 20).Ticks is var at and > 0 ? at - trail[0].Ticks : -1;
+                    var flick = trail.FirstOrDefault(p => p.Offset <= 40).Ticks is var flickAt and > 0 ? flickAt - trail[0].Ticks : -1;
+                    var biggest = moves.Count > 0 ? moves.Max(m => Math.Abs(m.Dx)) : 0;
+                    var hits = printed.Count(p => p == "True");
+
+                    // 크게 꺾기는 빠르게(300px 의 몸 안쪽 40px 까지 0.2초 안 - 시간 상수 95ms 시절에는 0.25초를 넘겼다), 남긴 8% 는 확인 화면을 보고 다듬어 0.45초 안에 머리 20px.
+                    Check("조준(몹): 다가가는 동안 8ms 박자로 쉬지 않고(가장 긴 틈 40ms 아래, 한 걸음 120 카운트 아래) 0.2초 안에 40px 까지 꺾고, 지나치지 않고(15px 아래) 0.45초 안에 20px, 끝에는 15px 안에 붙고 맞았다고 한다",
+                          errors.Count == 0 && final <= 15 && moves.Count >= 15 && longestGap <= 40 && biggest <= 120 && overshoot <= 15 && flick is > 0 and <= 200 && reach is > 0 and <= 450 && hits >= 3,
+                          errors.Count > 0 ? errors[0].ToString() : $"걸음 {moves.Count} · 가장 긴 틈 {longestGap}ms · 가장 큰 걸음 {biggest} · 40px 까지 {flick}ms · 20px 까지 {reach}ms · 지나침 {overshoot:0}px · 남은 {final:0}px · 맞음 {hits}/{printed.Count}");
+                }
+            }
+
+            // 옆으로 달리는 몹(200px/s) - 속도를 배워 따라잡고 붙어 있는다.
+            {
+                var adapter = new RecordingAdapter();
+                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 150, VelocityPxPerMs = 0.2 };
+                var printed = new List<string>();
+                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = printed.Add, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale };
+
+                using (var api = new LiveScriptApi(host, CancellationToken.None))
+                {
+                    var samples = new List<double>();
+                    // 붙이기 전에 화면 두 장을 본다 - 진짜 앱은 화면이 계속 흐르지만 가짜 허브는 부를 때 만든다. 붙이는 순간 직전 장과 견줘 봇의 속도를 미리 안다.
+                    var errors = new RoslynScriptEngine().RunLiveAsync("몹들(); 쉬기(120); 몹들(); var until = Environment.TickCount64 + 2000; while (Environment.TickCount64 < until) { var m = 목표(); if (m is null) { 쉬기(20); continue; } 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
+
+                    // 마지막 0.6초 동안의 참 거리 - 앞은 따라잡는 중이라 뺀다.
+                    var now = Environment.TickCount64;
+                    List<(long Ticks, int Dx, int Dy)> recent;
+                    lock (adapter.Moves) recent = adapter.Moves.Where(m => now - m.Ticks <= 600).ToList();
+                    foreach (var m in recent) samples.Add(Math.Abs(hub.TrueOffset(m.Ticks)));
+
+                    var worst = samples.Count > 0 ? samples.Max() : double.NaN;
+
+                    // 따라잡는 시간 - 150px 옆에서 달아나는 봇의 머리 20px 안에 처음 드는 때. 확인 화면을 기다리며 서 있으면 그동안 봇이 달아난다(실측: 100~200px 꺾기가 거리의 20% 모자란 채 멈춤).
+                    List<(long Ticks, int Dx, int Dy)> all;
+                    lock (adapter.Moves) all = adapter.Moves.ToList();
+                    var caught = all.Count > 0 && all.FirstOrDefault(m => Math.Abs(hub.TrueOffset(m.Ticks)) <= 20).Ticks is var catchAt and > 0 ? catchAt - all[0].Ticks : -1;
+
+                    Check("조준(몹): 200px/s 로 달아나는 몹을 0.35초 안에 머리 20px 까지 따라잡고, 마지막 0.6초 동안 머리 너비(15px) 안에 붙어 있는다",
+                          errors.Count == 0 && samples.Count > 0 && worst <= 15 && caught is > 0 and <= 350,
+                          errors.Count > 0 ? errors[0].ToString() : $"20px 까지 {caught}ms · 마지막 0.6초 표본 {samples.Count} · 가장 먼 {worst:0}px · 평균 {(samples.Count > 0 ? samples.Average() : double.NaN):0}px · 궤적(40ms) {Trail(all.Select(m => (m.Ticks, hub.TrueOffset(m.Ticks))).ToList())}");
+                }
+            }
+
+            // 목표풀기 뒤에는 서고, 목표() 는 스레드가 예측한 자리(같은 몹)를 준다.
+            {
+                var adapter = new RecordingAdapter();
+                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 200 };
+                var printed = new List<string>();
+                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = printed.Add, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale };
+
+                using (var api = new LiveScriptApi(host, CancellationToken.None))
+                {
+                    var errors = new RoslynScriptEngine().RunLiveAsync("var a = 목표(); 조준(a); var b = 목표(); 출력(b.이름); 목표풀기(); 쉬기(150); 출력(\"멈춤\"); 쉬기(150);", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
+
+                    long last;
+                    lock (adapter.Moves) last = adapter.Moves.Count > 0 ? adapter.Moves[^1].Ticks : 0;
+                    var stopped = Environment.TickCount64 - last >= 120;
+
+                    Check("목표풀기 뒤에는 조준 스레드가 서고, 목표() 는 붙잡은 몹을 준다",
+                          errors.Count == 0 && printed.Count == 2 && printed[0] == "일반 봇" && adapter.Moves.Count > 0 && stopped,
+                          errors.Count > 0 ? errors[0].ToString() : $"출력 {string.Join("/", printed)} · 걸음 {adapter.Moves.Count} · 마지막 걸음 뒤 {Environment.TickCount64 - last}ms");
+                }
+            }
+            // 배율이 15% 과해도(자동 배우기가 위로 튄 실측 상황) 크게 지나치지 않는다 - 휙 도는 동안의 화면은 덜 믿고, 느려진 뒤의 화면으로 마저 맞춘다.
+            {
+                var adapter = new RecordingAdapter();
+                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 300 };
+                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = _ => { }, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale * 1.15 };
+
+                using (var api = new LiveScriptApi(host, CancellationToken.None))
+                {
+                    var errors = new RoslynScriptEngine().RunLiveAsync("for (var i = 0; i < 12; i++) { var m = 목표(); if (m is null) break; 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
+
+                    List<(long Ticks, int Dx, int Dy)> moves;
+                    lock (adapter.Moves) moves = adapter.Moves.ToList();
+
+                    var trail = moves.Select(m => hub.TrueOffset(m.Ticks)).ToList();
+                    var overshoot = trail.Count > 0 ? Math.Max(0, -trail.Min()) : 0;
+                    var final = Math.Abs(hub.TrueOffset(Environment.TickCount64));
+
+                    // 300px 의 15% 는 45px - 모형만 믿고 끝까지 가면 그만큼 지나친다.
+                    Check("조준(몹): 배율이 15% 과해도 300px 조준에서 30px 넘게 지나치지 않고 15px 안에 붙는다",
+                          errors.Count == 0 && overshoot <= 30 && final <= 15,
+                          errors.Count > 0 ? errors[0].ToString() : $"지나침 {overshoot:0}px · 남은 {final:0}px");
+                }
+            }
+
+            // 옆에 다른 봇이 서 있고 붙잡은 봇이 네 장에 한 번 검출에서 빠진다 - 빠진 장에서 옆 봇으로 건너뛰면 안 된다(실측 2026-09-18: 가만히 겨눈 프레임 쌍의 7% 에서 본 자리가 60px 넘게 뛰었다).
+            {
+                var adapter = new RecordingAdapter();
+                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 150, DecoyGapPx = 120, DropEvery = 4 };
+                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = _ => { }, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale };
+
+                using (var api = new LiveScriptApi(host, CancellationToken.None))
+                {
+                    var errors = new RoslynScriptEngine().RunLiveAsync("var until = Environment.TickCount64 + 1500; while (Environment.TickCount64 < until) { var m = 목표(); if (m is null) { 쉬기(20); continue; } 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
+
+                    List<(long Ticks, int Dx, int Dy)> moves;
+                    lock (adapter.Moves) moves = adapter.Moves.ToList();
+
+                    var trail = moves.Select(m => (m.Ticks, Offset: hub.TrueOffset(m.Ticks))).ToList();
+                    var reach = trail.FirstOrDefault(p => Math.Abs(p.Offset) <= 20).Ticks is var at and > 0 ? at - trail[0].Ticks : -1;
+                    var after = reach > 0 ? trail.Where(p => p.Ticks - trail[0].Ticks >= reach).ToList() : [];
+                    var strayed = after.Count > 0 ? after.Max(p => Math.Abs(p.Offset)) : double.NaN;
+
+                    Check("조준(몹): 옆(120px)에 다른 봇이 있고 붙잡은 봇이 네 장에 한 번 안 보여도 옆 봇으로 건너뛰지 않는다(붙은 뒤 25px 안)",
+                          errors.Count == 0 && moves.Count >= 10 && reach is > 0 and <= 500 && strayed <= 25,
+                          errors.Count > 0 ? errors[0].ToString() : $"걸음 {moves.Count} · 20px 까지 {reach}ms · 붙은 뒤 가장 먼 {strayed:0}px · 궤적(40ms) {Trail(trail)}");
+                }
+            }
+
+            // 앱처럼 화면용 추적기를 거친 사각형(Found)과 날것(Raw)을 같이 준다 - 추적기는 화면을 돌리는 동안 옛 자리에 끌려 늦는다. 조준이 그것을 보면 "몹이 달아났다" 로 읽고 지나친다
+            // (실측 2026-09-18: -159px 에서 +75px 로 지나친 뒤 1초에 걸쳐 돌아왔다). 조준 스레드는 날것을 봐야 한다.
+            {
+                var adapter = new RecordingAdapter();
+                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 300, UseTracker = true };
+                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = _ => { }, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = scale };
+
+                using (var api = new LiveScriptApi(host, CancellationToken.None))
+                {
+                    // 추적기는 두 번 보여야 내놓는다 - 목표() 가 몹을 줄 때까지 기다렸다 붙는다.
+                    var errors = new RoslynScriptEngine().RunLiveAsync("var until = Environment.TickCount64 + 1500; while (Environment.TickCount64 < until) { var m = 목표(); if (m is null) { 쉬기(20); continue; } 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
+
+                    List<(long Ticks, int Dx, int Dy)> moves;
+                    lock (adapter.Moves) moves = adapter.Moves.ToList();
+
+                    var trail = moves.Select(m => (m.Ticks, Offset: hub.TrueOffset(m.Ticks))).ToList();
+                    var overshoot = trail.Count > 0 ? Math.Max(0, -trail.Min(p => p.Offset)) : 0;
+                    var reach = trail.FirstOrDefault(p => p.Offset <= 20).Ticks is var at and > 0 ? at - trail[0].Ticks : -1;
+                    var final = Math.Abs(hub.TrueOffset(Environment.TickCount64));
+
+                    // 붙은 뒤의 흔들림 - 검출 떨림(±5px)을 그대로 따라다니면 안 된다.
+                    var settledTrail = reach > 0 ? trail.Where(p => p.Ticks - trail[0].Ticks >= reach + 250).ToList() : [];
+                    var wobble = settledTrail.Count > 0 ? settledTrail.Max(p => Math.Abs(p.Offset)) : double.NaN;
+
+                    Check("조준(몹): 화면용 추적기가 늦은 사각형을 줘도(날것을 본다) 300px 조준에서 15px 넘게 지나치지 않고 15px 안에 붙고, 붙은 뒤 10px 넘게 흔들리지 않는다",
+                          errors.Count == 0 && moves.Count >= 15 && overshoot <= 15 && final <= 15 && reach is > 0 and <= 600 && wobble <= 10,
+                          errors.Count > 0 ? errors[0].ToString() : $"걸음 {moves.Count} · 20px 까지 {reach}ms · 지나침 {overshoot:0}px · 남은 {final:0}px · 붙은 뒤 흔들림 {wobble:0}px · 궤적(40ms) {Trail(trail)}");
+                }
+            }
+
+            // 배율이 틀려도 스레드가 붙고, 멈춰 선 뒤 보낸 총량 ÷ 줄어든 거리로 배율을 배운다(닻 방식 - 움직이는 중의 프레임으로는 안 잰다).
+            {
+                var adapter = new RecordingAdapter();
+                var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 150 };
+                var learned = new List<double>();
+                var host = new LiveScriptHost { Service = new InputService(adapter), RequiresForeground = false, Target = () => monitor, Hub = hub, Print = p => { if (p == "죽음") hub.Respawn(); }, Watch = (_, _) => { }, HoldTimeMs = 1, AimScale = 2.0, AimScaleLearned = learned.Add };
+
+                using (var api = new LiveScriptApi(host, CancellationToken.None))
+                {
+                    // 붙어 일곱 번 쏜 뒤(멈춰 선 프레임이 나오게 - 진짜 스크립트도 붙은 채 여러 발 쏜다) 놓고(봇이 죽어 새 봇이 150px 옆에 나온다) 다시 붙기를 되풀이한다 - 붙어 멈춰 선 프레임에서 표본 하나.
+                    var errors = new RoslynScriptEngine().RunLiveAsync(
+                        "for (var round = 0; round < 12; round++) { var until = Environment.TickCount64 + 3000; var hits = 0; while (Environment.TickCount64 < until) { var m = 목표(); if (m is null) { 쉬기(20); continue; } if (조준(m) && ++hits >= 7) { 목표풀기(); 출력(\"죽음\"); 쉬기(80); break; } } }",
+                        api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
+
+                    var last = learned.Count > 0 ? learned[^1] : double.NaN;
+
+                    Check("조준(몹): 배율 2.0 으로 시작해도 붙고, 붙을 때마다 표본을 모아 참값(3.5) 쪽으로 배운다",
+                          errors.Count == 0 && learned.Count >= 1 && last >= 2.9 && last <= 4.2 && hub.Spawns >= 8,
+                          errors.Count > 0 ? errors[0].ToString() : $"새 봇 {hub.Spawns}번 · 배움 {learned.Count}번 → {string.Join(" ", learned.Select(v => v.ToString("0.00")))}");
+                }
+            }
+        }
+    }
+
+    /// <summary>참 거리의 궤적을 40ms 간격으로 - 실패했을 때 어떻게 움직였는지 보게.</summary>
+    private static string Trail(IReadOnlyList<(long Ticks, double Offset)> trail)
+    {
+        var parts = new List<string>();
+        long next = 0;
+
+        foreach (var (ticks, offset) in trail)
+        {
+            if (ticks < next) continue;
+
+            parts.Add($"{ticks - trail[0].Ticks}:{offset:0}");
+            next = ticks + 40;
+        }
+
+        return string.Join(" ", parts);
+    }
+
     private static void RunAndCheck(string language, IScriptEngine engine, string source, CaptureTarget monitor)
     {
         var (errors, adapter, printed) = Run(engine, source, new FakeHub(monitor), monitor, CancellationToken.None);
@@ -772,7 +857,7 @@ internal static partial class Program
         }
 
         public void PublishState(bool capturing, bool detecting, CaptureTarget? target) { }
-        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0) { }
+        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0, IReadOnlyList<Detection>? raw = null) { }
         public void PublishFrame(byte[] bgra, int width, int height) { }
         public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
         public bool TryGetFrameSize(out int width, out int height) { width = height = 0; return false; }
@@ -793,12 +878,33 @@ internal static partial class Program
 
         private readonly Random _random = new(7);
 
-        /// <summary>붙은 뒤(30px 안) 마우스가 50ms 넘게 서 있으면(스크립트가 놓았다) 그 봇은 죽고 새 봇이 <see cref="OffsetPx"/> 만큼 옆에 나온다. 배율 배우기 검사용.</summary>
-        public bool Respawns { get; init; }
+        /// <summary>
+        /// 지금 봇이 죽고 새 봇이 <see cref="OffsetPx"/> 만큼 옆에 나온다. 배율 배우기 검사가 스크립트의 <c>출력("죽음")</c> 으로 부른다.
+        /// 예전에는 "붙은 뒤 마우스가 50ms 서 있으면 죽음" 으로 짐작했는데, 조준이 크게 꺾은 뒤 확인 화면을 기다리며 서 있는 것(0.1~0.2초)을 죽음으로 읽어 붙는 도중에 봇이 바뀌었다.
+        /// </summary>
+        public void Respawn()
+        {
+            _shift += OffsetPx;
+            Spawns++;
+        }
 
         /// <summary>새 봇이 나온 횟수.</summary>
         public int Spawns { get; private set; }
 
+        /// <summary>
+        /// 앱처럼 <see cref="DetectionSnapshot.Found"/> 는 화면용 추적기(<see cref="DetectionTracker"/>)를 거친 것으로, 날것은 <see cref="DetectionSnapshot.Raw"/> 로 준다.
+        /// 추적기는 옛 화면 좌표와 섞고 못 이으면 옛 사각형을 내줘, 화면을 돌리는 동안에는 늦은 자리다 - 조준이 그것을 보면 지나친다.
+        /// </summary>
+        public bool UseTracker { get; init; }
+
+        /// <summary>0 이 아니면 붙잡을 봇 옆(이만큼 px)에 다른 봇이 하나 더 서 있다 - 같은 크기, 늘 보인다.</summary>
+        public double DecoyGapPx { get; init; }
+
+        /// <summary>0 이 아니면 이 장수마다 한 번 붙잡을 봇이 검출에서 빠진다(옆 봇은 그대로) - 날것 검출은 가끔 한 장씩 놓친다.</summary>
+        public int DropEvery { get; init; }
+
+        private int _frames;
+        private readonly DetectionTracker _tracker = new();
         private double _shift;
         private readonly long _start = Environment.TickCount64;
         private long _frameTicks;
@@ -814,6 +920,7 @@ internal static partial class Program
         /// <summary>지금 몹이 가운데에서 얼마나 떨어져 있는가(px) - 보낸 것을 모두 반영한 참값.</summary>
         public double TrueOffset(long now) => OffsetAt(now, now);
 
+        /// <summary><paramref name="now"/> 의 몹 자리에서 <paramref name="inputsUntil"/> 까지 보낸 입력만큼 돈 화면으로 본 거리.</summary>
         private double OffsetAt(long now, long inputsUntil)
         {
             double sent;
@@ -832,16 +939,8 @@ internal static partial class Program
                 _frameTicks = now;
                 Minguk.Tools.Capture.Input.CaptureTargetBounds.TryGet(target, out var bounds);
 
-                long lastMove;
-                lock (adapter.Moves) lastMove = adapter.Moves.Count > 0 ? adapter.Moves[^1].Ticks : 0;
-
-                if (Respawns && Math.Abs(OffsetAt(now, now)) < 30 && now - lastMove > 50)
-                {
-                    _shift += OffsetPx;
-                    Spawns++;
-                }
-
-                var offset = OffsetAt(now, now - LatencyMs);
+                // 화면은 통째로 늦다 - 우리 입력뿐 아니라 몹의 자리도 LatencyMs 앞의 것이다(진짜 게임이 그렇다 - 입력만 늦게 하면 달리는 몹을 앞서 겨눠야 하는 몫이 검사에서 빠진다).
+                var offset = OffsetAt(now - LatencyMs, now - LatencyMs);
                 var cx = 0.5 + ((offset + ((_random.NextDouble() - 0.5) * 2 * JitterPx)) / bounds.Width);
                 var w = 60 / bounds.Width;
                 var h = 120 / bounds.Height;
@@ -850,15 +949,32 @@ internal static partial class Program
                 double sentY;
                 lock (adapter.Moves) sentY = adapter.Moves.Where(m => m.Ticks <= now - LatencyMs).Sum(m => (double)m.Dy);
                 var cy = 0.5 - (((sentY / scale) + ((_random.NextDouble() - 0.5) * 2 * JitterPx)) / bounds.Height);
-                var found = new List<Detection> { new("일반 봇", LabelBox.FromCorners(0, cx - (w / 2), cy - (h / 2), cx + (w / 2), cy + (h / 2)), 0.9f) };
+                var found = new List<Detection>();
 
-                _frame = new DetectionSnapshot(found, [""], 1920, 1080, target, now) { FrameTicks = now };
+                if (DropEvery <= 0 || ++_frames % DropEvery != 0)
+                    found.Add(new("일반 봇", LabelBox.FromCorners(0, cx - (w / 2), cy - (h / 2), cx + (w / 2), cy + (h / 2)), 0.9f));
+
+                if (DecoyGapPx != 0)
+                {
+                    var dx = cx + (DecoyGapPx / bounds.Width);
+                    found.Add(new("일반 봇", LabelBox.FromCorners(0, dx - (w / 2), cy - (h / 2), dx + (w / 2), cy + (h / 2)), 0.9f));
+                }
+
+                if (UseTracker)
+                {
+                    var tracked = _tracker.Update(found);
+
+                    _frame = new DetectionSnapshot(tracked, tracked.Select(_ => string.Empty).ToArray(), 1920, 1080, target, now) { FrameTicks = now, Raw = found, Previous = _frame is null ? null : _frame with { Previous = null } };
+                    return _frame;
+                }
+
+                _frame = new DetectionSnapshot(found, found.Select(_ => string.Empty).ToArray(), 1920, 1080, target, now) { FrameTicks = now, Previous = _frame is null ? null : _frame with { Previous = null } };
                 return _frame;
             }
         }
 
         public void PublishState(bool capturing, bool detecting, CaptureTarget? target) { }
-        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0) { }
+        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0, IReadOnlyList<Detection>? raw = null) { }
         public void PublishFrame(byte[] bgra, int width, int height) { }
         public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
         public bool TryGetFrameSize(out int width, out int height) { width = height = 0; return false; }
@@ -895,7 +1011,7 @@ internal static partial class Program
         }
 
         public void PublishState(bool capturing, bool detecting, CaptureTarget? target) { }
-        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0) { }
+        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0, IReadOnlyList<Detection>? raw = null) { }
         public void PublishFrame(byte[] bgra, int width, int height) { }
         public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
         public bool TryGetFrameSize(out int width, out int height) { width = height = 0; return false; }
@@ -920,7 +1036,7 @@ internal static partial class Program
             ["일반봇"], 1920, 1080, target, Environment.TickCount64) { FrameTicks = FrameTicks };
 
         public void PublishState(bool capturing, bool detecting, CaptureTarget? target) { }
-        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0) { }
+        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0, IReadOnlyList<Detection>? raw = null) { }
         public void PublishFrame(byte[] bgra, int width, int height) { }
         public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
         public bool TryGetFrameSize(out int width, out int height) { width = height = 0; return false; }

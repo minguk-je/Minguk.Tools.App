@@ -59,8 +59,13 @@ public sealed class PerceptionHub : IPerceptionHub
         if (!capturing || !detecting) _latest = null;
     }
 
-    public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0)
-        => _latest = new DetectionSnapshot(found, names, frameWidth, frameHeight, _target, Environment.TickCount64) { FrameTicks = frameTicks };
+    public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0, IReadOnlyList<Detection>? raw = null)
+    {
+        // 직전 것은 한 장만 물린다 - 그 앞까지 이어 두면 검출마다 사슬이 길어진다.
+        var previous = _latest is { } last ? last with { Previous = null } : null;
+
+        _latest = new DetectionSnapshot(found, names, frameWidth, frameHeight, _target, Environment.TickCount64) { FrameTicks = frameTicks, Raw = raw, Previous = previous };
+    }
 
     public void PublishFrame(byte[] bgra, int width, int height)
     {

@@ -230,6 +230,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
 ```
 dotnet run --project Minguk.Tools.Tests -c Debug -- --views               # 화면·모듈 생성 (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --vision              # 라벨·검출·OCR·스크립트·빌드·조준(가짜 어댑터) (안전)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --aim                 # 조준 스레드만 - 가짜 게임으로 꺾기·지나침·달리는 몹·배율 배우기 (안전, 40초)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --ocr                 # 글자 읽기만 (안전, CPU·GPU)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --ocr-bench --project=<프로젝트> --truth=Minguk.Tools.Tests/OcrData/<게임>.tsv   # 실제 화면 정답률
 dotnet run --project Minguk.Tools.Tests -c Debug -- --solution            # 솔루션·공유 프로젝트·탐색기·▶ 찾기 (안전, 임시 폴더)

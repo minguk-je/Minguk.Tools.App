@@ -29,11 +29,14 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 32ms 가 되면서 그 값이 조준을 붙잡는 쪽이 됐다 - 조준은 새 화면을 기다렸다 다시 겨누므로,
     /// 주기가 곧 "한 번 더 겨누기까지" 다. 실측 로그에서 조준이 0.5초에 한 번씩 세 번 걸려 붙었다.
     ///
-    /// 이제 80ms 다. 더 줄일 이유는 없다 - 캡처 자체가 10fps 면 100ms 에 한 장이라, 그 아래로는
-    /// 같은 프레임을 다시 보게 된다. 빠르게 붙게 하려면 <b>캡처 fps</b> 를 같이 올려야 한다.
-    /// 느린 모델(Torch)로 되돌려도 안전하다 - 도는 중이면 어차피 흘린다.
+    /// 그다음 80ms 였다(캡처가 10fps 이던 때 - 그 아래로는 같은 프레임을 다시 본다).
+    ///
+    /// <b>이제 45ms 다</b>(사용자, 2026-09-18 "프로게이머처럼 움직여줘"). 조준 스레드는 새 화면이 올 때마다 자리를 고치고, 크게 꺾은 뒤에는 <b>꺾은 결과가 담긴 화면을 보고서야</b>
+    /// 마지막을 다듬는다 - 80ms(실제로는 프레임 박자에 걸려 0.1초)면 그 확인을 최대 0.1초 더 기다린다. 45ms 면 30fps 캡처에서 두 장에 한 번(66ms), 60fps 에서 세 장에 한 번(50ms).
+    /// 추론은 게임과 같이 돌 때 중간값 14ms·90% 27ms(실측 로그)라 밀리지 않는다. 밀리면 어차피 그 프레임은 흘린다 - 느린 모델(Torch)로 되돌려도 안전하다.
+    /// GPU 몫은 10Hz 의 14% 에서 15~20Hz 의 25% 안팎으로 는다 - 게임 fps 가 떨어지면 이 값을 올린다.
     /// </remarks>
-    private const int DetectIntervalMs = 80;
+    private const int DetectIntervalMs = 45;
 
     /// <summary>
     /// 추론에 넣기 전에 줄일 크기(긴 변).
@@ -292,7 +295,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             var names = new string[found.Count];
 
             // 스크립트가 읽어 가는 자리. 화면(Detections)은 UI 스레드 것이라 스크립트가 못 읽는다.
-            Hub.PublishDetections(found, names, size.Width, size.Height, frameTicks);
+            Hub.PublishDetections(found, names, size.Width, size.Height, frameTicks, raw);
 
             // 화면에 닿는 것은 UI 스레드에서. 컬렉션을 캡처 스레드에서 고치면 그리는 중에 터진다.
             DispatcherService?.BeginInvoke(() => Guard(() =>
