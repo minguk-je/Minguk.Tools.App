@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Input;
 
 using DevExpress.Mvvm;
 
@@ -78,6 +79,25 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
 
     /// <summary>가장 자신 있는 몹을 누른다.</summary>
     public DelegateCommand ClickDetectionCommand { get; private set; }
+
+    /// <summary>
+    /// 미리보기 나누기(위아래·좌우)·자리 바꾸기 버튼을 이 화면이 지원하는지 - PreviewForwardBar 가 이 값으로
+    /// 세 버튼을 숨긴다. 도킹 배치가 있는 화면(스크립트)만 override 해서 켠다.
+    /// </summary>
+    /// <remarks>
+    /// 플레이 화면은 편집 없이 미리보기 하나뿐이라 나눌 짝이 없다 - 그대로 두면 셋 다 아무 일도 안 하는
+    /// 죽은 버튼이 된다.
+    /// </remarks>
+    public virtual bool SupportsPreviewSplit => false;
+
+    /// <summary>미리보기 위, 다른 판을 아래에 둔다.</summary>
+    public virtual ICommand? SplitVerticalCommand => null;
+
+    /// <summary>미리보기와 다른 판을 나란히 둔다.</summary>
+    public virtual ICommand? SplitHorizontalCommand => null;
+
+    /// <summary>미리보기와 다른 판의 자리를 맞바꾼다.</summary>
+    public virtual ICommand? SwapPanesCommand => null;
 
     /// <summary>인식 허브. 찾은 것과 프레임을 여기 올려 두면 스크립트가 읽어 간다.</summary>
     protected IPerceptionHub Hub { get; } = PerceptionHubFactory.Default;

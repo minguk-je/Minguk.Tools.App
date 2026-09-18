@@ -1,9 +1,10 @@
-<UserControl x:Class="Minguk.Tools.Views.Parts.PreviewForwardBar"
+﻿<UserControl x:Class="Minguk.Tools.Views.Parts.PreviewForwardBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
              xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
              xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
              xmlns:markup="clr-namespace:Minguk.Tools.Markup">
 
     <UserControl.Resources>
@@ -59,5 +60,24 @@
                           IsChecked="{Binding IsReturnFocusAfterClickEnabled}"
                           IsEnabled="{Binding IsInputForwardingEnabled}"
                           ToolTip="클릭이 대상에 닿은 뒤 커서와 포커스를 이 창으로 되돌린다. 끄면 대상 창이 앞에 남는다." />
+
+        <!--
+            미리보기 나누기(위아래·좌우)·자리 바꾸기 - 도킹 배치가 있는 화면(스크립트)만 보인다(SupportsPreviewSplit).
+            플레이 화면은 편집 없이 미리보기 하나뿐이라 나눌 짝이 없다.
+        -->
+        <dxb:BarItemSeparator IsVisible="{Binding SupportsPreviewSplit}" />
+
+        <dxb:BarButtonItem Command="{Binding SplitVerticalCommand}"
+                           Glyph="{image:FreeImage ResourceName='Axialis/Database/16x16/table_split_rows.png'}"
+                           IsVisible="{Binding SupportsPreviewSplit}"
+                           ToolTip="미리보기를 위, 나머지를 아래에 둔다." />
+        <dxb:BarButtonItem Command="{Binding SplitHorizontalCommand}"
+                           Glyph="{image:FreeImage ResourceName='Axialis/Database/16x16/table_split_columns.png'}"
+                           IsVisible="{Binding SupportsPreviewSplit}"
+                           ToolTip="미리보기와 나머지를 나란히 둔다." />
+        <dxb:BarButtonItem Command="{Binding SwapPanesCommand}"
+                           Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_shuffle.png'}"
+                           IsVisible="{Binding SupportsPreviewSplit}"
+                           ToolTip="미리보기와 나머지의 자리를 맞바꾼다." />
     </dxb:ToolBarControl>
 </UserControl>
