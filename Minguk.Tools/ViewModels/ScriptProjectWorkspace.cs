@@ -18,6 +18,13 @@ public sealed class ScriptProjectWorkspaceHost
 {
     public required Action<Action> OnUi { get; init; }
 
+    /// <summary>
+    /// <see cref="OnUi"/> 와 같지만 <b>늘 미룬다</b>(이미 UI 스레드여도). 트리 줄(<see cref="ScriptProjectNode"/>)의 property setter
+    /// 안에서(그리드가 칸 값을 쓰는 도중에) 그 줄 목록을 바로 갈아 끼우면, 그리드가 옛 줄에 마저 쓰다가 터진다(<see cref="ScriptProjectWorkspace.TryRename"/>).
+    /// 없으면(하네스) <see cref="OnUi"/> 로 대신한다.
+    /// </summary>
+    public Action<Action>? PostUi { get; init; }
+
     /// <summary>예·아니요·취소를 묻는다. 없으면(하네스) <see cref="MessageResult.Yes"/> 로 본다.</summary>
     public Func<string, MessageButton, MessageResult>? Ask { get; init; }
 
@@ -934,8 +941,10 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
             return false;
         }
 
-        // 트리는 이 호출이 끝난 뒤에 다시 만든다 - 칸이 값을 넣는 도중에 줄을 갈아 끼우면 그리드가 옛 줄에 값을 쓴다.
-        _host.OnUi(() => { RebuildNodes(); SelectedNode = Nodes.FirstOrDefault(n => n.Id == target); Changed?.Invoke(this, EventArgs.Empty); });
+        // 트리는 이 호출이 끝난 뒤에 다시 만든다 - 칸이 값을 넣는 도중에(지금 이 호출도 그 칸의 setter 안이다) 줄을 갈아 끼우면
+        // 그리드가 옛 줄에 마저 쓰다가 터진다(실측, 2026-09-18 "이름 변경 했더니 바로 오류") - OnUi 는 이미 UI 스레드면 그 자리에서 바로
+        // 돌아 이 미루기가 안 됐다. PostUi 로 반드시 미룬다.
+        (_host.PostUi ?? _host.OnUi)(() => { RebuildNodes(); SelectedNode = Nodes.FirstOrDefault(n => n.Id == target); Changed?.Invoke(this, EventArgs.Empty); });
         return true;
     }
 

@@ -112,6 +112,9 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         Project = new ScriptProjectWorkspace(new ScriptProjectWorkspaceHost
         {
             OnUi = host.OnUi,
+            // 이미 있는 host.OnUi 는 이미 UI 스레드면 그 자리에서 바로 돈다 - 트리 줄 이름을 바꾼 뒤 목록을 다시 만드는 것처럼
+            // "지금 이 호출이 다 끝난 뒤" 가 꼭 필요한 곳은 이걸로 늘 미룬다(ScriptProjectWorkspace.TryRename).
+            PostUi = action => System.Windows.Application.Current?.Dispatcher.BeginInvoke(action),
             Ask = host.Ask,
             OpenDialog = host.OpenDialog,
             SaveDialog = host.SaveDialog,
