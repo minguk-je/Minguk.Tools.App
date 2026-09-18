@@ -131,7 +131,7 @@
 
             <dxb:BarEditItem Content="대상"
                              EditValue="{Binding SelectedTarget}"
-                             EditWidth="420"
+                             EditWidth="200"
                              IsEnabled="{Binding IsNotRunning}">
                 <dxb:BarEditItem.EditSettings>
                     <dxe:ComboBoxEditSettings DisplayMember="Display"
