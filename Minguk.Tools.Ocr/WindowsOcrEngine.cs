@@ -136,12 +136,10 @@ public sealed class WindowsOcrEngine : IOcrEngine
         return new OcrOutcome(string.Join(Environment.NewLine, lines.Select(l => l.Text)), lines, watch.Elapsed);
     }
 
-    /// <summary>Bgra32 로 맞추고, 작으면 키운다. 돌려주는 것은 Freeze 된 것이다.</summary>
+    /// <summary>Bgra32 로 맞추고 알파를 채운 뒤, 작으면 키운다. 돌려주는 것은 Freeze 된 것이다.</summary>
     private static BitmapSource Prepare(BitmapSource image)
     {
-        BitmapSource source = image.Format == PixelFormats.Bgra32
-            ? image
-            : new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        BitmapSource source = ForceOpaque(image);
 
         if (source.PixelHeight < MinimumHeight && source.PixelHeight > 0)
         {
@@ -152,6 +150,33 @@ public sealed class WindowsOcrEngine : IOcrEngine
         if (source.CanFreeze) source.Freeze();
 
         return source;
+    }
+
+    /// <summary>
+    /// Bgra32 로 바꾸고 알파를 255 로 채운다(불투명).
+    /// </summary>
+    /// <remarks>
+    /// 화면 캡처(WGC)는 불투명한 창인데도 알파를 0 으로 준다 - 그 상태로 먼저 키우면(<see cref="TransformedBitmap"/>) WPF 가
+    /// 알파를 진짜 불투명도로 여겨 색까지 지워 버린다(실측 - 사용자, 2026-09-18 "전혀 못읽네", 작은 HUD 자리일수록 <see cref="MinimumHeight"/>
+    /// 미만이라 거의 다 이 길을 탄다). 그래서 <b>키우기 전에</b> 여기서 먼저 다 채운다 - 나중에 채우면 이미 지워진 색은 못 되살린다.
+    /// </remarks>
+    private static BitmapSource ForceOpaque(BitmapSource image)
+    {
+        BitmapSource bgra = image.Format == PixelFormats.Bgra32 ? image : new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+
+        var width = bgra.PixelWidth;
+        var height = bgra.PixelHeight;
+        var stride = width * 4;
+        var pixels = new byte[stride * height];
+
+        bgra.CopyPixels(pixels, stride, 0);
+
+        for (var i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
+
+        var result = BitmapSource.Create(width, height, bgra.DpiX, bgra.DpiY, PixelFormats.Bgra32, null, pixels, stride);
+        result.Freeze();
+
+        return result;
     }
 
     public void Dispose()
