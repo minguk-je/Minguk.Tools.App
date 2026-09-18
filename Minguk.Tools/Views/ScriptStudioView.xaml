@@ -1039,6 +1039,28 @@
                                                       Hint="만들어 둔 영역을 미리보기에 겹쳐 그린다.&#10;입력 전달이 꺼져 있으면 미리보기에서 영역을 눌러 고르고, 끌어 옮기고, 손잡이로 크기를 바꾼다(빈 곳 끌기는 새 영역)."
                                                       IsChecked="{Binding ShowRegions, Mode=TwoWay}" />
                                 </dxb:ToolBarControl>
+                                <!--
+                                    문턱값 미리보기(사용자, 2026-09-18 "콤보만 있으니 잘 모르겠어 도움되는 컨트롤 없어?") - 「지금 읽기」가 자른 그림에
+                                    문턱값·반전·확대를 입힌 모습. 값이 없으면(아직 「지금 읽기」를 안 눌렀으면) 통째로 숨긴다.
+                                -->
+                                <Border Padding="4"
+                                        BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                                        BorderThickness="0,0,0,1"
+                                        DockPanel.Dock="Top"
+                                        Visibility="{Binding HasRegionPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Margin="0,0,6,0"
+                                                   VerticalAlignment="Center"
+                                                   Text="문턱값 미리보기:" />
+                                        <Border BorderBrush="Gray"
+                                                BorderThickness="1">
+                                            <Image Height="32"
+                                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                                   Source="{Binding RegionPreviewImage}"
+                                                   Stretch="Uniform" />
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
                                 <controls:BaseGridControl AutoGenerateColumns="None"
                                                           ItemsSource="{Binding Regions}"
                                                           SelectedItem="{Binding SelectedRegionNode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
