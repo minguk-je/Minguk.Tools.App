@@ -295,6 +295,14 @@
                                 <dxb:BarButtonItem Command="{Binding DoCopyPreviousCommand}"
                                                    Content="앞 장 가져오기"
                                                    ToolTip="앞에서 가장 가까운, 라벨이 있는 그림의 사각형을 이 그림에 더합니다. 가져온 뒤 끌어서 맞추세요." />
+                                <dxb:BarButtonItem Command="{Binding DoCopyBoxesCommand}"
+                                                   Content="복사"
+                                                   KeyGesture="Ctrl+C"
+                                                   ToolTip="지금 그림의 사각형을 복사합니다(Ctrl+C). 앞 장 가져오기와 달리 아무 그림에서나 복사해 몇 장 뒤에든 붙일 수 있습니다." />
+                                <dxb:BarButtonItem Command="{Binding DoPasteBoxesCommand}"
+                                                   Content="붙여넣기"
+                                                   KeyGesture="Ctrl+V"
+                                                   ToolTip="복사해 둔 사각형을 이 그림에 더합니다(Ctrl+V). 지금 있는 것은 지우지 않습니다." />
 
                                 <dxb:BarItemSeparator />
 

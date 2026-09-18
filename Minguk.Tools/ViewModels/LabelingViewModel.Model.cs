@@ -43,6 +43,12 @@ public partial class LabelingViewModel
     /// <summary>앞 장의 사각형을 가져온다. 연달아 담은 그림은 몹 자리가 거의 같다.</summary>
     public DelegateCommand DoCopyPreviousCommand { get; private set; } = null!;
 
+    /// <summary>지금 그림의 사각형을 복사해 둔다(Ctrl+C). 순서를 안 가려도 되고 여러 장에 거듭 붙일 수 있다.</summary>
+    public DelegateCommand DoCopyBoxesCommand { get; private set; } = null!;
+
+    /// <summary>복사해 둔 사각형을 지금 그림에 더한다(Ctrl+V). 지금 있는 것은 안 지운다.</summary>
+    public DelegateCommand DoPasteBoxesCommand { get; private set; } = null!;
+
     /// <summary>그림 판 확대를 1(창에 맞춤)로 되돌린다.</summary>
     public DelegateCommand DoZoomResetCommand { get; private set; } = null!;
 

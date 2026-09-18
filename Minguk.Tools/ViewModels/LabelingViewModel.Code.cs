@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
@@ -259,6 +260,37 @@ public partial class LabelingViewModel
         }
 
         StatusText = "앞에 라벨이 있는 그림이 없습니다.";
+    });
+
+    /// <summary>지금 그림의 사각형을 복사해 둔다. 화면을 옮겨도(닫았다 열어도 아니다) 남아 있다.</summary>
+    private List<LabelBox>? _boxClipboard;
+
+    /// <summary>
+    /// Ctrl+C - 지금 그림의 사각형을 복사해 둔다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) "이전 화면에서 Copy 하고 다음 화면에서 붙여넣고 싶다" - 「앞 장 가져오기」는
+    /// 바로 앞의 라벨 있는 그림만 가져오는데, 이건 아무 그림에서나 복사해 몇 장 뒤에든 붙일 수 있다.
+    /// </remarks>
+    private void DoCopyBoxes() => Guard(() =>
+    {
+        if (Boxes.Count == 0) { StatusText = "복사할 사각형이 없습니다."; return; }
+
+        _boxClipboard = [.. Boxes];
+        DoPasteBoxesCommand.RaiseCanExecuteChanged();
+
+        StatusText = $"사각형 {_boxClipboard.Count}개를 복사했습니다.";
+    });
+
+    /// <summary>Ctrl+V - 복사해 둔 사각형을 지금 그림에 더한다. 지금 있는 것은 지우지 않는다.</summary>
+    private void DoPasteBoxes() => Guard(() =>
+    {
+        if (_boxClipboard is not { Count: > 0 } clipboard) { StatusText = "복사한 사각형이 없습니다 - 먼저 Ctrl+C 로 복사하세요."; return; }
+
+        foreach (var box in clipboard) Boxes.Add(box);
+
+        SelectedBoxIndex = Boxes.Count - 1;
+        StatusText = $"사각형 {clipboard.Count}개를 붙여넣었습니다. 자리가 다르면 끌어서 맞추세요.";
     });
 
     // ── 저장 ─────────────────────────────────────────────────────────────
@@ -683,6 +715,8 @@ public partial class LabelingViewModel
         DoClearPredictionsCommand.RaiseCanExecuteChanged();
         DoAdoptPredictionsCommand.RaiseCanExecuteChanged();
         DoCopyPreviousCommand.RaiseCanExecuteChanged();
+        DoCopyBoxesCommand.RaiseCanExecuteChanged();
+        DoPasteBoxesCommand.RaiseCanExecuteChanged();
         DoDeleteImageCommand.RaiseCanExecuteChanged();
     }
 

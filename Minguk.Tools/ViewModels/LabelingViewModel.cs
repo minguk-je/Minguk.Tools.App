@@ -54,6 +54,8 @@ public partial class LabelingViewModel : DocumentViewModelBase
         DoNextCommand = new DelegateCommand(DoNext, () => Items.Count > 0, false);
         DoNextUnlabeledCommand = new DelegateCommand(DoNextUnlabeled, () => Items.Count > 0, false);
         DoCopyPreviousCommand = new DelegateCommand(DoCopyPrevious, () => HasImage && Items.Count > 1, false);
+        DoCopyBoxesCommand = new DelegateCommand(DoCopyBoxes, () => Boxes.Count > 0, false);
+        DoPasteBoxesCommand = new DelegateCommand(DoPasteBoxes, () => HasImage && _boxClipboard is { Count: > 0 }, false);
         DoTrainCommand = new DelegateCommand(DoTrain, () => CanTrain, false);
         DoCancelTrainCommand = new DelegateCommand(DoCancelTrain, () => IsTraining, false);
         DoDetectCommand = new DelegateCommand(DoDetect, () => !IsDetecting && HasImage, false);
