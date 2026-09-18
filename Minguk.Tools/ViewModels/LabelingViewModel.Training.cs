@@ -289,7 +289,9 @@ public partial class LabelingViewModel
             ModelChoices.Clear();
             foreach (var choice in choices) ModelChoices.Add(choice);
 
-            SelectedModelChoice = DetectorFiles.CurrentChoice(dataset, choices);
+            // 아직 한 번도 학습 안 한 프로젝트는 CurrentChoice 가 null 이다 - 그대로 두면 콤보가 안 골라진 채라
+            // CanTrain(고른 모델이 있어야 함)이 늘 거짓이 되어 첫 학습을 영영 못 누른다. 첫 항목(가상이어도)을 미리 고른다.
+            SelectedModelChoice = DetectorFiles.CurrentChoice(dataset, choices) ?? choices.FirstOrDefault();
         }
         finally
         {
@@ -313,6 +315,9 @@ public partial class LabelingViewModel
         RaisePropertyChanged(nameof(CanChooseYoloImageSize));
 
         if (_isRefreshingModels || SelectedModelChoice is not { } choice) return;
+
+        // 가상 항목(아직 학습 안 한 이름) - 앉힐 파일이 없다. 이름만 기억해 두면 학습(DoTrain)이 그 이름으로 새로 만든다.
+        if (choice.IsVirtual) return;
 
         var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
         if (DetectorFiles.CurrentChoice(dataset, ModelChoices) == choice) return;

@@ -99,6 +99,9 @@ public static class DetectorFiles
     /// "무엇을 그 자리에 앉힐지" 만 고르게 하면 다른 곳을 하나도 안 고쳐도 된다. 시험은 YOLO11n, 배포는 D-FINE-N 으로 번갈아
     /// 쓰게 되어(2026-09-14) 명령을 외우지 않고 고를 수 있어야 했다. 보관본의 쪽지(이름·레터박스·재현율)도 같이 옮긴다.
     /// </remarks>
+    /// <summary>가상 항목으로 내놓을 이름들 - 학습기가 실제로 돌릴 수 있는 이름 그대로(YoloTrainer.WeightsFor·DFineTrainer.Handles 가 안다).</summary>
+    private static readonly string[] TrainableArchitectures = ["YOLO11n", "D-FINE-N"];
+
     public static IReadOnlyList<DetectorChoice> ListChoices(LabelDataset dataset)
     {
         var choices = new List<DetectorChoice>();
@@ -114,6 +117,15 @@ public static class DetectorFiles
             }
         }
 
+        // 프로젝트를 막 만들어 보관본이 하나도 없으면 콤보가 비어 아무것도 못 고른다 - 그러면 첫 학습을 영영 못 누른다
+        // (학습 버튼이 "콤보에서 고른 모델" 을 요구한다). 아직 없는 이름은 파일 없는 가상 항목으로 채워 준다 -
+        // 학습이 끝나면 진짜 보관본이 생겨 이 자리를 대신한다(사용자, 2026-09-19).
+        foreach (var name in TrainableArchitectures)
+        {
+            if (choices.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))) continue;
+
+            choices.Add(new DetectorChoice(name, string.Empty, "아직 학습 안 함 - 「학습」을 누르면 새로 만듭니다."));
+        }
 
         return choices;
     }
@@ -198,6 +210,10 @@ public static class DetectorFiles
 
 /// <summary>콤보에 뜨는 모델 하나.</summary>
 /// <param name="Name">사람이 읽을 이름("YOLO11n", "D-FINE-N").</param>
-/// <param name="Path">보관본(ONNX) 자리.</param>
-/// <param name="Summary">쪽지 한 줄(재현율 등).</param>
-public sealed record DetectorChoice(string Name, string Path, string Summary);
+/// <param name="Path">보관본(ONNX) 자리. 가상 항목(아직 학습 안 함)이면 빈 글.</param>
+/// <param name="Summary">쪽지 한 줄(재현율 등). 가상 항목이면 안내 문구.</param>
+public sealed record DetectorChoice(string Name, string Path, string Summary)
+{
+    /// <summary>아직 학습을 한 번도 안 해 보관본이 없는 이름뿐인 항목인가.</summary>
+    public bool IsVirtual => string.IsNullOrEmpty(Path);
+}
