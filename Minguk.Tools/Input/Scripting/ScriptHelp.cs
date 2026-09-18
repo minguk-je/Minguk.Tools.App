@@ -130,7 +130,7 @@ public static class ScriptHelp
         [
             new(MobProperties, "몹.이름", "Name", "몹 이름(라벨링에서 붙인 몹 이름).", "if (몹.이름 == \"허수아비\") 클릭();"),
             new(MobProperties, "몹.중심x · 몹.중심y", "CenterX · CenterY", "사각형 가운데 - 화면 픽셀이라 이동()·이동클릭() 에 그대로 넣는다.", "이동(몹.중심x, 몹.중심y);"),
-            new(MobProperties, "몹.머리x · 몹.머리y", "HeadX · HeadY", "머리 자리(위에서 18% 내려온 곳). 조준(몹) 이 겨누는 곳이다.", "출력(몹.머리y);"),
+            new(MobProperties, "몹.머리x · 몹.머리y", "HeadX · HeadY", "머리 자리(위에서 22% 내려온 곳). 조준(몹) 이 겨누는 곳이다.", "출력(몹.머리y);"),
             new(MobProperties, "몹.너비 · 몹.높이", "Width · Height", "사각형 크기(픽셀). 크면 가깝다.", "if (몹.높이 > 200) 걷기(\"S\", 300);"),
             new(MobProperties, "몹.점수", "Score", "찾은 확신(0~1).", "if (몹.점수 < 0.5) continue;"),
             new(MobProperties, "몹.이름표", "Caption", "머리 위 글자 - 부를 때 지금 화면에서 사각형 위를 잘라 읽는다. 이름표가 없는 게임이거나 못 읽으면 빈 글.", "if (몹.이름표.Contains(\"보스\")) 소리(\"경고.wav\");")

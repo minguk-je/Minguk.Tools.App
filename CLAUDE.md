@@ -57,10 +57,20 @@ Minguk Tools (틀)
 ## 기능 모듈 - 셸은 뼈대, 기능은 프로젝트
 
 ```
-Minguk.Tools.Core        ← 셸과 모듈이 함께 보는 가운데 조각 (기능 코드는 넣지 않는다)
+Minguk.Tools.Core        ← 셸과 모듈이 함께 보는 가운데 조각 (기능 코드는 넣지 않는다. LabelBox 도 여기 - OCR 이 쓴다)
    ↑              ↑
 Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 온다
+   ↑
+   ├ Minguk.Tools.Input     ← 입력 어댑터·전역 단축키·대상 창·계획 순서·한글 자판 + Native\x64\interception.dll (아무것도 참조 안 함)
+   ├ Minguk.Tools.Capture   ← WGC·영상 세션·공유 허브·녹화·미리보기 입력 좌표 (Base·Input 참조)
+   └ Minguk.Tools.Ocr       ← IOcrEngine·PP-OCRv5·Windows OCR·팩터리·OnnxDmlEngine·TensorSpec + Models\Ocr (Core 참조)
 ```
+
+- **바탕 조각**(2026-09-18, 사용자 "OCR·캡처·입력을 별도의 프로젝트로"): 화면이 없는 라이브러리다. `RootNamespace` 가 `Minguk.Tools` 라 **네임스페이스는 옮기기 전 그대로**(`Minguk.Tools.Capture`·`Minguk.Tools.Input`·`Minguk.Tools.Vision.Ocr`·`Minguk.Tools.Inference`) -
+  using 은 안 고쳤다. XAML 에서 그 네임스페이스를 쓰면 `;assembly=Minguk.Tools.Input` 처럼 어셈블리를 적어야 한다(`InputAutomationView`).
+  셸에 남은 것: 스크립트(`Input\Scripting` - Vision·ViewModel 을 다 쓴다), 자리 규칙(`Vision\Ocr\HudRegions`·`NameplateRegion`), 몹 찾기(`Vision\Inference`).
+  바탕 조각은 셸·Vision·학습을 모른다 - "학습 중이면 OCR 을 CPU 로" 같은 판단은 화면(`RecognizingCaptureViewModelBase`)이 하고 종류만 넘긴다.
+  네이티브·모델 파일은 그 조각의 csproj 가 `Content` 로 나른다(ProjectReference 를 타고 셸·하네스 출력에 온다).
 
 - Core 에 든 것: `MenuItemModel` · `DocumentViewModelBase` · `IToolModule`/`IMainShell` · `ToolModules` · 솔루션 모델(`Solution`·`SolutionWorkspace`) · 경로 도우미(`InstallPaths`·`UserDataPaths`·`TrainingPaths`·`ProjectPaths`).
   네임스페이스는 `Minguk.Tools.*` 그대로다(어셈블리 이름만 다르다).
@@ -147,7 +157,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
 | `IUiAutomationAdapter` | `WindowsUiAutomationAdapter` | `UiAutomationAdapterFactory` |
 | `IGlobalHotkeyAdapter` | `GlobalHotkeyAdapter` | `GlobalHotkeyAdapterFactory` · `SharedHotkeysFactory` |
 | `IWindowTargetAdapter` | `Win32WindowTargetAdapter` | `WindowTargetAdapterFactory` |
-| `IOcrEngine` | `PaddleOcrEngine`(PP-OCRv5 ONNX) | `OcrEngineFactory` |
+| `IOcrEngine` | `PaddleOcrEngine`(PP-OCRv5 GPU·CPU / PP-OCRv6 tiny·small - `PaddleOcrModelSet`, v6 는 한글 없음·det 정규화 다름) · `WindowsOcrEngine`(Windows 내장) | `OcrEngineFactory` - 스크립트 화면 인식 도구 줄의 「글자 읽기」 콤보(`OcrEngineChoice`, 앱 전체 설정 키 `Minguk.Tools.Ocr.Engine`) |
 
 - **능력이 경로마다 다르면 능력별 인터페이스**(`IScanCodeInput` SendInput·Interception / `ICharacterInput`·`IImeControl` PostMessage·SendMessage). 부르는 쪽이 `adapter is IXxx` 로 묻는다 -
   늘 false 인 빈 메서드는 되는 줄 알고 쓰게 만든다.
@@ -157,7 +167,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
   - P/Invoke 는 **W 판을 명시**(`PostMessageW`) - ANSI 판이 잡히면 한글이 `?`.
   - 한/영 은 `WM_IME_CONTROL`(변환 모드). `WM_INPUTLANGCHANGE`(자판)와 다르다.
   - **게임에는 안 먹는다**(Raw Input·DirectInput) - 게임은 SendInput 이나 Interception. 보낼 창은 `IWindowTargetAdapter` 로 고른다.
-- 입력 어댑터는 `Input/`, `Capture/Input/` 에는 미리보기 좌표 계산만(`PreviewInputRouter` 등). 게임 입력 함정은 `docs/실시간-스크립트.md`.
+- 입력 어댑터는 `Minguk.Tools.Input/`, `Minguk.Tools.Capture/Input/` 에는 미리보기 좌표 계산만(`PreviewInputRouter` 등). 게임 입력 함정은 `docs/실시간-스크립트.md`.
 
 ## 스크립트
 
@@ -218,9 +228,9 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
 - `ItemsSource` 가 있는 콤보는 **`SelectedItem`**(`Mode=TwoWay, UpdateSourceTrigger=PropertyChanged`)으로 묶는다 - `EditValue` 면 화면과 실제 동작이 어긋난다.
 - DevExpress 내장 SVG(`dx:DXImage`)는 없는 경로면 런타임에 터진다 - 아이콘은 확인된 Axialis(`image:FreeImage`)를 쓴다.
 - ViewModel 사이는 `MessengerUtility`. 예외 표시는 `ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName())`.
-- **DirectML 네이티브**는 `Libs/DirectML/x64/` 에서 나간다(패키지는 `ExcludeAssets="all"`). 올릴 때 새 패키지의 DLL 로 덮고 같이 커밋 - onnxruntime 과 짝이 안 맞으면 세션 만들 때 터진다.
+- **DirectML 네이티브**는 `Libs/DirectML/x64/` 에서 나간다(패키지는 셸·Ocr 프로젝트 둘 다 `ExcludeAssets="all"`, onnxruntime 판도 둘이 같아야 한다). 올릴 때 새 패키지의 DLL 로 덮고 같이 커밋 - onnxruntime 과 짝이 안 맞으면 세션 만들 때 터진다.
   `DirectML.Debug.dll` 은 Debug 구성만(csproj 에서 나눈다). `.pdb` 는 저장소에 안 둔다.
-- **Interception**: `interception.dll`·`install-interception.exe`(같은 v1.0.1)는 `Minguk.Tools/Native/x64/`(x86 이면 `BadImageFormatException`).
+- **Interception**: `interception.dll`·`install-interception.exe`(같은 v1.0.1)는 `Minguk.Tools.Input/Native/x64/`(x86 이면 `BadImageFormatException`).
   상태는 `keyboard`·`mouse` 서비스로 읽고, 설치는 별도 프로세스 `runas`(앱 전체를 관리자로 올리지 않는다), 설치 뒤 **재부팅**.
 - `Minguk.Image` 는 솔루션에 없다 - `Libs/Minguk.Image.dll` 을 HintPath 로 문다(리소스 4만 개). 아이콘을 바꾸면 그 프로젝트를 Release|x64 로 따로 빌드해 덮고 커밋.
 

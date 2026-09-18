@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		화면 캡처 - WGC 세션·영상 파일 세션·나눠 쓰는 허브(SharedCaptureHub)·fps 상한·D3DImage 다리·녹화(Media Foundation)·
+		미리보기 입력 전달의 좌표 계산(Capture\Input). 셸에서 떼어 냈다(사용자, 2026-09-18 "캡처, 입력 들도 별도의 프로젝트로").
+
+		참조: Minguk.Base(설정), Minguk.Tools.Input(미리보기 입력 전달이 어댑터로 보낸다). 셸·Vision 은 참조하지 않는다.
+		네임스페이스는 Minguk.Tools.Capture 그대로다(RootNamespace Minguk.Tools).
+	-->
+
+	<PropertyGroup>
+		<Platforms>x64</Platforms>
+		<Platform Condition="'$(Platform)' == 'AnyCPU'">x64</Platform>
+		<TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+		<SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Minguk.Tools</RootNamespace>
+		<AssemblyName>Minguk.Tools.Capture</AssemblyName>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="NLog" Version="6.2.0" />
+		<!-- WGC 프레임은 D3D11 텍스처로 온다. 미리보기 다리는 D3D9 공유 표면. 녹화·영상 읽기는 Media Foundation. -->
+		<PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+		<PackageReference Include="Vortice.Direct3D9" Version="3.8.3" />
+		<PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Minguk.Base\Minguk.Base.csproj" />
+		<ProjectReference Include="..\Minguk.Tools.Input\Minguk.Tools.Input.csproj" />
+	</ItemGroup>
+
+</Project>

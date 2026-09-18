@@ -22,6 +22,7 @@ internal static partial class Program
         TestOcrLineGrouping();
         TestSeparatorSplit();
         TestPaddleOcrEngine();
+        TestOcrEngineChoices();
     }
 
     private static void TestPaddleOcrModels()
@@ -224,24 +225,53 @@ internal static partial class Program
         return new BgraImage(width, height, pixels);
     }
 
+    /// <summary>콤보의 엔진 셋이 팩터리로 다 만들어진다(Windows OCR 은 언어 팩이 있는 PC 에서만 - 없으면 한국어 안내가 나와야 한다).</summary>
+    private static void TestOcrEngineChoices()
+    {
+        foreach (var choice in Minguk.Tools.Vision.Ocr.OcrEngineChoice.All)
+        {
+            try
+            {
+                using var engine = Minguk.Tools.Vision.Ocr.OcrEngineFactory.Create(choice.Kind, out var fallback);
+
+                Check($"엔진 콤보: {choice.Name} 을 만든다", engine is not null, $"{engine!.Name}{(fallback is null ? string.Empty : " · " + fallback)}");
+            }
+            catch (Exception ex) when (choice.Kind == Minguk.Tools.Vision.Ocr.OcrEngineKind.Windows)
+            {
+                Check($"엔진 콤보: {choice.Name} 은 언어 팩이 없으면 한국어로 안내한다", ex.Message.Contains("언어"), ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Check($"엔진 콤보: {choice.Name} 을 만든다", false, ex.Message);
+            }
+        }
+
+        Check("엔진 콤보: 저장값으로 되찾고 모르면 기본", Minguk.Tools.Vision.Ocr.OcrEngineChoice.Parse("Windows").Kind == Minguk.Tools.Vision.Ocr.OcrEngineKind.Windows
+                                                    && Minguk.Tools.Vision.Ocr.OcrEngineChoice.Parse("없는것").Kind == Minguk.Tools.Vision.Ocr.OcrEngineKind.PaddleGpu, "");
+    }
+
     private static void TestPaddleOcrEngine()
     {
-        foreach (var useGpu in new[] { false, true })
+        // v5 는 CPU·GPU, v6 tiny·small 은 GPU 로 - 같은 그림을 읽어 견준다.
+        foreach (var (models, useGpu) in new[] { (PaddleOcrModels.V5, false), (PaddleOcrModels.V5, true), (PaddleOcrModels.V6Tiny, true), (PaddleOcrModels.V6Small, true) })
         {
-            var device = useGpu ? "GPU" : "CPU";
+            var device = $"{models.Name} {(useGpu ? "GPU" : "CPU")}";
             PaddleOcrEngine engine;
 
             try
             {
-                engine = PaddleOcrEngine.Create(useGpu);
+                engine = PaddleOcrEngine.Create(models, useGpu);
             }
             catch (Exception ex)
             {
-                Check($"PP-OCRv5 엔진을 만든다 ({device})", false, ex.Message);
+                Check($"엔진을 만든다 ({device})", false, ex.Message);
                 continue;
             }
 
-            Check($"PP-OCRv5 엔진을 만든다 ({device})", true, engine.Name);
+            Check($"엔진을 만든다 ({device})", true, engine.Name);
+
+            // v6 사전에는 한글이 한 자도 없다(tiny 6,904자 · small 18,708자 - 라틴·한자·가나). 한글 검사는 v5 만.
+            var korean = ReferenceEquals(models, PaddleOcrModels.V5);
 
             using (engine)
             {
@@ -256,8 +286,11 @@ internal static partial class Program
                 Read(DrawText("HP 1234", 40, 320, 90), out var second);
                 Check($"숫자를 읽는다 ({device})", big.Contains("1234"), $"[{big}] 둘째 {second.Elapsed.TotalMilliseconds:0}ms");
 
-                var mixed = Read(DrawText("고블린 전사 Lv.37", 28, 420, 70, Brushes.Black, Brushes.White, "Malgun Gothic", 12), out _);
-                Check($"한글·영문·숫자를 한 모델로 ({device})", mixed == "고블린전사Lv.37", $"[{mixed}]");
+                if (korean)
+                {
+                    var mixed = Read(DrawText("고블린 전사 Lv.37", 28, 420, 70, Brushes.Black, Brushes.White, "Malgun Gothic", 12), out _);
+                    Check($"한글·영문·숫자를 한 모델로 ({device})", mixed == "고블린전사Lv.37", $"[{mixed}]");
+                }
 
                 var small = Read(DrawText("LV 57", 14, 90, 24), out _);
                 Check($"게임 UI 크기 글자 ({device})", small.Contains("57"), $"[{small}]");
@@ -267,11 +300,15 @@ internal static partial class Program
                 Check($"주황 바탕 흰 숫자를 손질 없이 ({device})", hud.Contains("17") && hud.Contains("24"), $"[{hud}]");
 
                 // 옛 길이 NameplateInk 로만 읽던 것 - 회색 바탕의 작은 빨간 글자.
-                var plate = Read(DrawText("일반 봇", 13, 224, 72, Brushes.Gray, Brushes.Red, "Malgun Gothic", 90), out _);
-                Check($"회색 바탕 빨간 이름표를 손질 없이 ({device})", plate.Contains("일반"), $"[{plate}]");
+                if (korean)
+                {
+                    var plate = Read(DrawText("일반 봇", 13, 224, 72, Brushes.Gray, Brushes.Red, "Malgun Gothic", 90), out _);
+                    Check($"회색 바탕 빨간 이름표를 손질 없이 ({device})", plate.Contains("일반"), $"[{plate}]");
+                }
 
-                var two = Read(DrawText("체력 225\n탄약 17", 24, 240, 90), out var twoOutcome);
-                Check($"두 줄은 두 줄로 ({device})", twoOutcome.Lines.Count == 2 && two.StartsWith("체력225", StringComparison.Ordinal), $"[{two}]");
+                var two = Read(DrawText(korean ? "체력 225\n탄약 17" : "HP 225\nAMMO 17", 24, 240, 90), out var twoOutcome);
+                // v6 tiny 는 "AMMO 17" 의 1 을 가끔 놓친다 - 줄 나누기만 본다.
+                Check($"두 줄은 두 줄로 ({device})", twoOutcome.Lines.Count == 2 && two.Contains("225") && (!korean || two.EndsWith("17", StringComparison.Ordinal)), $"[{two}]");
 
                 var inside = twoOutcome.Lines.SelectMany(l => l.Words).All(w => w.Box.Left >= 0 && w.Box.Top >= 0 && w.Box.Right <= 1 && w.Box.Bottom <= 1);
                 Check($"낱말 자리는 0~1 안 ({device})", twoOutcome.Lines.Count > 0 && inside, "");

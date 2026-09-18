@@ -136,6 +136,20 @@ internal sealed class AimLoop : IDisposable
     private const double DeadbandPx = 1.5;
 
     /// <summary>
+    /// 붙은 뒤에는 가만히 - 남은 거리가 <see cref="RestInPx"/> 안에 들면 쉬고, <see cref="RestOutPx"/> 를 넘어야 다시 움직인다(히스테리시스).
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-18) "화면이 너무 떨려·헛발이 많다". 붙어 있는 프레임에서 프레임마다 가로 중간값 14카운트(4px)·90% 72카운트(20px)를 보내고 있었다 - 검출 사각형이
+    /// 몇 px 씩 흔들리는 것을 그때그때 따라간 것이다(1.5px 문턱은 거의 늘 넘는다). 사람은 몸 안에 들어오면 손을 세운다. 몸 폭 60px 이니 5px 안은 그냥 둔다.
+    /// </remarks>
+    private const double RestInPx = 4;
+
+    private const double RestOutPx = 8;
+
+    /// <summary>이보다 느린 속도(px/ms)는 0 으로 본다 - 붙어 있는 동안 잰 속도의 중간값이 33px/s 였는데 떨림이지 움직임이 아니다. 80px/s 아래는 앞먹임·앞서 겨누기에서 뺀다.</summary>
+    private const double VelocityDeadPxPerMs = 0.08;
+
+    /// <summary>
     /// 보낸 입력이 캡처된 화면에 보이기까지(ms). 프레임 시각에서 이만큼 앞선 뒤의 입력은 그 프레임에 아직 없는 것으로 본다.
     /// 실측은 80~100ms 쯤(붙인 뒤 움직임이 화면에 처음 보이기까지 중간값 164ms − 프레임 주기 절반 − 가속) - 틀려도 안전한 쪽으로 조금 길게.
     /// </summary>
@@ -173,7 +187,7 @@ internal sealed class AimLoop : IDisposable
     /// <summary>새 사각형과 예측의 차이를 받아들이는 비율. 몹은 옆으로 달리므로 가로는 크게, 세로·크기는 흔들림이 커 작게.</summary>
     private const double GainX = 0.75;
 
-    private const double GainY = 0.55;
+    private const double GainY = 0.45;
 
     private const double GainSize = 0.35;
 
@@ -241,6 +255,9 @@ internal sealed class AimLoop : IDisposable
     private double _carryY;
     private double _stepX;
     private double _stepY;
+
+    /// <summary>붙어서 쉬는 중인가(<see cref="RestInPx"/>).</summary>
+    private bool _resting;
 
     /// <summary>첫 움직임이 남기는 양(px, 목표 쪽 벡터). 0 이면 남기는 것 없음.</summary>
     private double _holdX;
@@ -484,6 +501,7 @@ internal sealed class AimLoop : IDisposable
     {
         _holdX = _holdY = 0;
         _flicking = false;
+        _resting = false;
         _flickArmed = true;
         _primaryDoneTicks = 0;
         _flickFromTicks = 0;
@@ -923,7 +941,7 @@ internal sealed class AimLoop : IDisposable
 
     /// <summary>세로는 띠를 넓게 쓴다 - 가만히 겨눈 프레임 쌍에서 본 자리가 가로 중간값 3px·90% 30px, 세로 6px·35px 흔들렸다(실측 2026-09-18, 971쌍).</summary>
     private static double Calm(double innovationPx, double jitterPx, double realMovePx)
-        => 0.4 + (0.6 * Math.Clamp((Math.Abs(innovationPx) - jitterPx) / (realMovePx - jitterPx), 0, 1));
+        => 0.3 + (0.7 * Math.Clamp((Math.Abs(innovationPx) - jitterPx) / (realMovePx - jitterPx), 0, 1));
 
     /// <summary>한 박자 - 지금 예측한 남은 거리의 일정 비율을 보낸다.</summary>
     private void Step(long now)
@@ -982,9 +1000,21 @@ internal sealed class AimLoop : IDisposable
             ex -= _holdX;
             ey -= _holdY;
 
-            // 떨림 크기 안쪽 축은 안 움직인다.
-            if (Math.Abs(ex) < DeadbandPx) ex = 0;
-            if (Math.Abs(ey) < DeadbandPx) ey = 0;
+            // 붙었으면 쉰다 - 문턱 둘로 들락거리지 않게.
+            var offBy = Math.Sqrt(Sq(ex) + Sq(ey));
+
+            if (_resting ? offBy > RestOutPx : offBy <= RestInPx) _resting = !_resting;
+
+            if (_resting)
+            {
+                ex = ey = 0;
+            }
+            else
+            {
+                // 떨림 크기 안쪽 축은 안 움직인다.
+                if (Math.Abs(ex) < DeadbandPx) ex = 0;
+                if (Math.Abs(ey) < DeadbandPx) ey = 0;
+            }
 
             // 이번 박자의 걸음(px) - 남은 거리에서 낼 수 있는 속도: 1차 접근(가까울수록 느긋하게) · 일정 감속으로 설 수 있는 속도 · 상한 가운데 가장 느린 것.
             var remaining = Math.Sqrt(Sq(ex) + Sq(ey));
@@ -1003,10 +1033,10 @@ internal sealed class AimLoop : IDisposable
             // 몹이 가는 만큼(속도 앞먹임) - 남은 거리만 쫓으면 달리는 몹을 늘 속도×시간 상수만큼 뒤에서 쫓는다.
             var follow = now - t.SeenTicks <= StaleVelocityMs ? TickMs * scale : 0;
 
-            // 한 번 잰 속도는 반만 - 한 쌍이 튄 것일 수 있다. 두 번 맞으면 다 믿는다.
+            // 한 번 잰 속도는 반만 - 한 쌍이 튄 것일 수 있다. 두 번 맞으면 다 믿는다. 느린 속도는 떨림이라 0.
             follow *= VelocityConfidence(t);
-            wantX += t.Vx * follow;
-            wantY += t.Vy * follow;
+            wantX += Dead(t.Vx) * follow;
+            wantY += Dead(t.Vy) * follow;
 
             var magnitude = Math.Sqrt(Sq(wantX) + Sq(wantY));
 
@@ -1050,8 +1080,11 @@ internal sealed class AimLoop : IDisposable
         var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, long.MaxValue);
         var scale = Math.Max(0.01, _host.Scale());
 
-        return (t.OffX + (t.Vx * coast) - (sx / scale), t.OffY + (t.Vy * coast) - (sy / scale));
+        return (t.OffX + (Dead(t.Vx) * coast) - (sx / scale), t.OffY + (Dead(t.Vy) * coast) - (sy / scale));
     }
+
+    /// <summary>느린 속도는 0 으로(<see cref="VelocityDeadPxPerMs"/>).</summary>
+    private static double Dead(double velocity) => Math.Abs(velocity) < VelocityDeadPxPerMs ? 0 : velocity;
 
     /// <summary>속도를 얼마나 믿나 - 한 번 잰 것은 반, 두 번부터 다.</summary>
     private static double VelocityConfidence(Track t) => Math.Min(1, t.VelocitySamples / 2.0);

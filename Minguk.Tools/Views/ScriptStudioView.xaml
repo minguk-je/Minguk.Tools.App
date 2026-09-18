@@ -365,6 +365,18 @@
                                               MinValue="1" />
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
+                <dxb:BarItemSeparator />
+                <!-- 글자 읽기 엔진 - 돌려 보며 견준다(사용자, 2026-09-18). 앱 전체에 하나라 플레이도 같은 것으로 읽는다. -->
+                <dxb:BarEditItem Content="글자 읽기"
+                                 EditValue="{Binding SelectedOcrEngine, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 EditWidth="150"
+                                 Hint="글자 읽기 엔진. PP-OCRv5 는 한글·영문·숫자를 손질 없이 읽는다(GPU 는 몹 찾기와 GPU 를 나눠 쓴다, CPU 는 그 몫이 없다). PP-OCRv6 는 더 빠르지만 한글이 없다(숫자·영문 HUD 용). Windows 내장 OCR 은 빠르지만 게임 글자에 약하다.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:ComboBoxEditSettings DisplayMember="Name"
+                                                  IsTextEditable="False"
+                                                  ItemsSource="{Binding OcrEngines}" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
             </dxb:Bar>
         </dxb:BarManager.Bars>
 

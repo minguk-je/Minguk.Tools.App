@@ -9,7 +9,7 @@
              xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
              xmlns:image="clr-namespace:Minguk.Image;assembly=Minguk.Image"
              xmlns:markup="clr-namespace:Minguk.Tools.Markup"
-             xmlns:sequencing="clr-namespace:Minguk.Tools.Input.Sequencing"
+             xmlns:sequencing="clr-namespace:Minguk.Tools.Input.Sequencing;assembly=Minguk.Tools.Input"
              xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
              Style="{DynamicResource BaseControlStyle}"
              FontFamily="{DynamicResource BaseFontFamily}"

@@ -169,6 +169,8 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
 
         // 영역 보기도 켜 둔 대로 열린다(처음은 켬). 체크와 미리보기가 늘 같다(사용자, 2026-09-17).
         ShowRegions = GetSetting(nameof(ShowRegions), true);
+
+        RestoreOcrEngineChoice();
     }
 
     protected override void SaveSettings()

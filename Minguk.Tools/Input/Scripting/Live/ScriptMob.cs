@@ -33,14 +33,14 @@ public sealed record ScriptMob(string Name, double Score, int CenterX, int Cente
     /// 몹이 좌우로 움직여도 머리는 덜 흔들린다(팔다리가 사각형을 넓혔다 좁혔다 하는 것은 아래쪽이다).
     ///
     /// 위 모서리에 딱 붙이지 않는다 - 검출 사각형은 늘 조금 넉넉해서, 꼭대기를 겨누면 머리 위 허공을 본다.
-    /// 위에서 18% 내려온 자리가 사람 몸에서 머리 한가운데쯤이다.
+    /// 위에서 18% 내려온 자리가 사람 몸에서 머리 한가운데쯤이었는데, 사격장 봇(높이 70px)에서 조금 높아 22% 로 내렸다(사용자, 2026-09-18 "타겟 위치 조금만 아래로" - 약 3px).
     /// </remarks>
     public int HeadX => CenterX;
 
     public int HeadY => CenterY - (Height / 2) + (int)Math.Round(Height * HeadFraction);
 
     /// <summary>사각형 위에서 머리까지, 높이의 몇 배로 내려갈지.</summary>
-    public const double HeadFraction = 0.18;
+    public const double HeadFraction = 0.22;
 
     public int 머리x => HeadX;
 

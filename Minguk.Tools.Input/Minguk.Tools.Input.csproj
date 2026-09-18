@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		입력 - 키·마우스를 게임에 보내는 어댑터(SendInput · 창 메시지 · Interception), 전역 단축키, 대상 창 고르기,
+		계획 모드의 순서(Sequencing), 한글 자판. 셸에서 떼어 냈다(사용자, 2026-09-18 "캡처, 입력 들도 별도의 프로젝트로").
+
+		규칙: 다른 기능 프로젝트를 참조하지 않는다 - 캡처(Minguk.Tools.Capture)가 이것을 참조한다(미리보기 입력 전달).
+		네임스페이스는 Minguk.Tools.Input 그대로다(RootNamespace Minguk.Tools) - 옮겨도 using 을 안 고친다.
+		스크립트(Minguk.Tools/Input/Scripting)는 셸에 남았다 - Vision·ViewModel 을 다 쓴다.
+	-->
+
+	<PropertyGroup>
+		<Platforms>x64</Platforms>
+		<Platform Condition="'$(Platform)' == 'AnyCPU'">x64</Platform>
+		<TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+		<SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Minguk.Tools</RootNamespace>
+		<AssemblyName>Minguk.Tools.Input</AssemblyName>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="NLog" Version="6.2.0" />
+		<!-- Interception 드라이버 상태(keyboard·mouse 서비스)를 읽는다. -->
+		<PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
+	</ItemGroup>
+
+	<!--
+	  Interception 드라이버 dll + 설치 프로그램(같은 v1.0.1). x64 만 - x86 이면 BadImageFormatException.
+	  DllImport 는 실행 파일 옆을 찾으므로 TargetPath 로 출력 루트에 둔다. Content 라 이 프로젝트를 참조하는 셸·하네스 출력에도 따라간다.
+	  install-interception.exe 는 interception.dll 과 같은 릴리스에서 나온 것이어야 한다 - 판이 어긋나면 드라이버와 dll 이 다른 규약을 쓴다.
+	-->
+	<ItemGroup>
+	  <None Remove="Native\x64\interception.dll" />
+	  <Content Include="Native\x64\interception.dll" TargetPath="interception.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <None Remove="Native\x64\install-interception.exe" />
+	  <Content Include="Native\x64\install-interception.exe" TargetPath="install-interception.exe">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
+</Project>

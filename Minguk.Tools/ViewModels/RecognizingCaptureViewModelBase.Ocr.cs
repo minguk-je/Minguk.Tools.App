@@ -11,6 +11,8 @@ using System.Windows.Media.Imaging;
 
 using DevExpress.Mvvm;
 
+using Minguk.Base.Utilities;
+
 using Minguk.Tools.Capture;
 using Minguk.Tools.Capture.Input;
 using Minguk.Tools.Vision.Inference;
@@ -71,6 +73,33 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     private readonly object _ocrGate = new();
 
+    /// <summary>고를 수 있는 글자 읽기 엔진들(콤보).</summary>
+    public IReadOnlyList<OcrEngineChoice> OcrEngines => OcrEngineChoice.All;
+
+    /// <summary>
+    /// 고른 엔진. 바꾸면 지금 것을 버리고 다음 읽기에서 새로 만든다 - 읽는 도중이면 그 읽기가 끝난 뒤 놓인다.
+    /// </summary>
+    /// <remarks>사용자(2026-09-18) "OCR 종류 선택해서 돌려 볼 수 있게". 앱 전체에 하나(설정 키 <see cref="OcrEngineSettingKey"/>) - 스크립트 화면에서 고르면 플레이도 같은 것으로 읽는다.</remarks>
+    public OcrEngineChoice SelectedOcrEngine
+    {
+        get => GetProperty(() => SelectedOcrEngine) ?? OcrEngineChoice.Default;
+        set => SetProperty(() => SelectedOcrEngine, value, () =>
+        {
+            if (value is null) return;
+
+            AppSettingUtility.Set(OcrEngineSettingKey, value.Kind.ToString());
+            DropOcrEngine();
+            OcrStatus = $"글자 읽기 엔진: {value.Name} - 다음 읽기부터";
+        });
+    }
+
+    /// <summary>화면 이름과 무관한 앱 전체 키 - 어느 화면에서 골라도 같다.</summary>
+    private const string OcrEngineSettingKey = "Minguk.Tools.Ocr.Engine";
+
+    /// <summary>저장된 엔진을 되살린다. <c>RestoreSettings</c> 에서.</summary>
+    protected void RestoreOcrEngineChoice()
+        => SelectedOcrEngine = OcrEngineChoice.Parse(AppSettingUtility.Get(OcrEngineSettingKey, OcrEngineChoice.Default.Kind.ToString()));
+
     /// <summary>스크립트의 읽기()가 쓸 엔진. 없으면 null - 스크립트가 그 이유를 말한다.</summary>
     protected IOcrEngine? OcrEngineForScripts() => EnsureOcrEngine(out _) ? _ocr : null;
 
@@ -92,7 +121,10 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             try
             {
-                _ocr = OcrEngineFactory.Create(out var fallback);
+                // 학습 중이면 CPU - 같은 카드에서 CUDA 학습과 DirectML 추론이 겹치면 GPU 가 리셋된다(실측). 학습이 끝나면 엔진을 버려 고른 것으로 돌아간다.
+                var kind = Vision.Training.TrainingActivity.IsBusy && SelectedOcrEngine.Kind == OcrEngineKind.PaddleGpu ? OcrEngineKind.PaddleCpu : SelectedOcrEngine.Kind;
+
+                _ocr = OcrEngineFactory.Create(kind, out var fallback);
 
                 if (fallback is not null) DispatcherService?.BeginInvoke(() => StatusText = fallback);
 
