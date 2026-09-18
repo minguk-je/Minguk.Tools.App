@@ -95,6 +95,9 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
   (`Vision/Matching/TemplateMatch` - 정규화 상호상관, 계단 셋 1/8→1/2→원본, 1080p 0.5초). 밝기는 견디고 크기는 못 견딘다. 자세한 것은 `docs/실시간-스크립트.md`.
 - **자리 안 칸**(2026-09-16): 자리(`NamedRegion`)는 그룹, 칸(`RegionCell`, 자리 기준 0~1, 돌릴 수 있음)만 읽는다. 스크립트 `읽기("자리.칸")`. 칸은 별개 항목·별개 어도너(`RegionCellItem`·`RegionCellAdorner`),
   영역 패널은 트리. 자세한 것·함정(돌린 칸 손잡이 변위는 돌린 좌표계, 회전은 픽셀 공간)은 `docs/몹-검출.md`.
+  - **칸은 자리를 "뚫어야" 클릭을 받는다**(2026-09-18, 사용자 "클릭하니까 처음부터 구역이 선택되네"): 새 자리는 자리와 같은 크기의 「전체」 칸으로 시작하고 칸이 자리 위 형제(z 순서 위)라,
+    그냥 두면 자리 어디를 눌러도 칸부터 잡혀 자리를 고르거나 옮길 수 없었다. 안 고른 자리의 칸은 `IsHitTestVisible=false` 로 빠져 클릭이 밑 자리로 흘러간다 - **첫 클릭은 자리, 이미 고른 자리를
+    또 누르면 뚫려 그 뒤부터 칸**(`RegionCanvas._drilled`·`PlaceCells`). 검사는 실제 커서 없이 `InputHitTest` 대신 아는 요소에 `RaiseEvent` 로 클릭을 태운다(`--vision`, `RegionCanvasSelectionTests`).
 - 스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`. 스크립트 입력은 미리보기와 **같은 어댑터**로 나가고 보내기 직전 대상 창을 앞으로.
 - **캡처 세션은 허브에서 나눠 쓴다**(`SharedCaptureHub`) - 같은 창을 잡는 화면이 여럿이어도 WGC 세션은 하나. 리드백은 누구라도 원하면 켜고, 세션을 만들 때 정해져 필요하면 새로 만든다.
   콜백은 잠금 없이 손잡이 배열 스냅샷을 돈다. **세션이 스스로 멈추면**(대상 창 닫힘, `IScreenCaptureAdapter.Ended`) 허브가 손잡이를 모두 멈춘 것으로 하고 알리고, 화면 바탕이 중지 상태로 맞춘 뒤

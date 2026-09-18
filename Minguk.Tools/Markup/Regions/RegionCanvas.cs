@@ -40,6 +40,16 @@ public sealed class RegionCanvas : Canvas
     private RegionItemBase? _dragging;
     private bool _dragMoved;
 
+    /// <summary>
+    /// "뚫은" 자리 - 이 자리는 이미 고른 채로 한 번 더 눌려서, 그 안의 칸이 이제 클릭을 받는다(<see cref="PlaceCells"/>).
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-18) "처음 클릭하면 영역이 선택되고 또 클릭하면 구역이 선택되어야". 칸은 자리 위 형제(z 순서가 위)라 그냥 두면 새 자리의
+    /// 「전체」 칸(자리와 같은 크기로 시작)이 늘 클릭을 먼저 먹어 자리를 고르거나 손잡이로 옮길 수가 없었다. 자리가 고른 것이 되기 전까지는 칸이
+    /// 히트 테스트에서 빠져, 첫 클릭이 곧바로 자리로 흘러가 고르고 - 같은 눌러끌기 안에서 옮기기·크기 손잡이도 바로 커서를 따라간다.
+    /// </remarks>
+    private NamedRegion? _drilled;
+
     /// <summary>끌기를 시작할 때 마우스(캔버스 좌표)와 항목 사각형. 끄는 동안은 늘 여기서부터의 전체 이동량으로 놓는다.</summary>
     private Point _dragStartMouse;
     private Rect _dragStartRect;
@@ -75,7 +85,14 @@ public sealed class RegionCanvas : Canvas
 
     public static readonly DependencyProperty SelectedRegionProperty = DependencyProperty.Register(
         nameof(SelectedRegion), typeof(NamedRegion), typeof(RegionCanvas),
-        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, _) => ((RegionCanvas)d).Rebuild()));
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, _) =>
+        {
+            // 새로 고른(또는 바뀐) 자리는 아직 안 뚫었다 - 다음 클릭은 자리부터다. 뚫는 것은 Select() 가 "이미 고른 자리를 또 눌렀다" 에서 한다.
+            var canvas = (RegionCanvas)d;
+
+            canvas._drilled = null;
+            canvas.Rebuild();
+        }));
 
     /// <summary>고른 자리. 항목을 누르면 여기로 올라가고, 목록에서 고르면 여기로 내려온다.</summary>
     public NamedRegion? SelectedRegion
@@ -247,11 +264,24 @@ public sealed class RegionCanvas : Canvas
         }
     }
 
-    /// <summary>자리의 칸들을 자리 항목 사각형 안에 놓는다. 끄고 있는 칸은 건드리지 않는다.</summary>
+    /// <summary>
+    /// 자리의 칸들을 자리 항목 사각형 안에 놓는다. 끄고 있는 칸은 건드리지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// <b>칸은 자리를 "뚫어야"(<see cref="_drilled"/>) 마우스를 받는다</b>(사용자, 2026-09-18 "처음 클릭하면 영역이 선택되고 또 클릭하면 구역이 선택되어야").
+    /// 칸이 자리 위 형제라(z 순서가 위) 안 그러면 자리 어디를 눌러도 늘 칸부터 먼저 잡혀 자리를 고르거나 옮길 수가 없었다(새 자리는 「전체」 칸이 자리와 같은 크기로 시작해 늘 이 꼴이다).
+    /// 안 뚫렸으면 <see cref="UIElement.IsHitTestVisible"/> 을 꺼서 클릭이 밑의 자리로 그냥 흘러가게 한다 - 그 클릭이 자리를 고르고, 그 자리에서 곧바로
+    /// 옮기기·크기 손잡이가 커서를 따라간다(같은 눌러끌기 안에서 된다 - 히트 테스트는 처음 누른 순간에 정해지고 그때는 자리를 골랐으니 손잡이가 그 아래에 있다).
+    /// 이미 고른 자리를 또 누르면 그제서야 뚫려 칸이 받는다(<see cref="Select"/>). 트리에서 곧바로 칸을 골랐을 때도(<see cref="SelectedCell"/>) 뚫린 것으로 친다 -
+    /// 이미 고른 칸을 몸으로 못 끌면 이상하다.
+    /// </remarks>
     private void PlaceCells(NamedRegion region, Rect regionCanvas)
     {
         var area = ImageArea;
         var source = SourceSize;
+        // SelectedCell 이 "이 자리" 의 칸인지까지 본다(그냥 not null 이 아니라) - SelectedRegion 만 바깥에서 바로 바뀌고 SelectedCell 은
+        // 아직 이전 자리의 칸을 들고 있는 한 틈(예: 목록에서 다른 자리를 고르는 그 순간)에도 엉뚱한 자리의 칸이 뚫린 것처럼 보이면 안 된다.
+        var regionPicked = ReferenceEquals(region, SelectedRegion) && (ReferenceEquals(region, _drilled) || region.Cells.Any(c => ReferenceEquals(c, SelectedCell)));
 
         foreach (var cell in region.Cells)
         {
@@ -265,6 +295,7 @@ public sealed class RegionCanvas : Canvas
 
             item.Visibility = Visibility.Visible;
             item.IsSelected = IsEditing && ReferenceEquals(cell, SelectedCell);
+            item.IsHitTestVisible = regionPicked;
 
             if (ReferenceEquals(item, _dragging)) continue;
 
@@ -324,7 +355,21 @@ public sealed class RegionCanvas : Canvas
 
             case RegionItem { Region: { } region }:
                 if (SelectedCell is not null) SelectedCell = null;
-                if (!ReferenceEquals(region, SelectedRegion)) SelectedRegion = region;
+
+                if (ReferenceEquals(region, SelectedRegion))
+                {
+                    // 이미 고른 자리를 또 눌렀다 - 이제부터 그 안의 칸이 클릭을 받는다(두 번째 클릭에서 구역으로).
+                    if (!ReferenceEquals(region, _drilled))
+                    {
+                        _drilled = region;
+                        Rebuild();
+                    }
+                }
+                else
+                {
+                    SelectedRegion = region; // 프로퍼티 콜백이 _drilled 를 지우고 다시 놓는다.
+                }
+
                 break;
         }
     }
