@@ -85,7 +85,7 @@ public abstract class RegionItemBase : ContentControl
     protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnPreviewMouseLeftButtonDown(e);
-        Owner?.Select(this);
+        Owner?.Press(this);
     }
 
     private static void OnIsSelectedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

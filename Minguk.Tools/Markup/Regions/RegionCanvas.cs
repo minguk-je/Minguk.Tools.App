@@ -50,6 +50,16 @@ public sealed class RegionCanvas : Canvas
     /// </remarks>
     private NamedRegion? _drilled;
 
+    /// <summary>
+    /// 이번 눌러끌기가 "뚫을 후보"인가 - 이미 고른 자리를 눌렀다(아직 안 뚫었으면). <see cref="EndDrag"/> 에서 <b>안 끌고 그냥 뗐을 때만</b> 뚫는다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-18) "선택 후에 클릭하면 바로 구역이 선택되는데 - 또 클릭인지 마우스 드래그인지로". 뚫기를 누르는 순간(<see cref="BeginDrag"/>)에
+    /// 바로 정하면, 자리를 옮기려고 누른 채 끄는 것도 "또 클릭" 으로 잘못 세어 옮기던 중에 칸으로 뚫려 버렸다 - 끌리는 동안 손잡이가 자리에서 칸으로 바뀌면
+    /// 안 된다. 눌렀다 뗄 때(<see cref="_dragMoved"/> 가 false, "옮기기" 판단과 같은 규칙)까지 미룬다.
+    /// </remarks>
+    private NamedRegion? _drillCandidate;
+
     /// <summary>끌기를 시작할 때 마우스(캔버스 좌표)와 항목 사각형. 끄는 동안은 늘 여기서부터의 전체 이동량으로 놓는다.</summary>
     private Point _dragStartMouse;
     private Rect _dragStartRect;
@@ -355,28 +365,31 @@ public sealed class RegionCanvas : Canvas
 
             case RegionItem { Region: { } region }:
                 if (SelectedCell is not null) SelectedCell = null;
-
-                if (ReferenceEquals(region, SelectedRegion))
-                {
-                    // 이미 고른 자리를 또 눌렀다 - 이제부터 그 안의 칸이 클릭을 받는다(두 번째 클릭에서 구역으로).
-                    if (!ReferenceEquals(region, _drilled))
-                    {
-                        _drilled = region;
-                        Rebuild();
-                    }
-                }
-                else
-                {
-                    SelectedRegion = region; // 프로퍼티 콜백이 _drilled 를 지우고 다시 놓는다.
-                }
+                if (!ReferenceEquals(region, SelectedRegion)) SelectedRegion = region; // 프로퍼티 콜백이 _drilled 를 지우고 다시 놓는다.
 
                 break;
         }
     }
 
+    /// <summary>
+    /// 눌림의 첫 순간(터널 단계 - 옮기기 손잡이가 버블 단계에서 누름을 받아 <see cref="BeginDrag"/> 를 부르기 <b>전</b>) - 뚫을 후보를 정하고 고른다.
+    /// </summary>
+    /// <remarks>
+    /// 뚫을 후보인지는 <b>지금(변하기 전) SelectedRegion</b> 으로 봐야 한다 - <see cref="Select"/> 가 여기서 그것을 바꾸고, 손잡이가 같은 눌림으로
+    /// <see cref="BeginDrag"/> 를 또 부르면 그때는 이미 방금 바뀐 값이라 첫 클릭도 "이미 고른 자리" 로 잘못 보인다(실측 - 선택 직후 클릭이 바로 뚫렸다).
+    /// </remarks>
+    internal void Press(RegionItemBase item)
+    {
+        _drillCandidate = item is RegionItem { Region: { } region } && ReferenceEquals(region, SelectedRegion) && !ReferenceEquals(region, _drilled)
+            ? region
+            : null;
+
+        Select(item);
+    }
+
     internal void BeginDrag(RegionItemBase item)
     {
-        Select(item);
+        Select(item); // Press() 에서 이미 골랐지만 손잡이가 직접 받는 경로라 그대로 둔다 - 멱등이라 두 번 불러도 된다.
         _dragging = item;
         _dragMoved = false;
         _dragStartMouse = Mouse.GetPosition(this);
@@ -516,7 +529,14 @@ public sealed class RegionCanvas : Canvas
                     break;
             }
         }
+        else if (_drillCandidate is { } candidate)
+        {
+            // 안 끌고 그냥 눌렀다 뗐다 - 이미 고른 자리를 순전히 "또 클릭"한 것이니 이제 뚫는다(끌어서 옮긴 것은 위에서 걸러졌다).
+            _drilled = candidate;
+            Rebuild();
+        }
 
+        _drillCandidate = null;
         _dragMoved = false;
     }
 
