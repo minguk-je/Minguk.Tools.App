@@ -344,8 +344,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// 도구 줄 배치 판. 올리면 저장된 옛 자리를 버리고 XAML 의 기본 배치로 시작한다 - 안 올리면 옛 자리가 새 배치를 덮는다.
     /// 1: 성격별로 두 줄(사용자, 2026-09-17) - 윗줄 표준·디버그·실행 설정, 아랫줄 캡처·인식. 시작 대기는 실행 설정으로, 빌드는 디버그 끝으로.
     /// 2: 일시정지를 둘로 - 디버그 「실행 일시정지」, 캡처 「캡처 일시정지」(2026-09-17).
+    /// 3: 인식 줄에 「영역 이미지 저장」 더함(2026-09-18) - 옛 배치를 그대로 살리면 새 단추가 안 보인다.
     /// </summary>
-    private const int BarLayoutVersion = 2;
+    private const int BarLayoutVersion = 3;
 
     /// <summary>
     /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.
