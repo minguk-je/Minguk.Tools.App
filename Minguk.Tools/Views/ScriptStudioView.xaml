@@ -180,49 +180,6 @@
                 </dxb:BarEditItem>
             </dxb:Bar>
 
-            <!-- ── 디버그 ── VS 의 "▶ 시작" 자리. 실행 · 실행 일시정지 · 중지 · 한 줄 | 중단점 | 빌드 -->
-            <dxb:Bar x:Name="DebugBar"
-                     AllowQuickCustomization="False"
-                     Caption="디버그">
-                <dxb:Bar.DockInfo>
-                    <dxb:BarDockInfo ContainerName="ToolbarContainer"
-                                     Row="0" />
-                </dxb:Bar.DockInfo>
-                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                   Command="{Binding RunOrContinueCommand}"
-                                   Content="실행(F5)"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
-                                   Hint="스크립트 시작/계속 (F5) - 캡처가 켜져 있어야 몹·글자를 본다.시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다." />
-                <!--
-                    실행 일시정지 - 도는 스크립트만 멈춘다. 캡처는 캡처 도구 모음의 「캡처 일시정지」(사용자, 2026-09-17 - 한 단추가 둘 다 멈추니 실행 옆에서 실행용으로만 읽혔다).
-                    Pause 키는 비상 정지라 단축키가 아니다.
-                -->
-                <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
-                                  Content="실행 일시정지"
-                                  Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_pause.png'}"
-                                  Hint="도는 스크립트를 멈춘다 - 다음 호출에서 멈추고 누르고 있던 키를 뗀다. 다시 누르거나 F5 로 계속.&#10;캡처(미리보기·몹 찾기)는 캡처 도구 모음의 [캡처 일시정지]."
-                                  IsChecked="{Binding IsPaused, Mode=TwoWay}"
-                                  IsEnabled="{Binding CanPause, Mode=OneWay}" />
-                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                   Command="{Binding Player.StopCommand}"
-                                   Content="중지(F6)"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
-                                   Hint="디버깅 중지(F6) (Shift+F5 · 게임 안에서는 F6)" />
-                <dxb:BarButtonItem Command="{Binding StepCommand}"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_goto_next.png'}"
-                                   Hint="프로시저 단위 실행 (F10) - JavaScript·Python 만" />
-                <dxb:BarItemSeparator />
-                <dxb:BarButtonItem Command="{Binding ToggleBreakpointCommand}"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/flag_red.png'}"
-                                   Hint="중단점 설정/해제 (F9)" />
-                <dxb:BarItemSeparator />
-                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                   Command="{Binding BuildCommand}"
-                                   Content="빌드"
-                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project-save.png'}"
-                                   Hint="프로젝트를 .NET DLL(.mtsx)로 빌드 (Ctrl+Shift+B) - 소스 없이 플레이어에서 실행만 하는 파일을 만듭니다." />
-            </dxb:Bar>
-
             <!-- ── 실행 설정 ── 돌릴 때 쓰는 값. 시작 대기 | 조준 배율 · 자동 | 설정 값 창 -->
             <dxb:Bar x:Name="InputBar"
                      AllowQuickCustomization="False"
@@ -346,7 +303,7 @@
                      Caption="인식">
                 <dxb:Bar.DockInfo>
                     <dxb:BarDockInfo ContainerName="ToolbarContainer"
-                                     Row="1" />
+                                     Row="2" />
                 </dxb:Bar.DockInfo>
                 <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
                                   Content="몹 찾기"
@@ -377,6 +334,49 @@
                                                   ItemsSource="{Binding OcrEngines}" />
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
+            </dxb:Bar>
+
+            <!-- ── 디버그 ── VS 의 "▶ 시작" 자리. 실행 · 실행 일시정지 · 중지 · 한 줄 | 중단점 | 빌드. 인식 줄 뒤(사용자, 2026-09-18). -->
+            <dxb:Bar x:Name="DebugBar"
+                     AllowQuickCustomization="False"
+                     Caption="디버그">
+                <dxb:Bar.DockInfo>
+                    <dxb:BarDockInfo ContainerName="ToolbarContainer"
+                                     Row="2" />
+                </dxb:Bar.DockInfo>
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding RunOrContinueCommand}"
+                                   Content="실행(F5)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_play.png'}"
+                                   Hint="스크립트 시작/계속 (F5) - 캡처가 켜져 있어야 몹·글자를 본다.시작 전 대기 뒤 대상 창을 앞으로 가져와 실시간으로 돌린다. 도는 동안 Pause 가 비상 정지다." />
+                <!--
+                    실행 일시정지 - 도는 스크립트만 멈춘다. 캡처는 캡처 도구 모음의 「캡처 일시정지」(사용자, 2026-09-17 - 한 단추가 둘 다 멈추니 실행 옆에서 실행용으로만 읽혔다).
+                    Pause 키는 비상 정지라 단축키가 아니다.
+                -->
+                <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                                  Content="실행 일시정지"
+                                  Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_pause.png'}"
+                                  Hint="도는 스크립트를 멈춘다 - 다음 호출에서 멈추고 누르고 있던 키를 뗀다. 다시 누르거나 F5 로 계속.&#10;캡처(미리보기·몹 찾기)는 캡처 도구 모음의 [캡처 일시정지]."
+                                  IsChecked="{Binding IsPaused, Mode=TwoWay}"
+                                  IsEnabled="{Binding CanPause, Mode=OneWay}" />
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding Player.StopCommand}"
+                                   Content="중지(F6)"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_stop.png'}"
+                                   Hint="디버깅 중지(F6) (Shift+F5 · 게임 안에서는 F6)" />
+                <dxb:BarButtonItem Command="{Binding StepCommand}"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_goto_next.png'}"
+                                   Hint="프로시저 단위 실행 (F10) - JavaScript·Python 만" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem Command="{Binding ToggleBreakpointCommand}"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/flag_red.png'}"
+                                   Hint="중단점 설정/해제 (F9)" />
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding BuildCommand}"
+                                   Content="빌드"
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project-save.png'}"
+                                   Hint="프로젝트를 .NET DLL(.mtsx)로 빌드 (Ctrl+Shift+B) - 소스 없이 플레이어에서 실행만 하는 파일을 만듭니다." />
             </dxb:Bar>
         </dxb:BarManager.Bars>
 
