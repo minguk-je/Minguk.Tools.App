@@ -345,8 +345,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// 1: 성격별로 두 줄(사용자, 2026-09-17) - 윗줄 표준·디버그·실행 설정, 아랫줄 캡처·인식. 시작 대기는 실행 설정으로, 빌드는 디버그 끝으로.
     /// 2: 일시정지를 둘로 - 디버그 「실행 일시정지」, 캡처 「캡처 일시정지」(2026-09-17).
     /// 3: 인식 줄에 「영역 이미지 저장」 더함(2026-09-18) - 옛 배치를 그대로 살리면 새 단추가 안 보인다.
+    /// 4: 「영역 이미지 저장」을 인식 줄에서 뺐다(사용자, 2026-09-18 "몹 찾기 Bar는 지금처럼") - 영역 패널 도구 줄(하단 영역 그리드 위)에만 글자를 붙여 남긴다.
     /// </summary>
-    private const int BarLayoutVersion = 3;
+    private const int BarLayoutVersion = 4;
 
     /// <summary>
     /// 배치 형식이 바뀌면 올린다 - 옛 배치를 새 화면에 되살리면 없는 창을 찾거나 새 창이 사라진다.

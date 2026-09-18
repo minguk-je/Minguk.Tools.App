@@ -377,12 +377,6 @@
                                                   ItemsSource="{Binding OcrEngines}" />
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
-                <dxb:BarItemSeparator />
-                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                   Command="{Binding SaveTemplateCommand}"
-                                   Content="영역 이미지 저장"
-                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/camera.png'}"
-                                   Hint="고른 영역을 지금 화면에서 잘라 영역 이미지(Resources\영역이름.png)로 저장한다.&#10;글자가 아닌 그림 버튼(메뉴 카드·아이콘)은 스크립트에서 그림누르기(&quot;영역이름.png&quot;) 로 찾아 누른다." />
             </dxb:Bar>
         </dxb:BarManager.Bars>
 
@@ -1030,7 +1024,9 @@
                                     <dxb:BarButtonItem Command="{Binding TestRegionCommand}"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
                                                        Hint="고른 영역(구역을 골랐으면 그 구역)을 지금 한 번 읽는다." />
-                                    <dxb:BarButtonItem Command="{Binding SaveTemplateCommand}"
+                                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                                       Command="{Binding SaveTemplateCommand}"
+                                                       Content="영역 이미지 저장"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/camera.png'}"
                                                        Hint="고른 영역을 지금 화면에서 잘라 영역 이미지(Resources\영역이름.png)로 저장한다.&#10;글자가 아닌 그림 버튼(메뉴 카드·아이콘)은 스크립트에서 그림누르기(&quot;영역이름.png&quot;) 로 찾아 누른다." />
                                     <dxb:BarButtonItem Command="{Binding RemoveRegionCommand}"
