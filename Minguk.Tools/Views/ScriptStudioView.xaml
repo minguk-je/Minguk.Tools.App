@@ -1021,7 +1021,9 @@
                                                        Content="새 구역"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
                                                        Hint="고른 영역 안에 따로 읽을 구역을 더한다. 영역이나 그 구역을 골랐을 때만 켜진다.&#10;구역마다 따로 읽고, 스크립트는 읽기(&quot;영역.구역&quot;) 으로 부른다. 구역은 위쪽 동그라미로 돌릴 수 있다." />
-                                    <dxb:BarButtonItem Command="{Binding TestRegionCommand}"
+                                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                                       Command="{Binding TestRegionCommand}"
+                                                       Content="지금 읽기"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
                                                        Hint="고른 영역(구역을 골랐으면 그 구역)을 지금 한 번 읽는다." />
                                     <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
