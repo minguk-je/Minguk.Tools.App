@@ -19,5 +19,11 @@ public sealed record ScriptSpot(int CenterX, int CenterY, int Width, int Height,
 
     public string 글 => Text;
 
-    public override string ToString() => $"「{Text}」 ({CenterX}, {CenterY}) {Width}x{Height}";
+    /// <summary>본보기 그림으로 찾았으면 닮음(0~1). 글자로 찾았으면 0.</summary>
+    public double Score { get; init; }
+
+    public double 닮음 => Score;
+
+    public override string ToString()
+        => Score > 0 ? $"「{Text}」 ({CenterX}, {CenterY}) {Width}x{Height} 닮음 {Score:0.00}" : $"「{Text}」 ({CenterX}, {CenterY}) {Width}x{Height}";
 }

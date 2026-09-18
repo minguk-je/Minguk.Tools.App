@@ -1024,6 +1024,9 @@
                                     <dxb:BarButtonItem Command="{Binding TestRegionCommand}"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
                                                        Hint="고른 영역(구역을 골랐으면 그 구역)을 지금 한 번 읽는다." />
+                                    <dxb:BarButtonItem Command="{Binding SaveTemplateCommand}"
+                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/camera.png'}"
+                                                       Hint="고른 영역을 지금 화면에서 잘라 본보기 그림(Resources\영역이름.png)으로 저장한다.&#10;글자가 아닌 그림 버튼(메뉴 카드·아이콘)은 스크립트에서 그림누르기(&quot;영역이름.png&quot;) 로 찾아 누른다." />
                                     <dxb:BarButtonItem Command="{Binding RemoveRegionCommand}"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
                                                        Hint="고른 구역을 지운다(구역이 하나뿐이면 못 지운다). 영역 줄을 골랐으면 영역을 지운다." />
@@ -1113,6 +1116,9 @@
                                                 <dxb:BarButtonItem Command="{Binding View.DataContext.TestRegionCommand}"
                                                                    Content="지금 읽기(_R)"
                                                                    Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}" />
+                                                <dxb:BarButtonItem Command="{Binding View.DataContext.SaveTemplateCommand}"
+                                                                   Content="본보기로 저장(_T)"
+                                                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/camera.png'}" />
                                                 <dxb:BarItemSeparator />
                                                 <dxb:BarButtonItem Command="{Binding View.DataContext.RemoveRegionCommand}"
                                                                    Content="지우기(_D)"

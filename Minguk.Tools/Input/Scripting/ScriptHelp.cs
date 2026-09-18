@@ -48,7 +48,7 @@ public static class ScriptHelp
 
         ["Mobs"] = Mobs, ["NearestMob"] = Mobs, ["TargetMob"] = Mobs, ["ReleaseTarget"] = Mobs, ["WaitMob"] = Mobs,
 
-        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen,
+        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
         ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow,
@@ -79,6 +79,10 @@ public static class ScriptHelp
         ["HasTextAt"] = "while (글자있나(\"재장전중\")) 쉬기(100);",
         ["FindText"] = "if (글자찾기(\"사격장\") is { } 자리)\n    이동클릭(자리.x, 자리.y);",
         ["PressText"] = "if (!글자누르기(\"사격장\")) 출력(\"사격장 단추가 안 보인다\");",
+        ["FindImage"] = "if (그림찾기(\"사격장.png\") is { } 자리)\n    출력($\"{자리.x}, {자리.y} 닮음 {자리.닮음:0.00}\");",
+        ["HasImage"] = "if (그림있나(\"궁극기준비.png\", 0.9, \"궁극기자리\")) 키(\"Q\");",
+        ["ImageScore"] = "출력($\"닮음 {그림닮음(\"사격장.png\"):0.00}\");   // 문턱을 잡을 때",
+        ["PressImage"] = "if (!그림누르기(\"사격장.png\")) 출력(\"사격장 카드가 안 보인다\");",
         ["Wait"] = "쉬기(300);",
         ["IsStopped"] = "while (!중지되었나())\n{\n    // 반복할 일\n    쉬기(10);\n}",
         ["Print"] = "출력($\"탄약 {숫자읽기(\"탄약\")}\");",

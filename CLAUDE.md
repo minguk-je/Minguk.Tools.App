@@ -91,6 +91,8 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
   파생 화면은 `RestoreSettings/SaveSettings/ReleaseResources` 에서 반드시 `base` 를 부른다. 바탕 이름은 `...Base` 로 끝낸다(`ViewModel` 로 끝나면 로거 이름이 겹친다).
 - 설정 키는 **파생 화면 이름**으로 저장된다 - 캡처와 플레이가 대상 창을 각자 기억한다.
 - 미리보기 판·입력 전달 도구 줄은 `Views/Parts`(`CapturePreviewPanel`·`PreviewForwardBar`). 겹그림은 판의 `Overlay`, 영역 편집기는 `Editor` 자리.
+- **본보기 그림**(2026-09-18): 그림으로 된 메뉴·아이콘은 영역 패널의 `[본보기로 저장]` 으로 `Resources\<영역이름>.png` 를 만들고 스크립트가 `그림누르기("사격장.png")` 로 찾아 누른다
+  (`Vision/Matching/TemplateMatch` - 정규화 상호상관, 계단 셋 1/8→1/2→원본, 1080p 0.5초). 밝기는 견디고 크기는 못 견딘다. 자세한 것은 `docs/실시간-스크립트.md`.
 - **자리 안 칸**(2026-09-16): 자리(`NamedRegion`)는 그룹, 칸(`RegionCell`, 자리 기준 0~1, 돌릴 수 있음)만 읽는다. 스크립트 `읽기("자리.칸")`. 칸은 별개 항목·별개 어도너(`RegionCellItem`·`RegionCellAdorner`),
   영역 패널은 트리. 자세한 것·함정(돌린 칸 손잡이 변위는 돌린 좌표계, 회전은 픽셀 공간)은 `docs/몹-검출.md`.
 - 스크립트 문서는 `ScriptWorkbench`, 실행은 `ScriptPlayer`. 스크립트 입력은 미리보기와 **같은 어댑터**로 나가고 보내기 직전 대상 창을 앞으로.

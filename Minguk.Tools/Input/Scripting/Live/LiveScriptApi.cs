@@ -1191,6 +1191,103 @@ public class LiveScriptApi : IDisposable
 
     private static string Squash(string text) => text.Replace(" ", string.Empty);
 
+    // ── 그림 찾기 - 그림으로 된 메뉴·버튼 ────────────────────────────────
+
+    /// <summary>같은 그림으로 볼 닮음(0~1). 게임 메뉴는 마우스를 올리면 밝아져 1 이 되지 않는다 - 정규화 상호상관이라 0.8 이면 사실상 같은 그림이다.</summary>
+    public const double DefaultImageScore = 0.8;
+
+    /// <summary>
+    /// 화면에서 본보기 그림을 찾아 자리를 준다. 못 찾거나 닮음이 문턱 아래면 null.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-18) "사격장 글이 아니고 큰 이미지인데" - 메뉴 버튼이 그림이면 <c>글자찾기</c> 로는 못 찾는다. 본보기는 프로젝트 <c>Resources</c> 의 PNG
+    /// (영역 패널의 「본보기로 저장」 으로 만든다). 밝기·대비가 달라져도 견딘다(<see cref="TemplateMatch"/>) - 크기가 달라지면 못 찾는다(해상도를 바꿨으면 본보기도 다시).
+    /// 자리 이름을 주면 그 자리 안에서만 찾아 훨씬 빠르다.
+    /// </remarks>
+    public ScriptSpot? FindImage(string resourceName, double minimumScore = DefaultImageScore, string? regionName = null)
+        => Traced("FindImage", regionName is null ? Quote(resourceName) : $"{Quote(resourceName)}, {Quote(regionName)}", () => FindImageCore(resourceName, minimumScore, regionName));
+
+    /// <summary>본보기가 화면(또는 그 자리)에 있는가.</summary>
+    public bool HasImage(string resourceName, double minimumScore = DefaultImageScore, string? regionName = null)
+        => Traced("HasImage", Quote(resourceName), () => FindImageCore(resourceName, minimumScore, regionName) is not null);
+
+    /// <summary>본보기가 얼마나 닮았는지(0~1) - 문턱을 잡을 때 눈으로 본다. 못 찾으면 0.</summary>
+    public double ImageScore(string resourceName, string? regionName = null)
+        => Traced("ImageScore", Quote(resourceName), () => FindImageCore(resourceName, -1, regionName)?.Score ?? 0);
+
+    /// <summary>본보기를 찾아 그 가운데를 누른다. 찾았으면 참.</summary>
+    public bool PressImage(string resourceName, double minimumScore = DefaultImageScore, string? regionName = null)
+        => Traced("PressImage", Quote(resourceName), () =>
+        {
+            if (FindImageCore(resourceName, minimumScore, regionName) is not { } spot) return false;
+
+            ClickAt(spot.CenterX, spot.CenterY);
+            return true;
+        });
+
+    /// <summary>읽어 둔 본보기 - 파일을 읽고 회색조로 바꾸는 값을 부를 때마다 치르지 않는다.</summary>
+    private readonly Dictionary<string, Vision.Matching.GrayImage> _templates = new(StringComparer.OrdinalIgnoreCase);
+
+    private ScriptSpot? FindImageCore(string resourceName, double minimumScore, string? regionName)
+    {
+        var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
+
+        if (!CaptureTargetBounds.TryGet(target, out var bounds))
+            throw Guard("대상 창의 자리를 알 수 없습니다 - 창이 닫혔거나 최소화됐습니다.");
+
+        var needle = Template(resourceName);
+
+        // 찾을 자리 - 이름을 주면 그 자리, 아니면 화면 전체.
+        var area = new Rect(0, 0, 1, 1);
+
+        if (regionName is not null)
+        {
+            var book = _host.Regions?.Invoke() ?? throw Guard("영역 목록이 없습니다 - 화면에서 데이터셋 폴더를 골라야 합니다.");
+            var found = book.Resolve(regionName) ?? throw Guard(MissingRegion(book, regionName));
+
+            _host.Hub.TryGetFrameSize(out var frameWidth, out var frameHeight);
+            area = RegionTargets.Bounds(RegionTargets.Of(found.Region, found.Cell)[0], frameWidth, frameHeight);
+        }
+
+        var haystack = Vision.Matching.GrayImage.From(CropFor(area));
+
+        if (needle.Width > haystack.Width || needle.Height > haystack.Height)
+            throw Guard($"본보기 「{resourceName}」({needle.Width}x{needle.Height})가 찾을 자리({haystack.Width}x{haystack.Height})보다 큽니다 - 게임 해상도가 바뀌었으면 본보기를 다시 만드세요.");
+
+        if (Vision.Matching.TemplateMatch.Find(haystack, needle) is not { } hit || hit.Score < minimumScore) return null;
+
+        // 자른 자리 안의 비율 → 프레임 비율 → 화면 픽셀.
+        var cx = area.X + (hit.CenterX * area.Width);
+        var cy = area.Y + (hit.CenterY * area.Height);
+        var center = PreviewInputMapper.MapRatioToScreen(new Point(cx, cy), bounds);
+
+        return new ScriptSpot((int)Math.Round(center.X), (int)Math.Round(center.Y),
+            (int)Math.Round(hit.Width * area.Width * bounds.Width), (int)Math.Round(hit.Height * area.Height * bounds.Height), resourceName)
+        {
+            Score = hit.Score
+        };
+    }
+
+    private Vision.Matching.GrayImage Template(string resourceName)
+    {
+        if (_templates.TryGetValue(resourceName, out var cached)) return cached;
+
+        var path = FindResource(resourceName);
+        var image = new System.Windows.Media.Imaging.BitmapImage();
+
+        // 파일을 물고 있지 않게 통째로 읽어 둔다 - 스크립트가 도는 동안 사람이 본보기를 다시 저장할 수 있다.
+        image.BeginInit();
+        image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+        image.UriSource = new Uri(path);
+        image.EndInit();
+        image.Freeze();
+
+        var gray = Vision.Matching.GrayImage.From(image);
+        _templates[resourceName] = gray;
+
+        return gray;
+    }
+
     /// <summary>줄의 낱말들을 감싸는 자리.</summary>
     private static OcrWord Union(OcrLine line)
     {
@@ -1417,6 +1514,35 @@ public class LiveScriptApi : IDisposable
     public bool 글자누르기(string 글) => PressText(글);
 
     public bool 글자누르기(string 글, string 자리) => PressText(글, 자리);
+
+    /// <summary>본보기 그림(프로젝트 Resources 의 PNG)을 화면에서 찾아 자리를 준다. 못 찾으면 null. 그림으로 된 메뉴·버튼용.</summary>
+    public ScriptSpot? 그림찾기(string 본보기) => FindImage(본보기);
+
+    /// <summary>닮음 문턱을 직접(기본 0.8).</summary>
+    public ScriptSpot? 그림찾기(string 본보기, double 문턱) => FindImage(본보기, 문턱);
+
+    /// <summary>이름 붙인 자리 안에서만 찾는다 - 훨씬 빠르다.</summary>
+    public ScriptSpot? 그림찾기(string 본보기, double 문턱, string 자리) => FindImage(본보기, 문턱, 자리);
+
+    /// <summary>본보기가 화면에 있는가.</summary>
+    public bool 그림있나(string 본보기) => HasImage(본보기);
+
+    public bool 그림있나(string 본보기, double 문턱) => HasImage(본보기, 문턱);
+
+    /// <summary>그 자리에 본보기가 있는가 - 스킬 아이콘·버프 표시처럼 자리가 고정된 것.</summary>
+    public bool 그림있나(string 본보기, double 문턱, string 자리) => HasImage(본보기, 문턱, 자리);
+
+    /// <summary>본보기가 얼마나 닮았는지(0~1). 문턱을 잡을 때 눈으로 본다.</summary>
+    public double 그림닮음(string 본보기) => ImageScore(본보기);
+
+    public double 그림닮음(string 본보기, string 자리) => ImageScore(본보기, 자리);
+
+    /// <summary>본보기를 찾아 그 가운데를 누른다. 찾았으면 참. <c>그림누르기("사격장.png")</c>.</summary>
+    public bool 그림누르기(string 본보기) => PressImage(본보기);
+
+    public bool 그림누르기(string 본보기, double 문턱) => PressImage(본보기, 문턱);
+
+    public bool 그림누르기(string 본보기, double 문턱, string 자리) => PressImage(본보기, 문턱, 자리);
 
     // ── 키 ───────────────────────────────────────────────────────────────
 
