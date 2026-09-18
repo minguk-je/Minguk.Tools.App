@@ -24,8 +24,11 @@ namespace Minguk.Tools.Vision.Regions;
 /// 자리마다 손질·언어·기울기를 고르던 때(2026-09-16 까지)의 키(<c>ink</c>·<c>prep</c>·<c>lang</c>·<c>shear</c>)는 읽을 때 버린다 -
 /// System.Text.Json 은 모르는 키를 건너뛰고, 다음 저장에서 사라진다. 엔진(PP-OCRv5)이 손질 없이 한글·영문·숫자를 읽는다.
 ///
-/// <b>단, 흐리거나 대비가 낮은 HUD 는 여전히 헷갈린다</b>(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아") - <see cref="Threshold"/>·<see cref="Invert"/> 로
-/// 자리마다 그레이스케일 + 문턱값(이진화)을 켤 수 있다. 옛 것과 달리 딱 이 둘뿐이고 기본은 꺼짐(<c>Threshold</c> 0)이라 대부분은 손 댈 일이 없다.
+/// <b>단, 흐리거나 대비가 낮은 HUD 는 여전히 헷갈린다</b>(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아" · "인터넷에서 확인해서 게임에서 많이 쓰는
+/// 기능들로") - <see cref="Threshold"/>·<see cref="Invert"/>·<see cref="Scale"/> 로 자리마다 켤 수 있다. Tesseract 문서·PyImageSearch 가 한결같이
+/// 꼽는 셋이 그레이스케일 변환·이진화(문턱값)·확대(작은 글자는 키워야 읽는다)라 그 셋으로 골랐다 - 옛 것과 달리 다 기본은 꺼짐(<c>Threshold</c> 0·
+/// <c>Scale</c> 1)이라 대부분은 손 댈 일이 없다. HSV 색으로 글자만 뽑는 것(게임 봇에서도 흔하다)은 자리마다 색·허용치까지 고르게 해야 해 더 무겁다 -
+/// 필요해지면 그때 넣는다.
 /// </remarks>
 public sealed class NamedRegion : INotifyPropertyChanged
 {
@@ -105,6 +108,19 @@ public sealed class NamedRegion : INotifyPropertyChanged
     }
 
     private bool _invert;
+
+    /// <summary>
+    /// 자른 그림을 이만큼 키워서 OCR 에 넣는다(1 이면 꺼짐 - 그대로). 게임 HUD 글자는 작을 때가 많아 키우면 도움이 된다.
+    /// </summary>
+    /// <remarks>Tesseract 문서·PyImageSearch 가 공통으로 꼽는 손질(그레이스케일·이진화·확대) 중 하나 - <see cref="Threshold"/> 와 상관없이 켤 수 있다.</remarks>
+    [JsonPropertyName("scale")]
+    public double Scale
+    {
+        get => _scale <= 0 ? 1 : _scale;
+        set => Set(ref _scale, Math.Clamp(value, 1, 4));
+    }
+
+    private double _scale = 1;
 
     /// <summary>화면에 보일 글 - 「숫자만」 이면(자리든 칸이든) 숫자 덩어리만 띄어 잇는다.</summary>
     public static string Shown(NamedRegion region, RegionCell? cell, string text)

@@ -1118,6 +1118,31 @@
                                                 </DataTemplate>
                                             </dxg:GridColumn.CellTemplate>
                                         </dxg:GridColumn>
+                                        <!-- 확대(1~4배) - 게임 HUD 의 작은 글자를 키워 읽는다. 자리 단위, 칸 줄에서는 숨긴다. 1 이면 꺼짐. -->
+                                        <dxg:GridColumn FieldName="Scale" Header="확대">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:SpinEditSettings DisplayFormat="0.0x"
+                                                                      Increment="0.5"
+                                                                      MaxValue="4"
+                                                                      MinValue="1" />
+                                            </dxg:GridColumn.EditSettings>
+                                            <dxg:GridColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <dxe:SpinEdit x:Name="PART_Editor">
+                                                        <dxe:SpinEdit.Style>
+                                                            <Style TargetType="dxe:SpinEdit">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
+                                                                                 Value="False">
+                                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </dxe:SpinEdit.Style>
+                                                    </dxe:SpinEdit>
+                                                </DataTemplate>
+                                            </dxg:GridColumn.CellTemplate>
+                                        </dxg:GridColumn>
                                         <dxg:GridColumn AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
                                         <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
                                         <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">
