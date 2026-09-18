@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 
 using DevExpress.Mvvm;
 
@@ -38,6 +39,24 @@ public sealed class ScriptDocument : ViewModelBase, IDisposable
     }
 
     /// <summary>
+    /// 이 파일이 든 프로젝트 이름(폴더에서 가장 가까운 <c>.mtsproj</c> 의 이름) - 못 찾으면 null.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) "탭에 프로젝트명-main.csx 로" - 사격장·메인화면 둘 다 main.csx 라 탭만 봐서는 어느 프로젝트 것인지 몰랐다.
+    /// 워크벤치를 거치지 않고 파일 자리에서 바로 찾는다 - 참조로 딸려 온 다른 프로젝트의 파일이어도 맞게 나온다.
+    /// </remarks>
+    private static string? FindProjectName(string filePath)
+    {
+        for (var dir = Path.GetDirectoryName(filePath); !string.IsNullOrEmpty(dir); dir = Path.GetDirectoryName(dir))
+        {
+            var mtsproj = Directory.EnumerateFiles(dir, "*" + ScriptProject.Extension).FirstOrDefault();
+            if (mtsproj is not null) return Path.GetFileNameWithoutExtension(mtsproj);
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// 편집기가 묶을 공용 설정(색·완성·오류·잠금) - 워크벤치. 탭의 내용 틀은 문서를 데이터 문맥으로 받아서, 화면(조상)까지 거슬러
     /// 올라가 찾으면 창을 떼어 냈을 때(떠 있는 창은 다른 시각 트리다) 끊긴다. 문서가 들고 다니면 어디에 붙어도 닿는다.
     /// </summary>
@@ -52,8 +71,21 @@ public sealed class ScriptDocument : ViewModelBase, IDisposable
         private set => SetProperty(() => FilePath, value, () => RaisePropertyChanged(nameof(Title)));
     }
 
-    /// <summary>탭 제목. 저장 안 한 것은 * - VS 와 같다.</summary>
-    public string Title => Path.GetFileName(FilePath) + (IsDirty ? " *" : string.Empty);
+    /// <summary>
+    /// 탭 제목. <c>프로젝트명-파일명</c>(사격장·메인화면 둘 다 main.csx 라 프로젝트 이름이 없으면 어느 것인지 안 보인다).
+    /// 저장 안 한 것은 끝에 * - VS 와 같다.
+    /// </summary>
+    public string Title
+    {
+        get
+        {
+            var fileName = Path.GetFileName(FilePath);
+            var projectName = FindProjectName(FilePath);
+            var title = projectName is null ? fileName : $"{projectName}-{fileName}";
+
+            return title + (IsDirty ? " *" : string.Empty);
+        }
+    }
 
     public string Text
     {
