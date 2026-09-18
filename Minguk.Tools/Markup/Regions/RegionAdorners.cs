@@ -150,6 +150,41 @@ public sealed class RegionZoomConverter : IValueConverter
     public object? ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => null;
 }
 
+/// <summary>
+/// 배율 역수를 <b>Transform 통째</b>로 만든다 - 이름표·치수 글자를 확대해도 화면에서 같은 크기로 두려고. 매개변수를 주면 그 각도로 돌린 뒤 키운다.
+/// </summary>
+/// <remarks>
+/// <b>왜 변환기인가</b>(2026-09-18) - 템플릿 안에 <c>&lt;ScaleTransform ScaleX="{Binding InverseZoom}" /&gt;</c> 로 적으면 그 바인딩은 <b>조용히 죽는다</b>.
+/// ScaleTransform 은 Freezable 이라 DataContext 를 물려받을 길이 없다(로그: "Cannot find governing FrameworkElement ... target element is 'ScaleTransform'").
+/// 값이 기본 1 로 남아 이름표·치수 글자가 배율만큼 크게 그려졌다(사용자, "전체 어도너가 커져서"). Transform 통째를 만들어
+/// FrameworkElement 의 <c>LayoutTransform</c> 에 묶으면 평범한 속성 바인딩이라 산다.
+/// </remarks>
+public sealed class RegionScaleConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var inverse = value is double d && d > 0 ? d : 1d;
+        var scale = new ScaleTransform(inverse, inverse);
+
+        if (parameter is null || !double.TryParse(parameter.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var angle) || angle == 0)
+        {
+            scale.Freeze();
+
+            return scale;
+        }
+
+        var group = new TransformGroup();
+
+        group.Children.Add(new RotateTransform(angle));
+        group.Children.Add(scale);
+        group.Freeze();
+
+        return group;
+    }
+
+    public object? ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => null;
+}
+
 /// <summary>치수 글자는 정수로. 참조한 <c>DoubleFormatConverter</c>.</summary>
 public sealed class RegionRoundConverter : IValueConverter
 {

@@ -252,8 +252,8 @@ public sealed class DetectionOverlay : FrameworkElement
     /// <summary>이름 붙인 자리의 색. 글자 영역(노랑)·몹(초록)과 달라야 한다.</summary>
     private static readonly Color NamedColour = Color.FromRgb(120, 200, 255);
 
-    /// <summary>목록에서 고른 자리. 여럿 사이에서 무엇을 골랐는지 한눈에 갈리게 주황.</summary>
-    private static readonly Color SelectedNamedColour = Color.FromRgb(255, 170, 40);
+    /// <summary>목록에서 고른 자리. 여럿 사이에서 무엇을 골랐는지 한눈에 갈리게 마젠타 - 게임 화면에 거의 안 나오는 색이다(사용자, 2026-09-18). 편집기(RegionSelectedBrush)와 같다.</summary>
+    private static readonly Color SelectedNamedColour = Color.FromRgb(0xFF, 0x2B, 0xD6);
 
     /// <summary>계속 읽기를 켠 자리 아래에 읽은 글자(청록 바탕). 아직 못 읽었으면 「읽는 중」.</summary>
     private void DrawReadText(DrawingContext dc, Rect area, Minguk.Tools.Vision.Regions.NamedRegion region)

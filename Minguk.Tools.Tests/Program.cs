@@ -235,6 +235,7 @@ internal static partial class Program
         TestRegionBook();
         TestRegionCells();
         TestRegionGeometry();
+        TestRegionChrome();
         TestTemplateMatch();
         TestCompiledScript();
         TestTrainingActivity();
