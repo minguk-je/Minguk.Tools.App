@@ -27,6 +27,8 @@ public static class SolutionGate
 
         if (SolutionWorkspace.Current is not null) return true;
 
+        if (TryOpenLast()) return true;
+
         var start = new Views.StartWindow();
 
         if (Application.Current?.MainWindow is { IsVisible: true } owner) start.Owner = owner;
@@ -34,6 +36,28 @@ public static class SolutionGate
         start.ShowDialog();
 
         return start.Chosen is not null;
+    }
+
+    /// <summary>
+    /// 마지막에 열었던 솔루션이 아직 있으면 묻지 않고 그대로 연다(사용자, 2026-09-19 - 화면을 복구할 때마다 솔루션을 다시 골라야 했다).
+    /// 다른 솔루션은 위 칸 콤보로 바꾼다. 파일이 없어졌거나 못 읽으면 시작 창으로 간다.
+    /// </summary>
+    private static bool TryOpenLast()
+    {
+        var last = Minguk.Base.Utilities.AppSettingUtility.Get(SolutionWorkspace.LastSolutionKey, string.Empty);
+
+        if (string.IsNullOrWhiteSpace(last) || !System.IO.File.Exists(last)) return false;
+
+        try
+        {
+            SolutionWorkspace.Open(last);
+
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     /// <summary>옛 자리를 첫 솔루션으로 옮긴다. 취소면 false, 아니오면 옮기지 않고 시작 창으로 간다.</summary>

@@ -308,7 +308,7 @@ public class LiveScriptApi : IDisposable
         BeforeInput();
         ForgetAim();
 
-        const int MaxStepCounts = 40;
+        const int MaxStepCounts = 300;
         const int MaxIterations = 80;
 
         var adapter = _host.Service.Adapter;
@@ -333,7 +333,7 @@ public class LiveScriptApi : IDisposable
             if (stepY == 0 && Math.Abs(errY) > tolerance) stepY = Math.Sign(errY);
 
             SendRelative(stepX, stepY);
-            Wait(25);
+            Wait(12);
 
             if (adapter.GetCursorPosition() is not { } after) continue;
 

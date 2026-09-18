@@ -449,6 +449,10 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
         if (SolutionWorkspace.Current is null || SelectedProject is null) return;
 
         IDocument? first = null;
+        IDocument? remembered = null;
+
+        // 마지막에 보던 아래 탭으로 복구한다(사용자, 2026-09-19 - 켤 때마다 스크립트 탭을 다시 눌러야 했다).
+        var last = AppSettingUtility.Get(LastTabKey, string.Empty);
 
         foreach (var screen in AutomationScreens.All())
         {
@@ -464,9 +468,11 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
             });
 
             first ??= document;
+
+            if (screen.ViewName == last) remembered = document;
         }
 
-        first?.Show();
+        (remembered ?? first)?.Show();
     }
 
     /// <summary>아래 문서를 전부 닫는다. 하나라도 닫기를 막으면 false.</summary>
@@ -490,7 +496,14 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
         return !service.Documents.Any();
     }
 
-    private void OnChildActivated(object? sender, ActiveDocumentChangedEventArgs e) => Guard(() => ActiveChild()?.NotifyActivated());
+    private const string LastTabKey = "Automation.LastTab";
+
+    private void OnChildActivated(object? sender, ActiveDocumentChangedEventArgs e) => Guard(() =>
+    {
+        if (e.NewDocument?.Id is string id && !string.IsNullOrEmpty(id)) AppSettingUtility.Set(LastTabKey, id);
+
+        ActiveChild()?.NotifyActivated();
+    });
 
     private DocumentViewModelBase? ActiveChild() => ContentViewModel(AutomationDocumentManagerService?.ActiveDocument);
 
