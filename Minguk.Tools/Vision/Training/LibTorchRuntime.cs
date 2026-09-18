@@ -363,12 +363,12 @@ public static class LibTorchRuntime
             if (!IsInstalled(flavor))
                 throw new InvalidOperationException($"libtorch 를 아직 받지 않았다: {directory}");
 
-            // 아무도 안 골랐으면 지금 자동으로 고른다. 앱 시작 때가 아니라 첫 학습·몹 찾기 순간이라,
+            // 아무도 안 골랐으면 지금 자동으로 고른다. 앱 시작 때가 아니라 첫 학습·검출 순간이라,
             // 그때 게임이 도는 카드(사용률 높은 쪽)를 피할 수 있다. CUDA 는 여기서 처음 초기화된다.
             if (!_gpuChosen) SelectGpu(null);
 
             // OpenMP 스레드가 GPU 답을 기다리는 동안 바쁘게 도는(스핀) 것을 끈다. 기본은 일이 끝난 뒤에도
-            // 한동안 코어를 붙들고 다음 일을 기다려서, 0.7초에 한 번 찾는 몹 찾기가 코어 4.5개를 썼다.
+            // 한동안 코어를 붙들고 다음 일을 기다려서, 0.7초에 한 번 찾는 검출이 코어 4.5개를 썼다.
             // 일이 없으면 바로 쉬게 한다. 스레드 수 제한과 별개로, libtorch 를 올리기 전에 줘야 먹는다.
             SetProcessEnvironment("KMP_BLOCKTIME", "0");
             SetProcessEnvironment("OMP_WAIT_POLICY", "PASSIVE");

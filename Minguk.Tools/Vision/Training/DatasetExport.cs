@@ -52,7 +52,7 @@ public static class DatasetExport
             text.AppendLine($"  {i}: {classes.Names[i]}");
 
         File.WriteAllText(target, text.ToString(), Utf8);
-        Logger.Info($"YOLO 용 data.yaml 을 썼다: {target} (몹 {classes.Count}종)");
+        Logger.Info($"YOLO 용 data.yaml 을 썼다: {target} (검출 {classes.Count}종)");
 
         return target;
     }

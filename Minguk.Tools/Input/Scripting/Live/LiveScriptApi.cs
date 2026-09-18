@@ -36,14 +36,14 @@ public enum LiveScriptOutcome
 /// </summary>
 /// <remarks>
 /// 계획 모드(<see cref="SequenceScriptApi"/>)와 같은 이름을 쓴다 - 같은 글을 두 모드에서 돌릴 수 있어야
-/// 사람이 두 벌을 배우지 않는다. 거기에 화면을 읽는 것(몹들·읽기)과 흐름(중지되었나·끝)이 더 있다.
+/// 사람이 두 벌을 배우지 않는다. 거기에 화면을 읽는 것(검출들·읽기)과 흐름(중지되었나·끝)이 더 있다.
 /// 이름은 <see cref="ScriptApiCatalog"/> 표에 있고, 검증이 이 클래스에 그 이름이 다 있는지 센다.
 ///
 /// <b>안전장치</b> - 전부 여기서 건다. 엔진이나 화면에 두면 언어마다 다르게 새어 나간다.
 ///   - 대상 창이 앞에 없으면 입력을 보내지 않고 멈춘다(<see cref="ScriptGuardException"/>). 엉뚱한 창에 타이핑하는 사고.
 ///   - 초당 입력 상한. 넘으면 기다린다(멈추지 않는다) - 빠른 반복문이 입력을 쏟지 않게.
 ///   - 모든 호출이 중지 토큰을 본다. <c>쉬기()</c> 도 토큰으로 기다려서 중지가 바로 먹는다.
-///   - 눈이 없으면(캡처 안 돎, 몹 찾기 꺼짐) <c>몹들()</c> 은 빈 목록이 아니라 멈추고 이유를 말한다.
+///   - 눈이 없으면(캡처 안 돎, 검출 꺼짐) <c>검출들()</c> 은 빈 목록이 아니라 멈추고 이유를 말한다.
 ///
 /// 스크립트 스레드에서 돈다. UI 스레드가 아니라서 입력을 기다려도(await) 화면이 멈추지 않는다.
 ///
@@ -66,7 +66,7 @@ public class LiveScriptApi : IDisposable
     /// <summary>배율·표본을 지키는 잠금 - 조준 스레드(<see cref="AimLoop"/>)와 스크립트 스레드가 같이 본다.</summary>
     private readonly object _aimGate = new();
 
-    /// <summary>조준 스레드. 처음 <c>조준(몹)</c> 을 부를 때 만든다.</summary>
+    /// <summary>조준 스레드. 처음 <c>조준(검출)</c> 을 부를 때 만든다.</summary>
     private AimLoop? _aim;
 
     public LiveScriptApi(LiveScriptHost host, CancellationToken token)
@@ -178,29 +178,29 @@ public class LiveScriptApi : IDisposable
     public bool Aim(int x, int y) => Traced("Aim", $"{x}, {y}", () => AimCore(x, y, _host.AimTolerancePx, _host.AimTolerancePx));
 
     /// <summary>
-    /// 몹을 겨눈다 - <b>조준 스레드</b>(<see cref="AimLoop"/>)에 붙여 8ms 마다 멈추지 않고 <b>머리</b>를 따라가게 하고, <b>몸에 들어와 있으면</b> 맞은 것(true)으로 친다.
+    /// 검출을 겨눈다 - <b>조준 스레드</b>(<see cref="AimLoop"/>)에 붙여 8ms 마다 멈추지 않고 <b>머리</b>를 따라가게 하고, <b>몸에 들어와 있으면</b> 맞은 것(true)으로 친다.
     /// </summary>
     /// <remarks>
-    /// <b>부르면 어떻게 되나</b> - 처음 부르면 그 몹을 붙잡고 스레드가 움직이기 시작한다. 그 뒤로는 부를 때마다 <b>새 화면이 한 장 올 때까지</b>(몹 찾기 주기, 최대
-    /// <see cref="AimFrameWaitMs"/>) 기다렸다가 맞았는지 돌려준다 - 그래서 <c>while { 몹 = 목표(); if (조준(몹)) 클릭(); }</c> 반복문이 몹 찾기 박자에 맞춰 돌고,
+    /// <b>부르면 어떻게 되나</b> - 처음 부르면 그 검출을 붙잡고 스레드가 움직이기 시작한다. 그 뒤로는 부를 때마다 <b>새 화면이 한 장 올 때까지</b>(검출 주기, 최대
+    /// <see cref="AimFrameWaitMs"/>) 기다렸다가 맞았는지 돌려준다 - 그래서 <c>while { 검출 = 목표(); if (조준(검출)) 클릭(); }</c> 반복문이 검출 박자에 맞춰 돌고,
     /// 그동안 마우스는 스레드가 계속 움직인다. 맞았다는 답은 한 화면에 한 번만 준다(예측만으로 연달아 쏘지 않게).
     /// 붙잡은 것은 <c>목표풀기()</c>·다른 마우스 입력(상대이동·끌기·좌표 조준)·일시정지·중지에서 놓고, 400ms 넘게 못 보면 스스로 놓는다(그때 <c>목표()</c> 가 새로 고른다).
     ///
     /// <b>좌표로 겨누는 것과 무엇이 다른가</b> - <c>조준(x, y)</c> 는 한 번 움직이고 그 점에서 8px 안에 들어와야 맞았다고 한다.
-    /// 총은 그렇게까지 정확할 필요가 없다. 사람도 머리를 보고 쏘되 몸에 걸치면 그냥 쏜다. 겨누는 곳은 <see cref="ScriptMob.머리y"/>(위에서 22%)이고,
+    /// 총은 그렇게까지 정확할 필요가 없다. 사람도 머리를 보고 쏘되 몸에 걸치면 그냥 쏜다. 겨누는 곳은 <see cref="ScriptDetection.머리y"/>(위에서 22%)이고,
     /// 맞았다고 보는 범위는 <b>몸 사각형</b>(가운데에서 재야 한다 - 머리에서 높이의 반을 재면 머리 위 허공에서도 참이 된다).
     /// </remarks>
-    public bool Aim(ScriptMob mob)
+    public bool Aim(ScriptDetection mob)
     {
         ArgumentNullException.ThrowIfNull(mob);
 
         return Traced("Aim", mob.ToString(), () => AimTracked(mob));
     }
 
-    /// <summary>새 화면을 기다리는 상한(ms). 몹 찾기가 0.1초에 한 번이라 보통 그 안에 온다. 넘으면 지금 예측으로 답한다.</summary>
+    /// <summary>새 화면을 기다리는 상한(ms). 검출이 0.1초에 한 번이라 보통 그 안에 온다. 넘으면 지금 예측으로 답한다.</summary>
     private const int AimFrameWaitMs = 400;
 
-    private bool AimTracked(ScriptMob mob)
+    private bool AimTracked(ScriptDetection mob)
     {
         ThrowIfStopping();
         EnsureForeground();
@@ -459,7 +459,7 @@ public class LiveScriptApi : IDisposable
     /// 배율을 고치기 전에 모으는 표본 수. <b>가운뎃값</b>을 쓴다 - 평균이나 섞기가 아니다.
     /// </summary>
     /// <remarks>
-    /// <b>잡음이 한쪽으로만 튄다.</b> 몹이 스스로 움직이거나 화면이 덜 돌면 "보낸 것보다 덜 움직였다" 가 되어
+    /// <b>잡음이 한쪽으로만 튄다.</b> 검출이 스스로 움직이거나 화면이 덜 돌면 "보낸 것보다 덜 움직였다" 가 되어
     /// 잰 값이 커진다. 반대쪽("더 움직였다")은 거부 규칙(줄어든 비율 2.0 초과·멀어짐)에 걸러진다.
     /// 그래서 한 값씩 반영하면 <b>위로만 떠밀린다</b> - 실측에서 3.6 으로 시작해 734번 배우는 동안
     /// 상한 20 까지 올라가 붙었고(잰 값에 16.50 · 6.79 같은 것이 섞였다), 그러자 모든 조준이 상한에 잘려
@@ -519,10 +519,10 @@ public class LiveScriptApi : IDisposable
         }
     }
 
-    /// <summary>스크립트가 마지막으로 본 화면(몹들·가장가까운몹)의 프레임 시각. 0 이면 아직 안 봄.</summary>
+    /// <summary>스크립트가 마지막으로 본 화면(검출들·가장가까운검출)의 프레임 시각. 0 이면 아직 안 봄.</summary>
     private long _seenFrameTicks;
 
-    /// <summary>겨눈 뒤 새 화면을 이만큼(ms)까지 기다린다. 넘으면 false 로 돌아간다 - 몹 찾기가 멈췄을 수 있다.</summary>
+    /// <summary>겨눈 뒤 새 화면을 이만큼(ms)까지 기다린다. 넘으면 false 로 돌아간다 - 검출이 멈췄을 수 있다.</summary>
     private const int AimWaitMs = 1500;
 
     /// <summary>이 프레임이 마지막 조준 뒤의 화면인가. 모르면(0) 그렇다고 본다.</summary>
@@ -533,8 +533,8 @@ public class LiveScriptApi : IDisposable
     /// </summary>
     /// <remarks>
     /// 쉬기 없는 반복문(<c>while (...) { if (조준(...)) 클릭(); }</c>)이 옛 화면에서 조준을 초당 수천 번 불러,
-    /// 호출 로그가 1분에 10MB 를 넘고 화면 스레드가 밀려 몹 찾기가 0.7초에서 1.8초로 늦어졌다(실측). 기다려 주면
-    /// 반복문이 저절로 몹 찾기 속도에 맞춰진다.
+    /// 호출 로그가 1분에 10MB 를 넘고 화면 스레드가 밀려 검출이 0.7초에서 1.8초로 늦어졌다(실측). 기다려 주면
+    /// 반복문이 저절로 검출 속도에 맞춰진다.
     /// </remarks>
     private void WaitForFreshFrame()
     {
@@ -556,18 +556,18 @@ public class LiveScriptApi : IDisposable
     }
 
     /// <remarks>
-    /// <b>같은 화면으로 두 번 겨누지 않는다</b> - 검출은 0.5~1초에 한 번인데 반복문은 0.1초마다 돈다. 같은 몹 자리로
-    /// 예닐곱 번 겨누니 거리의 여섯 배를 돌아 몹을 지나쳐 흔들렸다(실측: 오버워치, 몹 자리가 0.7초마다 반대편으로 튐).
-    /// 몹 자리를 찾은 프레임이 마지막 조준보다 앞이면, 그 자리는 조준 전의 것이라 건너뛴다.
+    /// <b>같은 화면으로 두 번 겨누지 않는다</b> - 검출은 0.5~1초에 한 번인데 반복문은 0.1초마다 돈다. 같은 검출 자리로
+    /// 예닐곱 번 겨누니 거리의 여섯 배를 돌아 검출을 지나쳐 흔들렸다(실측: 오버워치, 검출 자리가 0.7초마다 반대편으로 튐).
+    /// 검출 자리를 찾은 프레임이 마지막 조준보다 앞이면, 그 자리는 조준 전의 것이라 건너뛴다.
     ///
     /// <b>큰 이동은 잘게</b> - 한 번에 수백 카운트를 넣으면 게임이 커서를 가운데로 되돌리기 전에 OS 커서가 창 밖으로
     /// 나가고, 이어진 클릭이 바탕 화면을 눌러 게임에서 빠져나왔다(실측: 앞 창이 "Program Manager" 가 됨).
     /// </remarks>
     /// <param name="toleranceX">맞았다고 볼 가로 범위(px). 좌표로 겨눌 때는 <see cref="LiveScriptHost.AimTolerancePx"/>.</param>
-    /// <param name="hitX">맞았는지 잴 기준점. 안 주면 겨누는 곳과 같다 - 몹은 머리를 겨누되 몸 가운데에서 잰다.</param>
+    /// <param name="hitX">맞았는지 잴 기준점. 안 주면 겨누는 곳과 같다 - 검출은 머리를 겨누되 몸 가운데에서 잰다.</param>
     private bool AimCore(int x, int y, int toleranceX, int toleranceY, int? hitX = null, int? hitY = null)
     {
-        // 스크립트가 본 화면으로 판단한다. 아직 몹을 안 봤으면(좌표를 손으로 준 경우) 허브의 최신값으로.
+        // 스크립트가 본 화면으로 판단한다. 아직 검출을 안 봤으면(좌표를 손으로 준 경우) 허브의 최신값으로.
         var seen = _seenFrameTicks > 0 ? _seenFrameTicks : _host.Hub.Latest?.FrameTicks ?? 0;
 
         if (!IsAfterLastAim(seen))
@@ -579,7 +579,7 @@ public class LiveScriptApi : IDisposable
 
         BeforeInput();
 
-        // 좌표 조준은 한 번짜리 - 스레드가 잡고 있던 몹은 놓는다.
+        // 좌표 조준은 한 번짜리 - 스레드가 잡고 있던 검출은 놓는다.
         _aim?.Disengage();
 
         var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
@@ -671,7 +671,7 @@ public class LiveScriptApi : IDisposable
         var moved = before - after;
         var fraction = moved / before;
 
-        // 보낸 쪽과 줄어든 쪽이 반대면 같은 몹이 아니다 - 조준 스레드가 죽은 봇 옆의 다른 봇으로 이어 붙었을 때 "−198 → −8, 보낸 +203, 잰 값 0.10" 이 표본에 들어갔다(실측 2026-09-18).
+        // 보낸 쪽과 줄어든 쪽이 반대면 같은 검출이 아니다 - 조준 스레드가 죽은 봇 옆의 다른 봇으로 이어 붙었을 때 "−198 → −8, 보낸 +203, 잰 값 0.10" 이 표본에 들어갔다(실측 2026-09-18).
         if (sent * moved <= 0)
         {
             Logger.Debug($"배율 배우기 버림: {before:0} → {after:0} (보낸 {sent:0} - 방향이 반대)");
@@ -684,7 +684,7 @@ public class LiveScriptApi : IDisposable
         //
         // 가르는 기준은 "비율이 1을 넘는가" 가 아니라 <b>"결국 가까워졌는가"</b> 다. 지나쳤어도 전보다 가까우면
         // 그 조준은 같은 목표를 향한 것이고 보낸 양도 믿을 만하다. 두 배 넘게 넘어갔거나(2.0 초과) 멀어졌으면
-        // 목표가 다른 몹으로 바뀐 것으로 보고 버린다 - 그런 값이 배율을 0.97→2.69→5.78 로 튀게 했었다.
+        // 목표가 다른 검출로 바뀐 것으로 보고 버린다 - 그런 값이 배율을 0.97→2.69→5.78 로 튀게 했었다.
         if (fraction < 0.2 || fraction > 2.0 || Math.Abs(after) >= Math.Abs(before))
         {
             Logger.Debug($"배율 배우기 버림: {before:0} → {after:0} (보낸 {sent}, 줄어든 비율 {fraction:0.00})");
@@ -776,44 +776,44 @@ public class LiveScriptApi : IDisposable
     public void 끌기(int x, int y, object? 버튼 = null) => Drag(x, y, 버튼);
     public void 상대끌기(int dx, int dy, object? 버튼 = null) => DragBy(dx, dy, 버튼);
     public bool 조준(int x, int y) => Aim(x, y);
-    public bool 조준(ScriptMob 몹) => Aim(몹);
+    public bool 조준(ScriptDetection 검출) => Aim(검출);
     public void 상대이동(int deltaX, int deltaY) => MoveBy(deltaX, deltaY);
     public void 쉬기(int milliseconds) => Wait(milliseconds);
 
     // ── 화면 읽기 ────────────────────────────────────────────────────────
 
-    /// <summary>지금 찾은 몹들. 화면 픽셀 자리로.</summary>
-    public IReadOnlyList<ScriptMob> Mobs() => Traced("Mobs", "", MobsCore);
+    /// <summary>지금 찾은 검출들. 화면 픽셀 자리로.</summary>
+    public IReadOnlyList<ScriptDetection> Detections() => Traced("Detections", "", DetectionsCore);
 
-    /// <summary>화면 가운데에서 가장 가까운 몹. 없으면 null.</summary>
-    public ScriptMob? NearestMob() => Traced("NearestMob", "", NearestMobCore);
+    /// <summary>화면 가운데에서 가장 가까운 검출. 없으면 null.</summary>
+    public ScriptDetection? NearestDetection() => Traced("NearestDetection", "", NearestDetectionCore);
 
-    /// <summary>잡을 때까지 같은 몹만 본다. 놓치면 잠깐 기다렸다 새로 고른다. 없으면 null.</summary>
-    public ScriptMob? TargetMob() => Traced("TargetMob", "", TargetMobCore);
+    /// <summary>잡을 때까지 같은 검출만 본다. 놓치면 잠깐 기다렸다 새로 고른다. 없으면 null.</summary>
+    public ScriptDetection? TargetDetection() => Traced("TargetDetection", "", TargetDetectionCore);
 
-    /// <summary>고정한 목표를 놓는다. 잡은 뒤 다음 몹으로 넘어갈 때.</summary>
+    /// <summary>고정한 목표를 놓는다. 잡은 뒤 다음 검출로 넘어갈 때.</summary>
     public void ReleaseTarget() => Traced("ReleaseTarget", "", ReleaseTargetCore);
 
-    /// <summary>몹이 보일 때까지 최대 ms 기다린다. 50ms 마다 본다. 못 보면 null.</summary>
-    public ScriptMob? WaitMob(int milliseconds) => Traced("WaitMob", milliseconds.ToString(), () => WaitMobCore(milliseconds));
+    /// <summary>검출이 보일 때까지 최대 ms 기다린다. 50ms 마다 본다. 못 보면 null.</summary>
+    public ScriptDetection? WaitDetection(int milliseconds) => Traced("WaitDetection", milliseconds.ToString(), () => WaitDetectionCore(milliseconds));
 
     /// <summary>그 자리(0~1 비율)의 글자를 읽는다.</summary>
     public string ReadText(double x, double y, double width, double height)
         => Traced("ReadText", $"{x:0.###}, {y:0.###}, {width:0.###}, {height:0.###}", () => ReadTextCore(x, y, width, height));
 
-    private IReadOnlyList<ScriptMob> MobsCore()
+    private IReadOnlyList<ScriptDetection> DetectionsCore()
     {
         ThrowIfStopping();
 
         var hub = _host.Hub;
 
-        if (!hub.IsCapturing) throw Guard("눈이 없습니다 - 화면에서 시작(연결)을 눌러 창을 잡아야 몹을 볼 수 있습니다.");
-        if (!hub.IsDetecting) throw Guard("몹 찾기가 꺼져 있습니다 - 화면에서 몹 찾기를 켜세요.");
+        if (!hub.IsCapturing) throw Guard("눈이 없습니다 - 화면에서 시작(연결)을 눌러 창을 잡아야 검출을 볼 수 있습니다.");
+        if (!hub.IsDetecting) throw Guard("검출이 꺼져 있습니다 - 화면에서 검출을 켜세요.");
 
         var snapshot = hub.Latest;
 
-        // 스크립트가 본 화면. 조준은 이 화면이 겨눈 뒤의 것인지로 판단한다 - 허브의 최신값으로 보면, 몹을 찾은 뒤
-        // 조준하기 전 찰나에 새 화면이 올라온 경우 옛 자리로 한 번 더 겨눈다(실측: 같은 몹을 두 번 겨눠 지나침).
+        // 스크립트가 본 화면. 조준은 이 화면이 겨눈 뒤의 것인지로 판단한다 - 허브의 최신값으로 보면, 검출을 찾은 뒤
+        // 조준하기 전 찰나에 새 화면이 올라온 경우 옛 자리로 한 번 더 겨눈다(실측: 같은 검출을 두 번 겨눠 지나침).
         _seenFrameTicks = snapshot?.FrameTicks ?? 0;
 
         if (snapshot is null || snapshot.Found.Count == 0) return [];
@@ -821,14 +821,14 @@ public class LiveScriptApi : IDisposable
         var target = _host.Target();
         if (target is null || !CaptureTargetBounds.TryGet(target, out var bounds)) return [];
 
-        var mobs = new List<ScriptMob>(snapshot.Found.Count);
+        var mobs = new List<ScriptDetection>(snapshot.Found.Count);
         _nameplates ??= new ScriptNameplateReader(ReadNameplateCore);
 
         for (var i = 0; i < snapshot.Found.Count; i++)
         {
             var d = snapshot.Found[i];
             var center = PreviewInputMapper.MapRatioToScreen(new Point(d.Box.CenterX, d.Box.CenterY), bounds);
-            mobs.Add(new ScriptMob(d.Label, d.Score,
+            mobs.Add(new ScriptDetection(d.Label, d.Score,
                 (int)Math.Round(center.X), (int)Math.Round(center.Y),
                 (int)Math.Round(d.Box.Width * bounds.Width), (int)Math.Round(d.Box.Height * bounds.Height), string.Empty)
             {
@@ -841,30 +841,30 @@ public class LiveScriptApi : IDisposable
     }
 
     /// <summary>
-    /// <b>잡을 때까지 같은 몹만 본다.</b> 없으면 잠깐 기다렸다가 새로 고른다.
+    /// <b>잡을 때까지 같은 검출만 본다.</b> 없으면 잠깐 기다렸다가 새로 고른다.
     /// </summary>
     /// <remarks>
-    /// <b>왜</b> - <see cref="NearestMob"/> 는 부를 때마다 그 순간 가장 가까운 것을 고른다. 몹이 둘이면
+    /// <b>왜</b> - <see cref="NearestDetection"/> 는 부를 때마다 그 순간 가장 가까운 것을 고른다. 검출이 둘이면
     /// A 로 돌다가 A 를 지나치는 순간 B 가 가까워져 B 로 돌고, 다시 A 가 가까워져 A 로 돈다 - 화면이 좌우로
     /// 휙휙 왕복만 하고 아무것도 못 잡는다(실측: 거리가 837 → -598 → 835 → -409 → 837 로 반복).
     ///
-    /// <b>어려운 점은 "같은 몹인지" 를 가리는 것이다.</b> 겨누면 화면이 돌아서 몹의 화면 좌표가 크게 움직인다 -
+    /// <b>어려운 점은 "같은 검출인지" 를 가리는 것이다.</b> 겨누면 화면이 돌아서 검출의 화면 좌표가 크게 움직인다 -
     /// 자리가 비슷한 것을 찾으면 정작 크게 돌았을 때 놓친다. 그래서 <b>보낸 양만큼 옮겨 놓고</b> 찾는다
     /// (보낸 카운트 ÷ 배율 = 화면이 밀린 px). 배율이 틀려도 방향은 맞으므로 가까운 것을 고르는 데는 충분하다.
     ///
-    /// 못 찾으면 바로 다른 몹으로 갈아타지 않고 <see cref="LockGraceMs"/> 동안 null 을 준다 - 잠깐 가려진 것과
+    /// 못 찾으면 바로 다른 검출로 갈아타지 않고 <see cref="LockGraceMs"/> 동안 null 을 준다 - 잠깐 가려진 것과
     /// 죽은 것을 구별할 길이 없으니, 그 사이 스크립트는 쉬었다 다시 부른다. 그 뒤에는 새로 고른다.
-    /// 잡았으면 <see cref="ReleaseTarget"/>(목표풀기) 로 놓아 다음 몹으로 넘어간다.
+    /// 잡았으면 <see cref="ReleaseTarget"/>(목표풀기) 로 놓아 다음 검출로 넘어간다.
     /// </remarks>
-    private ScriptMob? TargetMobCore()
+    private ScriptDetection? TargetDetectionCore()
     {
-        var mobs = MobsCore();
+        var mobs = DetectionsCore();
 
-        // 조준 스레드가 붙잡고 있으면 그것이 목표다 - 스레드가 프레임마다 같은 몹을 잇고 예측하므로 여기서 따로 찾지 않는다(둘이 다른 몹을 고르면 안 된다).
+        // 조준 스레드가 붙잡고 있으면 그것이 목표다 - 스레드가 프레임마다 같은 검출을 잇고 예측하므로 여기서 따로 찾지 않는다(둘이 다른 검출을 고르면 안 된다).
         // 놓쳤으면(400ms 넘게 못 봄) 스레드가 스스로 놓고, 아래에서 새로 고른다.
         if (_aim is { IsEngaged: true } loop)
         {
-            if (_host.Target() is { } target && CaptureTargetBounds.TryGet(target, out var bounds) && loop.CurrentMob(bounds, _nameplates) is { } tracked)
+            if (_host.Target() is { } target && CaptureTargetBounds.TryGet(target, out var bounds) && loop.CurrentDetection(bounds, _nameplates) is { } tracked)
             {
                 _locked = tracked;
                 return tracked;
@@ -881,13 +881,13 @@ public class LiveScriptApi : IDisposable
             var radius = Math.Max(locked.Width, locked.Height) * LockRadiusFactor;
 
             var best = mobs
-                .Select(m => (Mob: m, Distance: Math.Sqrt(Sq(m.CenterX - predictedX) + Sq(m.CenterY - predictedY))))
+                .Select(m => (Detection: m, Distance: Math.Sqrt(Sq(m.CenterX - predictedX) + Sq(m.CenterY - predictedY))))
                 .OrderBy(t => t.Distance)
                 .FirstOrDefault();
 
-            if (best.Mob is not null && best.Distance <= radius)
+            if (best.Detection is not null && best.Distance <= radius)
             {
-                _locked = Smooth(best.Mob, predictedX, predictedY, locked);
+                _locked = Smooth(best.Detection, predictedX, predictedY, locked);
                 _lockShiftX = 0;
                 _lockShiftY = 0;
                 _lockedMissTicks = 0;
@@ -942,10 +942,10 @@ public class LiveScriptApi : IDisposable
     /// 다음 프레임은 다시 0마리였다). 추적(<c>DetectionTracker</c>)이 한 프레임짜리를 거르지만, 놓친 것을
     /// 두 프레임까지 이어 주기도 해서 이렇게 새는 것이 있다.
     ///
-    /// <b>가까운 것은 그냥 믿는다.</b> 확인하느라 한 프레임(0.08초)을 버리는데, 코앞의 몹은 틀려도 조금 움직일
+    /// <b>가까운 것은 그냥 믿는다.</b> 확인하느라 한 프레임(0.08초)을 버리는데, 코앞의 검출은 틀려도 조금 움직일
     /// 뿐이라 그 값이 아깝다. 크게 돌아야 하는 것만 - 헛것이 비싼 이유가 "크게 돈다" 는 것이므로 문턱도 거기 둔다.
     /// </remarks>
-    private bool Confirmed(ScriptMob mob)
+    private bool Confirmed(ScriptDetection mob)
     {
         var target = _host.Target();
 
@@ -976,15 +976,15 @@ public class LiveScriptApi : IDisposable
     /// 고정한 목표의 자리·크기를 프레임 사이에서 이어 준다 - 새로 본 사각형으로 바로 바꾸지 않고 예상 자리에서 일부만 따라간다.
     /// </summary>
     /// <remarks>
-    /// <b>왜</b>(사용자, 2026-09-18 "화면 이동하고 나서 머리로 이동하는 게 부자연스럽다") - 검출 사각형은 같은 몹이 가만히 있어도
+    /// <b>왜</b>(사용자, 2026-09-18 "화면 이동하고 나서 머리로 이동하는 게 부자연스럽다") - 검출 사각형은 같은 검출이 가만히 있어도
     /// 프레임마다 흔들린다. 실측(오버워치 사격장 로그, 조준·클릭 없이 이어 본 같은 목표 2,666쌍): 가운데가 세로 중간값 17px(표준편차 28)·
     /// 가로 11px. 머리 자리는 사각형 높이로 잡으니 높이 흔들림까지 더해진다. 그래서 크게 돌아 머리에 거의 닿은 뒤에도, 새 화면마다
     /// 흔들린 머리로 따로 한 번 더 움직여 "돌고 멈췄다가 머리로" 가 됐다.
     ///
     /// 세로·크기는 더 믿지 않는다(<see cref="SmoothVertical"/>) - 사격장 봇·사람은 주로 옆으로 움직이고 위아래로는 거의 안 움직인다.
-    /// 가로는 몹이 실제로 움직이므로 많이 따라간다(<see cref="SmoothHorizontal"/>). 예상 자리는 조준이 민 만큼 옮긴 것이라 화면이 돌아도 뒤처지지 않는다.
+    /// 가로는 검출이 실제로 움직이므로 많이 따라간다(<see cref="SmoothHorizontal"/>). 예상 자리는 조준이 민 만큼 옮긴 것이라 화면이 돌아도 뒤처지지 않는다.
     /// </remarks>
-    private static ScriptMob Smooth(ScriptMob seen, double predictedX, double predictedY, ScriptMob previous)
+    private static ScriptDetection Smooth(ScriptDetection seen, double predictedX, double predictedY, ScriptDetection previous)
         => seen with
         {
             CenterX = (int)Math.Round(predictedX + ((seen.CenterX - predictedX) * SmoothHorizontal)),
@@ -993,7 +993,7 @@ public class LiveScriptApi : IDisposable
             Height = (int)Math.Round(previous.Height + ((seen.Height - previous.Height) * SmoothVertical))
         };
 
-    /// <summary>고정한 목표의 가로 자리를 새 사각형 쪽으로 이만큼 옮긴다(0~1). 몹이 옆으로 달리므로 크게.</summary>
+    /// <summary>고정한 목표의 가로 자리를 새 사각형 쪽으로 이만큼 옮긴다(0~1). 검출이 옆으로 달리므로 크게.</summary>
     private const double SmoothHorizontal = 0.6;
 
     /// <summary>고정한 목표의 세로 자리·크기를 새 사각형 쪽으로 이만큼 옮긴다(0~1). 흔들림은 크고 실제 움직임은 작아 작게.</summary>
@@ -1003,9 +1003,9 @@ public class LiveScriptApi : IDisposable
     private const double ConfirmDistancePx = 300;
 
     /// <summary>지난번에 새로 고르려던 목표. 두 번 연속 같은 자리에 보이는지 견주는 데만 쓴다.</summary>
-    private ScriptMob? _candidate;
+    private ScriptDetection? _candidate;
 
-    /// <summary>고정한 목표를 놓는다. 잡은 뒤 다음 몹으로 넘어갈 때 부른다.</summary>
+    /// <summary>고정한 목표를 놓는다. 잡은 뒤 다음 검출로 넘어갈 때 부른다.</summary>
     private void ReleaseTargetCore()
     {
         _locked = null;
@@ -1015,7 +1015,7 @@ public class LiveScriptApi : IDisposable
         _aim?.Disengage();
     }
 
-    private ScriptMob? NearestOf(IReadOnlyList<ScriptMob> mobs)
+    private ScriptDetection? NearestOf(IReadOnlyList<ScriptDetection> mobs)
     {
         var target = _host.Target();
         if (target is null || !CaptureTargetBounds.TryGet(target, out var bounds)) return null;
@@ -1029,7 +1029,7 @@ public class LiveScriptApi : IDisposable
     private static double Sq(double value) => value * value;
 
     /// <summary>고정한 목표. 같은 것을 계속 본다.</summary>
-    private ScriptMob? _locked;
+    private ScriptDetection? _locked;
 
     /// <summary>목표를 처음 놓친 시각. 0 이면 놓치지 않았다.</summary>
     private long _lockedMissTicks;
@@ -1039,13 +1039,13 @@ public class LiveScriptApi : IDisposable
 
     private double _lockShiftY;
 
-    /// <summary>같은 몹으로 볼 거리. 몹 크기의 몇 배까지 - 겨눈 뒤 자리가 꽤 움직이므로 넉넉해야 한다.</summary>
+    /// <summary>같은 검출로 볼 거리. 검출 크기의 몇 배까지 - 겨눈 뒤 자리가 꽤 움직이므로 넉넉해야 한다.</summary>
     private const double LockRadiusFactor = 2.0;
 
     /// <summary>목표를 놓친 뒤 새로 고르기까지 기다리는 시간(ms). 잠깐 가려진 것과 죽은 것을 구별할 길이 없다.</summary>
     private const int LockGraceMs = 400;
 
-    private ScriptMob? NearestMobCore()
+    private ScriptDetection? NearestDetectionCore()
     {
         var target = _host.Target();
         if (target is null || !CaptureTargetBounds.TryGet(target, out var bounds)) return null;
@@ -1053,16 +1053,16 @@ public class LiveScriptApi : IDisposable
         var cx = bounds.Left + (bounds.Width / 2);
         var cy = bounds.Top + (bounds.Height / 2);
 
-        return MobsCore().OrderBy(m => ((m.CenterX - cx) * (m.CenterX - cx)) + ((m.CenterY - cy) * (m.CenterY - cy))).FirstOrDefault();
+        return DetectionsCore().OrderBy(m => ((m.CenterX - cx) * (m.CenterX - cx)) + ((m.CenterY - cy) * (m.CenterY - cy))).FirstOrDefault();
     }
 
-    private ScriptMob? WaitMobCore(int milliseconds)
+    private ScriptDetection? WaitDetectionCore(int milliseconds)
     {
         var deadline = Environment.TickCount64 + Math.Max(0, milliseconds);
 
         while (true)
         {
-            var nearest = NearestMobCore();
+            var nearest = NearestDetectionCore();
             if (nearest is not null) return nearest;
 
             if (Environment.TickCount64 >= deadline) return null;
@@ -1076,7 +1076,7 @@ public class LiveScriptApi : IDisposable
 
     private ScriptNameplateReader? _nameplates;
 
-    /// <summary>몹 사각형 위 이름표를 지금 화면에서 읽는다(<c>몹.이름표</c>). 칸이 화면 밖이면 빈 글.</summary>
+    /// <summary>검출 사각형 위 이름표를 지금 화면에서 읽는다(<c>검출.이름표</c>). 칸이 화면 밖이면 빈 글.</summary>
     private string ReadNameplateCore(Minguk.Tools.Vision.Labeling.LabelBox box)
         => Traced("Nameplate", $"{box.CenterX:0.###}, {box.CenterY:0.###}", () =>
         {
@@ -1487,11 +1487,11 @@ public class LiveScriptApi : IDisposable
         => (_host.OcrFor is { } ocrFor ? ocrFor(region) : _host.Ocr?.Invoke())
            ?? throw Guard("글자 읽기 엔진이 없습니다 - 화면 상태 줄의 안내를 보세요(모델 파일이 없거나 엔진을 열지 못했습니다).");
 
-    public IReadOnlyList<ScriptMob> 몹들() => Mobs();
-    public ScriptMob? 가장가까운몹() => NearestMob();
-    public ScriptMob? 목표() => TargetMob();
+    public IReadOnlyList<ScriptDetection> 검출들() => Detections();
+    public ScriptDetection? 가장가까운검출() => NearestDetection();
+    public ScriptDetection? 목표() => TargetDetection();
     public void 목표풀기() => ReleaseTarget();
-    public ScriptMob? 몹기다리기(int milliseconds) => WaitMob(milliseconds);
+    public ScriptDetection? 검출기다리기(int milliseconds) => WaitDetection(milliseconds);
     public string 읽기(double x, double y, double width, double height) => ReadText(x, y, width, height);
     public int? 숫자읽기(double x, double y, double width, double height) => ReadNumber(x, y, width, height);
     public int? 탄약() => Ammo();
@@ -1734,7 +1734,7 @@ public class LiveScriptApi : IDisposable
     /// <summary>같은 솔루션의 옆 프로젝트를 이어서 돌린다.</summary>
     /// <remarks>
     /// 돌아오지 않는다 - 그 프로젝트의 시작 파일이 끝나야(또는 <c>끝()</c> 을 만나야) 다음 줄로 간다.
-    /// 몹 찾기가 켜져 있으면 그 프로젝트 모델을 다 읽을 때까지(몇 초) 기다렸다가 돈다.
+    /// 검출이 켜져 있으면 그 프로젝트 모델을 다 읽을 때까지(몇 초) 기다렸다가 돈다.
     /// </remarks>
     public void RunProject(string name) => Traced("RunProject", Quote(name), () => RunProjectCore(name));
 
@@ -1866,7 +1866,7 @@ public class LiveScriptApi : IDisposable
     {
         null => "",
         string text => Quote(text),
-        IReadOnlyList<ScriptMob> mobs => mobs.Count == 0 ? "없음" : $"{mobs.Count}마리: {mobs[0]}",
+        IReadOnlyList<ScriptDetection> mobs => mobs.Count == 0 ? "없음" : $"{mobs.Count}마리: {mobs[0]}",
         _ => result.ToString() ?? ""
     };
 

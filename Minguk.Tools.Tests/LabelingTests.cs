@@ -66,10 +66,10 @@ internal static partial class Program
         {
             ("0 0.4 0.6 0.4", "값이 넷"),
             ("0 0.4 0.6 0.4 0.4 0.4", "값이 여섯"),
-            ("-1 0.4 0.6 0.4 0.4", "몹 번호가 음수"),
+            ("-1 0.4 0.6 0.4 0.4", "검출 번호가 음수"),
             ("0 100 200 50 50", "0~1 이 아니다 - 픽셀로 적힌 파일"),
             ("0 0.4 0.6 0 0", "넓이 0"),
-            ("몹 0.4 0.6 0.4 0.4", "번호 자리에 이름"),
+            ("검출 0.4 0.6 0.4 0.4", "번호 자리에 이름"),
             (string.Empty, "빈 줄")
         };
 
@@ -193,7 +193,7 @@ internal static partial class Program
                   dataset.FindDuplicateStems().SequenceEqual([Path.GetFileNameWithoutExtension(imagePath)]),
                   string.Join(", ", dataset.FindDuplicateStems()));
 
-            // ── 몹 이름 ──
+            // ── 검출 이름 ──
 
             var classes = new LabelClasses(["슬라임", "버섯"]);
 
@@ -224,7 +224,7 @@ internal static partial class Program
             dataset.SaveClasses(classes);
             var reloaded = dataset.LoadClasses();
 
-            Check("몹 이름을 파일에 쓰고 다시 읽기",
+            Check("검출 이름을 파일에 쓰고 다시 읽기",
                   reloaded.Names.SequenceEqual(classes.Names),
                   string.Join(", ", reloaded.Names));
 
@@ -246,11 +246,11 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// 몹 지우기(안 쓰인 것만, 뒤 번호는 라벨 파일까지 당김)와 색 고르기(class-colors.json).
+    /// 검출 지우기(안 쓰인 것만, 뒤 번호는 라벨 파일까지 당김)와 색 고르기(class-colors.json).
     /// </summary>
     /// <remarks>
     /// 제 데이터셋을 따로 만든다 - 앞 단계가 남긴 라벨 파일과 섞이면 "쓰였다" 가 달라진다(실제로 그래서 한 번 틀렸다).
-    /// 몹은 [왕슬라임, 버섯, 두 줄]. 라벨 둘을 심는다 - 가.txt 는 0·2 번, 나.txt 는 2 번.
+    /// 검출은 [왕슬라임, 버섯, 두 줄]. 라벨 둘을 심는다 - 가.txt 는 0·2 번, 나.txt 는 2 번.
     /// 1번(버섯)은 아무 데도 안 쓰여 지워지고, 그러면 2번이 1번으로 당겨져야 한다. 0번은 쓰여서 못 지운다.
     /// </remarks>
     /// <summary>그림 지우기 - 그림과 라벨을 휴지통으로, 라벨이 없으면 그림만, 이름이 겹쳐 라벨을 나눠 가진 그림이면 라벨은 남긴다. 진짜 휴지통은 안 쓴다.</summary>
@@ -345,11 +345,11 @@ internal static partial class Program
               reloadedPalette.IsChosen(2) && reloadedPalette.ColorOf(2) == chosen && !reloadedPalette.IsChosen(0),
               File.Exists(dataset.PalettePath) ? File.ReadAllText(dataset.PalettePath) : "파일 없음");
 
-        Check("쓰인 몹은 어느 파일에 쓰였는지 말한다",
+        Check("쓰인 검출은 어느 파일에 쓰였는지 말한다",
               dataset.FindLabelsUsing(0).SequenceEqual(["가.txt"]) && dataset.FindLabelsUsing(2).Count == 2,
               string.Join(", ", dataset.FindLabelsUsing(2)));
 
-        Check("쓰인 몹은 못 지운다",
+        Check("쓰인 검출은 못 지운다",
               Throws(() => dataset.RemoveClass(classes, 0)) && classes.Count == 3,
               string.Join(", ", classes.Names));
 
@@ -358,7 +358,7 @@ internal static partial class Program
         var firstBack = LabelFile.Load(first);
         var secondBack = LabelFile.Load(second);
 
-        Check("안 쓰인 몹을 지우면 뒤 번호가 당겨진다",
+        Check("안 쓰인 검출을 지우면 뒤 번호가 당겨진다",
               classes.Names.SequenceEqual(["왕슬라임", "두 줄"]) && dataset.LoadClasses().Names.SequenceEqual(classes.Names),
               string.Join(", ", classes.Names));
 
@@ -376,7 +376,7 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// "쓰는 모델" 콤보: 보관본 둘 + 학습 zip 이 뜨고, 고르면 몹 찾기 자리에 그것이 앉고 쪽지(이름·레터박스)가 따라오는지.
+    /// "쓰는 모델" 콤보: 보관본 둘 + 학습 zip 이 뜨고, 고르면 검출 자리에 그것이 앉고 쪽지(이름·레터박스)가 따라오는지.
     /// </summary>
     /// <remarks>모델 파일은 가짜 바이트다 - 여기서 보는 것은 파일 옮기기와 고르기 규칙이지 추론이 아니다. 크기를 달리해 둘을 가른다.</remarks>
     private static void TestModelChoices()
@@ -555,7 +555,7 @@ internal static partial class Program
         Check("한 프레임짜리 헛것은 안 내놓는다", withGhost.Count == 1 && Near(withGhost[0].Box.CenterX, 0.5),
               $"{withGhost.Count}개");
 
-        // 6) 자리는 새 값 쪽으로 부드럽게 옮긴다 (0.6 비중). 0.03 은 폭 0.1 사각형에서 IoU 0.54 라 같은 몹으로 이어진다.
+        // 6) 자리는 새 값 쪽으로 부드럽게 옮긴다 (0.6 비중). 0.03 은 폭 0.1 사각형에서 IoU 0.54 라 같은 검출로 이어진다.
         tracker.Reset();
         tracker.Update([At(0.2, 0.2)]);
         var moved = tracker.Update([At(0.23, 0.2)]);
@@ -568,17 +568,17 @@ internal static partial class Program
         var two = tracker.Update([At(0.2, 0.2), At(0.8, 0.8)]);
         Check("떨어진 둘은 따로 잇는다", two.Count == 2, $"{two.Count}개");
 
-        // 8) 제 폭만큼 옮겨 가 안 겹쳐도(IoU 0) 가운데가 가까우면 같은 몹이다 - 유령이 안 생긴다.
+        // 8) 제 폭만큼 옮겨 가 안 겹쳐도(IoU 0) 가운데가 가까우면 같은 검출이다 - 유령이 안 생긴다.
         tracker.Reset();
         tracker.Update([At(0.2, 0.2)]);
         var jumped = tracker.Update([At(0.31, 0.2)]);
-        Check("폭만큼 옮겨도 같은 몹으로 잇는다", jumped.Count == 1 && tracker.Tracks.Count == 1,
+        Check("폭만큼 옮겨도 같은 검출로 잇는다", jumped.Count == 1 && tracker.Tracks.Count == 1,
               $"내놓음 {jumped.Count}개 · 추적 {tracker.Tracks.Count}개");
 
-        // 9) 폭의 두 배 넘게 옮기면 다른 몹이다.
+        // 9) 폭의 두 배 넘게 옮기면 다른 검출이다.
         tracker.Reset();
         tracker.Update([At(0.2, 0.2)]);
         tracker.Update([At(0.5, 0.2)]);
-        Check("멀리 뛰면 다른 몹이다", tracker.Tracks.Count == 2, $"추적 {tracker.Tracks.Count}개");
+        Check("멀리 뛰면 다른 검출이다", tracker.Tracks.Count == 2, $"추적 {tracker.Tracks.Count}개");
     }
 }

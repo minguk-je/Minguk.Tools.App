@@ -199,7 +199,7 @@ internal static class ViewSmokeProbe
 
             target.CopyPixels(pixels, size * 4, 0);
 
-            // 0번 몹의 색. 점선 테두리가 이 색으로 그려져 있어야 한다.
+            // 0번 검출의 색. 점선 테두리가 이 색으로 그려져 있어야 한다.
             var expected = Minguk.Tools.Markup.LabelCanvas.ColorOf(0);
 
             // 사각형 위쪽 변(y=50) 을 훑어 그 색이 있는지 본다. 점선이라 군데군데 비어 있다.

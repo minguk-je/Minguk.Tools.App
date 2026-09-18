@@ -12,13 +12,13 @@ using Vortice.MediaFoundation;
 namespace Minguk.Tools.Capture;
 
 /// <summary>
-/// 녹화한 영상 파일을 캡처처럼 흘린다(사용자, 2026-09-15) - 게임을 켜지 않고 몹 찾기·글자 읽기·스크립트 흐름을 시험한다.
+/// 녹화한 영상 파일을 캡처처럼 흘린다(사용자, 2026-09-15) - 게임을 켜지 않고 검출·글자 읽기·스크립트 흐름을 시험한다.
 /// </summary>
 /// <remarks>
 /// - Media Foundation SourceReader 가 H.264 를 풀고 RGB32 로 바꾼다(<see cref="SourceReaderAttributeKeys.EnableAdvancedVideoProcessing"/>).
 /// - 영상 시각(샘플 시각)에 맞춰 흘린다 - 녹화한 속도 그대로. 끝나면 처음부터 다시 튼다(시험은 되풀이가 흔하다).
 /// - 프레임은 WGC 와 같은 얼굴이다: GPU 텍스처(<see cref="CapturedFrameEventArgs.Texture"/>) + 리드백을 켰으면 CPU 픽셀.
-///   텍스처가 있어야 GPU 미리보기·GPU 전처리(몹 찾기)가 창 캡처와 같은 길로 간다.
+///   텍스처가 있어야 GPU 미리보기·GPU 전처리(검출)가 창 캡처와 같은 길로 간다.
 /// - 픽셀은 위에서 아래로, 알파 255 로 고친다 - RGB32 는 알파 칸이 비어(0) 있어 미리보기가 투명해진다.
 /// - <see cref="TargetFps"/> 보다 촘촘한 프레임은 솎는다(WGC 와 같은 <see cref="FrameRateLimiter"/>). 늦어지면(풀기가 느림) 기다리지 않고 시계를 다시 맞춘다.
 /// - 입력은 받지 않는다 - 부르는 쪽(PreviewInputRouter·실시간 스크립트)이 대상 종류로 막는다.

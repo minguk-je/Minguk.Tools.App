@@ -4,10 +4,10 @@ using System.Threading;
 namespace Minguk.Tools.Vision.Training;
 
 /// <summary>
-/// 앱 안에서 학습이 도는 중인지. 몹 찾기를 켠 화면들이 이것을 보고 학습하는 동안 GPU 모델을 내려놓는다.
+/// 앱 안에서 학습이 도는 중인지. 검출을 켠 화면들이 이것을 보고 학습하는 동안 GPU 모델을 내려놓는다.
 /// </summary>
 /// <remarks>
-/// <b>왜 있나</b>(실측 2026-09-14) - GTX 1060 3GB 한 장에서 스크립트 화면의 캡처(30fps)·몹 찾기(DirectML, 0.1초마다)와
+/// <b>왜 있나</b>(실측 2026-09-14) - GTX 1060 3GB 한 장에서 스크립트 화면의 캡처(30fps)·검출(DirectML, 0.1초마다)와
 /// YOLO 학습(CUDA)이 같이 돌다가 드라이버가 GPU 를 리셋했다(`DXGI_ERROR_DEVICE_REMOVED` → 학습 `cudaErrorUnknown`).
 /// 리셋 뒤에는 그 프로세스의 DirectML 이 계속 실패해(`887A0007`) 앱을 다시 켜야 했다.
 /// 화면끼리 서로를 모르므로 정적 신호 하나로 알린다. 학습이 겹쳐 돌 수도 있어 횟수로 센다.
@@ -70,5 +70,5 @@ public static class TrainingActivity
     /// <summary>GPU 가 리셋됐을 때 사람에게 보일 한 줄.</summary>
     public const string GpuLostMessage =
         "GPU 가 리셋됐습니다(드라이버가 장치를 다시 시작함). 이 앱의 GPU 연결은 되살아나지 않으니 앱을 다시 켜세요. " +
-        "학습할 때 스크립트·플레이 화면의 캡처·몹 찾기를 같은 카드에서 같이 돌리면 3GB 카드에서 이렇게 됩니다.";
+        "학습할 때 스크립트·플레이 화면의 캡처·검출을 같은 카드에서 같이 돌리면 3GB 카드에서 이렇게 됩니다.";
 }

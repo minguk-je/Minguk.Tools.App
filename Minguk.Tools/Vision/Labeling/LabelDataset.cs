@@ -27,7 +27,7 @@ public readonly record struct LabelItem(string ImagePath, string LabelPath)
 /// &lt;데이터셋&gt;/
 ///   Images/        그림 (.png · .jpg)
 ///   Labels/        라벨 (.txt) - 그림과 이름이 같다
-///   classes.txt    몹 이름 목록
+///   classes.txt    검출 이름 목록
 /// </code>
 ///
 /// <b>왜 그림과 라벨을 다른 폴더에 두는가</b>
@@ -167,14 +167,14 @@ public sealed class LabelDataset
 
     public void SaveClasses(LabelClasses classes) => classes.Save(ClassesPath);
 
-    /// <summary>몹 색(사람이 고른 것만). classes.txt 옆에 둔다 - 그 파일은 YOLO 형식이라 색을 못 넣는다.</summary>
+    /// <summary>검출 색(사람이 고른 것만). classes.txt 옆에 둔다 - 그 파일은 YOLO 형식이라 색을 못 넣는다.</summary>
     public string PalettePath => Path.Combine(Root, LabelPalette.FileName);
 
     public LabelPalette LoadPalette() => LabelPalette.Load(PalettePath);
 
     public void SavePalette(LabelPalette palette) => palette.Save(PalettePath);
 
-    /// <summary>그 번호의 사각형이 든 라벨 파일 이름들. 비어 있으면 아무 데도 안 쓰인 몹이다.</summary>
+    /// <summary>그 번호의 사각형이 든 라벨 파일 이름들. 비어 있으면 아무 데도 안 쓰인 검출이다.</summary>
     /// <remarks>그림이 없는 고아 라벨까지 본다 - 그림 목록으로 훑으면 놓친다.</remarks>
     public IReadOnlyList<string> FindLabelsUsing(int classId)
     {
@@ -188,12 +188,12 @@ public sealed class LabelDataset
     }
 
     /// <summary>
-    /// 몹 하나를 지운다. 뒤 번호는 하나씩 당기고, 그 번호가 든 라벨 파일과 색도 같이 당긴다.
+    /// 검출 하나를 지운다. 뒤 번호는 하나씩 당기고, 그 번호가 든 라벨 파일과 색도 같이 당긴다.
     /// </summary>
     /// <remarks>
-    /// <b>아무 라벨에도 안 쓰인 몹만 지운다.</b> 쓰인 것을 지우면 찍어 둔 사각형을 잃거나(지우면) 다른 몹을 가리키게
+    /// <b>아무 라벨에도 안 쓰인 검출만 지운다.</b> 쓰인 것을 지우면 찍어 둔 사각형을 잃거나(지우면) 다른 검출을 가리키게
     /// 된다(안 지우면). 부르기 전에 <see cref="FindLabelsUsing"/> 으로 보고, 쓰였으면 여기서 터진다.
-    /// 시험으로 넣은 몹처럼 아직 아무것도 안 찍은 것은 지워도 잃는 것이 없다 - 그것 때문에 열었다(2026-09-14).
+    /// 시험으로 넣은 검출처럼 아직 아무것도 안 찍은 것은 지워도 잃는 것이 없다 - 그것 때문에 열었다(2026-09-14).
     /// </remarks>
     /// <returns>번호를 당겨 고쳐 쓴 라벨 파일 수.</returns>
     public int RemoveClass(LabelClasses classes, int classId)

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    몹 검출 모델을 학습할 수 있게 파이썬 환경을 준비한다 - YOLO11 과 D-FINE 둘 다.
+    검출 모델을 학습할 수 있게 파이썬 환경을 준비한다 - YOLO11 과 D-FINE 둘 다.
 
 .DESCRIPTION
     앱(라벨링 화면 학습 버튼)이 쓰는 것과 같은 자리를 만든다. 새 PC 에서 한 번만 돌리면 된다.
@@ -18,7 +18,7 @@
     **왜 cu126·cu124 를 못 박나** - GTX 1060 은 Pascal(sm_61)이라 더 새 CUDA 판에서 빠질 수 있다.
     끝에 `torch.cuda.get_arch_list()` 에 sm_61 이 있는지 본다.
 
-    **D-FINE 설정은 저장소의 도구\dfine\ 에서 넣는다** - 몹 수·사진 자리는 앱이 학습 직전에 다시 쓰므로(DFineTrainer)
+    **D-FINE 설정은 저장소의 도구\dfine\ 에서 넣는다** - 검출 수·사진 자리는 앱이 학습 직전에 다시 쓰므로(DFineTrainer)
     여기서는 틀이 되는 두 파일만 제자리에 둔다.
 
 .EXAMPLE
@@ -125,7 +125,7 @@ if ($What -in @("all", "dfine")) {
         Invoke-WebRequest -Uri "https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth" -OutFile $weights
     }
 
-    Step "우리 설정을 넣는다(몹 수·사진 자리는 앱이 학습 직전에 다시 쓴다)"
+    Step "우리 설정을 넣는다(검출 수·사진 자리는 앱이 학습 직전에 다시 쓴다)"
     Copy-Item (Join-Path $PSScriptRoot "dfine\mob_detection.yml") (Join-Path $dfine "configs\dataset\mob_detection.yml") -Force
     New-Item -ItemType Directory -Force (Join-Path $dfine "configs\dfine\custom") | Out-Null
     Copy-Item (Join-Path $PSScriptRoot "dfine\dfine_hgnetv2_n_mob.yml") (Join-Path $dfine "configs\dfine\custom\dfine_hgnetv2_n_mob.yml") -Force

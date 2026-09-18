@@ -83,7 +83,7 @@ public sealed class DetectorManifest
     [JsonPropertyName("epochs")]
     public int Epochs { get; set; }
 
-    /// <summary>학습할 때의 몹 이름들. 그 뒤 목록이 바뀌었는지 볼 수 있다.</summary>
+    /// <summary>학습할 때의 검출 이름들. 그 뒤 목록이 바뀌었는지 볼 수 있다.</summary>
     [JsonPropertyName("classes")]
     public string[] Classes { get; set; } = [];
 
@@ -164,7 +164,7 @@ public sealed class DetectorManifest
         {
             WriteIndented = true,
 
-            // 한글 몹 이름을 \uXXXX 로 흘려 적지 않는다. 사람이 열어 볼 파일이다.
+            // 한글 검출 이름을 \uXXXX 로 흘려 적지 않는다. 사람이 열어 볼 파일이다.
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         });
 
@@ -198,7 +198,7 @@ public sealed class DetectorManifest
             parts.Add($"{InputWidth}x{InputHeight}");
 
             // 밖에서 들인 ONNX 는 우리 학습 기록이 없다(0 으로 둔다) - "그림 0장 · 0바퀴" 를 적으면 안 배운 모델처럼 보인다.
-            if (Images > 0) parts.Add($"그림 {Images}장 · 사각형 {Boxes}개 · 몹 {Classes.Length}종");
+            if (Images > 0) parts.Add($"그림 {Images}장 · 사각형 {Boxes}개 · 검출 {Classes.Length}종");
             if (Epochs > 0) parts.Add($"{Epochs}바퀴");
             if (ElapsedSeconds > 0) parts.Add($"{ElapsedSeconds / 60:0.0}분 ({(UsedGpu ? "GPU" : "CPU")})");
             if (LearningRate > 0) parts.Add($"학습률 {LearningRate:0.###}");

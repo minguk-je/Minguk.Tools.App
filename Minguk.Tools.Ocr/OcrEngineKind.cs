@@ -8,7 +8,7 @@ public enum OcrEngineKind
     /// <summary>PP-OCRv5 를 GPU(DirectML)로. 못 열면 CPU 로 내려앉는다.</summary>
     PaddleGpu,
 
-    /// <summary>PP-OCRv5 를 CPU 로. 20Hz 몹 찾기와 GPU 를 나눠 쓰는 것을 피한다.</summary>
+    /// <summary>PP-OCRv5 를 CPU 로. 20Hz 검출과 GPU 를 나눠 쓰는 것을 피한다.</summary>
     PaddleCpu,
 
     /// <summary>Windows 내장 OCR(<c>Windows.Media.Ocr</c>). 빠르지만 게임 글자는 잘 못 읽었다(2026-09-16 까지 쓰던 것).</summary>

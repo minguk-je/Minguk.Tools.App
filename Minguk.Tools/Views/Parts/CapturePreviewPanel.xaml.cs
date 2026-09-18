@@ -11,7 +11,7 @@ namespace Minguk.Tools.Views.Parts;
 /// 한쪽에서만 고쳐진다. DataContext 는 얹은 화면 것을 그대로 물려받아 <c>CaptureViewModelBase</c> 의
 /// 커맨드와 <c>PreviewImage</c> 에 묶인다.
 ///
-/// 겹그림(<see cref="Overlay"/>)만 화면이 준다 - 몹 점선은 몹 찾기가 있는 화면에만 있다. 이 판이
+/// 겹그림(<see cref="Overlay"/>)만 화면이 준다 - 검출 점선은 검출이 있는 화면에만 있다. 이 판이
 /// 직접 그리면 캡처 화면이 없는 프로퍼티에 묶여 바인딩 오류가 남는다.
 /// </remarks>
 public partial class CapturePreviewPanel : UserControl

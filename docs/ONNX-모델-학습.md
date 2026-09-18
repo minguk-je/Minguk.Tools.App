@@ -1,7 +1,7 @@
 # ONNX 모델 학습해서 들이기
 
 2026-09-13. 앱은 `.onnx` 를 **읽기만** 한다. 학습은 앱 밖(파이썬)에서 한 번 돌리고 결과 파일만 가져온다.
-왜 그렇게 나눴는지는 `몹-찾기-속도-설계.md` 4.5 에 있다.
+왜 그렇게 나눴는지는 `검출-속도-설계.md` 4.5 에 있다.
 
 ## 0. 먼저 정할 것 - 어느 모델 가족인가
 
@@ -10,7 +10,7 @@
 | **D-FINE** (권장) | Apache-2.0 | COCO json | **된다** (DETR 계열) |
 | RT-DETR (공식 저장소) | Apache-2.0 | COCO json | **된다** (DETR 계열) |
 | YOLOX | Apache-2.0 | COCO json | 아직 - 출력이 격자 날것이라 디코더가 따로 필요하다 |
-| YOLO11 / YOLOv8 (Ultralytics) | **AGPL-3.0** | data.yaml | **된다** (2026-09-14, `YoloDecoder` - `output0 [1,4+몹수,후보수]`, 겹침 제거 0.45) - 시험용 |
+| YOLO11 / YOLOv8 (Ultralytics) | **AGPL-3.0** | data.yaml | **된다** (2026-09-14, `YoloDecoder` - `output0 [1,4+검출수,후보수]`, 겹침 제거 0.45) - 시험용 |
 
 **팔 생각이 있으면 AGPL 은 피한다.** Ultralytics 는 그 도구로 학습한 <b>가중치까지</b> AGPL 로 본다.
 YOLO 디코더는 속도·인식률을 견주어 보려고 둔 것이다. 팔 물건에는 D-FINE·RT-DETR 을 쓴다.
@@ -166,7 +166,7 @@ Minguk.Tools.Tests.exe --import-onnx --model=D:\...\best_stg2-dml.onnx --size=64
 - `--fit=` 은 **그림을 어떻게 넣어 학습했는지**다. 기본은 `늘리기` - D-FINE·RT-DETR 공식 설정의 변환이
   `Resize [640,640]` 하나뿐이라 비율을 안 지킨다. YOLO 계열로 학습했으면 `--fit=비율`.
   여기가 학습과 다르면 역시 한 마리도 못 찾는다.
-- 쪽지가 이 모델을 가리키므로 앱은 다음 몹 찾기부터 새 모델로 돈다. libtorch 도, CPU 리드백도 필요 없다.
+- 쪽지가 이 모델을 가리키므로 앱은 다음 검출부터 새 모델로 돈다. libtorch 도, CPU 리드백도 필요 없다.
 
 ## 3.5 다른 PC(노트북)에서 학습하기
 

@@ -95,7 +95,7 @@ public static class DetectorFiles
     /// 고를 수 있는 모델들. 데이터셋 폴더의 <c>detector.&lt;이름&gt;.onnx</c>(보관본) 전부.
     /// </summary>
     /// <remarks>
-    /// <b>왜 보관본을 따로 두고 복사하나</b> - 몹 찾기·하네스·들이기가 모두 한 자리(<c>detector.onnx</c>)를 본다. 그 규칙을 그대로 두고
+    /// <b>왜 보관본을 따로 두고 복사하나</b> - 검출·하네스·들이기가 모두 한 자리(<c>detector.onnx</c>)를 본다. 그 규칙을 그대로 두고
     /// "무엇을 그 자리에 앉힐지" 만 고르게 하면 다른 곳을 하나도 안 고쳐도 된다. 시험은 YOLO11n, 배포는 D-FINE-N 으로 번갈아
     /// 쓰게 되어(2026-09-14) 명령을 외우지 않고 고를 수 있어야 했다. 보관본의 쪽지(이름·레터박스·재현율)도 같이 옮긴다.
     /// </remarks>
@@ -131,7 +131,7 @@ public static class DetectorFiles
     }
 
     /// <summary>
-    /// 지금 몹 찾기 자리에 앉은 것이 목록의 어느 것인지. 모르면(보관본이 없는 모델을 들였으면) null.
+    /// 지금 검출 자리에 앉은 것이 목록의 어느 것인지. 모르면(보관본이 없는 모델을 들였으면) null.
     /// </summary>
     /// <remarks>이름이 같고 파일 크기가 같으면 같은 것으로 본다 - 15MB 를 매번 해시하지 않는다.</remarks>
     public static DetectorChoice? CurrentChoice(LabelDataset dataset, IReadOnlyList<DetectorChoice> choices)
@@ -151,10 +151,10 @@ public static class DetectorFiles
     }
 
     /// <summary>
-    /// 고른 모델을 몹 찾기 자리에 앉힌다. 보관본과 그 쪽지를 <c>detector.onnx</c> 로 복사한다.
+    /// 고른 모델을 검출 자리에 앉힌다. 보관본과 그 쪽지를 <c>detector.onnx</c> 로 복사한다.
     /// </summary>
     /// <remarks>
-    /// 복사한 뒤 파일 시각을 지금으로 찍는다 - <c>File.Copy</c> 는 원본 시각을 그대로 옮기는데, 켜 둔 몹 찾기는 <b>시각이 바뀌었나</b>로
+    /// 복사한 뒤 파일 시각을 지금으로 찍는다 - <c>File.Copy</c> 는 원본 시각을 그대로 옮기는데, 켜 둔 검출은 <b>시각이 바뀌었나</b>로
     /// 새 모델을 알아채기 때문이다(<c>RecognizingCaptureViewModelBase.MaybeReloadDetector</c>).
     /// </remarks>
     public static void Use(LabelDataset dataset, DetectorChoice choice)
@@ -168,7 +168,7 @@ public static class DetectorFiles
         manifest.Engine = DetectorEngine.Onnx;
         manifest.Save(target);
 
-        Logger.Info($"몹 찾기 모델을 바꿨다: {choice.Name} ({Path.GetFileName(choice.Path)} → {Path.GetFileName(target)})");
+        Logger.Info($"검출 모델을 바꿨다: {choice.Name} ({Path.GetFileName(choice.Path)} → {Path.GetFileName(target)})");
     }
 
     /// <summary>

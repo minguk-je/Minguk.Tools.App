@@ -90,7 +90,7 @@
 		<PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" ExcludeAssets="all" />
 
 		<!--
-		  몹 검출 학습. TorchSharp 는 PyTorch 의 C++ 알맹이(libtorch)에 붙인 .NET 바인딩이라
+		  검출 학습. TorchSharp 는 PyTorch 의 C++ 알맹이(libtorch)에 붙인 .NET 바인딩이라
 		  파이썬과는 무관하다.
 
 		  여기 넣는 것은 관리 어셈블리뿐이다. TorchSharp-cpu / TorchSharp-cuda-windows 는

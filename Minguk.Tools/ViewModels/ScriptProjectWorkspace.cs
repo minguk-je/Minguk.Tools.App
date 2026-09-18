@@ -527,7 +527,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
             if (parts.Length > 1) return false;
         }
 
-        // 프로젝트 폴더 바로 아래 파일: 몹 이름·색, 학습 내보내기, 모델, 영역, 학습 캐시, 백업.
+        // 프로젝트 폴더 바로 아래 파일: 검출 이름·색, 학습 내보내기, 모델, 영역, 학습 캐시, 백업.
         return first.ToLowerInvariant() switch
         {
             Vision.Labeling.LabelClasses.FileName or Vision.Labeling.LabelPalette.FileName => true,

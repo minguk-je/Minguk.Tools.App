@@ -43,7 +43,7 @@ public sealed class LossSparkline : FrameworkElement
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
 
-    /// <summary>선 색. 몹 0번 색과 같게 두어 화면 안에서 튀지 않게 한다.</summary>
+    /// <summary>선 색. 검출 0번 색과 같게 두어 화면 안에서 튀지 않게 한다.</summary>
     private static readonly Color LineColor = LabelCanvas.ColorOf(0);
 
     protected override void OnRender(DrawingContext dc)

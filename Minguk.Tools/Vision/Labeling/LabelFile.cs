@@ -13,7 +13,7 @@ namespace Minguk.Tools.Vision.Labeling;
 /// <remarks>
 /// <b>형식</b> — 한 줄에 사각형 하나, 빈칸으로 나눈 다섯 값이다.
 /// <code>
-/// &lt;몹 번호&gt; &lt;가운데 x&gt; &lt;가운데 y&gt; &lt;너비&gt; &lt;높이&gt;
+/// &lt;검출 번호&gt; &lt;가운데 x&gt; &lt;가운데 y&gt; &lt;너비&gt; &lt;높이&gt;
 /// </code>
 /// 좌표는 모두 0~1 이다. 널리 쓰는 YOLO 형식 그대로다 - 우리끼리 쓸 형식을 새로 만들면
 /// 남이 만든 학습 코드에 넣을 때마다 옮겨 적어야 하고, 라벨을 눈으로 볼 도구도 없어진다.

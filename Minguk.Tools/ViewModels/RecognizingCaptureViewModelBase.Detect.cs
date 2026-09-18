@@ -66,7 +66,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </summary>
     /// <remarks>
     /// 이게 없으면 처음 켤 때 읽은 모델을 화면을 닫을 때까지 든다. 라벨링에서 다시 학습하고
-    /// 몹 찾기를 껐다 켜도 옛 모델로 찾는다 - "닫았다 열어야 하나" 가 그 말이었다.
+    /// 검출을 껐다 켜도 옛 모델로 찾는다 - "닫았다 열어야 하나" 가 그 말이었다.
     /// </remarks>
     private DateTime _detectorStamp;
 
@@ -74,7 +74,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     private string? _detectorPath;
 
     /// <summary>
-    /// 몹 찾기 모델·몹 이름·이름 붙인 자리를 읽을 폴더. 기본은 Automation Builder 에서 고른 프로젝트다.
+    /// 검출 모델·검출 이름·이름 붙인 자리를 읽을 폴더. 기본은 Automation Builder 에서 고른 프로젝트다.
     /// </summary>
     /// <remarks>
     /// 플레이는 고른 완성품(<c>Player\솔루션\프로젝트\*.mtsx</c>)의 폴더에서 읽게 바꾼다 - 빌드가 모델·영역을 그 옆에 같이 복사하므로
@@ -100,7 +100,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <remarks>
     /// 화면의 <see cref="Detections"/> 는 UI 스레드 것이라 캡처 스레드에서 못 읽는다.
     /// 찾은 순간의 목록을 그대로 들고 있다가 담기가 가져간다. 언제 찾은 것인지도 같이 -
-    /// 몇 초 전 것을 지금 프레임에 붙이면 몹이 이미 다른 자리에 있다.
+    /// 몇 초 전 것을 지금 프레임에 붙이면 검출이 이미 다른 자리에 있다.
     /// </remarks>
     private volatile IReadOnlyList<Detection>? _latestDetections;
     private long _latestDetectionTicks;
@@ -112,7 +112,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 방금 찾은 것. 없거나 오래됐으면 빈 목록.
     /// </summary>
     internal IReadOnlyList<Detection> FreshDetections
-        => IsMobDetectionOn
+        => IsDetectionOn
            && _latestDetections is { } found
            && Environment.TickCount64 - Interlocked.Read(ref _latestDetectionTicks) <= DetectionFreshMs
             ? found
@@ -127,7 +127,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </remarks>
     private void MaybeDetect(CapturedFrameEventArgs e)
     {
-        if (!IsMobDetectionOn) return;
+        if (!IsDetectionOn) return;
 
         // 켜 둔 채 다시 학습했으면 새 모델을 읽는다. 읽는 동안 _detector 는 null 이라 아래서 걸러진다.
         MaybeReloadDetector();
@@ -176,7 +176,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             }
 
             // 모델이 보는 크기보다 작게 줄이면 안 된다. 640x360 모델에 320 으로 줄인 그림을 넣으면
-            // 파이프라인이 도로 키워서 보는 꼴이라, 작은 몹 때문에 640 으로 올린 뜻이 실시간에서
+            // 파이프라인이 도로 키워서 보는 꼴이라, 작은 검출 때문에 640 으로 올린 뜻이 실시간에서
             // 사라진다 - 실제로 재현율 검사(원본 파일)는 97% 인데 실시간은 320 을 넣고 있었다.
             var longestSide = Math.Max(DetectLongestSide, _detector?.Manifest.InputWidth ?? DetectLongestSide);
 
@@ -291,13 +291,13 @@ public abstract partial class RecognizingCaptureViewModelBase
             // 누르기·자동 라벨도 이 결과를 쓴다 - 화면에 보이는 것과 누르는 것이 달라선 안 된다.
             var found = IsTrackingOn ? _tracker.Update(raw) : raw;
 
-            // 도는 사이에 몹 찾기를 껐다 - 결과를 버린다. 안 그러면 끄면서 비운 사각형이 이 결과로 다시 그려져 남았다(사용자, 2026-09-18).
-            if (!IsMobDetectionOn) return;
+            // 도는 사이에 검출을 껐다 - 결과를 버린다. 안 그러면 끄면서 비운 사각형이 이 결과로 다시 그려져 남았다(사용자, 2026-09-18).
+            if (!IsDetectionOn) return;
 
             _latestDetections = found;
             Interlocked.Exchange(ref _latestDetectionTicks, Environment.TickCount64);
 
-            // 머리 위 이름표는 검출마다 읽지 않는다 - 게임마다 없기도 해 스크립트가 몹.이름표 를 부를 때 읽는다(사용자, 2026-09-17).
+            // 머리 위 이름표는 검출마다 읽지 않는다 - 게임마다 없기도 해 스크립트가 검출.이름표 를 부를 때 읽는다(사용자, 2026-09-17).
             var names = new string[found.Count];
 
             // 스크립트가 읽어 가는 자리. 화면(Detections)은 UI 스레드 것이라 스크립트가 못 읽는다.
@@ -309,7 +309,7 @@ public abstract partial class RecognizingCaptureViewModelBase
                 Detections.Clear();
 
                 // 이 줄이 UI 스레드에 닿기 전에 껐을 수도 있다.
-                if (!IsMobDetectionOn) return;
+                if (!IsDetectionOn) return;
 
                 for (var i = 0; i < found.Count; i++)
                 {
@@ -323,7 +323,7 @@ public abstract partial class RecognizingCaptureViewModelBase
                 var how = IsTrackingOn ? "추적, " : string.Empty;
 
                 // 걸린 시간은 화면 설정 줄에만 있었다. 다른 PC 것을 견주려면 사람이 화면을 찍어 보내야 했다 - 로그에도 남긴다.
-                Logger.Debug($"몹 찾기: {found.Count}마리 · {size.Width}x{size.Height} · {watch.ElapsedMilliseconds}ms");
+                Logger.Debug($"검출: {found.Count}마리 · {size.Width}x{size.Height} · {watch.ElapsedMilliseconds}ms");
 
                 DetectionStatus = found.Count == 0
                     ? $"못 찾음 ({how}{size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms)"
@@ -333,7 +333,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         }
         catch (Exception ex)
         {
-            Logger.Error(ex, "몹을 찾지 못했다");
+            Logger.Error(ex, "검출을 찾지 못했다");
 
             DispatcherService?.BeginInvoke(() => Guard(() =>
             {
@@ -353,11 +353,11 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <remarks>
     /// 모델 읽기는 2.9초(68MB)라 UI 스레드에서 하면 화면이 멈춘다. 백그라운드로 보낸다.
     /// </remarks>
-    private void OnMobDetectionChanged() => Guard(() =>
+    private void OnDetectionChanged() => Guard(() =>
     {
         PublishPerceptionState();
 
-        if (!IsMobDetectionOn)
+        if (!IsDetectionOn)
         {
             // 화면 사각형과 함께 마지막 결과도 버린다(허브 것은 PublishPerceptionState 가 버린다).
             _latestDetections = null;
@@ -373,7 +373,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (Vision.Training.TrainingActivity.IsBusy)
         {
             _pausedForTraining = true;
-            DetectionStatus = "학습 중이라 끝나면 몹 찾기를 시작합니다.";
+            DetectionStatus = "학습 중이라 끝나면 검출을 시작합니다.";
             StatusText = DetectionStatus;
             return;
         }
@@ -382,7 +382,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     });
 
     /// <summary>
-    /// 지금 <see cref="RecognitionRoot"/> 기준으로 모델을 읽는다(또는 다시 읽는다). <see cref="OnMobDetectionChanged"/> 가
+    /// 지금 <see cref="RecognitionRoot"/> 기준으로 모델을 읽는다(또는 다시 읽는다). <see cref="OnDetectionChanged"/> 가
     /// 켤 때 부르고, <see cref="SwitchProjectContextAsync"/> 가 다른 프로젝트로 넘어갈 때도 부른다.
     /// </summary>
     private void ReloadDetectorForCurrentRoot()
@@ -421,8 +421,8 @@ public abstract partial class RecognizingCaptureViewModelBase
     }
 
     /// <summary>
-    /// 스크립트의 <c>프로젝트실행("사격장")</c> 이 부른다 - 이름 붙인 자리·몹 찾기 모델을 그 프로젝트 폴더 기준으로 바꾸고,
-    /// 몹 찾기가 켜져 있으면 새 모델을 다 읽을 때까지 기다린다(최대 <paramref name="timeoutMs"/>).
+    /// 스크립트의 <c>프로젝트실행("사격장")</c> 이 부른다 - 이름 붙인 자리·검출 모델을 그 프로젝트 폴더 기준으로 바꾸고,
+    /// 검출이 켜져 있으면 새 모델을 다 읽을 때까지 기다린다(최대 <paramref name="timeoutMs"/>).
     /// </summary>
     /// <remarks>
     /// UI 스레드 것(속성 설정·모델 로딩 시작)은 <see cref="RunOnUiBlocking"/> 로 부르고 돌아온다 - 스크립트 스레드가
@@ -435,7 +435,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             SwitchedRecognitionRoot = projectRoot;
             LoadRegions();
 
-            if (IsMobDetectionOn) ReloadDetectorForCurrentRoot();
+            if (IsDetectionOn) ReloadDetectorForCurrentRoot();
         });
 
         var deadline = Environment.TickCount64 + timeoutMs;
@@ -495,7 +495,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 모델을 읽는다. 이미 읽어 둔 것이 그 파일 그대로면 그냥 쓴다.
     /// </summary>
     /// <remarks>
-    /// 몹 찾기를 켤 때와, 켜 둔 채 파일이 바뀐 것을 알아챘을 때 둘 다 여기로 온다.
+    /// 검출을 켤 때와, 켜 둔 채 파일이 바뀐 것을 알아챘을 때 둘 다 여기로 온다.
     /// </remarks>
     private void LoadDetector(string modelPath, LabelDataset dataset, LibTorchFlavor? flavor)
     {
@@ -515,8 +515,8 @@ public abstract partial class RecognizingCaptureViewModelBase
         // 도구 줄의 짧은 글과 아래 바의 긴 글, 둘 다 쓴다. 도구 줄은 긴 한글을 안 그리는 일이 있고,
         // 사용자는 "로딩 중인지, 끝났는지, 무엇을 읽었는지" 를 물었다.
         var loadingMessage = stale is null
-            ? "몹 찾기: 학습한 모델을 읽는 중... (처음 한 번, 몇 초)"
-            : "몹 찾기: 다시 학습한 모델을 읽는 중...";
+            ? "검출: 학습한 모델을 읽는 중... (처음 한 번, 몇 초)"
+            : "검출: 다시 학습한 모델을 읽는 중...";
 
         DetectionStatus = stale is null ? "모델 읽는 중..." : "새 모델 읽는 중...";
         StatusText = loadingMessage;
@@ -550,7 +550,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
                 // 무엇을 읽었는지 한 줄로. 쪽지가 있으면 몇 번째 학습에 몇 장인지까지.
                 var manifest = model.Manifest;
-                var loaded = $"몹 찾기 준비됐습니다 - {manifest.Describe}"
+                var loaded = $"검출 준비됐습니다 - {manifest.Describe}"
                              + (manifest.TrainCount > 0 ? $" · {manifest.TrainCount}번째 학습" : string.Empty)
                              + (manifest.Images > 0 ? $" · 그림 {manifest.Images}장 · {manifest.Epochs}바퀴" : string.Empty)
                              + (manifest.RecallFound is { } f && manifest.RecallLabels is { } l && l > 0 ? $" · 재현율 {f}/{l}" : string.Empty)
@@ -635,7 +635,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     }
 
     /// <summary>
-    /// 가장 자신 있는 몹을 누른다.
+    /// 가장 자신 있는 검출을 누른다.
     /// </summary>
     /// <remarks>
     /// <b>찾기만 하면 자동화가 아니다.</b> 찾은 사각형의 가운데를 눌러 준다.
@@ -645,7 +645,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     ///
     /// <b>입력 전달이 켜져 있어야 한다.</b> 찾는 것은 화면만 보는 일이라 대상에 아무 영향이
     /// 없지만, 누르는 것은 남의 프로그램에 실제로 들어간다. 그것을 켜는 일은 사람이 한 번
-    /// 분명히 해야 한다 - 몹 찾기를 켠 것만으로 클릭이 나가면 안 된다.
+    /// 분명히 해야 한다 - 검출을 켠 것만으로 클릭이 나가면 안 된다.
     /// </remarks>
     private async void DoClickDetection()
     {
@@ -677,11 +677,11 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             if (prepared != Capture.Input.InputForwardResult.Sent)
             {
-                ReportInputForward(prepared, "몹 클릭");
+                ReportInputForward(prepared, "검출 클릭");
                 return;
             }
 
-            var result = await SendClickAsync(screenPoint, didActivate, Minguk.Tools.Input.MouseButton.Left, "몹 클릭");
+            var result = await SendClickAsync(screenPoint, didActivate, Minguk.Tools.Input.MouseButton.Left, "검출 클릭");
 
             if (result == Capture.Input.InputForwardResult.Sent)
             {
@@ -691,7 +691,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         }
         catch (Exception ex)
         {
-            Logger.Error(ex, "몹을 누르지 못했다");
+            Logger.Error(ex, "검출을 누르지 못했다");
             DetectionStatus = $"누르지 못했습니다: {ex.Message}";
         }
         finally
@@ -704,7 +704,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 이유를 적고 끈다. <b>순서가 전부다.</b>
     /// </summary>
     /// <remarks>
-    /// 메시지를 적은 뒤에 토글을 끄면 안 된다. 끄는 순간 <see cref="OnMobDetectionChanged"/> 가
+    /// 메시지를 적은 뒤에 토글을 끄면 안 된다. 끄는 순간 <see cref="OnDetectionChanged"/> 가
     /// 다시 돌면서 <see cref="DetectionStatus"/> 를 지우므로, 방금 적은 이유가 사라진다.
     /// 실제로 그랬다 - 모델이 없어 스스로 꺼지는데 화면에는 아무 말도 안 떠서,
     /// 버튼이 아무 일도 안 하는 것처럼 보였다. 먼저 끄고 나서 적는다.
@@ -718,7 +718,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </remarks>
     private void TurnOffDetection(string reason)
     {
-        IsMobDetectionOn = false;
+        IsDetectionOn = false;
         DetectionStatus = reason;
         StatusText = reason;
     }
@@ -727,7 +727,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     private bool _pausedForTraining;
 
     /// <summary>
-    /// 학습이 시작·끝났다(<see cref="Vision.Training.TrainingActivity"/>). 시작이면 GPU 모델을 내려놓고, 끝이면 켜 둔 몹 찾기를 다시 읽는다.
+    /// 학습이 시작·끝났다(<see cref="Vision.Training.TrainingActivity"/>). 시작이면 GPU 모델을 내려놓고, 끝이면 켜 둔 검출을 다시 읽는다.
     /// </summary>
     /// <remarks>
     /// 3GB 카드에서 캡처·DirectML 추론과 CUDA 학습이 같이 돌다 드라이버가 GPU 를 리셋했다(실측). 토글은 켠 채로 두어 끝나면 사람이 다시 켤 것이 없다.
@@ -735,12 +735,12 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </remarks>
     private void OnTrainingActivityChanged(object? sender, EventArgs e) => DispatcherService?.BeginInvoke(() => Guard(() =>
     {
-        // 글자 읽기 엔진은 몹 찾기가 꺼져 있어도 GPU 를 물 수 있다 - 학습이 시작·끝나면 버려 맞는 쪽으로 다시 연다.
+        // 글자 읽기 엔진은 검출이 꺼져 있어도 GPU 를 물 수 있다 - 학습이 시작·끝나면 버려 맞는 쪽으로 다시 연다.
         DropAllOcrEngines();
 
         if (Vision.Training.TrainingActivity.IsBusy)
         {
-            if (!IsMobDetectionOn || _pausedForTraining) return;
+            if (!IsDetectionOn || _pausedForTraining) return;
 
             _pausedForTraining = true;
 
@@ -760,9 +760,9 @@ public abstract partial class RecognizingCaptureViewModelBase
             }
 
             Detections.Clear();
-            DetectionStatus = "학습 중이라 몹 찾기를 멈췄습니다 - 끝나면 다시 찾습니다.";
+            DetectionStatus = "학습 중이라 검출을 멈췄습니다 - 끝나면 다시 찾습니다.";
             StatusText = DetectionStatus;
-            Logger.Info("학습이 시작돼 몹 찾기 모델을 내려놓았다(GPU 메모리)");
+            Logger.Info("학습이 시작돼 검출 모델을 내려놓았다(GPU 메모리)");
             return;
         }
 
@@ -771,7 +771,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         _pausedForTraining = false;
 
         // 학습이 끝나며 새 모델이 들어왔을 수 있다 - 켤 때와 같은 길로 지금 모델을 읽는다.
-        if (IsMobDetectionOn) OnMobDetectionChanged();
+        if (IsDetectionOn) OnDetectionChanged();
     }));
 
     /// <summary>지난번에 죽으면서 남긴 임시 파일을 치운다. 지금 쓰는 것은 건드리지 않는다.</summary>
@@ -795,7 +795,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     private void ReleaseDetector()
     {
-        IsMobDetectionOn = false;
+        IsDetectionOn = false;
 
         _detector?.Dispose();
         _detector = null;

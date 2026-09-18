@@ -9,7 +9,7 @@ using System.Windows.Media;
 namespace Minguk.Tools.Markup;
 
 /// <summary>
-/// 미리보기 위에 찾은 몹을 겹쳐 그린다.
+/// 미리보기 위에 찾은 검출을 겹쳐 그린다.
 /// </summary>
 /// <remarks>
 /// <b>왜 <see cref="LabelCanvas"/> 를 안 쓰는가</b>
@@ -72,7 +72,7 @@ public sealed class DetectionOverlay : FrameworkElement
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
 
-    /// <summary>글자 영역 색. 몹 색(황금각 팔레트)과 헷갈리지 않게 청록 하나로 고정한다.</summary>
+    /// <summary>글자 영역 색. 검출 색(황금각 팔레트)과 헷갈리지 않게 청록 하나로 고정한다.</summary>
     private static readonly Color OcrColour = Color.FromRgb(0x00, 0xBC, 0xD4);
 
     public static readonly DependencyProperty ZoomProperty = DependencyProperty.Register(
@@ -249,7 +249,7 @@ public sealed class DetectionOverlay : FrameworkElement
     /// <summary>칸의 색. 편집기(RegionChrome.xaml 의 RegionCellBrush)와 같다.</summary>
     private static readonly Color CellColour = Color.FromRgb(0x4C, 0xD9, 0x64);
 
-    /// <summary>이름 붙인 자리의 색. 글자 영역(노랑)·몹(초록)과 달라야 한다.</summary>
+    /// <summary>이름 붙인 자리의 색. 글자 영역(노랑)·검출(초록)과 달라야 한다.</summary>
     private static readonly Color NamedColour = Color.FromRgb(120, 200, 255);
 
     /// <summary>목록에서 고른 자리. 여럿 사이에서 무엇을 골랐는지 한눈에 갈리게 마젠타 - 게임 화면에 거의 안 나오는 색이다(사용자, 2026-09-18). 편집기(RegionSelectedBrush)와 같다.</summary>

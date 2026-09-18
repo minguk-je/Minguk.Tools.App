@@ -16,7 +16,7 @@ namespace Minguk.Tools.Input.Scripting;
 /// C# 완성. Roslyn 의 <see cref="CompletionService"/> 에 스크립트 문서를 들이밀어 그 자리에서 될 수 있는 것을 받는다.
 /// </summary>
 /// <remarks>
-/// <b>왜 따로 무거운 패키지를</b> - API 표만으로는 <c>몹.중심x</c> 나 <c>string.Length</c> 같은 멤버, <c>var</c>·<c>while</c>
+/// <b>왜 따로 무거운 패키지를</b> - API 표만으로는 <c>검출.중심x</c> 나 <c>string.Length</c> 같은 멤버, <c>var</c>·<c>while</c>
 /// 같은 문법이 안 나온다. Roslyn 은 실제 컴파일러라 전역(<see cref="Live.LiveScriptApi"/> 의 메서드)부터 지역 변수의
 /// 멤버까지 다 안다. 대신 Features 패키지가 수십 MB 고 첫 호출이 1~2초다 - 그래서 설계에서 4단계로 미뤄 두었다.
 ///

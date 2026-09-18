@@ -105,7 +105,7 @@ det·rec 둘 다 입력 크기가 가변인 모델이다. 그런데 **DirectML E
 ## 잘 안 될 때
 
 - 모델 파일이 없으면 팩터리가 **무엇이 없는지 한국어로** 말한다(지금 언어 팩 안내가 하던 자리).
-- `TrainingActivity.IsBusy` 면 GPU 세션을 내려놓는다 - 몹 찾기가 이미 하는 규칙 그대로다
+- `TrainingActivity.IsBusy` 면 GPU 세션을 내려놓는다 - 검출이 이미 하는 규칙 그대로다
   (3GB 카드에서 캡처·DirectML·CUDA 학습이 겹쳐 GPU 가 리셋된 이력).
 - `TrainingActivity.IsGpuLost` 면 **먼저 끄고 나서** 이유를 적는다.
 - 동시 호출은 지금의 `SemaphoreSlim` 자물쇠를 그대로 쓴다(한 번에 하나).
@@ -165,7 +165,7 @@ Tests/       OcrTuneCheck.cs (고를 손질이 없어진다)
 3. PaddleDetector · PaddleRecognizer · PaddleOcrEngine
 4. --ocr-bench 로 옛것과 비교          ← 관문. 숫자를 보고 멈출 수 있다
 5. 팩터리 교체 → 전처리·언어 걷어내기 → 화면 정리
-6. 검사 전부 + docs/몹-검출.md 갱신
+6. 검사 전부 + docs/검출.md 갱신
 ```
 
 **4번이 관문이다.** 거기서 기대만큼 안 나오면 5번으로 넘어가지 않고 먼저 알린다.

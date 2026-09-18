@@ -31,7 +31,7 @@
         예전에는 Grid + GridSplitter + dxlc:LayoutControl 이었는데 스플리터를 손으로 놓고 star 비율을 맞추는 일이
         번거로웠다. 도킹은 패널 사이 스플리터가 자동이고 ItemWidth 비율(0.22* : 0.58* : 0.2*)이 바로 된다.
         도킹 조작(끌기·띄우기·닫기·숨기기)은 껐다 - 배치를 저장하지 않으므로 옮겨 봐야 다음에 되돌아온다.
-        목록(그림·몹)은 ListBoxEdit 이 아니라 GridControl 이다 - loss 로 정렬하고, 몹 이름은 칸에서 바로 고친다.
+        목록(그림·검출)은 ListBoxEdit 이 아니라 GridControl 이다 - loss 로 정렬하고, 검출 이름은 칸에서 바로 고친다.
     -->
 
     <UserControl.Resources>
@@ -162,11 +162,11 @@
         </DockPanel>
 
 
-        <!-- ── (목록 | 그림 | 몹) / 학습 - dxdo:DockLayoutManager ─────────── -->
+        <!-- ── (목록 | 그림 | 검출) / 학습 - dxdo:DockLayoutManager ─────────── -->
         <!--
             캡처 화면과 같은 방식. 끌기·띄우기·닫기·숨기기는 막는다 - 배치를 저장하지 않아서 옮겨 봐야 다음에 되돌아오고,
             닫으면 되살릴 길이 없다. 남는 것은 패널 사이 스플리터와 ItemWidth·ItemHeight 비율뿐이다.
-            세로 그룹: 위가 목록·그림·몹 가로 그룹(*), 아래가 학습 패널(내용 높이만큼, 스플리터로 늘릴 수도 있다).
+            세로 그룹: 위가 목록·그림·검출 가로 그룹(*), 아래가 학습 패널(내용 높이만큼, 스플리터로 늘릴 수도 있다).
         -->
         <dxdo:DockLayoutManager FloatingMode="Desktop">
             <dxdo:LayoutGroup Orientation="Vertical">
@@ -388,13 +388,13 @@
                         </DockPanel>
                     </dxdo:LayoutPanel>
 
-                    <!-- 몹 이름 -->
+                    <!-- 검출 이름 -->
                     <dxdo:LayoutPanel x:Name="ClassesDockPanel"
                                       AllowClose="False"
                                       AllowDrag="False"
                                       AllowFloat="False"
                                       AllowHide="False"
-                                      Caption="몹"
+                                      Caption="검출"
                                       ItemWidth="0.2*"
                                       ShowCaption="False">
                         <dxmvvm:Interaction.Behaviors>
@@ -404,8 +404,8 @@
                         <DockPanel LastChildFill="True">
 
                             <!--
-                                이름을 따로 적는 칸은 없다(2026-09-14). 더하기는 임시 이름("몹 3")으로 넣고 바로 이름 칸을 열고,
-                                그 뒤로는 이름 칸을 더블 클릭해 고친다 - VS 솔루션 탐색기와 같다. 지우기는 아무 라벨에도 안 쓰인 몹만 된다.
+                                이름을 따로 적는 칸은 없다(2026-09-14). 더하기는 임시 이름("검출 3")으로 넣고 바로 이름 칸을 열고,
+                                그 뒤로는 이름 칸을 더블 클릭해 고친다 - VS 솔루션 탐색기와 같다. 지우기는 아무 라벨에도 안 쓰인 검출만 된다.
                             -->
                             <dxb:ToolBarControl AllowCustomizationMenu="False"
                                                 AllowQuickCustomization="False"
@@ -421,17 +421,17 @@
                                                    Command="{Binding DoDeleteClassCommand}"
                                                    Content="지우기"
                                                    Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
-                                                   ToolTip="고른 몹을 지웁니다. 아무 라벨에도 안 쓰인 몹만 지워집니다 - 라벨에는 번호가 들어 있어 뒤 번호가 당겨지는데, 그 라벨 파일도 같이 고칩니다. 쓰인 몹이면 어느 파일인지 상태 줄에 적습니다." />
+                                                   ToolTip="고른 검출을 지웁니다. 아무 라벨에도 안 쓰인 검출만 지워집니다 - 라벨에는 번호가 들어 있어 뒤 번호가 당겨지는데, 그 라벨 파일도 같이 고칩니다. 쓰인 검출이면 어느 파일인지 상태 줄에 적습니다." />
                             </dxb:ToolBarControl>
 
-                            <!-- 지금 찍는 몹의 색. 그림 위 사각형과 같은 색이어야 헷갈리지 않는다. -->
+                            <!-- 지금 찍는 검출의 색. 그림 위 사각형과 같은 색이어야 헷갈리지 않는다. -->
                             <Border Height="6"
                                     Margin="0,0,0,4"
                                     Background="{Binding CurrentClassBrush}"
                                     DockPanel.Dock="Top" />
 
                             <!--
-                                이름·색은 그리드 안에서 고친다. 정렬은 막는다 - 줄의 자리가 곧 몹 번호다(번호 열 대신 행 번호 인디케이터다).
+                                이름·색은 그리드 안에서 고친다. 정렬은 막는다 - 줄의 자리가 곧 검출 번호다(번호 열 대신 행 번호 인디케이터다).
                                 처음에는 편집이 안 되고(ShowingEditor 에서 막음) 칸을 더블 클릭했을 때만 그 칸이 열린다 - ViewModel 이
                                 ClassGridObjectService 로 이 그리드를 찾아 그렇게 한다. 여러 줄을 골라 지우면 고른 것을 다 지운다.
                             -->
@@ -453,7 +453,7 @@
                                                           ItemsSource="{Binding Classes}"
                                                           SelectedItem="{Binding SelectedClass, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                           ShowBorder="False"
-                                                          ToolTip="여기서 고른 몹으로 새 사각형이 그려집니다. 이름·색은 칸을 더블 클릭해 고칩니다.">
+                                                          ToolTip="여기서 고른 검출로 새 사각형이 그려집니다. 이름·색은 칸을 더블 클릭해 고칩니다.">
                                     <dxmvvm:Interaction.Behaviors>
                                         <dxmvvm:UIObjectService x:Name="ClassGridObjectService" />
                                         <dxmvvm:LayoutSerializationService x:Name="ClassGridLayoutService" />
@@ -510,8 +510,8 @@
                                             Orientation="Vertical">
 
                             <!--
-                                몹 찾기에 쓸 모델을 고른다(2026-09-14). 목록은 데이터셋 폴더의 보관본(detector.<이름>.onnx).
-                                고르면 그 모델이 몹 찾기 자리(detector.onnx)에 앉고 켜 둔 스크립트·플레이 화면도 따라온다. 옆 글은 그 모델의 쪽지 한 줄.
+                                검출에 쓸 모델을 고른다(2026-09-14). 목록은 데이터셋 폴더의 보관본(detector.<이름>.onnx).
+                                고르면 그 모델이 검출 자리(detector.onnx)에 앉고 켜 둔 스크립트·플레이 화면도 따라온다. 옆 글은 그 모델의 쪽지 한 줄.
                                 시험은 YOLO11n, 넘겨줄 때는 D-FINE-N (YOLO 는 AGPL). 학습 중에는 못 바꾼다.
                             -->
                             <dxlc:LayoutItem Label="쓰는 모델">
@@ -525,7 +525,7 @@
                                                       ItemsSource="{Binding ModelChoices}"
                                                       NullText="(목록에 없는 모델)"
                                                       SelectedItem="{Binding SelectedModelChoice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                      ToolTip="몹 찾기에 쓸 모델. 시험은 YOLO11n, 넘겨줄 때는 D-FINE-N 으로 고릅니다(YOLO 는 AGPL)." />
+                                                      ToolTip="검출에 쓸 모델. 시험은 YOLO11n, 넘겨줄 때는 D-FINE-N 으로 고릅니다(YOLO 는 AGPL)." />
                                     <TextBlock VerticalAlignment="Center"
                                                Foreground="#666666"
                                                Text="{Binding ModelSummary}"
@@ -544,7 +544,7 @@
                                                   MinValue="1"
                                                   ToolTip="{Binding EpochHelp}" />
                                 </dxlc:LayoutItem>
-                                <!-- 학습 크기(YOLO) - 작은 몹을 잘 찾게 960·1280 까지(2026-09-15). D-FINE 은 640 고정이라 YOLO 일 때만 켜진다. -->
+                                <!-- 학습 크기(YOLO) - 작은 검출을 잘 찾게 960·1280 까지(2026-09-15). D-FINE 은 640 고정이라 YOLO 일 때만 켜진다. -->
                                 <dxlc:LayoutItem Width="150"
                                                  Label="학습 크기"
                                                  ToolTip="{Binding ImageSizeHelp}">
@@ -560,7 +560,7 @@
                                                  HorizontalAlignment="Left"
                                                  Command="{Binding DoTrainCommand}"
                                                  Content="{Binding TrainButtonText}"
-                                                 ToolTip="아래 &apos;쓰는 모델&apos; 콤보에 고른 모델로 학습합니다.&#10;YOLO11n - 파이썬(yolo-venv), 98장 60바퀴에 약 5분.&#10;D-FINE-N - D-FINE 저장소(학습 폴더), 같은 데이터로 약 1시간 45분. 끝에 DirectML 고치기까지 자동입니다.&#10;둘 다 끝나면 몹 찾기에 바로 들어갑니다. 넘겨줄 모델은 D-FINE-N 입니다(YOLO 는 AGPL)." />
+                                                 ToolTip="아래 &apos;쓰는 모델&apos; 콤보에 고른 모델로 학습합니다.&#10;YOLO11n - 파이썬(yolo-venv), 98장 60바퀴에 약 5분.&#10;D-FINE-N - D-FINE 저장소(학습 폴더), 같은 데이터로 약 1시간 45분. 끝에 DirectML 고치기까지 자동입니다.&#10;둘 다 끝나면 검출에 바로 들어갑니다. 넘겨줄 모델은 D-FINE-N 입니다(YOLO 는 AGPL)." />
                                 <dx:SimpleButton Width="70"
                                                  Command="{Binding DoCancelTrainCommand}"
                                                  Content="중지" />
@@ -591,7 +591,7 @@
                                 <dx:SimpleButton Width="100"
                                                  Command="{Binding DoDetectCommand}"
                                                  Content="자동 라벨(_A)"
-                                                 ToolTip="학습한 모델로 이 그림에서 몹을 찾아 점선으로 겹쳐 그립니다. 아직 라벨이 아닙니다 - 확정해야 저장됩니다." />
+                                                 ToolTip="학습한 모델로 이 그림에서 검출을 찾아 점선으로 겹쳐 그립니다. 아직 라벨이 아닙니다 - 확정해야 저장됩니다." />
                                 <dx:SimpleButton Width="100"
                                                  Command="{Binding DoAdoptPredictionsCommand}"
                                                  Content="라벨 확정(_S)"

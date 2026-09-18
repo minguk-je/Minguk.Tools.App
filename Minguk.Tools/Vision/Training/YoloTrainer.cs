@@ -64,7 +64,7 @@ public static class YoloTrainer
         return match.Success ? "yolo" + match.Groups[1].Value.ToLowerInvariant() : null;
     }
 
-    /// <summary>고를 수 있는 학습 크기(정사각 한 변). 키우면 작은 몹을 더 찾고 학습·찾기가 느려진다(사용자, 2026-09-15 - 그래픽 카드는 나중에 바꾼다).</summary>
+    /// <summary>고를 수 있는 학습 크기(정사각 한 변). 키우면 작은 검출을 더 찾고 학습·찾기가 느려진다(사용자, 2026-09-15 - 그래픽 카드는 나중에 바꾼다).</summary>
     public static readonly int[] ImageSizes = [480, 640, 960, 1280];
 
     public const int DefaultImageSize = 640;
@@ -121,7 +121,7 @@ public static class YoloTrainer
                                      "--imgsz", imageSize.ToString(CultureInfo.InvariantCulture) })
             start.ArgumentList.Add(arg);
 
-        // 묶음 그림의 상자 색을 라벨링 화면의 몹 색으로 - 사람이 고른 색, 안 고른 번호는 화면과 같은 기본 색(황금각).
+        // 묶음 그림의 상자 색을 라벨링 화면의 검출 색으로 - 사람이 고른 색, 안 고른 번호는 화면과 같은 기본 색(황금각).
         var classCount = dataset.LoadClasses().Count;
         if (classCount > 0)
         {
@@ -222,9 +222,9 @@ public static class YoloTrainer
         status.Report("새 모델을 들이는 중...");
 
         // 들이기: Ultralytics 는 비율을 지켜 여백을 넣는다(레터박스). 이름이 곧 콤보 항목이라 보관본도 갈아 끼운다.
-        // 쪽지 크기도 학습한 크기로 - 몹 찾기는 ONNX 에 박힌 크기를 먼저 보지만, 줄 요약·재현율 쪽지·캡처를 줄이는 바닥이 쪽지를 본다.
+        // 쪽지 크기도 학습한 크기로 - 검출은 ONNX 에 박힌 크기를 먼저 보지만, 줄 요약·재현율 쪽지·캡처를 줄이는 바닥이 쪽지를 본다.
         var target = DetectorFiles.ImportOnnx(dataset, onnx, imageSize, imageSize, letterbox: true, modelName);
-        File.SetLastWriteTimeUtc(target, DateTime.UtcNow); // 켜 둔 몹 찾기가 시각으로 새 모델을 알아챈다
+        File.SetLastWriteTimeUtc(target, DateTime.UtcNow); // 켜 둔 검출이 시각으로 새 모델을 알아챈다
         DetectorFiles.KeepAsChoice(dataset, modelName);
 
         Logger.Info($"YOLO 학습 끝: {watch.Elapsed:mm\\:ss} · {onnx} → {target}");

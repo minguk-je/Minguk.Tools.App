@@ -14,7 +14,7 @@ namespace Minguk.Tools.Vision.Inference;
 /// <summary>
 /// 모델이 찾아낸 것 하나.
 /// </summary>
-/// <param name="Label">몹 이름.</param>
+/// <param name="Label">검출 이름.</param>
 /// <param name="Box">자리. 라벨과 같은 0~1 이고, <c>ClassId</c> 도 손으로 찍은 것과 같은 번호다.</param>
 /// <param name="Score">얼마나 자신 있는지 (0~1).</param>
 public readonly record struct Detection(string Label, LabelBox Box, float Score)
@@ -44,7 +44,7 @@ internal sealed class DetectionPrediction
 }
 
 /// <summary>
-/// 학습해 둔 모델로 그림에서 몹을 찾는다.
+/// 학습해 둔 모델로 그림에서 검출을 찾는다.
 /// </summary>
 /// <remarks>
 /// <b>libtorch 가 먼저 올라와 있어야 한다.</b> 모델 안에 TorchSharp 가 들어 있어서,
@@ -165,8 +165,8 @@ public sealed class DetectorModel : IDetector
         {
             if (scores[i] < minimumScore) continue;
 
-            // 이름을 번호로 되돌린다. 손으로 찍은 사각형과 같은 색으로 그려야 어느 몹을
-            // 찾았는지 한눈에 갈린다. 목록에 없는 이름이면(학습 뒤 몹을 지웠거나 한 경우)
+            // 이름을 번호로 되돌린다. 손으로 찍은 사각형과 같은 색으로 그려야 어느 검출을
+            // 찾았는지 한눈에 갈린다. 목록에 없는 이름이면(학습 뒤 검출을 지웠거나 한 경우)
             // 번호를 못 주므로 0 으로 둔다 - 색만 어긋나고 이름은 그대로 뜬다.
             var classId = Math.Max(classes.IndexOf(labels[i]), 0);
 

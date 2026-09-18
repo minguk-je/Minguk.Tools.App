@@ -8,8 +8,8 @@ namespace Minguk.Tools.Tests;
 /// 학습 중 신호(<see cref="TrainingActivity"/>) - 시작·끝을 알리고 겹쳐도 세며, GPU 리셋 오류를 알아보는가.
 /// </summary>
 /// <remarks>
-/// 2026-09-14 로그: 학습(CUDA)과 몹 찾기(DirectML)가 같은 3GB 카드에서 겹쳐 `DXGI_ERROR_DEVICE_REMOVED` → 학습 `cudaErrorUnknown` →
-/// 재현율 `887A0007`. 신호가 끝을 못 알리면 몹 찾기가 영영 멈추고, 리셋을 못 알아보면 사람은 영문 모를 예외만 본다.
+/// 2026-09-14 로그: 학습(CUDA)과 검출(DirectML)가 같은 3GB 카드에서 겹쳐 `DXGI_ERROR_DEVICE_REMOVED` → 학습 `cudaErrorUnknown` →
+/// 재현율 `887A0007`. 신호가 끝을 못 알리면 검출이 영영 멈추고, 리셋을 못 알아보면 사람은 영문 모를 예외만 본다.
 /// </remarks>
 internal static partial class Program
 {

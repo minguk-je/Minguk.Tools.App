@@ -54,7 +54,7 @@ public class FrameLogRow
 /// 미리보기에서 일어난 입력을 대상으로 넘기고, 한 장을 파일·데이터셋으로 떨어뜨린다.
 /// </summary>
 /// <remarks>
-/// <b>왜 베이스인가</b> - 캡처(담기)·편집(몹 찾기·글자·스크립트)·플레이(스크립트 실행) 세 화면이
+/// <b>왜 베이스인가</b> - 캡처(담기)·편집(검출·글자·스크립트)·플레이(스크립트 실행) 세 화면이
 /// 모두 "창을 잡아 미리보기에 올리는 일" 을 똑같이 한다. 한 화면(캡처 모니터)에 전부 얹었더니
 /// 도구 줄이 넘쳤고, 플레이만 하는 PC 에 편집기·담기까지 딸려 갔다. 잡는 일은 여기 한 벌만 두고
 /// 화면은 그 위에 제 것만 얹는다.
@@ -213,7 +213,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     private volatile bool _isCapturePaused;
 
     /// <summary>
-    /// 캡처 일시정지 - 세션은 그대로 두고 받은 프레임을 흘린다. 미리보기는 마지막 장에 멈추고, 몹 찾기·계속 읽기·스크립트에 프레임 올리기도 쉰다.
+    /// 캡처 일시정지 - 세션은 그대로 두고 받은 프레임을 흘린다. 미리보기는 마지막 장에 멈추고, 검출·계속 읽기·스크립트에 프레임 올리기도 쉰다.
     /// </summary>
     /// <remarks>
     /// 세션을 끊지 않아 계속하면 곧바로 이어진다. 캡처 스레드가 읽어 필드로 둔다. 캡처를 멈추면 풀린다. 통계·저장·담기(F8)는 그대로 돈다.
@@ -236,7 +236,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
             if (IsRunning)
                 StatusText = value
-                    ? "캡처 일시정지 - 미리보기는 마지막 장에 멈추고 몹 찾기·계속 읽기를 쉽니다. 다시 누르면 계속."
+                    ? "캡처 일시정지 - 미리보기는 마지막 장에 멈추고 검출·계속 읽기를 쉽니다. 다시 누르면 계속."
                     : "캡처 계속";
         }
     }
@@ -547,7 +547,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             foreach (var window in CaptureTarget.EnumerateWindows().OrderBy(target => target.ProcessName).ThenBy(target => target.Title))
                 Targets.Add(window);
 
-            // 녹화한 영상은 맨 아래 - 게임 없이 몹 찾기·글자 읽기·스크립트를 시험한다. 고른 프로젝트의 Recordings, 새것부터.
+            // 녹화한 영상은 맨 아래 - 게임 없이 검출·글자 읽기·스크립트를 시험한다. 고른 프로젝트의 Recordings, 새것부터.
             var videos = CaptureTarget.EnumerateVideos(Vision.ProjectPaths.Recordings);
             foreach (var video in videos)
                 Targets.Add(video);
@@ -675,7 +675,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     protected void RequestCollectFrame(int source)
     {
         // 픽셀이 CPU 로 안 내려오면 담을 것이 없다. 버튼을 회색으로 두고 이유를 안 알려 주면
-        // "몹을 모을 수가 없다" 가 된다 - 실제로 그랬다. 알아서 켜고 그렇게 적는다.
+        // "검출을 모을 수가 없다" 가 된다 - 실제로 그랬다. 알아서 켜고 그렇게 적는다.
         EnsureCpuReadback("데이터셋에 담으려면 픽셀이 필요합니다");
 
         Interlocked.Exchange(ref _isCollectFrameRequested, source);
@@ -687,7 +687,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// <remarks>
     /// 리드백은 세션을 만들 때 정해진다(<see cref="ScreenCaptureAdapterFactory.Create"/>). 허브가 나눠 쓰는 세션이면
     /// 허브가 알아서 리드백 있는 세션으로 갈아 끼우고 다른 화면에 알린다.
-    /// 도는 중에 값만 바꾸면 아무것도 안 달라진다 - 몹 찾기에서 "알아서 켜 준다" 고 해 놓고
+    /// 도는 중에 값만 바꾸면 아무것도 안 달라진다 - 검출에서 "알아서 켜 준다" 고 해 놓고
     /// 실제로는 헛것이었다. 껐다 켜는 것이 유일한 길이고, 통계 몇 초가 사라지는 것 말고는
     /// 잃는 것이 없다.
     /// </remarks>
@@ -743,7 +743,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
         if (_isCapturePaused) return;
 
-        // 몹 찾기·글자 읽기처럼 프레임을 보는 일은 파생 화면이 한다. 여기서 기다리면 프레임이 밀린다.
+        // 검출·글자 읽기처럼 프레임을 보는 일은 파생 화면이 한다. 여기서 기다리면 프레임이 밀린다.
         OnFramePixels(e);
 
         if (ShowPreview)
@@ -860,7 +860,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         scroller.ScrollToVerticalOffset((inContent.Y * PreviewZoom) - inView.Y);
     }
 
-    /// <summary>담을 때 라벨로 같이 쓸 검출. 몹 찾기가 없는 화면은 빈 목록이다.</summary>
+    /// <summary>담을 때 라벨로 같이 쓸 검출. 검출이 없는 화면은 빈 목록이다.</summary>
     protected virtual IReadOnlyList<Minguk.Tools.Vision.Inference.Detection> DetectionsForLabels => [];
 
     /// <summary>
@@ -1367,7 +1367,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// 화면 좌표 한 곳을 누른다. 끌어올린 뒤 기다리는 것과 포커스를 되돌리는 것까지.
     /// </summary>
     /// <remarks>
-    /// 미리보기를 손으로 누른 것과 모델이 찾아낸 몹을 누르는 것이 <b>같은 길</b>을 타야 한다.
+    /// 미리보기를 손으로 누른 것과 모델이 찾아낸 검출을 누르는 것이 <b>같은 길</b>을 타야 한다.
     /// 두 벌로 두면 한쪽만 고쳐져 손으로 누를 때는 되는데 자동으로는 안 되는 일이 생긴다.
     /// </remarks>
     protected async System.Threading.Tasks.Task<Capture.Input.InputForwardResult> SendClickAsync(
@@ -1670,9 +1670,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
             FrameSnapshot.SavePng(e, path);
 
-            // 몹 찾기가 켜져 있으면 방금 찾은 것을 라벨로 같이 쓴다. 그러면 라벨링 화면은
+            // 검출이 켜져 있으면 방금 찾은 것을 라벨로 같이 쓴다. 그러면 라벨링 화면은
             // 그리는 곳이 아니라 틀린 것만 고치는 곳이 된다. 찾은 것이 없으면 라벨 파일을
-            // 안 만든다 - 빈 라벨은 "여기엔 몹이 없다" 를 가르치는 것이라 사람이 봐야 한다.
+            // 안 만든다 - 빈 라벨은 "여기엔 검출이 없다" 를 가르치는 것이라 사람이 봐야 한다.
             var found = DetectionsForLabels;
             if (found.Count > 0)
                 LabelFile.Save(dataset.LabelPathFor(path), found.Select(d => d.Box));

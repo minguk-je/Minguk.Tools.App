@@ -15,7 +15,7 @@ using Minguk.Tools.Vision.Perception;
 namespace Minguk.Tools.ViewModels;
 
 /// <summary>
-/// 잡은 화면을 <b>보는</b> 화면들의 바탕 - 몹 찾기(검출·추적)와 글자 읽기(영역 OCR·이름표)를 얹는다.
+/// 잡은 화면을 <b>보는</b> 화면들의 바탕 - 검출·추적과 글자 읽기(영역 OCR·이름표)를 얹는다.
 /// </summary>
 /// <remarks>
 /// 스크립트 화면과 플레이 화면이 같이 쓴다. 캡처 화면은 이 계층이 없다 - 담기만 하는 화면에
@@ -27,11 +27,11 @@ namespace Minguk.Tools.ViewModels;
 /// </remarks>
 public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModelBase
 {
-    /// <summary>학습한 모델로 프레임에서 몹을 찾을지.</summary>
-    public bool IsMobDetectionOn
+    /// <summary>학습한 모델로 프레임에서 검출을 찾을지.</summary>
+    public bool IsDetectionOn
     {
-        get => GetProperty(() => IsMobDetectionOn);
-        set => SetProperty(() => IsMobDetectionOn, value, OnMobDetectionChanged);
+        get => GetProperty(() => IsDetectionOn);
+        set => SetProperty(() => IsDetectionOn, value, OnDetectionChanged);
     }
 
     /// <summary>
@@ -77,7 +77,7 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// <summary>찾은 것들. 미리보기 위에 겹쳐 그린다.</summary>
     public ObservableCollection<PredictedBox> Detections { get; } = [];
 
-    /// <summary>가장 자신 있는 몹을 누른다.</summary>
+    /// <summary>가장 자신 있는 검출을 누른다.</summary>
     public DelegateCommand ClickDetectionCommand { get; private set; }
 
     /// <summary>
@@ -102,8 +102,8 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// <summary>인식 허브. 찾은 것과 프레임을 여기 올려 두면 스크립트가 읽어 간다.</summary>
     protected IPerceptionHub Hub { get; } = PerceptionHubFactory.Default;
 
-    /// <summary>잡고 있는지·찾고 있는지·무엇을 잡는지를 허브에 알린다. 시작·중지·몹 찾기 토글 때.</summary>
-    protected void PublishPerceptionState() => Hub.PublishState(IsRunning, IsMobDetectionOn, SelectedTarget);
+    /// <summary>잡고 있는지·찾고 있는지·무엇을 잡는지를 허브에 알린다. 시작·중지·검출 토글 때.</summary>
+    protected void PublishPerceptionState() => Hub.PublishState(IsRunning, IsDetectionOn, SelectedTarget);
 
     protected override void OnRunningStateChanged() => PublishPerceptionState();
 
@@ -115,8 +115,8 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// <summary>프레임마다 찾고 읽는다. 둘 다 시간이 됐을 때만 백그라운드로 하나 띄우고 바로 돌아온다.</summary>
     protected override void OnFramePixels(CapturedFrameEventArgs e)
     {
-        // 스크립트가 화면 글자를 읽고 싶어 하면(허브 WantsFrames) 프레임을 한 벌 올린다. 몹 찾기와 무관하다 -
-        // 검출 안에 두었더니 ONNX(GPU 텍스처) 길이나 몹 찾기를 끈 때 스크립트의 읽기가 프레임을 영영 못 받았다(실측 2026-09-16).
+        // 스크립트가 화면 글자를 읽고 싶어 하면(허브 WantsFrames) 프레임을 한 벌 올린다. 검출과 무관하다 -
+        // 검출 안에 두었더니 ONNX(GPU 텍스처) 길이나 검출을 끈 때 스크립트의 읽기가 프레임을 영영 못 받았다(실측 2026-09-16).
         MaybePublishFrame(e);
 
         // 0.25초에 한 번만, 앞의 것이 끝났을 때만.
@@ -185,9 +185,9 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
         // 화면을 나누기 전 값(캡처 모니터 이름으로 저장된 것)을 처음 한 번 물려받는다.
         DetectMinimumScore = GetSettingOrLegacy(nameof(DetectMinimumScore), 0.5);
 
-        // 몹 찾기도 켜진 채로 복구한다(사용자, 2026-09-16 - "어차피 켜 놓을 거니까"). 켜져 있으면 화면을 열 때
+        // 검출도 켜진 채로 복구한다(사용자, 2026-09-16 - "어차피 켜 놓을 거니까"). 켜져 있으면 화면을 열 때
         // 모델(68MB)을 읽느라 조금 늦게 뜬다 - 그 값을 치르기로 한 것이다. 끄고 닫았으면 꺼진 채로 열린다.
-        IsMobDetectionOn = GetSettingOrLegacy(nameof(IsMobDetectionOn), false);
+        IsDetectionOn = GetSettingOrLegacy(nameof(IsDetectionOn), false);
         IsTrackingOn = GetSettingOrLegacy(nameof(IsTrackingOn), true);
 
         // 영역 보기도 켜 둔 대로 열린다(처음은 켬). 체크와 미리보기가 늘 같다(사용자, 2026-09-17).
@@ -202,7 +202,7 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
 
         // 문턱은 읽기만 하고 저장을 안 해 슬라이더를 움직여도 다음 실행에 안 남았다. 같이 저장한다.
         SetSetting(nameof(DetectMinimumScore), DetectMinimumScore);
-        SetSetting(nameof(IsMobDetectionOn), IsMobDetectionOn);
+        SetSetting(nameof(IsDetectionOn), IsDetectionOn);
         SetSetting(nameof(IsTrackingOn), IsTrackingOn);
         SetSetting(nameof(ShowRegions), ShowRegions);
     }

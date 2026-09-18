@@ -19,7 +19,7 @@ public enum CaptureTargetKind
     Monitor,
 
     /// <summary>
-    /// 녹화한 영상 파일(<see cref="CaptureTarget.FilePath"/>). 게임 창 대신 영상 프레임이 흐른다 - 몹 찾기·글자 읽기·스크립트 흐름 시험용.
+    /// 녹화한 영상 파일(<see cref="CaptureTarget.FilePath"/>). 게임 창 대신 영상 프레임이 흐른다 - 검출·글자 읽기·스크립트 흐름 시험용.
     /// 입력은 받지 않는다(<see cref="Capture.Input.InputForwardResult.VideoTarget"/>). 화면 자리가 없어 좌표는 영상 픽셀 그대로다.
     /// </summary>
     Video

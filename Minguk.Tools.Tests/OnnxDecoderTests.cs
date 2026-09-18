@@ -36,7 +36,7 @@ internal static partial class Program
         // ── DETR: 질의 둘 중 점수가 문턱을 넘는 하나만, 좌표는 원본 0~1 로 ──
         {
             var decoder = new DetrDecoder();
-            var classes = new LabelClasses(["일반 봇", "다른 몹"]);
+            var classes = new LabelClasses(["일반 봇", "다른 검출"]);
             var map = LetterboxMap.For(1920, 1080, 640, 640);
 
             // logits 는 시그모이드 전 값이다. 2.0 ≈ 88%, -2.0 ≈ 12%.
@@ -65,7 +65,7 @@ internal static partial class Program
         // ── D-FINE: 후처리를 그래프에 넣어 내보낸 것. 사각형은 입력 칸 픽셀 xyxy 다 ──
         {
             var decoder = new DFineDecoder();
-            var classes = new LabelClasses(["일반 봇", "다른 몹"]);
+            var classes = new LabelClasses(["일반 봇", "다른 검출"]);
 
             // 늘려 넣었다고 일러 준다(D-FINE 공식 설정이 그렇다). 그러면 640 으로 나눈 값이 곧 원본 0~1 이다.
             var map = LetterboxMap.For(1920, 1080, 640, 640, letterbox: false);
@@ -91,21 +91,21 @@ internal static partial class Program
                   found.Count == 2
                   && first.Label == "일반 봇" && Near(first.Box.CenterX, 0.5, 0.001) && Near(first.Box.CenterY, 0.5, 0.001)
                   && Near(first.Box.Width, 0.1, 0.001) && Near(first.Box.Height, 0.1, 0.001)
-                  && second.Label == "다른 몹" && Near(second.Box.CenterX, 0.15, 0.001) && Near(second.Box.CenterY, 0.1, 0.001),
+                  && second.Label == "다른 검출" && Near(second.Box.CenterX, 0.15, 0.001) && Near(second.Box.CenterY, 0.1, 0.001),
                   found.Count == 0 ? "하나도 안 나왔다" : $"{found.Count}개, {first.Describe} 가운데({first.Box.CenterX:0.000}, {first.Box.CenterY:0.000}) 크기({first.Box.Width:0.000})");
         }
 
-        // ── YOLO(Ultralytics): output0 [1, 4+몹수, 후보수]. 중심 xywh 픽셀 + 몹별 점수. 겹침은 우리가 누른다 ──
+        // ── YOLO(Ultralytics): output0 [1, 4+검출수, 후보수]. 중심 xywh 픽셀 + 검출별 점수. 겹침은 우리가 누른다 ──
         {
             var decoder = new YoloDecoder();
-            var classes = new LabelClasses(["일반 봇", "다른 몹"]);
+            var classes = new LabelClasses(["일반 봇", "다른 검출"]);
             var map = LetterboxMap.For(1920, 1080, 640, 640, letterbox: false);
 
-            // 후보 여덟(채널 6 = 4 + 몹 2). 채널이 먼저다: 채널마다 후보 여덟이 이어진다. 뒤 넷은 점수 0 인 빈 후보 -
+            // 후보 여덟(채널 6 = 4 + 검출 2). 채널이 먼저다: 채널마다 후보 여덟이 이어진다. 뒤 넷은 점수 0 인 빈 후보 -
             // 해석기가 "후보 축이 채널 축보다 길다" 로 모양을 가리므로 후보가 채널보다 많아야 한다(실제 모델은 8,400개다).
             //   0: 가운데 64x64, 일반 봇 0.9
             //   1: 0 과 거의 같은 자리(4px 옆), 일반 봇 0.7  → 겹쳐서 눌린다
-            //   2: 0 과 같은 자리, 다른 몹 0.6              → 다른 몹이라 산다
+            //   2: 0 과 같은 자리, 다른 검출 0.6              → 다른 검출이라 산다
             //   3: 왼쪽 위, 일반 봇 0.2                    → 문턱 아래
             const int n = 8;
             float[] cx = [320, 324, 320, 64, 0, 0, 0, 0], cy = [320, 320, 320, 32, 0, 0, 0, 0];
@@ -120,14 +120,14 @@ internal static partial class Program
             var first = found.Count > 0 ? found[0] : default;
             var second = found.Count > 1 ? found[1] : default;
 
-            Check("YOLO: 중심 xywh 를 원본 0~1 로 · 같은 몹의 겹침은 누르고 다른 몹은 산다 · 문턱 아래는 버린다",
+            Check("YOLO: 중심 xywh 를 원본 0~1 로 · 같은 검출의 겹침은 누르고 다른 검출은 산다 · 문턱 아래는 버린다",
                   found.Count == 2
                   && first.Label == "일반 봇" && Near(first.Score, 0.9, 0.001)
                   && Near(first.Box.CenterX, 0.5, 0.001) && Near(first.Box.CenterY, 0.5, 0.001) && Near(first.Box.Width, 0.1, 0.001)
-                  && second.Label == "다른 몹" && Near(second.Score, 0.6, 0.001),
+                  && second.Label == "다른 검출" && Near(second.Score, 0.6, 0.001),
                   found.Count == 0 ? "하나도 안 나왔다" : $"{found.Count}개, {string.Join(" / ", found.Select(f => f.Describe))}");
 
-            // 뒤집힌 모양 [1, 후보수, 4+몹수] 도 같은 답이어야 한다.
+            // 뒤집힌 모양 [1, 후보수, 4+검출수] 도 같은 답이어야 한다.
             var transposed = new float[output.Length];
             for (var i = 0; i < n; i++)
                 for (var c = 0; c < 6; c++)

@@ -3,12 +3,12 @@
 namespace Minguk.Tools.Vision.Labeling;
 
 /// <summary>
-/// 라벨 사각형 하나 - "이 자리에 이 몹이 있다".
+/// 라벨 사각형 하나 - "이 자리에 이 검출이 있다".
 /// </summary>
 /// <remarks>
 /// <b>왜 픽셀이 아니라 0~1 로 담는가</b>
 ///
-/// 같은 몹을 1920x1080 에서도 잡고 1280x720 에서도 잡는다. 픽셀로 담으면 그림 크기가
+/// 같은 검출을 1920x1080 에서도 잡고 1280x720 에서도 잡는다. 픽셀로 담으면 그림 크기가
 /// 달라지는 순간 라벨이 어긋나고, 학습할 때 어차피 다시 나눠야 한다. 0~1 로 담아 두면
 /// 그림 크기를 몰라도 뜻이 통한다 - 화면에 그릴 때만 그때 크기를 곱한다.
 ///
@@ -17,7 +17,7 @@ namespace Minguk.Tools.Vision.Labeling;
 /// </remarks>
 public readonly record struct LabelBox
 {
-    /// <summary>몇 번째 몹인지. <see cref="LabelClasses"/> 의 자리 번호다.</summary>
+    /// <summary>몇 번째 검출인지. <see cref="LabelClasses"/> 의 자리 번호다.</summary>
     public required int ClassId { get; init; }
 
     /// <summary>가운데 x (0~1).</summary>

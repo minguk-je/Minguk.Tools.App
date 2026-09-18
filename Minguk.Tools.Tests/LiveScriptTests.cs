@@ -18,10 +18,10 @@ using Minguk.Tools.Vision.Perception;
 namespace Minguk.Tools.Tests;
 
 /// <summary>
-/// 실시간 스크립트. 가짜 어댑터(누른 것을 적기만 한다)와 가짜 허브(몹 하나)를 꽂아 화면·게임 없이 돌린다.
+/// 실시간 스크립트. 가짜 어댑터(누른 것을 적기만 한다)와 가짜 허브(검출 하나)를 꽂아 화면·게임 없이 돌린다.
 /// </summary>
 /// <remarks>
-/// 여기서 보는 것 - 표의 이름이 실시간 API 에 다 있는지, C#·자바스크립트가 몹을 읽어 그 자리를 누르는지,
+/// 여기서 보는 것 - 표의 이름이 실시간 API 에 다 있는지, C#·자바스크립트가 검출을 읽어 그 자리를 누르는지,
 /// 눈이 없으면 멈추고 이유를 말하는지, 중지가 쉬기() 사이에 먹는지, 문법 검사가 돌리지 않고 줄 번호를 주는지.
 /// 파이썬은 런타임(11MB)을 받아야 해서 여기서는 안 돈다.
 /// <b>입력은 절대 실제로 나가지 않는다</b> - 어댑터가 가짜다.
@@ -48,13 +48,13 @@ internal static partial class Program
             return;
         }
 
-        // ── C#: 몹을 읽어 그 자리를 누른다 ──
+        // ── C#: 검출을 읽어 그 자리를 누른다 ──
         const string csharp = """
-                              var 목록 = 몹들();
+                              var 목록 = 검출들();
                               출력("n=" + 목록.Count);
-                              var 몹 = 가장가까운몹();
-                              보기("대상", 몹);
-                              이동(몹.중심x, 몹.중심y);
+                              var 검출 = 가장가까운검출();
+                              보기("대상", 검출);
+                              이동(검출.중심x, 검출.중심y);
                               클릭();
                               키("F");
                               쉬기(5);
@@ -64,11 +64,11 @@ internal static partial class Program
 
         // ── JavaScript: 같은 일 ──
         const string javascript = """
-                                  var 목록 = 몹들();
+                                  var 목록 = 검출들();
                                   출력("n=" + 목록.Count);
-                                  var 몹 = 가장가까운몹();
-                                  보기("대상", 몹);
-                                  이동(몹.중심x, 몹.중심y);
+                                  var 검출 = 가장가까운검출();
+                                  보기("대상", 검출);
+                                  이동(검출.중심x, 검출.중심y);
                                   클릭();
                                   키("F");
                                   쉬기(5);
@@ -79,9 +79,9 @@ internal static partial class Program
         // ── 눈이 없으면 멈추고 이유를 말한다 ──
         {
             var hub = new FakeHub(monitor) { IsDetecting = false };
-            var (errors, _, _) = Run(new RoslynScriptEngine(), "var m = 몹들();", hub, monitor, CancellationToken.None);
+            var (errors, _, _) = Run(new RoslynScriptEngine(), "var m = 검출들();", hub, monitor, CancellationToken.None);
 
-            Check("몹 찾기가 꺼져 있으면 멈추고 이유를 말한다", errors.Count == 1 && errors[0].Message.Contains("몹 찾기"), errors.Count > 0 ? errors[0].Message : "(오류 없음)");
+            Check("검출이 꺼져 있으면 멈추고 이유를 말한다", errors.Count == 1 && errors[0].Message.Contains("검출"), errors.Count > 0 ? errors[0].Message : "(오류 없음)");
         }
 
         // ── 중지가 쉬기() 사이에 먹는다 ──
@@ -131,7 +131,7 @@ internal static partial class Program
         // ── 머리 자리: 사각형 가운데가 아니라 위쪽을 겨눈다 ──
         {
             var (errors, _, printed) = Run(new RoslynScriptEngine(),
-                "var m = 가장가까운몹(); 출력(m.중심x + \",\" + m.중심y + \",\" + m.머리x + \",\" + m.머리y + \",\" + m.높이);",
+                "var m = 가장가까운검출(); 출력(m.중심x + \",\" + m.중심y + \",\" + m.머리x + \",\" + m.머리y + \",\" + m.높이);",
                 new FakeHub(monitor), monitor, CancellationToken.None);
 
             var parts = printed.Count == 1 ? printed[0].Split(',').Select(int.Parse).ToArray() : [];
@@ -144,16 +144,16 @@ internal static partial class Program
 
                 // 가로는 가운데 그대로, 세로는 위 모서리와 가운데 사이 - 꼭대기에 붙으면 머리 위 허공이다.
                 ok = headX == parts[0] && headY < centerY && headY > top
-                     && Math.Abs(headY - (top + (height * ScriptMob.HeadFraction))) <= 1;
+                     && Math.Abs(headY - (top + (height * ScriptDetection.HeadFraction))) <= 1;
             }
 
-            Check($"머리 자리는 사각형 위에서 {ScriptMob.HeadFraction:P0} 내려온 곳 (가로는 가운데)", errors.Count == 0 && ok,
+            Check($"머리 자리는 사각형 위에서 {ScriptDetection.HeadFraction:P0} 내려온 곳 (가로는 가운데)", errors.Count == 0 && ok,
                   printed.Count == 1 ? $"중심·머리·높이 = {printed[0]}" : "출력이 없다");
         }
 
-        // ── 목표 고정: 몹이 둘이어도 같은 것만 본다 ──
+        // ── 목표 고정: 검출이 둘이어도 같은 것만 본다 ──
         {
-            var hub = new TwoMobHub(monitor);
+            var hub = new TwoDetectionHub(monitor);
 
             // 같은 것을 세 번 부른다. 사이에 "가까운 쪽" 이 바뀌어도 고정한 것을 계속 줘야 한다.
             var (errors, _, printed) = Run(new RoslynScriptEngine(),
@@ -165,13 +165,13 @@ internal static partial class Program
                 var c = 목표(); 출력(c.중심x);
                 """.Replace("눈뒤집기();", ""), hub, monitor, CancellationToken.None);
 
-            // 첫 번째와 두 번째는 같은 몹(고정), 세 번째는 풀었으니 다시 가장 가까운 것.
+            // 첫 번째와 두 번째는 같은 검출(고정), 세 번째는 풀었으니 다시 가장 가까운 것.
             var same = printed.Count == 3 && printed[0] == printed[1];
 
             Check("목표는 고정되고, 풀면 다시 고른다", errors.Count == 0 && same && printed[2] == printed[0],
                   errors.Count > 0 ? errors[0].ToString() : string.Join(" / ", printed));
 
-            // 가까운 몹을 숨기면 남는 것은 멀리 있는 하나뿐이다. 먼 목표는 **두 번 연속 같은 자리에 보여야** 고른다 -
+            // 가까운 검출을 숨기면 남는 것은 멀리 있는 하나뿐이다. 먼 목표는 **두 번 연속 같은 자리에 보여야** 고른다 -
             // 한 프레임 반짝한 헛것으로 화면이 확 돌아 버리기 때문이다(실측: 78% 짜리 한 장에 1200,-1200 을 보냈다).
             hub.HideNear = true;
 
@@ -187,7 +187,7 @@ internal static partial class Program
                   missErrors.Count > 0 ? missErrors[0].ToString() : string.Join(" → ", missPrinted));
         }
 
-        // ── 목표 흔들림: 같은 몹의 사각형이 프레임마다 위아래로 흔들려도 목표의 머리는 조금만 움직인다 ──
+        // ── 목표 흔들림: 같은 검출의 사각형이 프레임마다 위아래로 흔들려도 목표의 머리는 조금만 움직인다 ──
         // 실측 - 가만히 있는 봇의 사각형 가운데가 세로 중간값 17px 흔들려, 크게 돈 뒤 흔들린 머리로 한 번 더 움직였다(사용자, 2026-09-18 "돌고 멈췄다가 머리로").
         {
             var hub = new JitterHub(monitor);
@@ -251,7 +251,7 @@ internal static partial class Program
             var cx = (int)(bounds.Left + (bounds.Width / 2));
             var cy = (int)(bounds.Top + (bounds.Height / 2));
 
-            // 같은 상황을 되풀이한다: 200px 떨어진 몹을 겨누고, 보낸 카운트만큼 실제로 움직인 화면을 돌려준다.
+            // 같은 상황을 되풀이한다: 200px 떨어진 검출을 겨누고, 보낸 카운트만큼 실제로 움직인 화면을 돌려준다.
             // 가운뎃값을 쓰므로 표본이 찰 만큼(AimSamples=9) 돌아야 배율이 움직이기 시작한다.
             for (var round = 0; round < 20; round++)
             {
@@ -293,7 +293,7 @@ internal static partial class Program
 
             Check("배율은 너무 가깝거나 너무 먼 조준으로는 안 배운다", ignored, string.Join(", ", detail));
 
-            // 잡음 하나에 안 흔들리는가. 몹이 스스로 움직이거나 화면이 덜 돌면 "덜 움직였다" 가 되어 잰 값이
+            // 잡음 하나에 안 흔들리는가. 검출이 스스로 움직이거나 화면이 덜 돌면 "덜 움직였다" 가 되어 잰 값이
             // 크게 나오는데, 그 잡음은 늘 한쪽(위)으로만 튄다 - 한 값씩 반영하면 위로만 떠밀려 상한까지 간다
             // (실측: 3.6 에서 시작해 734번 배우는 동안 20 에 붙었고, 그러자 모든 조준이 잘려 화면이 안 돌았다).
             {
@@ -433,16 +433,16 @@ internal static partial class Program
             Check("멈춘 채로 중지하면 끝난다", finished && run.Result.Count == 0, $"끝 {finished}");
         }
 
-        // ── 몹.이름표: 부를 때만 화면을 읽는다(안 부르면 프레임도 안 청한다) ──
+        // ── 검출.이름표: 부를 때만 화면을 읽는다(안 부르면 프레임도 안 청한다) ──
         {
             var quiet = new FakeHub(monitor);
-            var (quietErrors, _, _) = Run(new RoslynScriptEngine(), "foreach (var m in 몹들()) 출력(m.이름);", quiet, monitor, CancellationToken.None);
+            var (quietErrors, _, _) = Run(new RoslynScriptEngine(), "foreach (var m in 검출들()) 출력(m.이름);", quiet, monitor, CancellationToken.None);
 
             var asking = new FakeHub(monitor);
             var calls = new List<ScriptCall>();
-            var (askErrors, _, _) = Run(new RoslynScriptEngine(), "출력(몹들()[0].이름표);", asking, monitor, CancellationToken.None, calls.Add);
+            var (askErrors, _, _) = Run(new RoslynScriptEngine(), "출력(검출들()[0].이름표);", asking, monitor, CancellationToken.None, calls.Add);
 
-            Check("몹.이름표: 안 부르면 화면을 안 읽고, 부르면 그때 몹 위를 읽으러 간다",
+            Check("검출.이름표: 안 부르면 화면을 안 읽고, 부르면 그때 검출 위를 읽으러 간다",
                   quietErrors.Count == 0 && !quiet.WantsFrames && asking.WantsFrames && calls.Any(c => c.Name == "Nameplate")
                   && askErrors.Count == 1 && askErrors[0].Message.Contains("프레임"),
                   $"안 부름: 프레임 청함 {quiet.WantsFrames} · 부름: 청함 {asking.WantsFrames} · 호출 {string.Join(",", calls.Select(c => c.Name))} · {(askErrors.Count > 0 ? askErrors[0].Message : "(오류 없음)")}");
@@ -513,15 +513,15 @@ internal static partial class Program
         //    Live 네임스페이스를 WithImports 로 붙였더니 목록이 갈아 끼워져 System 이 빠졌었다.
         {
             var errors = new RoslynScriptEngine()
-                .CheckLiveAsync("var a = Math.Abs(-1);\nlong b = Environment.TickCount64;\nScriptMob? c = null;")
+                .CheckLiveAsync("var a = Math.Abs(-1);\nlong b = Environment.TickCount64;\nScriptDetection? c = null;")
                 .GetAwaiter().GetResult();
 
-            Check("실시간 C# 에서 Math·Environment·ScriptMob 을 짧게 쓴다", errors.Count == 0,
+            Check("실시간 C# 에서 Math·Environment·ScriptDetection 을 짧게 쓴다", errors.Count == 0,
                 errors.Count == 0 ? "오류 없음" : string.Join(" / ", errors));
         }
     }
 
-    /// <summary>조준 스레드(<see cref="AimLoop"/>) - 닫힌 고리 가짜 허브(<see cref="SimHub"/>)로 붙기·달리는 몹·지나침·배율 배우기를 본다. <c>--aim</c> 은 이것만 돌린다.</summary>
+    /// <summary>조준 스레드(<see cref="AimLoop"/>) - 닫힌 고리 가짜 허브(<see cref="SimHub"/>)로 붙기·달리는 검출·지나침·배율 배우기를 본다. <c>--aim</c> 은 이것만 돌린다.</summary>
     /// <summary>
     /// 메뉴 글자를 찾아 누른다 - 게임 없이, 그린 화면 한 장으로(<see cref="FrameHub"/>).
     /// </summary>
@@ -611,11 +611,11 @@ internal static partial class Program
 
     private static void TestAimLoop(CaptureTarget monitor)
     {
-        // ── 조준 스레드: 몹을 주면 멈추지 않고 따라가 붙고, 움직이는 몹도 쫓고, 목표풀기면 선다(사용자, 2026-09-18 "돌고 멈췄다가 머리로" 가 여전히 부자연스러워 스레드로) ──
+        // ── 조준 스레드: 검출을 주면 멈추지 않고 따라가 붙고, 움직이는 검출도 쫓고, 목표풀기면 선다(사용자, 2026-09-18 "돌고 멈췄다가 머리로" 가 여전히 부자연스러워 스레드로) ──
         {
             const double scale = 3.5;
 
-            // 가만히 있는 몹 300px 옆 - 붙을 때까지 마우스가 쉬지 않고 움직여야 한다.
+            // 가만히 있는 검출 300px 옆 - 붙을 때까지 마우스가 쉬지 않고 움직여야 한다.
             {
                 var adapter = new RecordingAdapter();
                 var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 300 };
@@ -642,13 +642,13 @@ internal static partial class Program
                     var hits = printed.Count(p => p == "True");
 
                     // 크게 꺾기는 빠르게(300px 의 몸 안쪽 40px 까지 0.2초 안 - 시간 상수 95ms 시절에는 0.25초를 넘겼다), 남긴 8% 는 확인 화면을 보고 다듬어 0.45초 안에 머리 20px.
-                    Check("조준(몹): 다가가는 동안 8ms 박자로 쉬지 않고(가장 긴 틈 40ms 아래, 한 걸음 120 카운트 아래) 0.2초 안에 40px 까지 꺾고, 지나치지 않고(15px 아래) 0.45초 안에 20px, 끝에는 15px 안에 붙고 맞았다고 한다",
+                    Check("조준(검출): 다가가는 동안 8ms 박자로 쉬지 않고(가장 긴 틈 40ms 아래, 한 걸음 120 카운트 아래) 0.2초 안에 40px 까지 꺾고, 지나치지 않고(15px 아래) 0.45초 안에 20px, 끝에는 15px 안에 붙고 맞았다고 한다",
                           errors.Count == 0 && final <= 15 && moves.Count >= 15 && longestGap <= 40 && biggest <= 120 && overshoot <= 15 && flick is > 0 and <= 200 && reach is > 0 and <= 450 && hits >= 3,
                           errors.Count > 0 ? errors[0].ToString() : $"걸음 {moves.Count} · 가장 긴 틈 {longestGap}ms · 가장 큰 걸음 {biggest} · 40px 까지 {flick}ms · 20px 까지 {reach}ms · 지나침 {overshoot:0}px · 남은 {final:0}px · 맞음 {hits}/{printed.Count}");
                 }
             }
 
-            // 옆으로 달리는 몹(200px/s) - 속도를 배워 따라잡고 붙어 있는다.
+            // 옆으로 달리는 검출(200px/s) - 속도를 배워 따라잡고 붙어 있는다.
             {
                 var adapter = new RecordingAdapter();
                 var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 150, VelocityPxPerMs = 0.2 };
@@ -659,7 +659,7 @@ internal static partial class Program
                 {
                     var samples = new List<double>();
                     // 붙이기 전에 화면 두 장을 본다 - 진짜 앱은 화면이 계속 흐르지만 가짜 허브는 부를 때 만든다. 붙이는 순간 직전 장과 견줘 봇의 속도를 미리 안다.
-                    var errors = new RoslynScriptEngine().RunLiveAsync("몹들(); 쉬기(120); 몹들(); var until = Environment.TickCount64 + 2000; while (Environment.TickCount64 < until) { var m = 목표(); if (m is null) { 쉬기(20); continue; } 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
+                    var errors = new RoslynScriptEngine().RunLiveAsync("검출들(); 쉬기(120); 검출들(); var until = Environment.TickCount64 + 2000; while (Environment.TickCount64 < until) { var m = 목표(); if (m is null) { 쉬기(20); continue; } 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
 
                     // 마지막 0.6초 동안의 참 거리 - 앞은 따라잡는 중이라 뺀다.
                     var now = Environment.TickCount64;
@@ -675,13 +675,13 @@ internal static partial class Program
                     var caught = all.Count > 0 && all.FirstOrDefault(m => Math.Abs(hub.TrueOffset(m.Ticks)) <= 20).Ticks is var catchAt and > 0 ? catchAt - all[0].Ticks : -1;
 
                     // 0.3초쯤 걸린다 - 프레임 박자(0.1초)에 걸리는 자리에 따라 0.35 를 살짝 넘기도 해서 0.45 로 둔다.
-                    Check("조준(몹): 200px/s 로 달아나는 몹을 0.45초 안에 머리 20px 까지 따라잡고, 마지막 0.6초 동안 머리 너비(15px) 안에 붙어 있는다",
+                    Check("조준(검출): 200px/s 로 달아나는 검출을 0.45초 안에 머리 20px 까지 따라잡고, 마지막 0.6초 동안 머리 너비(15px) 안에 붙어 있는다",
                           errors.Count == 0 && samples.Count > 0 && worst <= 15 && caught is > 0 and <= 450,
                           errors.Count > 0 ? errors[0].ToString() : $"20px 까지 {caught}ms · 마지막 0.6초 표본 {samples.Count} · 가장 먼 {worst:0}px · 평균 {(samples.Count > 0 ? samples.Average() : double.NaN):0}px · 궤적(40ms) {Trail(all.Select(m => (m.Ticks, hub.TrueOffset(m.Ticks))).ToList())}");
                 }
             }
 
-            // 목표풀기 뒤에는 서고, 목표() 는 스레드가 예측한 자리(같은 몹)를 준다.
+            // 목표풀기 뒤에는 서고, 목표() 는 스레드가 예측한 자리(같은 검출)를 준다.
             {
                 var adapter = new RecordingAdapter();
                 var hub = new SimHub(monitor, adapter, scale) { OffsetPx = 200 };
@@ -696,7 +696,7 @@ internal static partial class Program
                     lock (adapter.Moves) last = adapter.Moves.Count > 0 ? adapter.Moves[^1].Ticks : 0;
                     var stopped = Environment.TickCount64 - last >= 120;
 
-                    Check("목표풀기 뒤에는 조준 스레드가 서고, 목표() 는 붙잡은 몹을 준다",
+                    Check("목표풀기 뒤에는 조준 스레드가 서고, 목표() 는 붙잡은 검출을 준다",
                           errors.Count == 0 && printed.Count == 2 && printed[0] == "일반 봇" && adapter.Moves.Count > 0 && stopped,
                           errors.Count > 0 ? errors[0].ToString() : $"출력 {string.Join("/", printed)} · 걸음 {adapter.Moves.Count} · 마지막 걸음 뒤 {Environment.TickCount64 - last}ms");
                 }
@@ -719,7 +719,7 @@ internal static partial class Program
                     var final = Math.Abs(hub.TrueOffset(Environment.TickCount64));
 
                     // 300px 의 15% 는 45px - 모형만 믿고 끝까지 가면 그만큼 지나친다.
-                    Check("조준(몹): 배율이 15% 과해도 300px 조준에서 30px 넘게 지나치지 않고 15px 안에 붙는다",
+                    Check("조준(검출): 배율이 15% 과해도 300px 조준에서 30px 넘게 지나치지 않고 15px 안에 붙는다",
                           errors.Count == 0 && overshoot <= 30 && final <= 15,
                           errors.Count > 0 ? errors[0].ToString() : $"지나침 {overshoot:0}px · 남은 {final:0}px");
                 }
@@ -743,13 +743,13 @@ internal static partial class Program
                     var after = reach > 0 ? trail.Where(p => p.Ticks - trail[0].Ticks >= reach).ToList() : [];
                     var strayed = after.Count > 0 ? after.Max(p => Math.Abs(p.Offset)) : double.NaN;
 
-                    Check("조준(몹): 옆(120px)에 다른 봇이 있고 붙잡은 봇이 네 장에 한 번 안 보여도 옆 봇으로 건너뛰지 않는다(붙은 뒤 25px 안)",
+                    Check("조준(검출): 옆(120px)에 다른 봇이 있고 붙잡은 봇이 네 장에 한 번 안 보여도 옆 봇으로 건너뛰지 않는다(붙은 뒤 25px 안)",
                           errors.Count == 0 && moves.Count >= 10 && reach is > 0 and <= 500 && strayed <= 25,
                           errors.Count > 0 ? errors[0].ToString() : $"걸음 {moves.Count} · 20px 까지 {reach}ms · 붙은 뒤 가장 먼 {strayed:0}px · 궤적(40ms) {Trail(trail)}");
                 }
             }
 
-            // 앱처럼 화면용 추적기를 거친 사각형(Found)과 날것(Raw)을 같이 준다 - 추적기는 화면을 돌리는 동안 옛 자리에 끌려 늦는다. 조준이 그것을 보면 "몹이 달아났다" 로 읽고 지나친다
+            // 앱처럼 화면용 추적기를 거친 사각형(Found)과 날것(Raw)을 같이 준다 - 추적기는 화면을 돌리는 동안 옛 자리에 끌려 늦는다. 조준이 그것을 보면 "검출이 달아났다" 로 읽고 지나친다
             // (실측 2026-09-18: -159px 에서 +75px 로 지나친 뒤 1초에 걸쳐 돌아왔다). 조준 스레드는 날것을 봐야 한다.
             {
                 var adapter = new RecordingAdapter();
@@ -758,7 +758,7 @@ internal static partial class Program
 
                 using (var api = new LiveScriptApi(host, CancellationToken.None))
                 {
-                    // 추적기는 두 번 보여야 내놓는다 - 목표() 가 몹을 줄 때까지 기다렸다 붙는다.
+                    // 추적기는 두 번 보여야 내놓는다 - 목표() 가 검출을 줄 때까지 기다렸다 붙는다.
                     var errors = new RoslynScriptEngine().RunLiveAsync("var until = Environment.TickCount64 + 1500; while (Environment.TickCount64 < until) { var m = 목표(); if (m is null) { 쉬기(20); continue; } 조준(m); }", api, debug: null, token: CancellationToken.None).GetAwaiter().GetResult();
 
                     List<(long Ticks, int Dx, int Dy)> moves;
@@ -774,7 +774,7 @@ internal static partial class Program
                     // 붙은 뒤 걸음이 하나도 없으면(쉬는 중) 흔들림도 없다.
                     var wobble = settledTrail.Count > 0 ? settledTrail.Max(p => Math.Abs(p.Offset)) : 0;
 
-                    Check("조준(몹): 화면용 추적기가 늦은 사각형을 줘도(날것을 본다) 300px 조준에서 15px 넘게 지나치지 않고 15px 안에 붙고, 붙은 뒤 10px 넘게 흔들리지 않는다",
+                    Check("조준(검출): 화면용 추적기가 늦은 사각형을 줘도(날것을 본다) 300px 조준에서 15px 넘게 지나치지 않고 15px 안에 붙고, 붙은 뒤 10px 넘게 흔들리지 않는다",
                           errors.Count == 0 && moves.Count >= 15 && overshoot <= 15 && final <= 15 && reach is > 0 and <= 600 && wobble <= 10,
                           errors.Count > 0 ? errors[0].ToString() : $"걸음 {moves.Count} · 20px 까지 {reach}ms · 지나침 {overshoot:0}px · 남은 {final:0}px · 붙은 뒤 흔들림 {wobble:0}px · 궤적(40ms) {Trail(trail)}");
                 }
@@ -796,7 +796,7 @@ internal static partial class Program
 
                     var last = learned.Count > 0 ? learned[^1] : double.NaN;
 
-                    Check("조준(몹): 배율 2.0 으로 시작해도 붙고, 붙을 때마다 표본을 모아 참값(3.5) 쪽으로 배운다",
+                    Check("조준(검출): 배율 2.0 으로 시작해도 붙고, 붙을 때마다 표본을 모아 참값(3.5) 쪽으로 배운다",
                           errors.Count == 0 && learned.Count >= 1 && last >= 2.9 && last <= 4.2 && hub.Spawns >= 8,
                           errors.Count > 0 ? errors[0].ToString() : $"새 봇 {hub.Spawns}번 · 배움 {learned.Count}번 → {string.Join(" ", learned.Select(v => v.ToString("0.00")))}");
                 }
@@ -826,15 +826,15 @@ internal static partial class Program
         var (errors, adapter, printed) = Run(engine, source, new FakeHub(monitor), monitor, CancellationToken.None);
 
         Check($"{language} 실시간: 오류 없이 돈다", errors.Count == 0, errors.Count == 0 ? "" : errors[0].ToString());
-        Check($"{language} 실시간: 몹을 읽는다", printed.Contains("n=1"), string.Join(" / ", printed));
+        Check($"{language} 실시간: 검출을 읽는다", printed.Contains("n=1"), string.Join(" / ", printed));
 
-        // 이동은 부드럽게 여러 걸음으로 간다. 마지막 걸음이 몹 자리여야 하고, 그 뒤에 누름·뗌이 온다.
+        // 이동은 부드럽게 여러 걸음으로 간다. 마지막 걸음이 검출 자리여야 하고, 그 뒤에 누름·뗌이 온다.
         var lastMove = adapter.Calls.FindLastIndex(c => c.StartsWith("MoveTo"));
         var released = adapter.Calls.FindIndex(c => c == "Release Left" || c == "Click Left");
-        var atMob = lastMove >= 0 && adapter.Calls[lastMove] == "MoveTo 1280,720";
+        var atDetection = lastMove >= 0 && adapter.Calls[lastMove] == "MoveTo 1280,720";
         var pressed = adapter.Calls.Contains("Press 70") && adapter.Calls.Contains("Release 70");   // F = 0x46
 
-        Check($"{language} 실시간: 몹 자리로 옮겨 누른다", atMob && released > lastMove,
+        Check($"{language} 실시간: 검출 자리로 옮겨 누른다", atDetection && released > lastMove,
               lastMove >= 0 ? $"{adapter.Calls[lastMove]} → {string.Join(", ", adapter.Calls.Skip(lastMove + 1).Take(3))}" : "이동 없음");
         Check($"{language} 실시간: 키 이름으로 누른다", pressed, string.Join(", ", adapter.Calls.Skip(Math.Max(0, adapter.Calls.Count - 3))));
 
@@ -916,9 +916,9 @@ internal static partial class Program
         public void Dispose() { }
     }
 
-    /// <summary>몹 하나가 화면 가운데에 있는 허브.</summary>
-    /// <summary>몹 둘. 하나는 가운데 가까이, 하나는 멀리 - 목표 고정이 갈아타지 않는지 보려고.</summary>
-    private sealed class TwoMobHub(CaptureTarget target) : IPerceptionHub
+    /// <summary>검출 하나가 화면 가운데에 있는 허브.</summary>
+    /// <summary>검출 둘. 하나는 가운데 가까이, 하나는 멀리 - 목표 고정이 갈아타지 않는지 보려고.</summary>
+    private sealed class TwoDetectionHub(CaptureTarget target) : IPerceptionHub
     {
         public bool IsCapturing => true;
         public bool IsDetecting => true;
@@ -954,14 +954,14 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// 닫힌 고리 가짜 허브 - 몹 하나가 화면 가운데에서 <c>OffsetPx</c> 떨어져 있고 <c>VelocityPxPerMs</c> 로 옆으로 움직인다.
-    /// 어댑터로 보낸 카운트만큼(÷배율) 화면이 돌아 몹이 가까워진 것으로 답하되, 프레임은 <c>FrameMs</c> 마다 한 장이고 <c>LatencyMs</c> 앞의 입력까지만 반영한다.
+    /// 닫힌 고리 가짜 허브 - 검출 하나가 화면 가운데에서 <c>OffsetPx</c> 떨어져 있고 <c>VelocityPxPerMs</c> 로 옆으로 움직인다.
+    /// 어댑터로 보낸 카운트만큼(÷배율) 화면이 돌아 검출이 가까워진 것으로 답하되, 프레임은 <c>FrameMs</c> 마다 한 장이고 <c>LatencyMs</c> 앞의 입력까지만 반영한다.
     /// </summary>
     private sealed class SimHub(CaptureTarget target, RecordingAdapter adapter, double scale) : IPerceptionHub
     {
         public double OffsetPx { get; init; } = 300;
         public double VelocityPxPerMs { get; init; }
-        // 실측(오버워치, 2026-09-18)에 맞춘 값 - 몹 찾기 0.1초 주기, 보낸 입력이 화면에 보이기까지 약 90ms, 사각형은 가만히 있어도 몇 px 흔들린다.
+        // 실측(오버워치, 2026-09-18)에 맞춘 값 - 검출 0.1초 주기, 보낸 입력이 화면에 보이기까지 약 90ms, 사각형은 가만히 있어도 몇 px 흔들린다.
         public int FrameMs { get; init; } = 100;
         public int LatencyMs { get; init; } = 90;
         public double JitterPx { get; init; } = 5;
@@ -1007,10 +1007,10 @@ internal static partial class Program
         public bool IsPreparingFrames => false;
         public void PreparingFrames() { }
 
-        /// <summary>지금 몹이 가운데에서 얼마나 떨어져 있는가(px) - 보낸 것을 모두 반영한 참값.</summary>
+        /// <summary>지금 검출이 가운데에서 얼마나 떨어져 있는가(px) - 보낸 것을 모두 반영한 참값.</summary>
         public double TrueOffset(long now) => OffsetAt(now, now);
 
-        /// <summary><paramref name="now"/> 의 몹 자리에서 <paramref name="inputsUntil"/> 까지 보낸 입력만큼 돈 화면으로 본 거리.</summary>
+        /// <summary><paramref name="now"/> 의 검출 자리에서 <paramref name="inputsUntil"/> 까지 보낸 입력만큼 돈 화면으로 본 거리.</summary>
         private double OffsetAt(long now, long inputsUntil)
         {
             double sent;
@@ -1029,7 +1029,7 @@ internal static partial class Program
                 _frameTicks = now;
                 Minguk.Tools.Capture.Input.CaptureTargetBounds.TryGet(target, out var bounds);
 
-                // 화면은 통째로 늦다 - 우리 입력뿐 아니라 몹의 자리도 LatencyMs 앞의 것이다(진짜 게임이 그렇다 - 입력만 늦게 하면 달리는 몹을 앞서 겨눠야 하는 몫이 검사에서 빠진다).
+                // 화면은 통째로 늦다 - 우리 입력뿐 아니라 검출의 자리도 LatencyMs 앞의 것이다(진짜 게임이 그렇다 - 입력만 늦게 하면 달리는 검출을 앞서 겨눠야 하는 몫이 검사에서 빠진다).
                 var offset = OffsetAt(now - LatencyMs, now - LatencyMs);
                 var cx = 0.5 + ((offset + ((_random.NextDouble() - 0.5) * 2 * JitterPx)) / bounds.Width);
                 var w = 60 / bounds.Width;
@@ -1070,7 +1070,7 @@ internal static partial class Program
         public bool TryGetFrameSize(out int width, out int height) { width = height = 0; return false; }
     }
 
-    /// <summary>가운데 가까운 몹 하나의 사각형이 부를 때마다 위·아래로 번갈아 흔들린다(가로·크기는 그대로).</summary>
+    /// <summary>가운데 가까운 검출 하나의 사각형이 부를 때마다 위·아래로 번갈아 흔들린다(가로·크기는 그대로).</summary>
     private sealed class JitterHub(CaptureTarget target) : IPerceptionHub
     {
         private const double Swing = 0.02;

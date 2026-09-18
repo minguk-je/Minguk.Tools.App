@@ -21,7 +21,7 @@ public partial class LabelingViewModel
     private LabelDataset? _dataset;
     private LabelClasses _classes = new();
 
-    /// <summary>몹 색(사람이 고른 것). 데이터셋 폴더의 class-colors.json. 안 고른 번호는 기본 색이다.</summary>
+    /// <summary>검출 색(사람이 고른 것). 데이터셋 폴더의 class-colors.json. 안 고른 번호는 기본 색이다.</summary>
     private LabelPalette _palette = new();
 
     /// <summary>지금 화면에 뜬 그림. 저장할 자리를 알기 위해 따로 든다.</summary>
@@ -112,7 +112,7 @@ public partial class LabelingViewModel
         _loaded = SelectedItem;
 
         // 앞 그림에서 찾은 점선을 지운다. 안 지우면 다음 그림 위에 그대로 남아
-        // 엉뚱한 자리에 몹이 있는 것처럼 보인다.
+        // 엉뚱한 자리에 검출이 있는 것처럼 보인다.
         ClearPredictionsForNewImage();
 
         Boxes.Clear();
@@ -229,7 +229,7 @@ public partial class LabelingViewModel
     /// 앞에서 가장 가까운, 라벨이 있는 그림의 사각형을 이 그림에 더한다.
     /// </summary>
     /// <remarks>
-    /// 연달아 담은 그림은 몹이 몇 픽셀만 움직인다. 매 장 처음부터 그리게 하면 같은 사각형을
+    /// 연달아 담은 그림은 검출이 몇 픽셀만 움직인다. 매 장 처음부터 그리게 하면 같은 사각형을
     /// 수십 번 그린다 - 가져와서 옮기기·크기 조절로 맞추는 것이 빠르다.
     /// 바로 앞 장이 아니라 <b>라벨이 있는</b> 가장 가까운 앞 장이다. 앞 장을 건너뛰었으면
     /// 빈 것을 가져와 봐야 아무 일도 안 일어난다.
@@ -403,13 +403,13 @@ public partial class LabelingViewModel
         StatusText = $"{item.Name} 을(를) 휴지통으로 보냈습니다" + (sent.Count > 1 ? " (라벨 파일도 함께)" : string.Empty) + " - 잘못 지웠으면 휴지통에서 되살리고 다시 읽기.";
     });
 
-    // ── 몹 이름 ──────────────────────────────────────────────────────────
+    // ── 검출 이름 ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 몹을 하나 더하고 바로 이름 칸을 연다.
+    /// 검출을 하나 더하고 바로 이름 칸을 연다.
     /// </summary>
     /// <remarks>
-    /// 이름을 따로 적는 칸이 없다(2026-09-14). VS 솔루션 탐색기의 새 항목처럼 임시 이름("몹 3")으로 넣고
+    /// 이름을 따로 적는 칸이 없다(2026-09-14). VS 솔루션 탐색기의 새 항목처럼 임시 이름("검출 3")으로 넣고
     /// 그리드 안에서 고쳐 쓰게 한다 - 같은 일을 두 곳(칸·그리드)에서 하면 하나는 안 쓰인다.
     /// </remarks>
     private void DoAddClass() => Guard(() =>
@@ -417,7 +417,7 @@ public partial class LabelingViewModel
         var n = _classes.Count + 1;
         string name;
 
-        do name = $"몹 {n++}";
+        do name = $"검출 {n++}";
         while (_classes.IndexOf(name) >= 0);
 
         var index = _classes.Add(name);
@@ -427,18 +427,18 @@ public partial class LabelingViewModel
 
         SelectedClassIndex = index;
 
-        StatusText = $"몹을 더했습니다: {name} ({index}번) - 이름을 고쳐 쓰세요.";
+        StatusText = $"검출을 더했습니다: {name} ({index}번) - 이름을 고쳐 쓰세요.";
 
         BeginRename();
     });
 
     /// <summary>
-    /// 고른 몹을 지운다. 아무 라벨에도 안 쓰인 몹만이다.
+    /// 고른 검출을 지운다. 아무 라벨에도 안 쓰인 검출만이다.
     /// </summary>
     /// <remarks>
     /// 라벨에는 번호가 들어 있어 중간을 지우면 뒤가 당겨진다 - <see cref="LabelDataset.RemoveClass"/> 가 라벨 파일의
-    /// 번호와 색까지 같이 당긴다. 쓰인 몹은 못 지운다(사각형을 잃거나 다른 몹을 가리키게 된다) - 어느 파일에 쓰였는지
-    /// 상태 줄에 적어 사람이 그 사각형을 먼저 지우게 한다. 시험으로 넣은 몹처럼 안 찍은 것은 잃을 것이 없다.
+    /// 번호와 색까지 같이 당긴다. 쓰인 검출은 못 지운다(사각형을 잃거나 다른 검출을 가리키게 된다) - 어느 파일에 쓰였는지
+    /// 상태 줄에 적어 사람이 그 사각형을 먼저 지우게 한다. 시험으로 넣은 검출처럼 안 찍은 것은 잃을 것이 없다.
     /// </remarks>
     private void DoDeleteClass() => Guard(() =>
     {
@@ -470,14 +470,14 @@ public partial class LabelingViewModel
         }
 
         var answer = MessageBoxService.ShowMessage(
-            $"몹 {indices.Length}개를 지웁니다: {string.Join(", ", names)}\n아직 아무 라벨에도 안 쓰였습니다.\n뒤 번호는 당겨지고 라벨 파일도 같이 고쳐집니다.\n\n계속할까요?",
-            "몹 지우기",
+            $"검출 {indices.Length}개를 지웁니다: {string.Join(", ", names)}\n아직 아무 라벨에도 안 쓰였습니다.\n뒤 번호는 당겨지고 라벨 파일도 같이 고쳐집니다.\n\n계속할까요?",
+            "검출 지우기",
             MessageButton.OKCancel,
             MessageIcon.Question);
 
         if (answer != MessageResult.OK) return;
 
-        // 뒤에서부터 지운다 - 앞을 먼저 지우면 뒤 번호가 당겨져 다른 몹을 지운다.
+        // 뒤에서부터 지운다 - 앞을 먼저 지우면 뒤 번호가 당겨져 다른 검출을 지운다.
         var rewritten = 0;
         foreach (var index in indices.Reverse()) rewritten += dataset.RemoveClass(_classes, index);
 
@@ -486,8 +486,8 @@ public partial class LabelingViewModel
         SelectedClassIndex = _classes.Count == 0 ? -1 : Math.Min(indices[0], _classes.Count - 1);
 
         StatusText = rewritten > 0
-            ? $"몹을 지웠습니다: {string.Join(", ", names)}. 라벨 파일 {rewritten}장의 번호를 당겼습니다."
-            : $"몹을 지웠습니다: {string.Join(", ", names)}.";
+            ? $"검출을 지웠습니다: {string.Join(", ", names)}. 라벨 파일 {rewritten}장의 번호를 당겼습니다."
+            : $"검출을 지웠습니다: {string.Join(", ", names)}.";
     });
 
     // ── 그림 목록 패널 너비 ──────────────────────────────────────────────
@@ -587,7 +587,7 @@ public partial class LabelingViewModel
         if (wanted.Length == 0)
         {
             row.Name = before;
-            StatusText = "몹 이름이 비어 되돌렸습니다.";
+            StatusText = "검출 이름이 비어 되돌렸습니다.";
             return;
         }
 
@@ -637,7 +637,7 @@ public partial class LabelingViewModel
         ClassNameSnapshot = _classes.Names.ToArray();
         ClassColors = _palette.Snapshot(_classes.Count);
 
-        // 아직 몹이 하나도 없으면 고를 것이 없다. 0번을 고른 척하면 없는 몹으로 찍힌다.
+        // 아직 검출이 하나도 없으면 고를 것이 없다. 0번을 고른 척하면 없는 검출로 찍힌다.
         SelectedClassIndex = Classes.Count == 0
             ? -1
             : Math.Clamp(index < 0 ? 0 : index, 0, Classes.Count - 1);
@@ -651,7 +651,7 @@ public partial class LabelingViewModel
 
     private void OnSelectedClassChanged()
     {
-        // 캔버스가 쓰는 색과 같은 것을 보여 준다. 다른 색을 보여 주면 어느 몹을 찍는 중인지
+        // 캔버스가 쓰는 색과 같은 것을 보여 준다. 다른 색을 보여 주면 어느 검출을 찍는 중인지
         // 화면과 그림이 어긋난다. 사람이 고른 색이 있으면 그것이다.
         var color = _palette.ColorOf(Math.Max(SelectedClassIndex, 0));
         var brush = new SolidColorBrush(color);
@@ -676,7 +676,7 @@ public partial class LabelingViewModel
     /// 그리드에서 고른 줄을 번호로.
     /// </summary>
     /// <remarks>
-    /// 고른 것을 풀면(null) 번호는 그대로 둔다 - 캔버스는 늘 찍을 몹이 있어야 하고, 목록을 다시 채울 때
+    /// 고른 것을 풀면(null) 번호는 그대로 둔다 - 캔버스는 늘 찍을 검출이 있어야 하고, 목록을 다시 채울 때
     /// 잠깐 비는 순간에도 번호를 잃으면 안 된다.
     /// </remarks>
     private void OnSelectedClassRowChanged()

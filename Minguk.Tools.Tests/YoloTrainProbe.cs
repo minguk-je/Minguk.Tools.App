@@ -90,7 +90,7 @@ internal static class YoloTrainProbe
         if (manifest is not { Engine: DetectorEngine.Onnx, Letterbox: true } || manifest.ModelName != name) { Console.WriteLine("[FAIL] 들인 쪽지가 ONNX·레터박스·이름이 아니다"); failures++; }
         else Console.WriteLine("[PASS] ONNX · 비율 · 이름으로 들였다");
 
-        // 학습 크기 - 쪽지와 ONNX 에 박힌 입력이 고른 크기다(몹 찾기는 ONNX 쪽을 읽는다).
+        // 학습 크기 - 쪽지와 ONNX 에 박힌 입력이 고른 크기다(검출은 ONNX 쪽을 읽는다).
         int onnxWidth, onnxHeight;
         using (var detector = new Minguk.Tools.Vision.Inference.Onnx.OnnxDetector(modelPath, manifest))
             (onnxWidth, onnxHeight) = (detector.InputSpec.Width, detector.InputSpec.Height);

@@ -85,7 +85,7 @@
                     </dxmvvm:Interaction.Behaviors>
                 </Image>
 
-                <!-- 화면이 얹는 겹그림(찾은 몹 점선 등). 없으면 비어 있다. 마우스는 통과시킨다. -->
+                <!-- 화면이 얹는 겹그림(찾은 검출 점선 등). 없으면 비어 있다. 마우스는 통과시킨다. -->
                 <ContentPresenter Content="{Binding Overlay, RelativeSource={RelativeSource AncestorType=parts:CapturePreviewPanel}}"
                                   IsHitTestVisible="False" />
 

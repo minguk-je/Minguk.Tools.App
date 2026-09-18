@@ -7,7 +7,7 @@ using Minguk.Tools.Vision.Training;
 namespace Minguk.Tools.Vision.Inference;
 
 /// <summary>
-/// 학습해 둔 모델로 그림에서 몹을 찾는 것.
+/// 학습해 둔 모델로 그림에서 검출을 찾는 것.
 /// </summary>
 /// <remarks>
 /// <b>왜 가르나</b> - 지금 쓰는 ML.NET AutoFormerV2 가 한 장에 660ms 다(GTX 1060 실측). 같은 카드에서

@@ -157,7 +157,7 @@ public sealed class LabelCanvas : FrameworkElement
         nameof(CurrentClassId), typeof(int), typeof(LabelCanvas),
         new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.AffectsRender));
 
-    /// <summary>새로 그리는 사각형에 붙일 몹 번호.</summary>
+    /// <summary>새로 그리는 사각형에 붙일 검출 번호.</summary>
     public int CurrentClassId
     {
         get => (int)GetValue(CurrentClassIdProperty);
@@ -179,7 +179,7 @@ public sealed class LabelCanvas : FrameworkElement
         nameof(ClassColors), typeof(IReadOnlyList<Color>), typeof(LabelCanvas),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
 
-    /// <summary>몹 번호마다 색(사람이 고른 것 포함). 없거나 짧으면 그 번호는 기본 색(<see cref="ColorOf"/>).</summary>
+    /// <summary>검출 번호마다 색(사람이 고른 것 포함). 없거나 짧으면 그 번호는 기본 색(<see cref="ColorOf"/>).</summary>
     public IReadOnlyList<Color>? ClassColors
     {
         get => (IReadOnlyList<Color>?)GetValue(ClassColorsProperty);
@@ -205,7 +205,7 @@ public sealed class LabelCanvas : FrameworkElement
     /// <see cref="ToScreen"/> · <see cref="ToNormalized"/> 두 곳뿐이라 사각형 계산은 아무것도 안 바뀐다.
     ///
     /// 휠은 마우스 아래 자리를 그대로 두고 바꾸고(<see cref="OnMouseWheel"/>), 콤보로 바꾸면 보던 가운데를 그대로 둔다.
-    /// 오른쪽 버튼으로 끌면 옮겨진다. 그림을 넘겨도 배율·자리는 그대로다 - 연달아 담은 그림은 몹이 같은 자리라
+    /// 오른쪽 버튼으로 끌면 옮겨진다. 그림을 넘겨도 배율·자리는 그대로다 - 연달아 담은 그림은 검출이 같은 자리라
     /// 확대해 둔 곳을 계속 찍는다.
     /// </remarks>
     public double Zoom
@@ -311,7 +311,7 @@ public sealed class LabelCanvas : FrameworkElement
     /// 휠로 확대·축소. 마우스 아래의 그림 자리가 그대로 마우스 아래에 있게 민다.
     /// </summary>
     /// <remarks>
-    /// 배율만 바꾸면 가운데 기준으로 커져서 보던 몹이 화면 밖으로 달아난다.
+    /// 배율만 바꾸면 가운데 기준으로 커져서 보던 검출이 화면 밖으로 달아난다.
     /// 확대 전 마우스 아래의 그림 자리(0~1) 를 재고, 새 자리에서 그 점이 마우스에 오도록 밀어 둔 양을 다시 푼다.
     /// </remarks>
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -398,7 +398,7 @@ public sealed class LabelCanvas : FrameworkElement
     /// <summary>
     /// 크기를 바꾸거나 새로 그리는 동안 아래에 너비, 오른쪽에 높이(원본 픽셀). 스크립트 미리보기의 영역 치수 표시(<c>RegionSizeChrome</c>)와 같은 모양.
     /// </summary>
-    /// <remarks>원본 픽셀로 적는다 - 화면 픽셀은 배율마다 달라 몹 크기를 가늠하지 못한다.</remarks>
+    /// <remarks>원본 픽셀로 적는다 - 화면 픽셀은 배율마다 달라 검출 크기를 가늠하지 못한다.</remarks>
     private void DrawDragSize(DrawingContext dc)
     {
         if (_dragStart is not { } start) return;
@@ -481,8 +481,8 @@ public sealed class LabelCanvas : FrameworkElement
     /// 모델이 찾은 것. 점선으로 그리고 신뢰도를 같이 적는다.
     /// </summary>
     /// <remarks>
-    /// 점선인 것과 이름 뒤에 %가 붙는 것, 둘로 사람이 찍은 것과 갈린다. 색은 같은 몹이면
-    /// 같게 둔다 - 색까지 다르면 어느 몹을 찾았는지 알아보기 어렵다.
+    /// 점선인 것과 이름 뒤에 %가 붙는 것, 둘로 사람이 찍은 것과 갈린다. 색은 같은 검출이면
+    /// 같게 둔다 - 색까지 다르면 어느 검출을 찾았는지 알아보기 어렵다.
     /// </remarks>
     private void DrawPrediction(DrawingContext dc, PredictedBox prediction)
     {
@@ -515,7 +515,7 @@ public sealed class LabelCanvas : FrameworkElement
         var rect = ToScreen(box);
         var color = ColorFor(box.ClassId);
 
-        // 고른 것은 굵게. 색까지 바꾸면 무슨 몹인지가 안 보인다.
+        // 고른 것은 굵게. 색까지 바꾸면 무슨 검출인지가 안 보인다.
         var pen = new Pen(new SolidColorBrush(color), selected ? 3d : 1.5d);
         pen.Freeze();
 
@@ -587,7 +587,7 @@ public sealed class LabelCanvas : FrameworkElement
         => ClassNames is { } names && classId >= 0 && classId < names.Count ? names[classId] : $"{classId}번";
 
     /// <summary>
-    /// 몹 번호로 만드는 기본 색(황금각). 사람이 고른 색은 <see cref="ClassColors"/> 로 온다 - 그리는 쪽은 <see cref="ColorFor"/> 를 쓴다.
+    /// 검출 번호로 만드는 기본 색(황금각). 사람이 고른 색은 <see cref="ClassColors"/> 로 온다 - 그리는 쪽은 <see cref="ColorFor"/> 를 쓴다.
     /// </summary>
     /// <remarks>
     /// 계산은 <see cref="LabelPalette.DefaultColor"/> 에 있다. 여기 남겨 둔 것은 겹그림(DetectionOverlay)·꺾은선이
@@ -936,7 +936,7 @@ public sealed class LabelCanvas : FrameworkElement
                 e.Handled = true;
                 break;
 
-            // 화살표로 한 픽셀씩 민다. 작은 몹은 마우스로 1px 을 맞추기 어렵다. Shift 면 열 픽셀.
+            // 화살표로 한 픽셀씩 민다. 작은 검출은 마우스로 1px 을 맞추기 어렵다. Shift 면 열 픽셀.
             case Key.Left or Key.Right or Key.Up or Key.Down
                 when SelectedIndex >= 0 && SelectedIndex < boxes.Count && !_imageRect.IsEmpty:
             {

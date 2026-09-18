@@ -10,10 +10,10 @@ using Minguk.Tools.Vision.Perception;
 namespace Minguk.Tools.Input.Scripting.Live;
 
 /// <summary>
-/// 조준 스레드 - 붙잡은 몹을 향해 <b>8ms 마다 조금씩, 멈추지 않고</b> 마우스를 움직인다. 스크립트는 <c>조준(몹)</c> 으로 붙이고 맞았을 때 쏘기만 한다.
+/// 조준 스레드 - 붙잡은 검출을 향해 <b>8ms 마다 조금씩, 멈추지 않고</b> 마우스를 움직인다. 스크립트는 <c>조준(검출)</c> 으로 붙이고 맞았을 때 쏘기만 한다.
 /// </summary>
 /// <remarks>
-/// <b>왜 따로 도는가</b>(사용자, 2026-09-18 "부자연스러워") - 예전 조준은 한 번 부르면 남은 거리의 93% 를 76ms 에 보내고 <b>멈춘 채</b> 새 화면(몹 찾기 0.1초 주기 +
+/// <b>왜 따로 도는가</b>(사용자, 2026-09-18 "부자연스러워") - 예전 조준은 한 번 부르면 남은 거리의 93% 를 76ms 에 보내고 <b>멈춘 채</b> 새 화면(검출 0.1초 주기 +
 /// 80ms 안정)을 기다렸다 다시 보냈다. 로그 434회 중간값: 움직임 76ms · 멈춤 249ms - 조준하는 동안 움직이는 시간이 22% 라 초당 3번 「툭 - 멈춤 - 툭」 이었다.
 /// 사람은 새 정보가 없어도 멈추지 않는다 - 마지막으로 본 자리와 속도로 계속 따라가다가 새로 보이면 고친다. 그것을 이 스레드가 한다.
 ///
@@ -33,11 +33,11 @@ namespace Minguk.Tools.Input.Scripting.Live;
 /// <b>크게 꺾을 때는 두 번에 나눈다</b> - 첫 움직임은 일부러 8% 못 미치게 던지고(<see cref="ShortfallFraction"/>), 그 결과가 담긴 화면을 본 뒤 남긴 것을 풀어 다듬는다. 0.13초짜리
 /// 꺾기는 도중에 화면으로 고칠 수 없어(입력이 화면에 오르기까지 0.1초) 정확도가 배율에 달렸는데, 잰 배율은 ±15% 흩어진다 - 끝까지 가면 300px 에서 45px 를 지나쳐 되돌아온다.
 ///
-/// <b>새 화면</b> - 허브의 새 검출이 오면 프레임 시각의 예상 자리에서 가장 가까운 사각형을 같은 몹으로 보고(반지름 = 크기×2 + 속도 여유), 예상과의 차이를 일부만
-/// 받아들인다(가로 <see cref="GainX"/>·세로 <see cref="GainY"/> - 검출 사각형은 가만히 있는 몹도 세로 17px 흔들린다, 실측).
+/// <b>새 화면</b> - 허브의 새 검출이 오면 프레임 시각의 예상 자리에서 가장 가까운 사각형을 같은 검출로 보고(반지름 = 크기×2 + 속도 여유), 예상과의 차이를 일부만
+/// 받아들인다(가로 <see cref="GainX"/>·세로 <see cref="GainY"/> - 검출 사각형은 가만히 있는 검출도 세로 17px 흔들린다, 실측).
 /// <b>화면용 추적기를 거친 사각형이 아니라 날것을 본다</b>(<see cref="DetectionSnapshot.Raw"/>) - 추적기는 옛 화면 좌표와 섞고 못 이으면 옛 사각형을 내줘, 화면을 돌리는 동안에는
-/// 늦은 자리다. 그것을 보던 때는 "몹이 달아났다" 로 읽고 더 밀어 -159px 에서 +75px 로 지나친 뒤 1초에 걸쳐 돌아왔다(실측 로그) - "휙휙" 과 "허술" 의 뿌리가 그것이었다.
-/// 속도는 두 프레임 사이의 자리 변화에서 우리가 돌린 만큼을 되돌려 재고 지수 평균한다 - <b>우리가 휙 꺾는 중이던 쌍으로는 안 잰다</b>(<see cref="MobVelocity"/>, 지연 20ms 차이가
+/// 늦은 자리다. 그것을 보던 때는 "검출이 달아났다" 로 읽고 더 밀어 -159px 에서 +75px 로 지나친 뒤 1초에 걸쳐 돌아왔다(실측 로그) - "휙휙" 과 "허술" 의 뿌리가 그것이었다.
+/// 속도는 두 프레임 사이의 자리 변화에서 우리가 돌린 만큼을 되돌려 재고 지수 평균한다 - <b>우리가 휙 꺾는 중이던 쌍으로는 안 잰다</b>(<see cref="DetectionVelocity"/>, 지연 20ms 차이가
 /// 가짜 속도 0.78px/ms 가 되어 앞먹임이 조준을 목표 옆에 1초씩 걸어 뒀다). 못 찾으면 <see cref="LockGraceMs"/> 동안은 예측으로 이어 가고, 넘으면 놓는다(<see cref="IsEngaged"/> false).
 ///
 /// <b>배율 배우기</b>는 예전 규칙 그대로 <see cref="LiveScriptApi"/> 에 맡긴다 - 표본은 둘: 크게 꺾은 뒤의 확인 화면(꺾기 전 본 자리 → 지금, 그 사이 보낸 전부 - 첫 움직임 뒤로는
@@ -63,7 +63,7 @@ internal sealed class AimLoop : IDisposable
     /// <summary>박자(ms). 약 125Hz - 게이밍 마우스 폴링과 비슷하다.</summary>
     private const double TickMs = 8;
 
-    /// <summary>가까이 붙어 따라갈 때의 시간 상수(ms) - <see cref="NearPx"/> 안. 검출 떨림(가만히 선 몹도 몇 px)에 마우스가 따라 떨지 않을 만큼 느긋하게.</summary>
+    /// <summary>가까이 붙어 따라갈 때의 시간 상수(ms) - <see cref="NearPx"/> 안. 검출 떨림(가만히 선 검출도 몇 px)에 마우스가 따라 떨지 않을 만큼 느긋하게.</summary>
     private const double TauNearMs = 45;
 
     /// <summary>떨어져 있을 때의 시간 상수(ms) - <see cref="FarPx"/> 밖. 감속 구간이 끝난 마지막 수십 px 을 또렷하게 붙인다.</summary>
@@ -98,7 +98,7 @@ internal sealed class AimLoop : IDisposable
     /// </summary>
     /// <remarks>
     /// 0.15초짜리 꺾기는 도중에 화면으로 고칠 수 없다(보낸 입력이 화면에 오르기까지 0.1초) - 정확도는 오로지 배율이 얼마나 맞느냐다. 그런데 게임에서 잰 배율은
-    /// 3.1~4.2 로 ±15% 흩어진다(가장자리 원근·몹의 움직임). 모형만 믿고 끝까지 가면 300px 에서 45px 를 지나쳐 되돌아온다 - 그게 허술해 보인다.
+    /// 3.1~4.2 로 ±15% 흩어진다(가장자리 원근·검출의 움직임). 모형만 믿고 끝까지 가면 300px 에서 45px 를 지나쳐 되돌아온다 - 그게 허술해 보인다.
     /// 사람(프로)도 크게 꺾을 때는 살짝 못 미치게 던지고(첫 움직임), 눈으로 확인한 뒤 짧게 다듬는다(둘째 움직임). 첫 움직임이 끝나고 그것이 다 반영된 화면
     /// (<see cref="SettleLatencyMs"/>)이 오면 남긴 것을 풀고 그 화면을 그대로 믿는다. 예전 값(0.1)은 박자마다 남은 거리에 곱해져 속도만 10% 늦출 뿐 남기는 것이 없었다.
     /// </remarks>
@@ -124,7 +124,7 @@ internal sealed class AimLoop : IDisposable
     private const int SettleLatencyMs = 100;
 
     /// <summary>
-    /// 확인하는 화면이 안 와도 이만큼(ms) 지나면 남긴 것을 푼다 - 몹 찾기가 밀려도 못 미친 채 서 있지 않게. 첫 움직임 0.13초 + 지연 0.1초 + 프레임 주기 0.1초보다는 길어야 한다
+    /// 확인하는 화면이 안 와도 이만큼(ms) 지나면 남긴 것을 푼다 - 검출이 밀려도 못 미친 채 서 있지 않게. 첫 움직임 0.13초 + 지연 0.1초 + 프레임 주기 0.1초보다는 길어야 한다
     /// (300 이었을 때 0.1초 프레임에서 확인 화면보다 먼저 풀려 버리는 일이 잦았다).
     /// </summary>
     private const int HoldTimeoutMs = 450;
@@ -155,8 +155,8 @@ internal sealed class AimLoop : IDisposable
     /// </summary>
     private readonly int _latencyMs = 110;
 
-    /// <summary>몹의 자리를 앞서 잡는 시간(ms) - 화면이 늦은 만큼. 입력 지연(<see cref="_latencyMs"/>)보다 조금 짧게 - 입력은 게임이 받아 그리기까지가 더 든다.</summary>
-    private const int MobLeadMs = 90;
+    /// <summary>검출의 자리를 앞서 잡는 시간(ms) - 화면이 늦은 만큼. 입력 지연(<see cref="_latencyMs"/>)보다 조금 짧게 - 입력은 게임이 받아 그리기까지가 더 든다.</summary>
+    private const int DetectionLeadMs = 90;
 
     /// <summary>지연이 이 사이 어디인지 모른다고 본다(ms). 이 띠 안에 보낸 양이 프레임 사이에 바뀐 만큼이 그 화면의 불확실함이다.</summary>
     private const int LatencyMinMs = 40;
@@ -179,12 +179,12 @@ internal sealed class AimLoop : IDisposable
     private const int StaleVelocityMs = 160;
 
     /// <summary>
-    /// 속도 상한(px/ms) - 400px/s. 화면에서 그보다 빠른 몹은 없다(사격장 봇의 옆걸음은 150px/s 쯤). 1.5 였을 때 검출 사각형이 한 장 40px 튄 것을 −363·+619px/s 로 받아,
+    /// 속도 상한(px/ms) - 400px/s. 화면에서 그보다 빠른 검출은 없다(사격장 봇의 옆걸음은 150px/s 쯤). 1.5 였을 때 검출 사각형이 한 장 40px 튄 것을 −363·+619px/s 로 받아,
     /// 앞서 겨누기·앞먹임이 그쪽으로 밀어 100~180px 꺾기가 반대편으로 87~89px 지나쳤다(실측 2026-09-18).
     /// </summary>
     private const double MaxVelocityPxPerMs = 0.4;
 
-    /// <summary>새 사각형과 예측의 차이를 받아들이는 비율. 몹은 옆으로 달리므로 가로는 크게, 세로·크기는 흔들림이 커 작게.</summary>
+    /// <summary>새 사각형과 예측의 차이를 받아들이는 비율. 검출은 옆으로 달리므로 가로는 크게, 세로·크기는 흔들림이 커 작게.</summary>
     private const double GainX = 0.75;
 
     private const double GainY = 0.45;
@@ -202,19 +202,19 @@ internal sealed class AimLoop : IDisposable
 
     private const double VelocityAlphaY = 0.25;
 
-    /// <summary>붙일 때 "이미 따라가던 그 몹인가" 를 가르는 거리 - 크기의 몇 배. 스크립트가 준 자리는 화면용 추적기 것이라 넉넉히.</summary>
+    /// <summary>붙일 때 "이미 따라가던 그 검출인가" 를 가르는 거리 - 크기의 몇 배. 스크립트가 준 자리는 화면용 추적기 것이라 넉넉히.</summary>
     private const double LockRadiusFactor = 2.0;
 
-    /// <summary>새 화면에서 같은 몹으로 볼 거리의 바탕 - 크기의 몇 배(머리 자리 기준).</summary>
+    /// <summary>새 화면에서 같은 검출로 볼 거리의 바탕 - 크기의 몇 배(머리 자리 기준).</summary>
     private const double GateSizeFactor = 0.6;
 
-    /// <summary>속도를 모르는 몹이 움직일 수 있다고 보는 빠르기(px/ms) - 사격장 봇의 옆걸음이 150px/s 쯤.</summary>
-    private const double UnknownMobSpeedPxPerMs = 0.15;
+    /// <summary>속도를 모르는 검출이 움직일 수 있다고 보는 빠르기(px/ms) - 사격장 봇의 옆걸음이 150px/s 쯤.</summary>
+    private const double UnknownDetectionSpeedPxPerMs = 0.15;
 
     /// <summary>마지막으로 본 뒤 우리가 돌린 양 가운데 모른다고 보는 몫 - 배율 ±15% 와 지연.</summary>
     private const double GateTurnFraction = 0.25;
 
-    /// <summary>같은 몹이면 사각형 높이가 이 비율 안이다.</summary>
+    /// <summary>같은 검출이면 사각형 높이가 이 비율 안이다.</summary>
     private const double GateMinSizeRatio = 0.6;
 
     private const double GateMaxSizeRatio = 1.6;
@@ -250,7 +250,7 @@ internal sealed class AimLoop : IDisposable
     private volatile bool _disposed;
     private volatile bool _engaged;
     private Track? _track;
-    private ScriptMob? _given;
+    private ScriptDetection? _given;
     private double _carryX;
     private double _carryY;
     private double _stepX;
@@ -296,7 +296,7 @@ internal sealed class AimLoop : IDisposable
         _host = host;
     }
 
-    /// <summary>붙잡은 몹의 상태. 자리는 화면 가운데 기준 머리의 거리(px).</summary>
+    /// <summary>붙잡은 검출의 상태. 자리는 화면 가운데 기준 머리의 거리(px).</summary>
     private sealed class Track
     {
         /// <summary>마지막으로 본(섞은) 프레임 시각.</summary>
@@ -350,10 +350,10 @@ internal sealed class AimLoop : IDisposable
     public int FramesConsumed => Volatile.Read(ref _framesConsumed);
 
     /// <summary>
-    /// 이 몹을 붙잡고 움직이기 시작한다. 이미 같은 몹(우리가 준 것이거나 예상 자리 안의 것)을 따라가는 중이면 그대로 잇는다 - 속도·섞은 자리를 잃지 않게.
+    /// 이 검출을 붙잡고 움직이기 시작한다. 이미 같은 검출(우리가 준 것이거나 예상 자리 안의 것)을 따라가는 중이면 그대로 잇는다 - 속도·섞은 자리를 잃지 않게.
     /// </summary>
-    /// <param name="frameTicks">이 몹을 찾은 프레임 시각. 모르면 0(지금으로 본다).</param>
-    public void Engage(ScriptMob mob, long frameTicks, Rect bounds)
+    /// <param name="frameTicks">이 검출을 찾은 프레임 시각. 모르면 0(지금으로 본다).</param>
+    public void Engage(ScriptDetection mob, long frameTicks, Rect bounds)
     {
         var now = Environment.TickCount64;
         var cx = bounds.Left + (bounds.Width / 2);
@@ -408,7 +408,7 @@ internal sealed class AimLoop : IDisposable
     }
 
     /// <summary>
-    /// 붙이는 순간의 속도 - 허브의 최근 두 장(날것)에서 이 몹을 찾아 잰다. 못 찾거나 그사이 우리가 돌리고 있었으면 그대로 0 이다. _sync 안에서.
+    /// 붙이는 순간의 속도 - 허브의 최근 두 장(날것)에서 이 검출을 찾아 잰다. 못 찾거나 그사이 우리가 돌리고 있었으면 그대로 0 이다. _sync 안에서.
     /// </summary>
     /// <remarks>이유는 <see cref="DetectionSnapshot.Previous"/>. 찾았으면 자리도 날것의 최신 장으로 옮긴다 - 스크립트가 준 자리는 화면용 추적기가 섞은 것이라 걷는 봇이면 몇 px 늦다.</remarks>
     private void SeedVelocity(Track t, Rect bounds)
@@ -471,7 +471,7 @@ internal sealed class AimLoop : IDisposable
             if (boxHeight < height * GateMinSizeRatio || boxHeight > height * GateMaxSizeRatio) continue;
 
             var headX = bounds.Left + (box.CenterX * bounds.Width) - cx;
-            var headY = bounds.Top + ((box.CenterY - (box.Height / 2) + (box.Height * ScriptMob.HeadFraction)) * bounds.Height) - cy;
+            var headY = bounds.Top + ((box.CenterY - (box.Height / 2) + (box.Height * ScriptDetection.HeadFraction)) * bounds.Height) - cy;
             var distance = Math.Sqrt(Sq(headX - x) + Sq(headY - y));
 
             if (best is null || distance < best.Value.Distance) best = (headX, headY, distance);
@@ -516,8 +516,8 @@ internal sealed class AimLoop : IDisposable
         lock (_sync) Record(Environment.TickCount64, dx, dy);
     }
 
-    /// <summary>지금 예측한 자리의 몹. 스크립트의 <c>목표()</c> 가 준다. 놓았거나 놓쳤으면 null.</summary>
-    public ScriptMob? CurrentMob(Rect bounds, ScriptNameplateReader? reader)
+    /// <summary>지금 예측한 자리의 검출. 스크립트의 <c>목표()</c> 가 준다. 놓았거나 놓쳤으면 null.</summary>
+    public ScriptDetection? CurrentDetection(Rect bounds, ScriptNameplateReader? reader)
     {
         lock (_sync)
         {
@@ -530,9 +530,9 @@ internal sealed class AimLoop : IDisposable
 
             // 머리 거리에서 사각형 가운데로 - 머리는 위에서 HeadFraction 만큼 내려온 곳이다.
             var centerX = (int)Math.Round(cx + ex);
-            var centerY = (int)Math.Round(cy + ey + ((0.5 - ScriptMob.HeadFraction) * t.H));
+            var centerY = (int)Math.Round(cy + ey + ((0.5 - ScriptDetection.HeadFraction) * t.H));
 
-            var mob = new ScriptMob(t.Name, t.Score, centerX, centerY, (int)Math.Round(t.W), height, string.Empty) { Box = t.Box, Reader = reader };
+            var mob = new ScriptDetection(t.Name, t.Score, centerX, centerY, (int)Math.Round(t.W), height, string.Empty) { Box = t.Box, Reader = reader };
 
             _given = mob;
             return mob;
@@ -550,7 +550,7 @@ internal sealed class AimLoop : IDisposable
             if (now - t.SeenTicks > OnTargetMaxAgeMs) return false;
 
             var (ex, ey) = Predict(t, now);
-            var bodyY = ey + ((0.5 - ScriptMob.HeadFraction) * t.H);
+            var bodyY = ey + ((0.5 - ScriptDetection.HeadFraction) * t.H);
 
             if (Math.Abs(ex) > t.W / 2 * OnTargetFraction || Math.Abs(bodyY) > t.H / 2 * OnTargetFraction) return false;
 
@@ -631,7 +631,7 @@ internal sealed class AimLoop : IDisposable
         }
     }
 
-    /// <summary>허브에 새 검출이 올라왔으면 받아들인다 - 같은 몹을 찾아 자리·속도·크기를 고친다.</summary>
+    /// <summary>허브에 새 검출이 올라왔으면 받아들인다 - 같은 검출을 찾아 자리·속도·크기를 고친다.</summary>
     private void ConsumeFrame(long now)
     {
         var snapshot = _host.Latest();
@@ -658,13 +658,13 @@ internal sealed class AimLoop : IDisposable
             // 프레임 시각의 예상 자리 - 그때까지(지연만큼 앞서) 보낸 것만 뺀다.
             var (px, py) = PredictAt(t, frame);
 
-            // 같은 몹으로 볼 거리. 날것에는 옆의 다른 봇도 그대로 들어 있어 넉넉히(크기×2) 잡으면 붙잡은 봇이 한 장 안 보일 때 옆 봇으로 건너뛴다 - 실측(2026-09-18): 가만히 있던
+            // 같은 검출로 볼 거리. 날것에는 옆의 다른 봇도 그대로 들어 있어 넉넉히(크기×2) 잡으면 붙잡은 봇이 한 장 안 보일 때 옆 봇으로 건너뛴다 - 실측(2026-09-18): 가만히 있던
             // 프레임 쌍의 7% 에서 본 자리가 60px 넘게 뛰었고(한 번은 650px), 그 쌍으로 잰 배율 표본(7.0·7.4·9.6)이 배율을 3.3↔4.3 으로 흔들었다.
-            // 몸 크기의 0.6배 + 몹이 그사이 갈 수 있는 만큼(아는 속도 + 모르는 0.15px/ms) + 우리가 돌린 양의 25%(배율·지연을 모르는 몫)만 연다.
+            // 몸 크기의 0.6배 + 검출이 그사이 갈 수 있는 만큼(아는 속도 + 모르는 0.15px/ms) + 우리가 돌린 양의 25%(배율·지연을 모르는 몫)만 연다.
             var sinceSeen = Math.Max(0, frame - t.SeenTicks);
             var (turnedX, turnedY) = SentBetween(t.SeenTicks - _latencyMs, frame);
             var radius = (Math.Max(t.W, t.H) * GateSizeFactor)
-                         + ((Math.Sqrt(Sq(t.Vx) + Sq(t.Vy)) + UnknownMobSpeedPxPerMs) * Math.Min(sinceSeen, LockGraceMs))
+                         + ((Math.Sqrt(Sq(t.Vx) + Sq(t.Vy)) + UnknownDetectionSpeedPxPerMs) * Math.Min(sinceSeen, LockGraceMs))
                          + (Math.Sqrt(Sq(turnedX) + Sq(turnedY)) / scale * GateTurnFraction);
 
             var bestDistance = double.MaxValue;
@@ -676,7 +676,7 @@ internal sealed class AimLoop : IDisposable
             {
                 var box = seen[i].Box;
                 var headX = bounds.Left + (box.CenterX * bounds.Width) - cx;
-                var headY = bounds.Top + ((box.CenterY - (box.Height / 2) + (box.Height * ScriptMob.HeadFraction)) * bounds.Height) - cy;
+                var headY = bounds.Top + ((box.CenterY - (box.Height / 2) + (box.Height * ScriptDetection.HeadFraction)) * bounds.Height) - cy;
                 var distance = Math.Sqrt(Sq(headX - px) + Sq(headY - py));
                 var boxHeight = box.Height * bounds.Height;
 
@@ -702,7 +702,7 @@ internal sealed class AimLoop : IDisposable
 
                 t.MissFrames++;
 
-                // 가만히 겨누고 있는데 연달아 안 보이면 죽은 것이다 - 바로 놓아 스크립트가 다음 몹을 고르게 한다(실측: 붙인 142번 가운데 49번이 400ms 를 다 기다리고 끝났다 - 죽은 봇마다 0.4초).
+                // 가만히 겨누고 있는데 연달아 안 보이면 죽은 것이다 - 바로 놓아 스크립트가 다음 검출을 고르게 한다(실측: 붙인 142번 가운데 49번이 400ms 를 다 기다리고 끝났다 - 죽은 봇마다 0.4초).
                 // 휙 꺾는 중에는 화면이 번져 몇 장 안 보일 수 있으니 그때는 끝까지 기다린다.
                 var (movingX, movingY) = SentBetween(frame - LatencyMaxMs, frame);
                 var quiet = (Math.Abs(movingX) + Math.Abs(movingY)) / scale <= QuietTurnPx;
@@ -743,8 +743,8 @@ internal sealed class AimLoop : IDisposable
                 _holdX = _holdY = 0;
 
                 // 배율 표본 - 꺾기 전 본 자리 → 지금 본 자리, 그 사이 보낸 전부. 첫 움직임 뒤로는 거의 안 보냈으니 지연이 얼마든 "이 화면에 다 반영됐다" - 닻 방식보다 깨끗하고
-                // 큰 꺾기마다 하나씩 나온다(닻 방식은 배율이 많이 틀린 동안 조금씩 고쳐 가느라 조용한 프레임이 늦게 와, 그 전에 몹이 죽으면 표본이 없었다).
-                // 달리던 몹(꺾기 전에 잰 속도가 있을 때)이면 줄어든 거리에 몹의 움직임이 섞여 안 준다. 막 붙인 몹은 속도를 모르지만 다가오는 몹과 달아나는 몹이 반반이라 가운뎃값이 거른다.
+                // 큰 꺾기마다 하나씩 나온다(닻 방식은 배율이 많이 틀린 동안 조금씩 고쳐 가느라 조용한 프레임이 늦게 와, 그 전에 검출이 죽으면 표본이 없었다).
+                // 달리던 검출(꺾기 전에 잰 속도가 있을 때)이면 줄어든 거리에 검출의 움직임이 섞여 안 준다. 막 붙인 검출은 속도를 모르지만 다가오는 검출과 달아나는 검출이 반반이라 가운뎃값이 거른다.
                 var sampled = false;
 
                 _settledFrameTicks = frame;
@@ -774,9 +774,9 @@ internal sealed class AimLoop : IDisposable
             if (t.HasObservation && gap > 0 && gap <= MaxVelocityGapMs)
             {
                 // 우리가 휙 꺾는 중이던 쌍이면 안 잰다 - 알던 속도를 그대로 둔다.
-                if (MobVelocity(t, obsX, obsY, frame, gap, scale) is var (rawVx, rawVy))
+                if (DetectionVelocity(t, obsX, obsY, frame, gap, scale) is var (rawVx, rawVy))
                 {
-                    // 한 프레임에 이만큼 뛰었으면 달린 것이 아니라 다른 몹으로 이어진 것이다(죽은 봇 옆의 새 봇) - 속도로 읽으면 앞먹임이 몇 프레임 동안 엉뚱한 쪽으로 민다.
+                    // 한 프레임에 이만큼 뛰었으면 달린 것이 아니라 다른 검출로 이어진 것이다(죽은 봇 옆의 새 봇) - 속도로 읽으면 앞먹임이 몇 프레임 동안 엉뚱한 쪽으로 민다.
                     if (Math.Sqrt(Sq(rawVx) + Sq(rawVy)) > TeleportPxPerMs)
                     {
                         rawVx = rawVy = t.Vx = t.Vy = 0;
@@ -802,7 +802,7 @@ internal sealed class AimLoop : IDisposable
 
             // 배율 표본 - <b>닻(멈춰 서 있던 프레임) → 지금</b> 보낸 총량 ÷ 줄어든 거리. 프레임마다 재면 지연 안의 입력이 반영됐는지 몰라 못 믿는데, 닻에서부터 길게 재면
             // 그 모르는 부분(띠 안에 보낸 양)이 총량에 견줘 작아진다 - 15% 아래일 때 한 번 준다. 완전히 멈춰 서기를 기다리면 배율이 많이 틀린 동안에는(끝없이 조금씩
-            // 고쳐 가느라) 표본이 영영 안 나온다. 몹이 달리는 중(속도 120px/s 넘게)에는 줄어든 거리에 몹의 움직임이 섞여 안 준다. 닻은 다시 멈춰 서면 새로 놓는다.
+            // 고쳐 가느라) 표본이 영영 안 나온다. 검출이 달리는 중(속도 120px/s 넘게)에는 줄어든 거리에 검출의 움직임이 섞여 안 준다. 닻은 다시 멈춰 서면 새로 놓는다.
             {
                 var (totalX, totalY) = SentBetween(t.AnchorTicks - _latencyMs, frame - _latencyMs);
                 var horizontal = Math.Abs(totalX) >= Math.Abs(totalY);
@@ -827,7 +827,7 @@ internal sealed class AimLoop : IDisposable
 
             // 예측과의 차이. <b>남긴 것을 푼 직후</b>(<see cref="ReleaseCautionMs"/>)에는 지연을 짧게·길게 가정해도 남는 만큼만 받아들인다(Cautious) - 그 짧은 움직임(24px, 0.4px/ms)이
             // 화면에 어디까지 올랐는지는 지연 20ms 차이로 8px 이 갈리는데, 기준 지연 하나로만 재면 "지나쳤다" 로 잘못 읽고 뒤로 물러났다(검사 궤적: 2 → −2 → 12 → 18 → 17, 0.5초에 걸쳐 복귀).
-            // 늘 그렇게 하지는 않는다 - 달리는 몹을 따라가는 중에는 우리가 계속 움직여 가정들이 늘 12px 쯤 갈리고, 그만큼이 죽은 띠가 되어 몹을 10px 뒤에서 쫓았다.
+            // 늘 그렇게 하지는 않는다 - 달리는 검출을 따라가는 중에는 우리가 계속 움직여 가정들이 늘 12px 쯤 갈리고, 그만큼이 죽은 띠가 되어 검출을 10px 뒤에서 쫓았다.
             var innovationX = obsX - px;
             var innovationY = obsY - py;
 
@@ -840,9 +840,9 @@ internal sealed class AimLoop : IDisposable
                 innovationY = Cautious(innovationY, obsY - shortY, obsY - longY);
             }
 
-            // 차이가 한쪽으로 이어지면 속도가 모자란 것이다 - 속도에도 조금 보탠다(α-β). 자리만 고치면 떨림을 누르느라(Calm) 달아나는 몹의 자리를 늘 10px 쯤 늦게 알아,
+            // 차이가 한쪽으로 이어지면 속도가 모자란 것이다 - 속도에도 조금 보탠다(α-β). 자리만 고치면 떨림을 누르느라(Calm) 달아나는 검출의 자리를 늘 10px 쯤 늦게 알아,
             // 속도를 맞게 알고도 20~30px 뒤에서 1초 넘게 쫓았다(가짜 게임 궤적: 27 → 34 → 30 → 27 → 17 …). 우리가 휙 꺾는 중이던 화면으로는 안 한다.
-            if (!settled && t.VelocitySamples > 0 && gap > 0 && gap <= MaxVelocityGapMs && MobVelocity(t, obsX, obsY, frame, gap, scale) is not null)
+            if (!settled && t.VelocitySamples > 0 && gap > 0 && gap <= MaxVelocityGapMs && DetectionVelocity(t, obsX, obsY, frame, gap, scale) is not null)
             {
                 t.Vx = Math.Clamp(t.Vx + (VelocityBeta * innovationX / gap * trustX), -MaxVelocityPxPerMs, MaxVelocityPxPerMs);
                 t.Vy = Math.Clamp(t.Vy + (VelocityBeta * 0.5 * innovationY / gap * trustY), -MaxVelocityPxPerMs, MaxVelocityPxPerMs);
@@ -867,16 +867,16 @@ internal sealed class AimLoop : IDisposable
     }
 
     /// <summary>
-    /// 두 프레임 사이 몹의 속도(px/ms) - 자리 변화에서 우리가 돌린 만큼을 되돌린 것. <b>우리가 휙 꺾는 중이던 프레임 쌍으로는 재지 않는다</b>(null).
+    /// 두 프레임 사이 검출의 속도(px/ms) - 자리 변화에서 우리가 돌린 만큼을 되돌린 것. <b>우리가 휙 꺾는 중이던 프레임 쌍으로는 재지 않는다</b>(null).
     /// </summary>
     /// <remarks>
     /// 우리가 돌린 만큼은 "프레임 − 지연" 까지 보낸 양인데 지연을 정확히 모른다. 천천히 따라가는 중에는 20ms 틀려도 몇 px 이지만, 휙 꺾는 중에는
     /// 3.9px/ms × 20ms = 78px - 0.1초 프레임 간격이면 0.78px/ms 짜리 <b>가짜 속도</b>가 된다. 그 속도를 앞먹임이 그대로 밀어서, 꺾은 뒤 조준이 목표 옆 10~15px 에
     /// 1초 가까이 걸려 있었다(검사 궤적: 32 → 3 → −11 → −14 → −16 … −6). 지연을 여러 값으로 가정해 그 사이 우리가 돌린 속도가 <see cref="OwnFlickPxPerMs"/> 를
-    /// 넘는 것이 하나라도 있으면 꺾는 중으로 본다 - 달리는 몹을 따라가는 속도(0.2~0.6px/ms)는 그 아래다.
-    /// 가정들이 엇갈린 폭만큼 속도를 줄이는 방식은 안 됐다 - 속도를 작게 알면 프레임마다 몰아서 보내게 되고, 그러면 폭이 더 커져 끝내 0 으로 붙는다(달리는 몹을 20px 뒤에서 쫓았다).
+    /// 넘는 것이 하나라도 있으면 꺾는 중으로 본다 - 달리는 검출을 따라가는 속도(0.2~0.6px/ms)는 그 아래다.
+    /// 가정들이 엇갈린 폭만큼 속도를 줄이는 방식은 안 됐다 - 속도를 작게 알면 프레임마다 몰아서 보내게 되고, 그러면 폭이 더 커져 끝내 0 으로 붙는다(달리는 검출을 20px 뒤에서 쫓았다).
     /// </remarks>
-    private (double Vx, double Vy)? MobVelocity(Track t, double obsX, double obsY, long frame, long gap, double scale)
+    private (double Vx, double Vy)? DetectionVelocity(Track t, double obsX, double obsY, long frame, long gap, double scale)
     {
         _velocityPairWasQuiet = true;
 
@@ -894,16 +894,16 @@ internal sealed class AimLoop : IDisposable
         return ((obsX - t.ObsX + (sentX / scale)) / gap, (obsY - t.ObsY + (sentY / scale)) / gap);
     }
 
-    /// <summary>두 프레임 사이 자리 변화가 이보다 빠르면(px/ms) 움직인 것이 아니라 다른 몹이거나 사각형이 튄 것으로 본다 - 화면에서 450px/s 로 달리는 몹은 없다.</summary>
+    /// <summary>두 프레임 사이 자리 변화가 이보다 빠르면(px/ms) 움직인 것이 아니라 다른 검출이거나 사각형이 튄 것으로 본다 - 화면에서 450px/s 로 달리는 검출은 없다.</summary>
     private const double TeleportPxPerMs = 0.45;
 
-    /// <summary>몹이 서 있다고 볼 속도(px/ms) - 120px/s. 이보다 빠르면 줄어든 거리에 몹의 움직임이 섞여 배율 표본으로 못 쓴다.</summary>
+    /// <summary>검출이 서 있다고 볼 속도(px/ms) - 120px/s. 이보다 빠르면 줄어든 거리에 검출의 움직임이 섞여 배율 표본으로 못 쓴다.</summary>
     private const double StillPxPerMs = 0.12;
 
-    /// <summary>방금 <see cref="MobVelocity"/> 가 본 쌍이 조용했는가(우리가 <see cref="OwnQuietPxPerMs"/> 아래로 돌았는가).</summary>
+    /// <summary>방금 <see cref="DetectionVelocity"/> 가 본 쌍이 조용했는가(우리가 <see cref="OwnQuietPxPerMs"/> 아래로 돌았는가).</summary>
     private bool _velocityPairWasQuiet;
 
-    /// <summary>두 프레임 사이 우리가 돌린 속도가 이보다 빠르면(px/ms) 그 쌍으로는 몹의 속도를 안 잰다.</summary>
+    /// <summary>두 프레임 사이 우리가 돌린 속도가 이보다 빠르면(px/ms) 그 쌍으로는 검출의 속도를 안 잰다.</summary>
     private const double OwnFlickPxPerMs = 0.9;
 
     /// <summary>우리가 이보다 느리게 돌던 쌍(px/ms)이어야 처음 잰 속도를 크게 받고, 붙일 때 속도를 미리 잰다.</summary>
@@ -933,9 +933,9 @@ internal sealed class AimLoop : IDisposable
     private static double Trust(double uncertaintyPx) => 1 / (1 + (uncertaintyPx / UncertaintyHalfPx));
 
     /// <summary>
-    /// 예측과의 차이가 떨림 크기(<see cref="JitterPx"/> 아래)면 0.4 만, <see cref="RealMovePx"/> 넘으면 그대로, 그 사이는 고르게 - 검출 사각형은 가만히 있는 몹도 가로 11px·세로 17px 흔들린다(실측).
+    /// 예측과의 차이가 떨림 크기(<see cref="JitterPx"/> 아래)면 0.4 만, <see cref="RealMovePx"/> 넘으면 그대로, 그 사이는 고르게 - 검출 사각형은 가만히 있는 검출도 가로 11px·세로 17px 흔들린다(실측).
     /// 받아들이는 비율(가로 0.75)을 올리면서 같이 바꿨다 - 8px 에서 0.5 → 1 로 뚝 끊기면 떨림 10px 짜리를 통째로 받아, 붙은 직후 조준이 ±10px 을 오갔다(검사 궤적 2 → −2 → 7 → 11 → 9).
-    /// 달리는 몹은 차이가 한쪽으로 이어지므로 속도가 받아 준다.
+    /// 달리는 검출은 차이가 한쪽으로 이어지므로 속도가 받아 준다.
     /// </summary>
     private static double Calm(double innovationPx) => Calm(innovationPx, JitterPx, RealMovePx);
 
@@ -968,7 +968,7 @@ internal sealed class AimLoop : IDisposable
                 _holdStartTicks = now;
                 _primaryDoneTicks = 0;
 
-                // 배율 표본의 "앞" - 마지막으로 본 날것 자리. 막 붙인 몹은 아직 날것이 없다 - 붙일 때 받은 자리가 곧 본 자리다.
+                // 배율 표본의 "앞" - 마지막으로 본 날것 자리. 막 붙인 검출은 아직 날것이 없다 - 붙일 때 받은 자리가 곧 본 자리다.
                 // 그 프레임에 반영됐는지 모르는 입력(지연 띠 40~200ms 안에 보낸 것)은 적어 뒀다가, 확인 화면에서 꺾은 양의 15% 를 넘으면 표본을 버린다(닻 방식과 같은 기준).
                 // 띠 뒤(프레임 − 40ms 부터)에 보낸 것은 그 프레임에 없는 것이 분명하니 꺾은 양에 그대로 들어간다.
                 var (unsureX, unsureY) = SentBetween(t.SeenTicks - LatencyMaxMs, t.SeenTicks - LatencyMinMs);
@@ -1030,7 +1030,7 @@ internal sealed class AimLoop : IDisposable
                 wantY = ey / remaining * stepPx * scale;
             }
 
-            // 몹이 가는 만큼(속도 앞먹임) - 남은 거리만 쫓으면 달리는 몹을 늘 속도×시간 상수만큼 뒤에서 쫓는다.
+            // 검출이 가는 만큼(속도 앞먹임) - 남은 거리만 쫓으면 달리는 검출을 늘 속도×시간 상수만큼 뒤에서 쫓는다.
             var follow = now - t.SeenTicks <= StaleVelocityMs ? TickMs * scale : 0;
 
             // 한 번 잰 속도는 반만 - 한 쌍이 튄 것일 수 있다. 두 번 맞으면 다 믿는다. 느린 속도는 떨림이라 0.
@@ -1075,8 +1075,8 @@ internal sealed class AimLoop : IDisposable
     {
         var age = Math.Max(0, now - t.SeenTicks);
 
-        // 화면에 찍힌 몹의 자리도 지연만큼 옛것이다 - 우리 입력만 늦게 보이는 것이 아니다. 그만큼 앞서 겨눈다(150px/s 옆걸음 봇이면 14px - 안 하면 늘 그만큼 뒤를 쏜다).
-        var coast = (Math.Min(age, StaleVelocityMs) + (age <= StaleVelocityMs ? MobLeadMs : 0)) * VelocityConfidence(t);
+        // 화면에 찍힌 검출의 자리도 지연만큼 옛것이다 - 우리 입력만 늦게 보이는 것이 아니다. 그만큼 앞서 겨눈다(150px/s 옆걸음 봇이면 14px - 안 하면 늘 그만큼 뒤를 쏜다).
+        var coast = (Math.Min(age, StaleVelocityMs) + (age <= StaleVelocityMs ? DetectionLeadMs : 0)) * VelocityConfidence(t);
         var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, long.MaxValue);
         var scale = Math.Max(0.01, _host.Scale());
 

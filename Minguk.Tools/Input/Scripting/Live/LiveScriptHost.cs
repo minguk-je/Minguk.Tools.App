@@ -21,7 +21,7 @@ public sealed class LiveScriptHost
     /// <summary>이 경로는 대상 창이 앞에 있어야 들어가는가(SendInput·Interception). 창 메시지 경로는 아니다.</summary>
     public required bool RequiresForeground { get; init; }
 
-    /// <summary>잡고 있는 대상. 몹 자리를 화면 픽셀로 바꾸고, 앞에 있는지 볼 때 쓴다.</summary>
+    /// <summary>잡고 있는 대상. 검출 자리를 화면 픽셀로 바꾸고, 앞에 있는지 볼 때 쓴다.</summary>
     public required Func<CaptureTarget?> Target { get; init; }
 
     public required IPerceptionHub Hub { get; init; }
@@ -54,7 +54,7 @@ public sealed class LiveScriptHost
     /// <remarks>
     /// <b>화면마다 무엇을 도는지가 다르다</b>(사용자, 2026-09-19) - 스크립트 화면은 그 프로젝트 소스를 연결해 그대로 돈다
     /// (다시 빌드할 필요 없이 고친 것이 바로 반영된다). 플레이 화면은 빌드된 것(.mtsx)을 읽어 돈다(소스가 없어도, 다른
-    /// PC 로 폴더만 옮겨도 돈다). 어느 쪽이든 몹 찾기 모델·이름 붙인 자리는 그 프로젝트로 바뀐 채로 돈다.
+    /// PC 로 폴더만 옮겨도 돈다). 어느 쪽이든 검출 모델·이름 붙인 자리는 그 프로젝트로 바뀐 채로 돈다.
     /// </remarks>
     public Func<string, LiveScriptHost, System.Threading.CancellationToken, System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<ScriptError>>>? RunProject { get; init; }
 

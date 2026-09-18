@@ -187,7 +187,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
     }
 
     /// <summary>
-    /// 몹 찾기 모델·이름 붙인 자리를 읽을 폴더 - 고른 완성품의 프로젝트 폴더다(<c>사격장/bin/사격장.mtsx</c> 면 <c>사격장</c>).
+    /// 검출 모델·이름 붙인 자리를 읽을 폴더 - 고른 완성품의 프로젝트 폴더다(<c>사격장/bin/사격장.mtsx</c> 면 <c>사격장</c>).
     /// </summary>
     /// <remarks>
     /// 완성품이 bin 안에 있으면 그 위가 프로젝트 폴더고 모델·영역이 거기 있다. 열기로 딴 데서 고른 .mtsx 면 그 폴더를 본다.
@@ -237,7 +237,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
             Script.Project.CloseProject();
             Script.LoadCompiled(SelectedScript.Path);
 
-            // 이름 붙인 자리는 완성품 옆 regions.json 을 다시 읽는다. 몹 찾기 모델은 켜 둔 채면 자리가 바뀐 것을 보고 곧바로 다시 읽는다.
+            // 이름 붙인 자리는 완성품 옆 regions.json 을 다시 읽는다. 검출 모델은 켜 둔 채면 자리가 바뀐 것을 보고 곧바로 다시 읽는다.
             LoadRegions();
             FollowSettingsWindow();
 

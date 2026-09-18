@@ -77,7 +77,7 @@ public static class LabelingScreenProbe
 
                 var vm = (Minguk.Tools.ViewModels.LabelingViewModel)view.DataContext;
 
-                // 콤보는 읽기만 본다 - 여기서 고르면 진짜 데이터셋의 몹 찾기 모델이 바뀐다.
+                // 콤보는 읽기만 본다 - 여기서 고르면 진짜 데이터셋의 검출 모델이 바뀐다.
                 Console.WriteLine($"[INFO] 쓰는 모델 콤보: [{string.Join(", ", vm.ModelChoices.Select(c => c.Name))}] · 고른 것 {vm.SelectedModelChoice?.Name ?? "없음"} · 줄 \"{vm.ModelSummary}\"");
                 if (vm.ModelChoices.Count == 0 || vm.SelectedModelChoice is null) { Console.WriteLine("[FAIL] 쓰는 모델 콤보가 비었거나 지금 모델을 못 골랐다"); failures++; }
                 else Console.WriteLine("[PASS] 쓰는 모델 콤보가 채워지고 지금 모델을 골랐다");

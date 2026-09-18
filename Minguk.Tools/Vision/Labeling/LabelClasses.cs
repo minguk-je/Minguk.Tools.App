@@ -7,13 +7,13 @@ using System.Text;
 namespace Minguk.Tools.Vision.Labeling;
 
 /// <summary>
-/// 몹 이름 목록. 파일에서는 <c>classes.txt</c> 한 줄에 하나다.
+/// 검출 이름 목록. 파일에서는 <c>classes.txt</c> 한 줄에 하나다.
 /// </summary>
 /// <remarks>
 /// <b>번호가 아니라 자리가 뜻이다</b>
 ///
 /// 라벨 파일에는 이름이 아니라 번호가 들어간다. 그래서 이 목록의 <b>순서를 바꾸면
-/// 이미 찍어 둔 라벨이 전부 다른 몹을 가리킨다</b> - 중간에 하나를 지우면 뒤가 하나씩
+/// 이미 찍어 둔 라벨이 전부 다른 검출을 가리킨다</b> - 중간에 하나를 지우면 뒤가 하나씩
 /// 당겨져 조용히 어긋난다. 그래서 지우는 것은 열어 두지 않고, 이름 바꾸기와 뒤에 더하기만 연다.
 /// (이름만 바꾸는 것은 번호가 그대로라 안전하다.)
 ///
@@ -53,7 +53,7 @@ public sealed class LabelClasses
     {
         var trimmed = Normalize(name);
 
-        if (trimmed.Length == 0) throw new ArgumentException("몹 이름이 비었다.", nameof(name));
+        if (trimmed.Length == 0) throw new ArgumentException("검출 이름이 비었다.", nameof(name));
 
         var existing = IndexOf(trimmed);
         if (existing >= 0) return existing;
@@ -73,7 +73,7 @@ public sealed class LabelClasses
 
         var trimmed = Normalize(name);
 
-        if (trimmed.Length == 0) throw new ArgumentException("몹 이름이 비었다.", nameof(name));
+        if (trimmed.Length == 0) throw new ArgumentException("검출 이름이 비었다.", nameof(name));
 
         var existing = IndexOf(trimmed);
         if (existing >= 0 && existing != classId)
@@ -86,7 +86,7 @@ public sealed class LabelClasses
     /// 번호 하나를 빼고 뒤를 당긴다.
     /// </summary>
     /// <remarks>
-    /// 라벨에는 번호가 들어 있어, 이것만 부르면 그 번호 뒤의 사각형이 전부 다른 몹을 가리킨다.
+    /// 라벨에는 번호가 들어 있어, 이것만 부르면 그 번호 뒤의 사각형이 전부 다른 검출을 가리킨다.
     /// 화면은 <see cref="LabelDataset.RemoveClass"/> 로 불러야 한다 - 그쪽이 라벨 파일의 번호도 같이 당긴다.
     /// </remarks>
     public void RemoveAt(int classId)

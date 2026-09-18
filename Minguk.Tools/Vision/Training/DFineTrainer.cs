@@ -21,7 +21,7 @@ namespace Minguk.Tools.Vision.Training;
 /// <b>왜 밖의 저장소를 부르나</b> - D-FINE 은 학습 코드가 제 저장소에 있다(Apache-2.0). 우리가 옮겨 적으면 저쪽이 올라갈 때마다 따라가야 한다.
 /// 그래서 저장소·가상환경·사전학습 가중치를 한 폴더(`Vision.DFineRoot`, 기본 <c>D:\Minguk.Tools.학습</c>)에 두고 앱은 그것을 돌린다.
 ///
-/// <b>네 걸음이다.</b> (1) 데이터셋을 COCO 로 내보내고 설정의 자리·몹 수를 지금 것으로 고친다, (2) <c>train.py</c>,
+/// <b>네 걸음이다.</b> (1) 데이터셋을 COCO 로 내보내고 설정의 자리·검출 수를 지금 것으로 고친다, (2) <c>train.py</c>,
 /// (3) <c>export_onnx.py</c>, (4) <c>도구/onnx-DirectML-고치기.py</c>. 넷째를 빼먹으면 DirectML 이 MatMul 을 틀리게 계산해
 /// 점수가 0.06 으로 내려앉고 한 마리도 못 찾는다(CLAUDE.md). 들일 때는 <b>늘리기</b>다 - D-FINE 공식 설정이 그렇다.
 ///
@@ -42,7 +42,7 @@ public static class DFineTrainer
     /// <summary>COCO 사전학습 가중치. 여기서 이어 배운다 - 98장으로 처음부터는 어림도 없다.</summary>
     public static string PretrainedWeights => TrainingPaths.DFineWeights;
 
-    /// <summary>우리 데이터셋용 설정. 몹 수·사진 자리는 학습 직전에 다시 쓴다.</summary>
+    /// <summary>우리 데이터셋용 설정. 검출 수·사진 자리는 학습 직전에 다시 쓴다.</summary>
     public static string ConfigPath => Path.Combine(RepositoryPath, "configs", "dfine", "custom", "dfine_hgnetv2_n_mob.yml");
 
     public static string DatasetConfigPath => Path.Combine(RepositoryPath, "configs", "dataset", "mob_detection.yml");
@@ -83,7 +83,7 @@ public static class DFineTrainer
 
         var watch = Stopwatch.StartNew();
 
-        // (1) 우리 데이터셋을 COCO 로 내보내고 설정이 그것을 가리키게 한다. 사진을 더 담았거나 몹을 늘렸으면 여기서 따라온다.
+        // (1) 우리 데이터셋을 COCO 로 내보내고 설정이 그것을 가리키게 한다. 사진을 더 담았거나 검출을 늘렸으면 여기서 따라온다.
         status.Report("데이터셋을 COCO 로 내보내는 중...");
         var coco = DatasetExport.WriteCoco(dataset);
         RewriteDatasetConfig(dataset, coco);
@@ -132,11 +132,11 @@ public static class DFineTrainer
     }
 
     /// <summary>
-    /// 설정이 지금 데이터셋을 가리키게 고친다. 사진 자리·주석 파일·몹 수 세 줄이다.
+    /// 설정이 지금 데이터셋을 가리키게 고친다. 사진 자리·주석 파일·검출 수 세 줄이다.
     /// </summary>
     /// <remarks>
-    /// 폴더를 바꿔 가며 학습할 수 있고(시험용 데이터셋), 몹을 더하면 <c>num_classes</c> 가 달라진다. 안 고치면 저쪽은 옛 자리를
-    /// 읽어 "파일이 없다" 로 죽거나, 더 나쁘게는 몹 수가 어긋난 채로 학습해 번호가 밀린다.
+    /// 폴더를 바꿔 가며 학습할 수 있고(시험용 데이터셋), 검출을 더하면 <c>num_classes</c> 가 달라진다. 안 고치면 저쪽은 옛 자리를
+    /// 읽어 "파일이 없다" 로 죽거나, 더 나쁘게는 검출 수가 어긋난 채로 학습해 번호가 밀린다.
     /// </remarks>
     private static void RewriteDatasetConfig(LabelDataset dataset, string cocoPath)
     {
@@ -151,7 +151,7 @@ public static class DFineTrainer
 
         File.WriteAllText(DatasetConfigPath, text, new UTF8Encoding(false));
 
-        Logger.Info($"D-FINE 설정을 맞췄다: {images} · {annotations} · 몹 {classes}종");
+        Logger.Info($"D-FINE 설정을 맞췄다: {images} · {annotations} · 검출 {classes}종");
     }
 
     /// <summary>진행 줄에서 바퀴와 loss 를 읽는다. D-FINE 은 <c>Epoch: [3/60]  [ 10/24]  eta: ...  loss: 12.3 (12.9)</c> 로 찍는다.</summary>

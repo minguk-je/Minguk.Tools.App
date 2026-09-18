@@ -19,7 +19,7 @@ public sealed record ScriptHelpRow(string Group, string Name, string English, st
 }
 
 /// <summary>
-/// 스크립트 화면 도움말 패널의 내용 - 기본 사용법 + 부를 수 있는 함수 전부 + 몹의 속성.
+/// 스크립트 화면 도움말 패널의 내용 - 기본 사용법 + 부를 수 있는 함수 전부 + 검출의 속성.
 /// </summary>
 /// <remarks>
 /// 함수 줄은 <see cref="ScriptApiCatalog"/> 에서 뽑는다(사용자, 2026-09-15 - "문법 도움말이 있어야"). 이름·설명을 여기 또 적으면
@@ -30,8 +30,8 @@ public static class ScriptHelp
     private const string Basics = "1. 기본 사용법";
     private const string Keyboard = "2. 키보드";
     private const string Mouse = "3. 마우스";
-    private const string Mobs = "4. 몹 찾기";
-    private const string MobProperties = "5. 몹의 속성 (몹.이름 처럼)";
+    private const string Detections = "4. 검출";
+    private const string DetectionProperties = "5. 검출의 속성 (검출.이름 처럼)";
     private const string Screen = "6. 화면 글자 읽기";
     private const string Flow = "7. 흐름 · 출력";
     private const string Resources = "8. 리소스 · 설정";
@@ -46,7 +46,7 @@ public static class ScriptHelp
         ["Click"] = Mouse, ["RightClick"] = Mouse, ["ClickAt"] = Mouse, ["MoveTo"] = Mouse, ["Scroll"] = Mouse,
         ["Aim"] = Mouse, ["MoveBy"] = Mouse, ["MouseDown"] = Mouse, ["MouseUp"] = Mouse, ["Drag"] = Mouse, ["DragBy"] = Mouse,
 
-        ["Mobs"] = Mobs, ["NearestMob"] = Mobs, ["TargetMob"] = Mobs, ["ReleaseTarget"] = Mobs, ["WaitMob"] = Mobs,
+        ["Detections"] = Detections, ["NearestDetection"] = Detections, ["TargetDetection"] = Detections, ["ReleaseTarget"] = Detections, ["WaitDetection"] = Detections,
 
         ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
@@ -67,13 +67,13 @@ public static class ScriptHelp
         ["Walk"] = "걷기(\"W\", 500);      // 0.5초 앞으로\n걷기(\"W+A\", 300);    // 대각선",
         ["Click"] = "클릭();\n클릭(\"Right\");\n클릭(100);            // 0.1초 누르고 떼기",
         ["ClickAt"] = "이동클릭(960, 540, \"Left\");",
-        ["Aim"] = "var 몹 = 목표();\nif (몹 is not null && 조준(몹))   // 스레드가 계속 따라간다\n    클릭();",
+        ["Aim"] = "var 검출 = 목표();\nif (검출 is not null && 조준(검출))   // 스레드가 계속 따라간다\n    클릭();",
         ["DragBy"] = "상대끌기(200, 0, \"Right\");   // 카메라 오른쪽으로",
-        ["Mobs"] = "foreach (var 몹 in 몹들())\n    출력(몹);",
-        ["NearestMob"] = "var 몹 = 가장가까운몹();\nif (몹 is not null) 이동(몹.중심x, 몹.중심y);",
-        ["TargetMob"] = "var 몹 = 목표();          // 잡을 때까지 같은 몹\nif (몹 is null) { 쉬기(50); continue; }",
+        ["Detections"] = "foreach (var 검출 in 검출들())\n    출력(검출);",
+        ["NearestDetection"] = "var 검출 = 가장가까운검출();\nif (검출 is not null) 이동(검출.중심x, 검출.중심y);",
+        ["TargetDetection"] = "var 검출 = 목표();          // 잡을 때까지 같은 검출\nif (검출 is null) { 쉬기(50); continue; }",
         ["ReleaseTarget"] = "if (쏜발수 >= 15) 목표풀기();",
-        ["WaitMob"] = "var 몹 = 몹기다리기(3000);\nif (몹 is null) 출력(\"3초 동안 못 봤다\");",
+        ["WaitDetection"] = "var 검출 = 검출기다리기(3000);\nif (검출 is null) 출력(\"3초 동안 못 봤다\");",
         ["ReadText"] = "var 글 = 읽기(\"퀘스트\");            // 영역 패널에서 만든 이름\nvar 글2 = 읽기(0.4, 0.9, 0.2, 0.05); // 비율 자리",
         ["ReadNumber"] = "var 탄약 = 숫자읽기(\"탄약\");\nif (탄약 is not null && 탄약 <= 3) 키(\"R\");",
         ["HasTextAt"] = "while (글자있나(\"재장전중\")) 쉬기(100);",
@@ -87,7 +87,7 @@ public static class ScriptHelp
         ["IsStopped"] = "while (!중지되었나())\n{\n    // 반복할 일\n    쉬기(10);\n}",
         ["Print"] = "출력($\"탄약 {숫자읽기(\"탄약\")}\");",
         ["Watch"] = "보기(\"쏜 발수\", 쏜발수);",
-        ["ResourceText"] = "var 표 = 리소스글(\"몹표.json\");",
+        ["ResourceText"] = "var 표 = 리소스글(\"검출표.json\");",
         ["Setting"] = "var hp = 설정<int>(\"물약HP\");     // 설정 탭에서 만든 칸\nif (체력() < hp) 키(\"1\");",
         ["SetSetting"] = "설정저장(\"사냥횟수\", 설정<int>(\"사냥횟수\") + 1);",
         ["SettingList"] = "foreach (var 줄 in 설정목록(\"물약목록\"))\n    if (줄.Get<bool>(\"켜기\")) 출력(줄[\"키\"]);",
@@ -113,7 +113,7 @@ public static class ScriptHelp
                 "솔루션에 공유 프로젝트를 만들고(솔루션 탭 [새 공유 프로젝트]), 쓸 프로젝트의 솔루션 탐색기에서 추가 > 공유 프로젝트 참조. 그 뒤로는 같은 프로젝트의 함수처럼 부른다.", ""),
             new(Basics, "계속 반복하기", "",
                 "중지되었나() 를 반복문 조건에 둔다 - 중지나 비상 정지를 누르면 빠져나온다. 반복 안에 쉬기() 를 조금 두면 CPU 를 덜 쓴다.",
-                "while (!중지되었나())\n{\n    var 몹 = 목표();\n    if (몹 is null) { 쉬기(50); continue; }\n\n    if (조준(몹)) 클릭();\n}"),
+                "while (!중지되었나())\n{\n    var 검출 = 목표();\n    if (검출 is null) { 쉬기(50); continue; }\n\n    if (조준(검출)) 클릭();\n}"),
             new(Basics, "실행 · 멈추기", "",
                 "F5 실행/계속 · F6 중지 · F10 한 줄씩 · F9 중단점 · Ctrl+Shift+B 빌드(bin 에 .mtsx - 플레이 화면에서 돌린다).\n" +
                 "F5·F6·F10 은 게임 창이 앞에 있어도 먹는다. 도는 동안 Pause 는 비상 정지 - 멈추고 누르고 있던 키·버튼을 모두 뗀다.", ""),
@@ -135,12 +135,12 @@ public static class ScriptHelp
 
         rows.AddRange(
         [
-            new(MobProperties, "몹.이름", "Name", "몹 이름(라벨링에서 붙인 몹 이름).", "if (몹.이름 == \"허수아비\") 클릭();"),
-            new(MobProperties, "몹.중심x · 몹.중심y", "CenterX · CenterY", "사각형 가운데 - 화면 픽셀이라 이동()·이동클릭() 에 그대로 넣는다.", "이동(몹.중심x, 몹.중심y);"),
-            new(MobProperties, "몹.머리x · 몹.머리y", "HeadX · HeadY", "머리 자리(위에서 22% 내려온 곳). 조준(몹) 이 겨누는 곳이다.", "출력(몹.머리y);"),
-            new(MobProperties, "몹.너비 · 몹.높이", "Width · Height", "사각형 크기(픽셀). 크면 가깝다.", "if (몹.높이 > 200) 걷기(\"S\", 300);"),
-            new(MobProperties, "몹.점수", "Score", "찾은 확신(0~1).", "if (몹.점수 < 0.5) continue;"),
-            new(MobProperties, "몹.이름표", "Caption", "머리 위 글자 - 부를 때 지금 화면에서 사각형 위를 잘라 읽는다. 이름표가 없는 게임이거나 못 읽으면 빈 글.", "if (몹.이름표.Contains(\"보스\")) 소리(\"경고.wav\");")
+            new(DetectionProperties, "검출.이름", "Name", "검출 이름(라벨링에서 붙인 검출 이름).", "if (검출.이름 == \"허수아비\") 클릭();"),
+            new(DetectionProperties, "검출.중심x · 검출.중심y", "CenterX · CenterY", "사각형 가운데 - 화면 픽셀이라 이동()·이동클릭() 에 그대로 넣는다.", "이동(검출.중심x, 검출.중심y);"),
+            new(DetectionProperties, "검출.머리x · 검출.머리y", "HeadX · HeadY", "머리 자리(위에서 22% 내려온 곳). 조준(검출) 이 겨누는 곳이다.", "출력(검출.머리y);"),
+            new(DetectionProperties, "검출.너비 · 검출.높이", "Width · Height", "사각형 크기(픽셀). 크면 가깝다.", "if (검출.높이 > 200) 걷기(\"S\", 300);"),
+            new(DetectionProperties, "검출.점수", "Score", "찾은 확신(0~1).", "if (검출.점수 < 0.5) continue;"),
+            new(DetectionProperties, "검출.이름표", "Caption", "머리 위 글자 - 부를 때 지금 화면에서 사각형 위를 잘라 읽는다. 이름표가 없는 게임이거나 못 읽으면 빈 글.", "if (검출.이름표.Contains(\"보스\")) 소리(\"경고.wav\");")
         ]);
 
         return rows.OrderBy(r => r.Group, StringComparer.Ordinal).ToList();

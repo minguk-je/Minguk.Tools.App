@@ -24,7 +24,7 @@ public static class CaptureTargetBounds
     {
         bounds = default;
 
-        // 영상은 화면 자리가 없다 - 영상 픽셀 그대로(0,0 에서 시작)를 자리로 삼는다. 몹 좌표가 영상 픽셀로 나온다.
+        // 영상은 화면 자리가 없다 - 영상 픽셀 그대로(0,0 에서 시작)를 자리로 삼는다. 검출 좌표가 영상 픽셀로 나온다.
         // 입력은 이 자리로 보내지 않는다(PreviewInputRouter·실시간 스크립트가 영상이면 막는다) - 보내면 진짜 화면 왼쪽 위를 누른다.
         if (target.Kind == CaptureTargetKind.Video)
         {

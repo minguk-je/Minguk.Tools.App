@@ -30,7 +30,7 @@ public sealed class ScriptConsole : ViewModelBase
     private readonly object _gate = new();
 
     // 화면 갱신은 칸마다 하나만 걸어 둔다. 반복문이 초당 수천 번 부르면 화면 스레드에 수천 개가 쌓여
-    // 캡처·몹 찾기까지 밀렸다(실측). 걸린 갱신이 돌 때 그때의 최신 글을 만든다.
+    // 캡처·검출까지 밀렸다(실측). 걸린 갱신이 돌 때 그때의 최신 글을 만든다.
     private readonly UiCoalescer _callsUi;
     private readonly UiCoalescer _linesUi;
     private readonly UiCoalescer _watchesUi;

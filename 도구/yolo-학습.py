@@ -13,7 +13,7 @@ YOLO11 을 우리 데이터셋으로 학습해 ONNX 로 내보낸다. 보통은 
 - **학습은 시험 폴더(--work)에서 한다.** images·labels 는 데이터셋을 가리키는 junction 이라 복사가 아니다(ps1 이 만든다).
   data.yaml·학습 결과가 데이터셋 폴더에 섞이지 않게 하려는 것이다. 다만 Ultralytics 는 junction 을 실제 경로로 풀어
   `labels.cache` 를 **데이터셋 폴더**(몹/labels.cache)에 쓴다(실측). 앱은 안 읽고, 라벨이 바뀌면 해시로 알아채 다시 만든다 - 해가 없다.
-- **data.yaml 은 매번 classes.txt 로 새로 쓴다.** 몹을 더하거나 이름을 바꾼 뒤 옛 yaml 로 학습하면 번호가 어긋난다.
+- **data.yaml 은 매번 classes.txt 로 새로 쓴다.** 검출을 더하거나 이름을 바꾼 뒤 옛 yaml 로 학습하면 번호가 어긋난다.
 - **본문은 main 가드 안이다.** Windows 는 데이터 로더 작업자를 spawn 으로 띄워 이 파일을 다시 import 한다 -
   가드가 없으면 작업자마다 학습을 또 시작하려다 RuntimeError(bootstrapping)로 죽는다(실측).
 - GTX 1060 3GB 에서 yolo11n 은 batch 8 이 1.3GB, 98장 60바퀴에 5분이었다. yolo11s 는 batch 4 로 10분이고 얻는 것이 없었다.
@@ -29,7 +29,7 @@ def write_data_yaml(root: Path, work: Path) -> Path:
     names = [line.strip() for line in (root / "classes.txt").read_text(encoding="utf-8").splitlines() if line.strip()]
 
     if not names:
-        raise SystemExit(f"classes.txt 에 몹이 없다: {root / 'classes.txt'}")
+        raise SystemExit(f"classes.txt 에 검출이 없다: {root / 'classes.txt'}")
 
     work.mkdir(parents=True, exist_ok=True)
 
@@ -82,7 +82,7 @@ def allow_capital_folders() -> None:
 
 def use_class_colors(hexes: str | None) -> None:
     """
-    묶음 그림의 상자 색을 라벨링 화면의 몹 색으로(사용자, 2026-09-15). `--colors FF0000,00A0FF` - 자리가 몹 번호.
+    묶음 그림의 상자 색을 라벨링 화면의 검출 색으로(사용자, 2026-09-15). `--colors FF0000,00A0FF` - 자리가 검출 번호.
 
     plot_images 는 모듈 전역 `colors`(Ultralytics 기본 20색)로 번호 색을 고른다 - 그 팔레트를 우리 색으로 갈아 끼운다.
     그림이 RGB(PIL)라 RGB 로 넣는다. 안 주면 Ultralytics 기본 색 그대로.
@@ -165,9 +165,9 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--device", default="0")
-    parser.add_argument("--colors", default=None, help="몹 번호 순서의 색 RRGGBB 를 쉼표로(묶음 그림 상자 색)")
+    parser.add_argument("--colors", default=None, help="검출 번호 순서의 색 RRGGBB 를 쉼표로(묶음 그림 상자 색)")
     parser.add_argument("--imgsz", type=int, default=640,
-                        help="학습·내보내기 크기(정사각, 32 의 배수). 키우면 작은 몹을 더 찾고 학습·찾기가 느려진다(480·640·960·1280)")
+                        help="학습·내보내기 크기(정사각, 32 의 배수). 키우면 작은 검출을 더 찾고 학습·찾기가 느려진다(480·640·960·1280)")
     args = parser.parse_args()
 
     root, runs = Path(args.root), Path(args.runs)
@@ -192,7 +192,7 @@ def main() -> None:
         project=str(runs), name=args.model, exist_ok=True, plots=False, verbose=False)
     print(f"TRAIN_SECONDS {round(time.time() - started)}", flush=True)
 
-    # 내보내기도 학습한 크기로 - ONNX 입력이 이 크기로 박히고, 앱의 몹 찾기는 그 크기를 읽어 그대로 넣는다(OnnxDetector).
+    # 내보내기도 학습한 크기로 - ONNX 입력이 이 크기로 박히고, 앱의 검출은 그 크기를 읽어 그대로 넣는다(OnnxDetector).
     best = runs / args.model / "weights" / "best.pt"
     exported = YOLO(str(best)).export(format="onnx", imgsz=args.imgsz, opset=17, simplify=True, dynamic=False)
     print(f"ONNX {exported}", flush=True)

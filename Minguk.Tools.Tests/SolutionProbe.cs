@@ -218,7 +218,7 @@ public static class SolutionProbe
             Report(scriptsOk, "스크립트 자리가 고른 프로젝트", scripts);
             failures += scriptsOk ? 0 : 1;
 
-            // 데이터셋(사진·라벨·모델·영역) 자리 - 라벨링·캡처·몹 찾기가 다 이것을 본다. 예전엔 따로 저장한 키를 Automation 이 고쳐 쓰는 다리였다.
+            // 데이터셋(사진·라벨·모델·영역) 자리 - 라벨링·캡처·검출이 다 이것을 본다. 예전엔 따로 저장한 키를 Automation 이 고쳐 쓰는 다리였다.
             var dataset = Minguk.Tools.Vision.Labeling.LabelDataset.ConfiguredRoot;
             var datasetOk = string.Equals(Path.GetFullPath(dataset), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase);
             Report(datasetOk, "데이터셋 자리가 고른 프로젝트", dataset);

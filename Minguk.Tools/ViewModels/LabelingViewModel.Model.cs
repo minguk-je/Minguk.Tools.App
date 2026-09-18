@@ -31,7 +31,7 @@ public partial class LabelingViewModel
 
     public DelegateCommand DoAddClassCommand { get; private set; } = null!;
 
-    /// <summary>고른 몹을 지운다. 아무 라벨에도 안 쓰인 것만 - 뒤 번호는 라벨 파일까지 같이 당긴다.</summary>
+    /// <summary>고른 검출을 지운다. 아무 라벨에도 안 쓰인 것만 - 뒤 번호는 라벨 파일까지 같이 당긴다.</summary>
     public DelegateCommand DoDeleteClassCommand { get; private set; } = null!;
 
     public DelegateCommand DoPreviousCommand { get; private set; } = null!;
@@ -40,7 +40,7 @@ public partial class LabelingViewModel
 
     public DelegateCommand DoNextUnlabeledCommand { get; private set; } = null!;
 
-    /// <summary>앞 장의 사각형을 가져온다. 연달아 담은 그림은 몹 자리가 거의 같다.</summary>
+    /// <summary>앞 장의 사각형을 가져온다. 연달아 담은 그림은 검출 자리가 거의 같다.</summary>
     public DelegateCommand DoCopyPreviousCommand { get; private set; } = null!;
 
     /// <summary>지금 그림의 사각형을 복사해 둔다(Ctrl+C). 순서를 안 가려도 되고 여러 장에 거듭 붙일 수 있다.</summary>
@@ -123,9 +123,9 @@ public partial class LabelingViewModel
         set => SetProperty(() => SelectedBoxIndex, value, () => DoDeleteBoxCommand.RaiseCanExecuteChanged());
     }
 
-    // ── 몹 이름 ──────────────────────────────────────────────────────────
+    // ── 검출 이름 ──────────────────────────────────────────────────────────
 
-    /// <summary>새로 그릴 사각형에 붙일 몹. 목록의 자리가 곧 번호다.</summary>
+    /// <summary>새로 그릴 사각형에 붙일 검출. 목록의 자리가 곧 번호다.</summary>
     public int SelectedClassIndex
     {
         get => GetProperty(() => SelectedClassIndex);
@@ -133,7 +133,7 @@ public partial class LabelingViewModel
     }
 
     /// <summary>
-    /// 몹 목록(그리드)이 고른 줄.
+    /// 검출 목록(그리드)이 고른 줄.
     /// </summary>
     /// <remarks>
     /// 그리드는 <c>SelectedItem</c> 으로만 묶이므로 번호(<see cref="SelectedClassIndex"/>)와 여기서 서로 맞춘다.
@@ -145,7 +145,7 @@ public partial class LabelingViewModel
         set => SetProperty(() => SelectedClass, value, OnSelectedClassRowChanged);
     }
 
-    /// <summary>지금 고른 몹의 색. 사각형에 쓰이는 색과 같아야 어느 몹을 찍는 중인지 안다.</summary>
+    /// <summary>지금 고른 검출의 색. 사각형에 쓰이는 색과 같아야 어느 검출을 찍는 중인지 안다.</summary>
     public Brush CurrentClassBrush
     {
         get => GetProperty(() => CurrentClassBrush);
@@ -165,7 +165,7 @@ public partial class LabelingViewModel
         set => SetProperty(() => ClassNameSnapshot, value);
     }
 
-    /// <summary>캔버스에 넘길 몹 색 목록(번호 순). 고른 색이 없는 번호는 기본 색이다. 색을 고르면 새 목록을 넘긴다.</summary>
+    /// <summary>캔버스에 넘길 검출 색 목록(번호 순). 고른 색이 없는 번호는 기본 색이다. 색을 고르면 새 목록을 넘긴다.</summary>
     public IReadOnlyList<Color> ClassColors
     {
         get => GetProperty(() => ClassColors);
@@ -197,7 +197,7 @@ public partial class LabelingViewModel
     /// 다음 YOLO 학습의 크기. 저장한다(<c>YoloImageSize</c>). 지금 쓰는 모델의 크기는 옆 줄 요약("960x960")에 뜬다 - 바꾸면 다시 학습해야 먹는다.
     /// </summary>
     /// <remarks>
-    /// 작은 몹(멀리 있는 봇)을 잘 찾게 960·1280 까지 넓혔다(사용자, 2026-09-15 - 학습·찾기가 느려져도 그래픽 카드는 나중에 바꾼다).
+    /// 작은 검출(멀리 있는 봇)을 잘 찾게 960·1280 까지 넓혔다(사용자, 2026-09-15 - 학습·찾기가 느려져도 그래픽 카드는 나중에 바꾼다).
     /// D-FINE 은 640 고정이라 YOLO 가 골라져 있을 때만 켜진다.
     /// </remarks>
     public int SelectedYoloImageSize
@@ -213,8 +213,8 @@ public partial class LabelingViewModel
     public string ImageSizeHelp { get; } =
         "모델이 그림을 이 크기(정사각, 한 변 px)로 줄여서 봅니다. 게임 화면 1920×1080 은 비율을 지키고 위아래에 여백을 넣어 맞춥니다.\n" +
         "\n" +
-        "• 키우면 작은 몹(멀리 있는 봇)을 더 잘 찾습니다. 640 에서는 1920 화면이 3분의 1로 줄어 60px 봇이 20px 이 됩니다 - 1280 이면 40px.\n" +
-        "• 대신 학습과 몹 찾기가 느려집니다. 픽셀 수에 비례해 960 은 640 의 약 2.3배, 1280 은 약 4배 일을 합니다.\n" +
+        "• 키우면 작은 검출(멀리 있는 봇)을 더 잘 찾습니다. 640 에서는 1920 화면이 3분의 1로 줄어 60px 봇이 20px 이 됩니다 - 1280 이면 40px.\n" +
+        "• 대신 학습과 검출이 느려집니다. 픽셀 수에 비례해 960 은 640 의 약 2.3배, 1280 은 약 4배 일을 합니다.\n" +
         "• 그래픽 카드 메모리에 맞게 한 번에 넣는 그림 수를 알아서 줄입니다(YOLO11n: 480 → 14장 · 640 → 8장 · 960 → 4장 · 1280 → 2장).\n" +
         "\n" +
         "YOLO11n 98장 60바퀴, GTX 1060 3GB: 640 은 약 5분(실측). 960·1280 은 픽셀 수로 어림하면 약 12분·20분입니다(아직 안 재 봤습니다).\n" +
@@ -226,10 +226,10 @@ public partial class LabelingViewModel
         "\n" +
         "왜 여러 바퀴를 돌리나\n" +
         "• 한 번 볼 때 조금씩만 고칩니다. 한 묶음을 보고 크게 고치면 그 묶음에만 맞춰 흔들려서, 여러 번 보며 조금씩 맞춰 갑니다.\n" +
-        "• 바퀴마다 같은 그림을 다르게 봅니다. 네 장을 이어 붙이고 크기·자리·색을 비틀어서, 바퀴가 늘면 몹이 놓일 수 있는 모습을 더 많이 봅니다.\n" +
+        "• 바퀴마다 같은 그림을 다르게 봅니다. 네 장을 이어 붙이고 크기·자리·색을 비틀어서, 바퀴가 늘면 검출이 놓일 수 있는 모습을 더 많이 봅니다.\n" +
         "• 처음 몇 바퀴는 거의 못 찾습니다. 아래 loss 꺾은선이 내려가는 동안 배우는 중이고, 평평해지면 더 돌려도 얻는 것이 적습니다.\n" +
         "\n" +
-        "너무 적으면 몹을 못 찾고, 너무 많으면 학습 그림만 외워(과적합) 새 장면에서 못 찾습니다.\n" +
+        "너무 적으면 검출을 못 찾고, 너무 많으면 학습 그림만 외워(과적합) 새 장면에서 못 찾습니다.\n" +
         "YOLO11n 은 98장 60바퀴에 약 5분이었습니다. 그림을 크게 늘렸거나 loss 가 아직 내려가는 중이면 바퀴를 늘리세요.";
 
     public bool IsTraining
@@ -386,7 +386,7 @@ public partial class LabelingViewModel
         return int.TryParse(end < 0 ? rest : rest[..end], out var index) ? index : -1;
     }
 
-    /// <summary>몹 찾기가 지금 실제로 쓰는 모델 한 줄(ONNX 가 있으면 그것). 그 모델의 쪽지에서 읽는다.</summary>
+    /// <summary>검출이 지금 실제로 쓰는 모델 한 줄(ONNX 가 있으면 그것). 그 모델의 쪽지에서 읽는다.</summary>
     public string? ModelSummary
     {
         get => GetProperty(() => ModelSummary);
@@ -397,7 +397,7 @@ public partial class LabelingViewModel
     public ObservableCollection<Vision.Training.DetectorChoice> ModelChoices { get; } = [];
 
     /// <summary>
-    /// 몹 찾기에 쓸 모델. 고르면 그 모델이 몹 찾기 자리(detector.onnx)에 앉는다 - 켜 둔 스크립트·플레이 화면도 몇 초 안에 따라온다.
+    /// 검출에 쓸 모델. 고르면 그 모델이 검출 자리(detector.onnx)에 앉는다 - 켜 둔 스크립트·플레이 화면도 몇 초 안에 따라온다.
     /// </summary>
     public Vision.Training.DetectorChoice? SelectedModelChoice
     {

@@ -131,7 +131,7 @@
 
         <Keywords color="Type">
             <Word>MouseButton</Word>
-            <Word>ScriptMob</Word>
+            <Word>ScriptDetection</Word>
             <Word>Math</Word>
             <Word>Environment</Word>
             <Word>DateTime</Word>
@@ -164,11 +164,11 @@
             <Word>MouseUp</Word><Word>버튼떼기</Word>
             <Word>Drag</Word><Word>끌기</Word>
             <Word>DragBy</Word><Word>상대끌기</Word>
-            <Word>Mobs</Word><Word>몹들</Word>
-            <Word>NearestMob</Word><Word>가장가까운몹</Word>
-            <Word>TargetMob</Word><Word>목표</Word>
+            <Word>Detections</Word><Word>검출들</Word>
+            <Word>NearestDetection</Word><Word>가장가까운검출</Word>
+            <Word>TargetDetection</Word><Word>목표</Word>
             <Word>ReleaseTarget</Word><Word>목표풀기</Word>
-            <Word>WaitMob</Word><Word>몹기다리기</Word>
+            <Word>WaitDetection</Word><Word>검출기다리기</Word>
             <Word>ReadText</Word><Word>읽기</Word>
             <Word>ReadNumber</Word><Word>숫자읽기</Word>
             <Word>Ammo</Word><Word>탄약</Word>
@@ -201,7 +201,7 @@
             [\p{L}_][\p{L}\p{Nd}_]*(?=\s*\()
         </Rule>
 
-        <!--  점 뒤의 이름은 멤버(몹.머리x). ReSharper 에서 속성·필드는 Violet 이다.  -->
+        <!--  점 뒤의 이름은 멤버(검출.머리x). ReSharper 에서 속성·필드는 Violet 이다.  -->
         <Rule color="Member">
             (?&lt;=\.)[\p{L}_][\p{L}\p{Nd}_]*
         </Rule>

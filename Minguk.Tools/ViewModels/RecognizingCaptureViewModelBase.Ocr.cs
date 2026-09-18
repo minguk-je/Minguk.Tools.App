@@ -24,14 +24,14 @@ namespace Minguk.Tools.ViewModels;
 public sealed record RegionOcrEngineOption(string? EngineName, string Label);
 
 /// <summary>
-/// 잡은 화면에서 글자를 읽는다 - 이름 붙인 자리 중 "계속 읽기" 를 켠 곳, 그리고 몹 머리 위 이름표.
+/// 잡은 화면에서 글자를 읽는다 - 이름 붙인 자리 중 "계속 읽기" 를 켠 곳, 그리고 검출 머리 위 이름표.
 /// </summary>
 /// <remarks>
 /// <b>자리를 정해서 읽는다</b> - 화면 전체를 읽으면 느리고(1080p 에 수백 ms) 엉뚱한 글이 섞인다. 스테이지 이름, 체력 숫자처럼
 /// 늘 같은 자리에 뜨는 글이 목표라, 자리(<see cref="Vision.Regions.NamedRegion"/>)를 잘라 넣는다.
 /// 옛 "글자 영역"(한 곳, 설정에 저장)은 자리로 합쳤다(2026-09-15) - 저장값은 처음 한 번 「글자」 자리로 옮긴다.
 ///
-/// <b>주기</b> - 0.5초에 한 번, 켠 자리를 차례로. 글자는 몹처럼 빨리 안 바뀐다. 앞의 것이 끝났을 때만 돈다.
+/// <b>주기</b> - 0.5초에 한 번, 켠 자리를 차례로. 글자는 검출처럼 빨리 안 바뀐다. 앞의 것이 끝났을 때만 돈다.
 /// </remarks>
 public abstract partial class RecognizingCaptureViewModelBase
 {
@@ -180,7 +180,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         foreach (var engine in stale) _ = Task.Run(engine.Dispose);
     }
 
-    // ── 몹 머리 위 이름표 ─────────────────────────────────────────────────
+    // ── 검출 머리 위 이름표 ─────────────────────────────────────────────────
 
     /// <summary>스크립트가 화면을 읽고 싶어 할 때(허브 <c>WantsFrames</c>) 프레임을 허브에 올리는 간격(ms).</summary>
     /// <remarks>스크립트의 읽기는 1.5초를 기다리므로 이보다 촘촘할 필요가 없다. 1080p 한 장 복사가 수 ms 라 캡처를 잡지 않게 솎는다.</remarks>
@@ -193,7 +193,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 스크립트가 읽을 프레임을 허브에 올린다. 캡처 스레드.
     /// </summary>
     /// <remarks>
-    /// 허브는 제 버퍼에 다시 복사하므로 여기 버퍼는 바로 다시 써도 된다. 스크립트의 <c>몹.이름표</c> 도 이 프레임을 자른다.
+    /// 허브는 제 버퍼에 다시 복사하므로 여기 버퍼는 바로 다시 써도 된다. 스크립트의 <c>검출.이름표</c> 도 이 프레임을 자른다.
     /// </remarks>
     private void MaybePublishFrame(CapturedFrameEventArgs e)
     {

@@ -85,12 +85,12 @@ internal static partial class Program
 
         // ── 모르는 이름 ──
         //
-        // 학습한 뒤 몹 목록이 바뀌었을 수 있다. 그때 터지면 안 되고, 이름은 그대로 보여야 한다.
+        // 학습한 뒤 검출 목록이 바뀌었을 수 있다. 그때 터지면 안 되고, 이름은 그대로 보여야 한다.
         var unknown = Convert(
-            MakePrediction(["없는몹"], [32f, 20f, 160f, 100f], [0.9f]), classes, 320, 200, 0.5f);
+            MakePrediction(["없는검출"], [32f, 20f, 160f, 100f], [0.9f]), classes, 320, 200, 0.5f);
 
         Check("모르는 이름도 그대로 보여 준다",
-              unknown.Count == 1 && unknown[0].Label == "없는몹" && unknown[0].ClassId == 0,
+              unknown.Count == 1 && unknown[0].Label == "없는검출" && unknown[0].ClassId == 0,
               unknown.Count == 0 ? "(없음)" : unknown[0].Describe);
 
         // ── 열 이름 ──

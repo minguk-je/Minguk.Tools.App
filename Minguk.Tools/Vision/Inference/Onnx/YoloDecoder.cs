@@ -7,15 +7,15 @@ using Minguk.Tools.Vision.Labeling;
 namespace Minguk.Tools.Vision.Inference.Onnx;
 
 /// <summary>
-/// Ultralytics YOLOv8 · YOLO11 이 내보낸 모양. 출력은 <c>output0 [1, 4+몹수, 후보수]</c> - 후보마다 [cx, cy, w, h, 몹별 점수…].
+/// Ultralytics YOLOv8 · YOLO11 이 내보낸 모양. 출력은 <c>output0 [1, 4+검출수, 후보수]</c> - 후보마다 [cx, cy, w, h, 검출별 점수…].
 /// </summary>
 /// <remarks>
 /// <b>DETR 계열과 다른 것 둘.</b>
-/// (1) 후보가 8,400개(640 입력)라 <b>겹침 제거(NMS)</b>를 우리가 해야 한다 - 한 몹에 후보 수십 개가 겹쳐 온다.
-///     몹마다 따로 누른다(다른 몹끼리는 겹쳐도 둘 다 산다). 겹침 문턱 0.45 는 Ultralytics 추론 기본값과 같다.
+/// (1) 후보가 8,400개(640 입력)라 <b>겹침 제거(NMS)</b>를 우리가 해야 한다 - 한 검출에 후보 수십 개가 겹쳐 온다.
+///     검출마다 따로 누른다(다른 검출끼리는 겹쳐도 둘 다 산다). 겹침 문턱 0.45 는 Ultralytics 추론 기본값과 같다.
 /// (2) 사각형은 <b>입력 칸 픽셀의 중심 xywh</b> 다. 점수는 시그모이드가 이미 걸려 0~1 이고, objectness 는 따로 없다(v5 와 다르다).
 ///
-/// 모양이 <c>[1, 후보수, 4+몹수]</c> 로 뒤집혀 나오는 내보내기도 있어(transpose 옵션) 둘 다 받는다 - 어느 축이 후보인지는
+/// 모양이 <c>[1, 후보수, 4+검출수]</c> 로 뒤집혀 나오는 내보내기도 있어(transpose 옵션) 둘 다 받는다 - 어느 축이 후보인지는
 /// "더 긴 쪽" 으로 가른다(후보 수천 vs 채널 대여섯).
 ///
 /// <b>라이선스</b> - Ultralytics 는 AGPL-3.0 이고 그 도구로 학습한 가중치까지 그렇게 본다. 이 디코더는 시험용이다.
@@ -23,7 +23,7 @@ namespace Minguk.Tools.Vision.Inference.Onnx;
 /// </remarks>
 public sealed class YoloDecoder : IDetectionDecoder
 {
-    /// <summary>같은 몹의 후보끼리 이만큼 겹치면 점수 낮은 쪽을 버린다.</summary>
+    /// <summary>같은 검출의 후보끼리 이만큼 겹치면 점수 낮은 쪽을 버린다.</summary>
     public const float NmsIou = 0.45f;
 
     public string Name => "YOLO (Ultralytics)";
@@ -47,14 +47,14 @@ public sealed class YoloDecoder : IDetectionDecoder
         var count = (int)(channelsFirst ? shape[2] : shape[1]);
 
         if (channels < 5)
-            throw new InvalidOperationException($"YOLO 출력 채널이 모자란다: {channels} (cx·cy·w·h + 몹 하나 이상이어야 한다)");
+            throw new InvalidOperationException($"YOLO 출력 채널이 모자란다: {channels} (cx·cy·w·h + 검출 하나 이상이어야 한다)");
 
         var classCount = channels - 4;
 
         float At(int candidate, int channel)
             => channelsFirst ? values[(channel * count) + candidate] : values[(candidate * channels) + channel];
 
-        // 1) 문턱을 넘는 후보를 몹별로 모은다.
+        // 1) 문턱을 넘는 후보를 검출별로 모은다.
         var candidates = new List<(int ClassIndex, float Score, double L, double T, double R, double B)>();
 
         for (var i = 0; i < count; i++)
@@ -89,7 +89,7 @@ public sealed class YoloDecoder : IDetectionDecoder
             candidates.Add((best, bestScore, left, top, right, bottom));
         }
 
-        // 2) 몹별로 점수순 정렬 뒤 겹치는 것을 누른다(greedy NMS). 후보가 수천 개여도 문턱을 넘는 것은 몇십 개라 O(n²) 로 족하다.
+        // 2) 검출별로 점수순 정렬 뒤 겹치는 것을 누른다(greedy NMS). 후보가 수천 개여도 문턱을 넘는 것은 몇십 개라 O(n²) 로 족하다.
         var found = new List<Detection>();
 
         foreach (var group in candidates.GroupBy(c => c.ClassIndex))

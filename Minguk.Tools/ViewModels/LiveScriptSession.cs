@@ -227,7 +227,7 @@ public sealed class LiveScriptSession : IDisposable
 
         if (IsVideoTarget)
         {
-            Console.Print("대상이 영상입니다 - 키·클릭·조준은 보내지 않고 호출 로그에만 남깁니다. 몹 좌표는 영상 픽셀이고, 조준 배율은 배우지 않습니다.");
+            Console.Print("대상이 영상입니다 - 키·클릭·조준은 보내지 않고 호출 로그에만 남깁니다. 검출 좌표는 영상 픽셀이고, 조준 배율은 배우지 않습니다.");
             return;
         }
 

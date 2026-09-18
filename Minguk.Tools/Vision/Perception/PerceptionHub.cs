@@ -55,7 +55,7 @@ public sealed class PerceptionHub : IPerceptionHub
         _detecting = detecting;
         _target = target;
 
-        // 눈을 감거나 몹 찾기를 끄면 옛 결과는 버린다. 몇 초 전 몹을 지금 것으로 주면 안 된다.
+        // 눈을 감거나 검출을 끄면 옛 결과는 버린다. 몇 초 전 검출을 지금 것으로 주면 안 된다.
         if (!capturing || !detecting) _latest = null;
     }
 

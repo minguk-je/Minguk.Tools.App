@@ -72,7 +72,7 @@ internal static partial class Program
         return result;
     }
 
-    /// <summary>몹 사각형 위 이름표 자리. 위로 올라가고, 넓어지고, 화면 밖으로는 안 나간다.</summary>
+    /// <summary>검출 사각형 위 이름표 자리. 위로 올라가고, 넓어지고, 화면 밖으로는 안 나간다.</summary>
     private static void TestNameplateRegion()
     {
         var box = Minguk.Tools.Vision.Labeling.LabelBox.FromCorners(0, 0.4, 0.4, 0.5, 0.6);   // 0.1 x 0.2

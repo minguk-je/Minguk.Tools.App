@@ -6,18 +6,18 @@ DevExpress WPF 컨트롤, WPF 개발자
 ## 이 프로젝트
 
 TamsTools 의 셸 구조(MainWindow / MainView / MainViewModel / MainMenu)와 기준 스타일(Minguk.Base)을 가져온 게임 자동화 도구.
-화면캡처 → 라벨링 → 학습(ONNX) → 스크립트(몹 찾기·조준·글자 읽기) → 빌드(.mtsx) → 플레이.
+화면캡처 → 라벨링 → 학습(ONNX) → 스크립트(검출·조준·글자 읽기) → 빌드(.mtsx) → 플레이.
 
 자세한 규칙·실측은 docs 에 나눠 둔다 - 그 영역을 고칠 때 먼저 읽는다.
 
 | 문서 | 무엇 |
 |---|---|
 | `docs/프로젝트-설계.md` | 솔루션·프로젝트·작업공간, 폴더 모양, 솔루션 탭·셸 |
-| `docs/몹-검출.md` | 라벨 형식, ONNX 모델·DirectML 함정, 학습, 실시간 몹 찾기, OCR·이름 붙인 자리, 라벨링 화면 |
+| `docs/검출.md` | 라벨 형식, ONNX 모델·DirectML 함정, 학습, 실시간 검출, OCR·이름 붙인 자리, 라벨링 화면 |
 | `docs/실시간-스크립트.md` | 실시간 API·안전장치, 목표·조준, 입력 경로, 전역 단축키, 디버그 |
 | `docs/스크립트-프로젝트-설계.md` · `docs/스크립트-설계.md` | 스크립트 화면(VS 모양)·프로젝트 파일 |
 | `docs/솔루션-설정.md` | 설정 탭(사용자가 칸을 놓아 만드는 설정 화면)·솔루션/프로젝트 두 층·스크립트 `설정()` |
-| `docs/ONNX-모델-학습.md` · `docs/몹-찾기-속도-설계.md` | 학습 절차 · 추론 속도 |
+| `docs/ONNX-모델-학습.md` · `docs/검출-속도-설계.md` | 학습 절차 · 추론 속도 |
 
 ## 짜임
 
@@ -68,7 +68,7 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
 
 - **바탕 조각**(2026-09-18, 사용자 "OCR·캡처·입력을 별도의 프로젝트로"): 화면이 없는 라이브러리다. `RootNamespace` 가 `Minguk.Tools` 라 **네임스페이스는 옮기기 전 그대로**(`Minguk.Tools.Capture`·`Minguk.Tools.Input`·`Minguk.Tools.Vision.Ocr`·`Minguk.Tools.Inference`) -
   using 은 안 고쳤다. XAML 에서 그 네임스페이스를 쓰면 `;assembly=Minguk.Tools.Input` 처럼 어셈블리를 적어야 한다(`InputAutomationView`).
-  셸에 남은 것: 스크립트(`Input\Scripting` - Vision·ViewModel 을 다 쓴다), 자리 규칙(`Vision\Ocr\HudRegions`·`NameplateRegion`), 몹 찾기(`Vision\Inference`).
+  셸에 남은 것: 스크립트(`Input\Scripting` - Vision·ViewModel 을 다 쓴다), 자리 규칙(`Vision\Ocr\HudRegions`·`NameplateRegion`), 검출(`Vision\Inference`).
   바탕 조각은 셸·Vision·학습을 모른다 - "학습 중이면 OCR 을 CPU 로" 같은 판단은 화면(`RecognizingCaptureViewModelBase`)이 하고 종류만 넘긴다.
   네이티브·모델 파일은 그 조각의 csproj 가 `Content` 로 나른다(ProjectReference 를 타고 셸·하네스 출력에 온다).
 
@@ -84,7 +84,7 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
 | 화면 | ViewModel | 하는 일 |
 |---|---|---|
 | 화면캡처 | `CaptureMonitorViewModel : CaptureViewModelBase` | 대상·fps·미리보기·프레임 저장·담기(F8)·**녹화(mp4)**·통계 |
-| 스크립트 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | VS 모양 편집기. 몹 찾기·추적·글자 읽기를 보며 쓰고 돌린다, 빌드, 담기(F8) |
+| 스크립트 | `ScriptStudioViewModel : RecognizingCaptureViewModelBase` | VS 모양 편집기. 검출·추적·글자 읽기를 보며 쓰고 돌린다, 빌드, 담기(F8) |
 | 플레이 | `PlayViewModel : RecognizingCaptureViewModelBase` | 완성품(.mtsx)을 골라 1회(F5)·반복(F6). 편집 없음. 모델·영역·설정은 완성품의 프로젝트 폴더(`RecognitionRoot`). `설정` 은 값 창(`PlaySettingsView`) |
 
 - 바탕 둘: `CaptureViewModelBase`(잡기·미리보기·입력 전달·저장·담기·통계) 위에 `RecognizingCaptureViewModelBase`(`.Detect.cs`·`.Ocr.cs`·`.Regions.cs`). 캡처는 첫 바탕만 - 모델 메모리를 물리지 않는다.
@@ -94,7 +94,7 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
 - **본보기 그림**(2026-09-18): 그림으로 된 메뉴·아이콘은 영역 패널의 `[본보기로 저장]` 으로 `Resources\<영역이름>.png` 를 만들고 스크립트가 `그림누르기("사격장.png")` 로 찾아 누른다
   (`Vision/Matching/TemplateMatch` - 정규화 상호상관, 계단 셋 1/8→1/2→원본, 1080p 0.5초). 밝기는 견디고 크기는 못 견딘다. 자세한 것은 `docs/실시간-스크립트.md`.
 - **자리 안 칸**(2026-09-16): 자리(`NamedRegion`)는 그룹, 칸(`RegionCell`, 자리 기준 0~1, 돌릴 수 있음)만 읽는다. 스크립트 `읽기("자리.칸")`. 칸은 별개 항목·별개 어도너(`RegionCellItem`·`RegionCellAdorner`),
-  영역 패널은 트리. 자세한 것·함정(돌린 칸 손잡이 변위는 돌린 좌표계, 회전은 픽셀 공간)은 `docs/몹-검출.md`.
+  영역 패널은 트리. 자세한 것·함정(돌린 칸 손잡이 변위는 돌린 좌표계, 회전은 픽셀 공간)은 `docs/검출.md`.
   - **칸은 자리를 "뚫어야" 클릭을 받는다**(2026-09-18, 사용자 "클릭하니까 처음부터 구역이 선택되네"): 새 자리는 자리와 같은 크기의 「전체」 칸으로 시작하고 칸이 자리 위 형제(z 순서 위)라,
     그냥 두면 자리 어디를 눌러도 칸부터 잡혀 자리를 고르거나 옮길 수 없었다. 안 고른 자리의 칸은 `IsHitTestVisible=false` 로 빠져 클릭이 밑 자리로 흘러간다 - **첫 클릭은 자리, 이미 고른 자리를
     또 누르면 뚫려 그 뒤부터 칸**(`RegionCanvas._drilled`·`PlaceCells`). 검사는 실제 커서 없이 `InputHitTest` 대신 아는 요소에 `RaiseEvent` 로 클릭을 태운다(`--vision`, `RegionCanvasSelectionTests`).
@@ -121,14 +121,14 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
   **조각 간격은 싱크가 정하고 키프레임과 무관**(실측 2026-09-15): 약 7~9장마다(1080p 30fps 0.25초 · 60fps 0.13초), 키프레임은 [0,9,90]. `MaxKeyframeSpacing` 은 1초·10초가 바이트까지 같아 안 먹는다.
   그래서 간격 콤보(`나눠 쓰기`/`RecordingSegment`)는 **없앴다** - 요구보다 촘촘히 확정되고, 효과 없는 콤보는 되는 줄 알게 만든다.
   검사 `--vision` 의 녹화 줄: 쓰는 도중 파일을 떠 둔 사본을 MF 로 풀어 프레임을 읽는다(40장→36 · 75장→72), 닫으면 75/75.
-- **영상을 캡처 대상으로**(사용자, 2026-09-15 - 게임 없이 몹 찾기·글자 읽기·스크립트 흐름 시험): 대상 콤보 맨 아래 `[영상] 파일.mp4`(프로젝트 `Recordings`, 새것부터).
+- **영상을 캡처 대상으로**(사용자, 2026-09-15 - 게임 없이 검출·글자 읽기·스크립트 흐름 시험): 대상 콤보 맨 아래 `[영상] 파일.mp4`(프로젝트 `Recordings`, 새것부터).
   `CaptureTargetKind.Video` + `CaptureTarget.FilePath`, 구현 `VideoFileCaptureSession`(SourceReader 고급 영상 처리 → RGB32 → 위에서 아래·알파 255 로 고쳐 D3D 텍스처 + 리드백 픽셀).
   녹화 속도대로 흐르고 끝나면 되감는다, fps 솎기는 WGC 와 같은 90% 규칙. 핸들이 모두 0 이라 허브·선택 복원은 `CaptureTarget.Key`(영상은 경로)로 가른다.
-  **자리는 영상 픽셀**(`CaptureTargetBounds` 가 (0,0,w,h), 크기는 `TryGetFrameSize` 캐시) - 몹 좌표가 그대로 나온다.
+  **자리는 영상 픽셀**(`CaptureTargetBounds` 가 (0,0,w,h), 크기는 `TryGetFrameSize` 캐시) - 검출 좌표가 그대로 나온다.
   **입력은 절대 안 나간다**: 미리보기는 `PreviewInputRouter` 가 `InputForwardResult.VideoTarget`(안 막으면 영상 좌표로 진짜 화면 왼쪽 위를 누른다),
   실시간 스크립트는 `LiveScriptSession.BuildHost` 가 `InputAdapterFactory.CreateSilent()`(부른 것은 호출 로그에만)로 바꾸고 조준 배율 학습을 끈다(화면이 안 돌아 배율이 끝없이 커져 저장된다).
   검사 `--vision` 의 `영상 대상:` 줄(1080p 크기·방향·속도·되감기·솎기·허브·입력 막기).
-- **학습하는 동안 몹 찾기는 GPU 모델을 내려놓는다**(`TrainingActivity`) - 3GB 카드에서 캡처·DirectML 추론·CUDA 학습이 겹쳐 GPU 가 리셋됐다(실측). 리셋 뒤에는 앱을 다시 켜야 해 그렇게 알린다(`IsGpuLost`).
+- **학습하는 동안 검출은 GPU 모델을 내려놓는다**(`TrainingActivity`) - 3GB 카드에서 캡처·DirectML 추론·CUDA 학습이 겹쳐 GPU 가 리셋됐다(실측). 리셋 뒤에는 앱을 다시 켜야 해 그렇게 알린다(`IsGpuLost`).
 - **버튼을 숨긴 설정은 저장값을 믿지 않는다** - 화면캡처 `미리보기` 는 `RestoreSettings` 에서 늘 켠다(숨긴 채 False 로 저장되면 켤 길이 없다). 그리드 배치를 복원한 뒤 자동 너비를 다시 건다.
 - **서비스를 View 에 선언하지 않으면 `Guard` 가 예외를 삼켜 아무 일도 안 일어난 것처럼 보인다** - 새 서비스를 쓰면 View 의 `Interaction.Behaviors` 부터 본다.
 
@@ -246,7 +246,7 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
 ```
 dotnet run --project Minguk.Tools.Tests -c Debug -- --views               # 화면·모듈 생성 (안전)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --vision              # 라벨·검출·OCR·스크립트·빌드·조준(가짜 어댑터) (안전)
-dotnet run --project Minguk.Tools.Tests -c Debug -- --aim                 # 조준 스레드만 - 가짜 게임으로 꺾기·지나침·달리는 몹·배율 배우기 + 메뉴 글자 찾기 (안전, 40초)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --aim                 # 조준 스레드만 - 가짜 게임으로 꺾기·지나침·달리는 검출·배율 배우기 + 메뉴 글자 찾기 (안전, 40초)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --check-project=<.mtsproj> # 작업공간의 진짜 프로젝트가 컴파일되는지만 (안전, 안 돌린다)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --ocr                 # 글자 읽기만 (안전, CPU·GPU)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --ocr-bench --project=<프로젝트> --truth=Minguk.Tools.Tests/OcrData/<게임>.tsv   # 실제 화면 정답률

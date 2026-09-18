@@ -76,7 +76,7 @@ public sealed class DetrDecoder : IDetectionDecoder
             found.Add(new Detection(classes.NameOf(best), LabelBox.FromCorners(best, left, top, right, bottom), bestScore));
         }
 
-        // 점수가 높은 것부터. 화면은 앞의 몇 개만 적고, 스크립트의 "가장 가까운 몹" 도 이 순서를 본다.
+        // 점수가 높은 것부터. 화면은 앞의 몇 개만 적고, 스크립트의 "가장 가까운 검출" 도 이 순서를 본다.
         return [.. found.OrderByDescending(d => d.Score)];
     }
 

@@ -12,7 +12,7 @@ using Minguk.Tools.Vision.Training;
 namespace Minguk.Tools.ViewModels;
 
 /// <summary>
-/// 학습 칸. "쓰는 모델" 콤보로 몹 찾기 모델을 고르고, YOLO 가 골라져 있으면 그것을 다시 학습한다.
+/// 학습 칸. "쓰는 모델" 콤보로 검출 모델을 고르고, YOLO 가 골라져 있으면 그것을 다시 학습한다.
 /// </summary>
 /// <remarks>
 /// 2026-09-14 에 옛 TorchSharp 학습(AutoFormerV2 · detector.zip)을 이 화면에서 뺐다 - 크기 고르기·따라가기·그림별 loss·libtorch 받기 안내가
@@ -38,7 +38,7 @@ public partial class LabelingViewModel
     /// 콤보에 고른 YOLO 모델을 다시 학습한다.
     /// </summary>
     /// <remarks>
-    /// 끝나면 새 모델이 몹 찾기 자리와 콤보 보관본에 들어가고, 학습 그림을 다시 찾아 목록에 적는다.
+    /// 끝나면 새 모델이 검출 자리와 콤보 보관본에 들어가고, 학습 그림을 다시 찾아 목록에 적는다.
     /// YOLO 는 <see cref="YoloTrainer"/>(yolo-venv), D-FINE 은 <see cref="DFineTrainer"/>(제 저장소)로 간다 - 어느 쪽을 쓸지는 사람이 고른다
     /// (사용자 결정 2026-09-14). 환경이 없으면 무엇이 없는지 상태 줄에 적는다.
     /// </remarks>
@@ -68,7 +68,7 @@ public partial class LabelingViewModel
         TrainingBatchImage = null;
 
         // "GPU 1 - ..." 이면 그 번호. 자동이면 모니터가 안 붙은·지금 덜 바쁜 카드(GpuProbe) - 예전에는 늘 0번이라
-        // 게임·캡처·몹 찾기가 도는 카드에 학습을 얹어 GPU 가 리셋됐다(실측 2026-09-14). 고를 근거가 없으면 0.
+        // 게임·캡처·검출이 도는 카드에 학습을 얹어 GPU 가 리셋됐다(실측 2026-09-14). 고를 근거가 없으면 0.
         var device = SelectedGpuOption is { } gpu && System.Text.RegularExpressions.Regex.Match(gpu, @"^GPU (\d+)") is { Success: true } m
             ? int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)
             : GpuProbe.PickForTraining(GpuProbe.List())?.Index ?? 0;
@@ -98,7 +98,7 @@ public partial class LabelingViewModel
                 var previews = new Progress<string>(path => _ = LoadTrainingBatchAsync(path));
 
                 // 둘은 걸리는 시간이 크게 다르다 - YOLO11n 은 5분, D-FINE-N 은 1시간 45분(98장 60바퀴, GTX 1060).
-                // 학습하는 동안 켜 둔 스크립트·플레이 화면이 몹 찾기 모델을 내려놓는다(TrainingActivity) - 같은 카드에서 겹치면 GPU 가 리셋됐다.
+                // 학습하는 동안 켜 둔 스크립트·플레이 화면이 검출 모델을 내려놓는다(TrainingActivity) - 같은 카드에서 겹치면 GPU 가 리셋됐다.
                 string modelPath;
                 TimeSpan elapsed;
 
@@ -113,7 +113,7 @@ public partial class LabelingViewModel
                 TrainEpochsDone = TrainEpochsTotal;
                 TrainBatchDone = TrainBatchTotal;
                 TrainPercent = 100;
-                TrainingStatus = $"끝났습니다 - {choice.Name} 을 {elapsed.TotalMinutes:0.0}분 동안 학습해 몹 찾기에 넣었습니다.";
+                TrainingStatus = $"끝났습니다 - {choice.Name} 을 {elapsed.TotalMinutes:0.0}분 동안 학습해 검출에 넣었습니다.";
 
                 ReleaseModel();
                 RefreshModelSummary();
@@ -268,8 +268,8 @@ public partial class LabelingViewModel
     /// "쓰는 모델" 콤보와 옆 줄을 다시 채운다. 폴더를 바꿀 때, 학습 뒤, 재현율 뒤, 모델을 고른 뒤.
     /// </summary>
     /// <remarks>
-    /// 줄은 <b>몹 찾기가 실제로 쓰는 모델</b>(<see cref="DetectorFiles.CurrentFor"/>)이다. 예전에는 이 화면의 학습 결과(detector.zip)만 읽어,
-    /// 몹 찾기는 YOLO11n(ONNX)으로 도는데 줄에는 "640x360 · 재현율 70%" 가 떠서 70% 짜리가 도는 것처럼 보였다(2026-09-14).
+    /// 줄은 <b>검출이 실제로 쓰는 모델</b>(<see cref="DetectorFiles.CurrentFor"/>)이다. 예전에는 이 화면의 학습 결과(detector.zip)만 읽어,
+    /// 검출은 YOLO11n(ONNX)으로 도는데 줄에는 "640x360 · 재현율 70%" 가 떠서 70% 짜리가 도는 것처럼 보였다(2026-09-14).
     /// </remarks>
     private void RefreshModelSummary()
     {
@@ -303,7 +303,7 @@ public partial class LabelingViewModel
     private bool _isRefreshingModels;
 
     /// <summary>
-    /// 콤보에서 모델을 고르면 그것을 몹 찾기 자리에 앉힌다.
+    /// 콤보에서 모델을 고르면 그것을 검출 자리에 앉힌다.
     /// </summary>
     /// <remarks>
     /// 이 화면의 찾아보기가 들고 있던 모델도 놓는다 - 안 놓으면 옛 모델로 계속 찾는다.
@@ -325,7 +325,7 @@ public partial class LabelingViewModel
         DetectorFiles.Use(dataset, choice);
         ReleaseModel();
 
-        StatusText = $"몹 찾기 모델을 {choice.Name} 로 바꿨습니다. 켜 둔 스크립트·플레이 화면도 몇 초 안에 따라옵니다.";
+        StatusText = $"검출 모델을 {choice.Name} 로 바꿨습니다. 켜 둔 스크립트·플레이 화면도 몇 초 안에 따라옵니다.";
         MessengerUtility.SendMainMessage(StatusText);
 
         RefreshModelSummary();

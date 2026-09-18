@@ -18,7 +18,7 @@ public sealed class TrainingSample
 {
     public string ImagePath { get; set; } = string.Empty;
 
-    /// <summary>몹 이름들. 사각형 하나에 하나씩.</summary>
+    /// <summary>검출 이름들. 사각형 하나에 하나씩.</summary>
     public string[] Labels { get; set; } = [];
 
     /// <summary>

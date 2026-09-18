@@ -22,15 +22,15 @@ internal static partial class Program
 
         Check("C# 완성: 전역 API 가 나온다", first.Any(s => s.Text == "Type"), $"{first.Count}개, 처음 {firstMs}ms");
 
-        var korean = live.GetAsync("몹", 1).GetAwaiter().GetResult();
-        Check("C# 완성: 한글 이름과 실시간 전용이 나온다", korean.Any(s => s.Text == "몹들") && korean.Any(s => s.Text == "몹기다리기"),
-              string.Join(", ", korean.Where(s => s.Text.StartsWith('몹')).Select(s => s.Text)));
+        var korean = live.GetAsync("검출", 2).GetAwaiter().GetResult();
+        Check("C# 완성: 한글 이름과 실시간 전용이 나온다", korean.Any(s => s.Text == "검출들") && korean.Any(s => s.Text == "검출기다리기"),
+              string.Join(", ", korean.Where(s => s.Text.StartsWith("검출")).Select(s => s.Text)));
 
-        var planOnly = plan.GetAsync("몹", 1).GetAwaiter().GetResult();
-        Check("C# 완성: 계획 모드에는 실시간 전용이 안 나온다", planOnly.All(s => s.Text != "몹들") && planOnly.Any(s => s.Text == "MoveTo" || s.Text == "이동" || s.Text == "Type"),
+        var planOnly = plan.GetAsync("검출", 2).GetAwaiter().GetResult();
+        Check("C# 완성: 계획 모드에는 실시간 전용이 안 나온다", planOnly.All(s => s.Text != "검출들") && planOnly.Any(s => s.Text == "MoveTo" || s.Text == "이동" || s.Text == "Type"),
               $"{planOnly.Count}개");
 
-        const string member = "var 몹 = 가장가까운몹();\n몹.중";
+        const string member = "var 검출 = 가장가까운검출();\n검출.중";
         var members = live.GetAsync(member, member.Length).GetAwaiter().GetResult();
         Check("C# 완성: 지역 변수의 멤버가 나온다", members.Any(s => s.Text == "중심x"), string.Join(", ", members.Take(6).Select(s => s.Text)));
 
@@ -62,10 +62,10 @@ internal static partial class Program
             }
             while (!중지되었나())
             {
-                var 몹 = 목표();
-                if (몹 is null) continue;
-                if (조준(몹)) 클릭();
-                var x = 몹.머리x; // 머리
+                var 검출 = 목표();
+                if (검출 is null) continue;
+                if (조준(검출)) 클릭();
+                var x = 검출.머리x; // 머리
                 탄약보기(3);
                 출력("끝");
             }
@@ -93,7 +93,7 @@ internal static partial class Program
             ("long", 0, ScriptTokenKind.Keyword),
             ("조준", 0, ScriptTokenKind.Method),         // 전역 API
             ("탄약보기", 1, ScriptTokenKind.Method),     // 스크립트 안에서 만든 함수를 부른 곳 - 정규식은 이름 뒤 ( 로만 알았다
-            ("몹", 1, ScriptTokenKind.Local),
+            ("검출", 1, ScriptTokenKind.Local),
             ("문턱", 0, ScriptTokenKind.Local),          // 매개변수
             ("다음", 1, ScriptTokenKind.Member),         // 스크립트 최상위 변수는 제출 클래스의 필드다 - 점 없이 쓴 필드
             ("머리x", 0, ScriptTokenKind.Member),

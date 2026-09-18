@@ -9,15 +9,15 @@ using System.Windows.Media;
 namespace Minguk.Tools.Vision.Labeling;
 
 /// <summary>
-/// 몹 번호마다 색. 사람이 고른 것만 적어 두고, 안 고른 번호는 기본 색(황금각)이다.
+/// 검출 번호마다 색. 사람이 고른 것만 적어 두고, 안 고른 번호는 기본 색(황금각)이다.
 /// </summary>
 /// <remarks>
 /// <b>왜 classes.txt 에 안 넣는가</b> - 그 파일은 YOLO 형식 그대로라 한 줄에 이름 하나다. 색을 붙이면 남의 학습
 /// 도구가 이름을 잘못 읽는다. 그래서 옆에 <c>class-colors.json</c> 을 따로 둔다(데이터셋 폴더, 앱 설정이 아니다 -
-/// 색은 그 데이터셋의 몹에 매인 것이라 사진·라벨과 같이 옮겨 간다).
+/// 색은 그 데이터셋의 검출에 매인 것이라 사진·라벨과 같이 옮겨 간다).
 ///
-/// <b>번호로 맨다</b>(이름이 아니라). 라벨이 번호를 쓰므로 이름을 바꿔도 색이 따라오고, 몹을 지워 번호가 당겨지면
-/// 색도 같이 당긴다(<see cref="RemoveAt"/>). 안 고른 자리는 <c>null</c> 이라 몹이 늘 때 색을 새로 고르지 않아도 된다 -
+/// <b>번호로 맨다</b>(이름이 아니라). 라벨이 번호를 쓰므로 이름을 바꿔도 색이 따라오고, 검출을 지워 번호가 당겨지면
+/// 색도 같이 당긴다(<see cref="RemoveAt"/>). 안 고른 자리는 <c>null</c> 이라 검출이 늘 때 색을 새로 고르지 않아도 된다 -
 /// 처음에는 예전처럼 번호에서 만든 기본 색이 나온다.
 /// </remarks>
 public sealed class LabelPalette
@@ -45,7 +45,7 @@ public sealed class LabelPalette
         Trim();
     }
 
-    /// <summary>번호 하나를 빼고 뒤를 당긴다. 몹을 지울 때 라벨 번호와 같이 당긴다.</summary>
+    /// <summary>번호 하나를 빼고 뒤를 당긴다. 검출을 지울 때 라벨 번호와 같이 당긴다.</summary>
     public void RemoveAt(int classId)
     {
         if (classId >= 0 && classId < _colors.Count) _colors.RemoveAt(classId);
@@ -62,7 +62,7 @@ public sealed class LabelPalette
     /// </summary>
     /// <remarks>
     /// 황금각(137.5도)씩 돌린다. 번호가 몇 개든 이웃한 번호끼리 색이 가장 멀어져,
-    /// 사각형이 겹쳐 있어도 어느 것이 어느 몹인지 눈으로 갈린다.
+    /// 사각형이 겹쳐 있어도 어느 것이 어느 검출인지 눈으로 갈린다.
     /// </remarks>
     public static Color DefaultColor(int classId)
     {

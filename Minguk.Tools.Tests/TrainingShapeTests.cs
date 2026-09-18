@@ -75,7 +75,7 @@ internal static partial class Program
               fromBig is not null && sample is not null && fromBig.Box.SequenceEqual(sample.Box),
               fromBig is null ? "(못 만듦)" : string.Join(", ", fromBig.Box));
 
-        Check("몹 번호를 이름으로 되돌린다",
+        Check("검출 번호를 이름으로 되돌린다",
               sample is not null && sample.Labels.SequenceEqual(["버섯"]),
               sample is null ? "(못 만듦)" : string.Join(", ", sample.Labels));
 
@@ -124,7 +124,7 @@ internal static partial class Program
               manifest.InputWidth == 640 && manifest.InputHeight == 360 && manifest.Epochs == 20,
               manifest.Describe + $" / {manifest.Epochs} epoch");
 
-        Check("몹 이름도 남긴다 - 한글이 안 깨진다",
+        Check("검출 이름도 남긴다 - 한글이 안 깨진다",
               manifest.Classes.SequenceEqual(["슬라임", "버섯"]),
               string.Join(", ", manifest.Classes));
 

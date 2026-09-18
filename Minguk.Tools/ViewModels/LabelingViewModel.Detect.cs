@@ -24,7 +24,7 @@ public partial class LabelingViewModel
     private IDetector? _model;
 
     /// <summary>
-    /// 지금 그림에서 몹을 찾아 본다.
+    /// 지금 그림에서 검출을 찾아 본다.
     /// </summary>
     /// <remarks>
     /// 학습이 쓸 만해졌는지 보는 자리다. 사람이 찍은 사각형 위에 점선으로 겹쳐 그려서,
@@ -77,7 +77,7 @@ public partial class LabelingViewModel
             }
             catch (Exception ex)
             {
-                Logger.Error(ex, "몹을 찾지 못했다");
+                Logger.Error(ex, "검출을 찾지 못했다");
                 DetectStatus = $"실패: {ex.Message}";
             }
             finally
@@ -199,7 +199,7 @@ public partial class LabelingViewModel
     /// 그림을 넘기면 점선을 지운다.
     /// </summary>
     /// <remarks>
-    /// 안 지우면 앞 그림에서 찾은 것이 다음 그림 위에 그대로 남아, 엉뚱한 자리에 몹이
+    /// 안 지우면 앞 그림에서 찾은 것이 다음 그림 위에 그대로 남아, 엉뚱한 자리에 검출이
     /// 있는 것처럼 보인다.
     /// </remarks>
     private void ClearPredictionsForNewImage()

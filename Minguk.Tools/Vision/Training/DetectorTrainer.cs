@@ -17,7 +17,7 @@ namespace Minguk.Tools.Vision.Training;
 /// <param name="ModelPath">만들어진 모델 파일.</param>
 /// <param name="Images">학습에 실제로 쓴 그림 수.</param>
 /// <param name="Boxes">학습에 실제로 쓴 사각형 수.</param>
-/// <param name="Classes">몹 종류 수.</param>
+/// <param name="Classes">검출 종류 수.</param>
 /// <param name="Elapsed">걸린 시간.</param>
 /// <param name="UsedGpu">GPU 로 돌았는지.</param>
 /// <param name="InputSize">모델이 실제로 본 크기.</param>
@@ -25,7 +25,7 @@ public readonly record struct TrainingResult(
     string ModelPath, int Images, int Boxes, int Classes, TimeSpan Elapsed, bool UsedGpu, string InputSize);
 
 /// <summary>
-/// 찍어 둔 라벨로 몹 검출 모델을 학습시킨다.
+/// 찍어 둔 라벨로 검출 모델을 학습시킨다.
 /// </summary>
 /// <remarks>
 /// <b>왜 C# 인가</b>
@@ -76,7 +76,7 @@ public static class DetectorTrainer
     /// </summary>
     /// <remarks>
     /// 실측한 한 장 값(GTX 1060): 320x180 = 220ms · 480x270 = 439ms · 640x360 = 587ms ·
-    /// 960x540 = 1,064ms. 학습 시간도 같은 비율로 늘어난다. 작은 몹을 놓칠 때만 키운다.
+    /// 960x540 = 1,064ms. 학습 시간도 같은 비율로 늘어난다. 작은 검출을 놓칠 때만 키운다.
     /// </remarks>
     public static readonly (int Width, int Height)[] InputSizes =
     [
@@ -168,7 +168,7 @@ public static class DetectorTrainer
             var classes = dataset.LoadClasses();
 
             if (classes.Count == 0)
-                throw new InvalidOperationException("몹 이름이 하나도 없습니다. 라벨링 화면에서 먼저 더하세요.");
+                throw new InvalidOperationException("검출 이름이 하나도 없습니다. 라벨링 화면에서 먼저 더하세요.");
 
             progress?.Report("찍어 둔 라벨을 모으는 중...");
 
@@ -183,10 +183,10 @@ public static class DetectorTrainer
             var boxes = samples.Sum(s => s.Labels.Length);
             var usedGpu = TorchSharp.torch.cuda.is_available();
 
-            Logger.Info($"학습 시작 - 그림 {samples.Count}장 / 사각형 {boxes}개 / 몹 {classes.Count}종 " +
+            Logger.Info($"학습 시작 - 그림 {samples.Count}장 / 사각형 {boxes}개 / 검출 {classes.Count}종 " +
                         $"/ {maxEpoch} epoch / GPU {usedGpu}");
 
-            progress?.Report($"그림 {samples.Count}장 · 사각형 {boxes}개 · 몹 {classes.Count}종 " +
+            progress?.Report($"그림 {samples.Count}장 · 사각형 {boxes}개 · 검출 {classes.Count}종 " +
                              $"을 {inputWidth}x{inputHeight} 로 {maxEpoch} epoch 학습합니다 " +
                              $"({(usedGpu ? "GPU" : "CPU")})");
 
@@ -267,7 +267,7 @@ public static class DetectorTrainer
             var data = ml.Data.LoadFromEnumerable(samples);
 
             // 학습기가 요구하는 모양으로 맞춘다.
-            //   LabelKey : 몹 이름(문자열) -> 키
+            //   LabelKey : 검출 이름(문자열) -> 키
             //   Image    : 파일 경로 -> 실제 픽셀
             // imageFolder 를 null 로 두면 ImagePath 를 전체 경로로 본다.
             var pipeline = ml.Transforms.Conversion.MapValueToKey("LabelKey", nameof(TrainingSample.Labels))
@@ -302,9 +302,9 @@ public static class DetectorTrainer
                         InitLearningRate = learningRate ?? DefaultLearningRate
                     }))
 
-                // 예측을 번호가 아니라 몹 이름으로 내놓게 한다. 이걸 빼면 추론 쪽이 번호를
+                // 예측을 번호가 아니라 검출 이름으로 내놓게 한다. 이걸 빼면 추론 쪽이 번호를
                 // 받아 classes.txt 로 다시 찾아야 하는데, 그러면 학습할 때의 목록과 그때의
-                // 목록이 어긋났을 때 조용히 다른 몹 이름이 붙는다.
+                // 목록이 어긋났을 때 조용히 다른 검출 이름이 붙는다.
                 .Append(ml.Transforms.Conversion.MapKeyToValue(
                     PredictedLabelColumn, PredictedLabelColumn));
 

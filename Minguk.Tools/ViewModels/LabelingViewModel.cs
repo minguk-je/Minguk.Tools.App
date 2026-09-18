@@ -14,7 +14,7 @@ using Minguk.Tools.Vision.Labeling;
 namespace Minguk.Tools.ViewModels;
 
 /// <summary>
-/// 모아 둔 그림에 몹 사각형을 찍는 화면.
+/// 모아 둔 그림에 검출 사각형을 찍는 화면.
 /// </summary>
 /// <remarks>
 /// <b>어디에 서 있는 화면인가</b>
@@ -71,7 +71,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
     // ── 생명주기 ─────────────────────────────────────────────────────────
 
-    /// <summary>몹 그리드. 더하기·더블 클릭이 이름 칸을 열 때 쓴다(<c>ShowEditor</c>).</summary>
+    /// <summary>검출 그리드. 더하기·더블 클릭이 이름 칸을 열 때 쓴다(<c>ShowEditor</c>).</summary>
     private DevExpress.Xpf.Grid.GridControl? _classGrid;
 
     private DevExpress.Xpf.Grid.TableView? _classGridView;
@@ -82,7 +82,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
     /// <summary>그림 목록 그리드. 열 너비를 합쳐 패널 너비(<see cref="ImagesPanelWidth"/>)를 잰다.</summary>
     private DevExpress.Xpf.Grid.GridControl? _imagesGrid;
 
-    /// <summary>몹 패널. 너비를 설정에 남기고 되돌린다 - 도킹 배치 전체는 저장하지 않는다(그림·학습 패널은 내용에서 매번 잰다).</summary>
+    /// <summary>검출 패널. 너비를 설정에 남기고 되돌린다 - 도킹 배치 전체는 저장하지 않는다(그림·학습 패널은 내용에서 매번 잰다).</summary>
     private DevExpress.Xpf.Docking.LayoutPanel? _classesPanel;
 
     /// <summary>그리드 열 구성을 바꾸면 올린다 - 옛 배치가 새 열을 몰라 엉킨다.</summary>
@@ -158,7 +158,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
             : GpuOptions[0];
         GpuNotice = null;
 
-        // 그리드 배치(정렬·열 순서)와 몹 패널 너비는 그리드가 자리를 잡은 뒤(ContextIdle)에 얹는다(캡처 화면과 같은 이유).
+        // 그리드 배치(정렬·열 순서)와 검출 패널 너비는 그리드가 자리를 잡은 뒤(ContextIdle)에 얹는다(캡처 화면과 같은 이유).
         // 그림 그리드는 복원이 열을 Pixel 로 되돌리므로 그 뒤에 다시 Auto 로 놓는다.
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.ContextIdle,
@@ -168,7 +168,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
     // ── 배치 저장·복원 ───────────────────────────────────────────────────
 
     /// <summary>
-    /// 남기는 것: 두 그리드의 정렬·열 순서(<c>LayoutSerializationService</c>), 몹 패널 너비.
+    /// 남기는 것: 두 그리드의 정렬·열 순서(<c>LayoutSerializationService</c>), 검출 패널 너비.
     /// 안 남기는 것: 그림 패널 너비(열 합에서 잰다), 학습 패널 높이(내용에서 잰다), 도킹 배치 전체(끌기·띄우기를 막아 둬 바뀔 것이 없다).
     /// </summary>
     private void RestoreLayouts() => Guard(() =>
@@ -195,7 +195,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
         var layout = GetSetting(settingKey, string.Empty);
         if (string.IsNullOrEmpty(layout)) return;
 
-        // 검색 창 펼침 상태는 안 되돌린다 - 몹 그리드는 XAML 이 Never 인데 복원이 펼친 채로 굳힌다(캡처 화면 실측).
+        // 검색 창 펼침 상태는 안 되돌린다 - 검출 그리드는 XAML 이 Never 인데 복원이 펼친 채로 굳힌다(캡처 화면 실측).
         layout = System.Text.RegularExpressions.Regex.Replace(layout, "<property name=\"ActualShowSearchPanel\">[^<]*</property>", string.Empty);
 
         try
@@ -275,7 +275,7 @@ public partial class LabelingViewModel : DocumentViewModelBase
     /// <summary>지금 그림의 사각형들. <c>Markup/LabelCanvas</c> 가 직접 고친다.</summary>
     public ObservableCollection<LabelBox> Boxes { get; }
 
-    /// <summary>몹 목록(번호·이름·색). 그리드가 보이고 이름은 그 안에서 고쳐 쓴다. 캔버스는 <see cref="ClassNameSnapshot"/> 을 본다.</summary>
+    /// <summary>검출 목록(번호·이름·색). 그리드가 보이고 이름은 그 안에서 고쳐 쓴다. 캔버스는 <see cref="ClassNameSnapshot"/> 을 본다.</summary>
     public ObservableCollection<LabelClassRow> Classes { get; }
 
     /// <summary>모델이 찾아낸 것들. 캔버스가 점선으로 그린다.</summary>

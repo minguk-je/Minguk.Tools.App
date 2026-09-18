@@ -4,8 +4,8 @@
 		글자 읽기 - IOcrEngine 과 엔진들(PP-OCRv5 ONNX GPU·CPU, Windows 내장 OCR), 고르는 팩터리, ONNX 세션 감싸개(OnnxDmlEngine).
 		셸에서 떼어 냈다(사용자, 2026-09-18 "OCR 전체를 별도의 프로젝트로").
 
-		OnnxDmlEngine(Minguk.Tools.Inference)이 여기 있는 이유 - 두 OCR 모델이 이것으로 돈다. 몹 찾기(셸의 OnnxDetector)도 같은 것을 쓰므로
-		셸이 이 프로젝트를 참조해 가져다 쓴다. ONNX 패키지는 이 프로젝트와 셸(몹 찾기)이 같은 판(1.24.4)이어야 한다 - DirectML 네이티브(Libs\DirectML\x64)와 짝이다.
+		OnnxDmlEngine(Minguk.Tools.Inference)이 여기 있는 이유 - 두 OCR 모델이 이것으로 돈다. 검출(셸의 OnnxDetector)도 같은 것을 쓰므로
+		셸이 이 프로젝트를 참조해 가져다 쓴다. ONNX 패키지는 이 프로젝트와 셸(검출)이 같은 판(1.24.4)이어야 한다 - DirectML 네이티브(Libs\DirectML\x64)와 짝이다.
 
 		참조: Minguk.Tools.Core(LabelBox - 읽은 단어의 자리). 셸·Vision 은 참조하지 않는다.
 		자리 규칙(HudRegions·NameplateRegion)은 셸의 Vision\Ocr 에 남았다 - 엔진이 아니라 "어디를 읽나" 다.

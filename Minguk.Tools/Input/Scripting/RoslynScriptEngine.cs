@@ -461,7 +461,7 @@ public sealed class RoslynScriptEngine : IScriptEngine, IProjectScriptEngine, IC
         .WithReferences(typeof(SequenceScriptApi).Assembly)
         .WithImports("System", "Minguk.Tools.Input", "Minguk.Tools.Input.Scripting");
 
-    /// <summary>실시간 모드. 몹(ScriptMob) 같은 것을 이름만으로 쓸 수 있게 Live 네임스페이스를 더한다.</summary>
+    /// <summary>실시간 모드. 검출(ScriptDetection) 같은 것을 이름만으로 쓸 수 있게 Live 네임스페이스를 더한다.</summary>
     /// <remarks>
     /// <c>AddImports</c> 여야 한다. <c>WithImports</c> 는 목록을 갈아 끼워 System 이 빠진다 -
     /// 실시간 스크립트에서 <c>Math</c>·<c>Environment</c> 가 "이름이 없다" 로 막혔었다.

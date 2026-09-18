@@ -96,7 +96,7 @@ internal static class ScriptScreenProbe
                 Console.WriteLine("[INFO] 떴다 - 프로젝트를 연다");
 
                 var vm = (ScriptStudioViewModel)view.DataContext;
-                var project = vm.Script.Project.CreateProject(Path.Combine(folder, "사격장.mtsproj"), "var 몹 = 목표();\n조준(몹);\n없는함수();\n");
+                var project = vm.Script.Project.CreateProject(Path.Combine(folder, "사격장.mtsproj"), "var 검출 = 목표();\n조준(검출);\n없는함수();\n");
                 vm.Script.Project.AddNewFile(ScriptProjectWorkspace.RootId, "조준도우미");
 
                 await Pump(2500);

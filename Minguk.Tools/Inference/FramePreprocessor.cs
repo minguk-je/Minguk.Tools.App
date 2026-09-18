@@ -207,7 +207,7 @@ public sealed class FramePreprocessor : IDisposable
     /// <remarks>
     /// <b>장치가 셋 중 가장 놓치기 쉽다.</b> 캡처 대상을 모니터에서 게임 창으로 바꾸면 세션이 새 D3D 장치로
     /// 다시 만들어지는데, 크기가 같다고 옛 전처리기를 그냥 쓰면 죽은 장치로 텍스처를 만들다
-    /// <see cref="NullReferenceException"/> 이 난다 - 그때부터 몹 찾기가 통째로 멈추고 화면에는 아무 말도 안 뜬다
+    /// <see cref="NullReferenceException"/> 이 난다 - 그때부터 검출이 통째로 멈추고 화면에는 아무 말도 안 뜬다
     /// (실측: 0.25초마다 같은 예외가 로그를 도배했다).
     ///
     /// 넣는 방식(레터박스냐)도 본다 - 같은 크기로 모델만 갈아 끼우면 셰이더가 옛 방식으로 남는다.
