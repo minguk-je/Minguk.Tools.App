@@ -381,6 +381,11 @@
                                    Content="빌드"
                                    Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project-save.png'}"
                                    Hint="프로젝트를 .NET DLL(.mtsx)로 빌드 (Ctrl+Shift+B) - 소스 없이 플레이어에서 실행만 하는 파일을 만듭니다." />
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding BuildAllCommand}"
+                                   Content="전체 빌드"
+                                   Glyph="{image:FreeImage ResourceName='axialispureflat/development/16x16/project-save.png'}"
+                                   Hint="솔루션의 프로젝트를 모두 저장하고 하나씩 빌드합니다. 시작 파일이 없는(공유) 프로젝트는 건너뜁니다." />
             </dxb:Bar>
         </dxb:BarManager.Bars>
 
@@ -710,13 +715,9 @@
                                                             <dxe:TextEdit.Style>
                                                                 <Style TargetType="dxe:TextEdit">
                                                                     <Style.Triggers>
-                                                                        <!-- VS 처럼 시작 파일·프로젝트 줄은 굵게, 디스크에 없는 것은 흐리게. -->
+                                                                        <!-- VS 처럼 시작 파일·시작 프로젝트 줄만 굵게(IsEntry), 다른 프로젝트는 그대로. 디스크에 없는 것은 흐리게. -->
                                                                         <DataTrigger Binding="{Binding RowData.Row.IsEntry}"
                                                                                      Value="True">
-                                                                            <Setter Property="FontWeight" Value="Bold" />
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding RowData.Row.Kind}"
-                                                                                     Value="Project">
                                                                             <Setter Property="FontWeight" Value="Bold" />
                                                                         </DataTrigger>
                                                                         <DataTrigger Binding="{Binding RowData.Row.IsMissing}"
@@ -752,6 +753,12 @@
                                                     <!-- 솔루션의 다른 프로젝트 줄에서만 켜진다 - 그 프로젝트로 넘어가 파일을 더하고 지운다. -->
                                                     <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.EditProjectCommand}"
                                                                        Content="이 프로젝트 편집(_E)" />
+                                                    <dxb:BarItemSeparator />
+                                                    <!-- 솔루션 줄은 전체 빌드, 프로젝트 줄(지금 연 것·다른 프로젝트 모두)은 그 하나만 빌드. -->
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.BuildAllCommand}"
+                                                                       Content="전체 빌드(_A)" />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.BuildProjectNodeCommand}"
+                                                                       Content="빌드(_B)" />
                                                     <dxb:BarItemSeparator />
                                                     <dxb:BarSubItem Content="추가(_D)">
                                                         <dxb:BarButtonItem Command="{Binding View.DataContext.Script.Project.AddNewFileCommand}"
@@ -864,28 +871,10 @@
                                               ItemWidth="1.2*">
                                 <DockPanel>
                                     <!--
-                                        VS XAML 디자이너의 아래 띠 - 나누기(위아래·좌우·바꾸기). VS2026 처럼 글자 없이 아이콘만(사용자, 2026-09-18).
-                                        확대 콤보는 판 위 도구 줄(PreviewForwardBar), 이름 붙인 자리는 영역 패널 한 곳에 있다(2026-09-15).
+                                        미리보기를 켰을 때만: 확대 · 맞춤 · 실제 FPS · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 ·
+                                        나누기(위아래·좌우)·자리 바꾸기(SupportsPreviewSplit, 2026-09-18 에 이 도구 줄로 옮겼다 -
+                                        전엔 판 아래 따로 띠가 있었다). 이름 붙인 자리는 영역 패널 한 곳에 있다(2026-09-15).
                                     -->
-                                    <dxlc:LayoutControl Padding="2,1"
-                                                        HorizontalAlignment="Left"
-                                                        DockPanel.Dock="Bottom"
-                                                        Orientation="Horizontal">
-                                        <dx:SimpleButton Width="24"
-                                                         Command="{Binding SplitVerticalCommand}"
-                                                         Glyph="{image:FreeImage ResourceName='Axialis/Database/16x16/table_split_rows.png'}"
-                                                         ToolTip="미리보기를 위, 스크립트를 아래에 둔다." />
-                                        <dx:SimpleButton Width="24"
-                                                         Command="{Binding SplitHorizontalCommand}"
-                                                         Glyph="{image:FreeImage ResourceName='Axialis/Database/16x16/table_split_columns.png'}"
-                                                         ToolTip="미리보기와 스크립트를 나란히 둔다." />
-                                        <dx:SimpleButton Width="24"
-                                                         Command="{Binding SwapPanesCommand}"
-                                                         Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_shuffle.png'}"
-                                                         ToolTip="미리보기와 스크립트의 자리를 맞바꾼다." />
-                                    </dxlc:LayoutControl>
-
-                                    <!-- 미리보기를 켰을 때만: 확대 · 맞춤 · 실제 FPS · 입력 전달 · 요소 검사 · 클릭 후 돌아오기 -->
                                     <parts:PreviewForwardBar DockPanel.Dock="Top" />
 
                                     <!-- 비어 있으면 할 일을 말한다. 빈 창만 보이면 무엇을 눌러야 할지 모른다(실측 - 캡처 시작을 못 찾았다). -->

@@ -80,7 +80,13 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 플레이는 고른 완성품(<c>Player\솔루션\프로젝트\*.mtsx</c>)의 폴더에서 읽게 바꾼다 - 빌드가 모델·영역을 그 옆에 같이 복사하므로
     /// Player 폴더만 다른 PC 로 옮겨도 돈다(사용자 결정 2026-09-14).
     /// </remarks>
-    protected virtual string RecognitionRoot => LabelDataset.ConfiguredRoot;
+    protected virtual string RecognitionRoot => SwitchedRecognitionRoot ?? LabelDataset.ConfiguredRoot;
+
+    /// <summary>
+    /// 스크립트의 <c>프로젝트실행()</c> 이 다른 프로젝트를 이어서 돌리는 동안 이 폴더를 <see cref="RecognitionRoot"/> 대신 쓴다.
+    /// null 이면 평소대로(Automation Builder 에서 고른 프로젝트 · 플레이는 고른 완성품).
+    /// </summary>
+    protected string? SwitchedRecognitionRoot { get; set; }
 
     /// <summary>지금 찾는 중인지. 한 번에 하나만 돈다.</summary>
     private int _isDetectRunning;
@@ -372,6 +378,15 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
+        ReloadDetectorForCurrentRoot();
+    });
+
+    /// <summary>
+    /// 지금 <see cref="RecognitionRoot"/> 기준으로 모델을 읽는다(또는 다시 읽는다). <see cref="OnMobDetectionChanged"/> 가
+    /// 켤 때 부르고, <see cref="SwitchProjectContextAsync"/> 가 다른 프로젝트로 넘어갈 때도 부른다.
+    /// </summary>
+    private void ReloadDetectorForCurrentRoot()
+    {
         var dataset = new LabelDataset(RecognitionRoot);
         var modelPath = DetectorFiles.CurrentFor(dataset);
 
@@ -403,7 +418,75 @@ public abstract partial class RecognizingCaptureViewModelBase
         }
 
         LoadDetector(modelPath, dataset, flavor);
-    });
+    }
+
+    /// <summary>
+    /// 스크립트의 <c>프로젝트실행("사격장")</c> 이 부른다 - 이름 붙인 자리·몹 찾기 모델을 그 프로젝트 폴더 기준으로 바꾸고,
+    /// 몹 찾기가 켜져 있으면 새 모델을 다 읽을 때까지 기다린다(최대 <paramref name="timeoutMs"/>).
+    /// </summary>
+    /// <remarks>
+    /// UI 스레드 것(속성 설정·모델 로딩 시작)은 <see cref="RunOnUiBlocking"/> 로 부르고 돌아온다 - 스크립트 스레드가
+    /// 그 사이 값을 반쯤 바뀐 채로 읽지 않게. 기다리는 동안은 스크립트 스레드에서 그냥 <see cref="Task.Delay"/> 한다.
+    /// </remarks>
+    protected async System.Threading.Tasks.Task SwitchProjectContextAsync(string projectRoot, int timeoutMs = 15000)
+    {
+        RunOnUiBlocking(() =>
+        {
+            SwitchedRecognitionRoot = projectRoot;
+            LoadRegions();
+
+            if (IsMobDetectionOn) ReloadDetectorForCurrentRoot();
+        });
+
+        var deadline = Environment.TickCount64 + timeoutMs;
+
+        while (Volatile.Read(ref _isDetectorLoading) != 0 && Environment.TickCount64 < deadline)
+            await System.Threading.Tasks.Task.Delay(50);
+    }
+
+    /// <summary>그 동작을 UI 스레드에서 돌리고 끝날 때까지 기다린다. 검증 하네스처럼 서비스가 없는 자리에서도 배선은 돌아야 한다.</summary>
+    private static void RunOnUiBlocking(Action action)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+
+        if (dispatcher is null || dispatcher.CheckAccess()) action();
+        else dispatcher.Invoke(action);
+    }
+
+    /// <summary>
+    /// 이름으로 <b>같은 솔루션의 옆 프로젝트 폴더</b>를 찾는다(그 프로젝트가 실제로 있는지는 안 본다 - 부르는 쪽이 본다).
+    /// </summary>
+    /// <remarks>
+    /// 기준은 <b>지금 이 화면이 연 프로젝트</b>(<see cref="Vision.Labeling.LabelDataset.ConfiguredRoot"/>)의 위 폴더다 -
+    /// <see cref="RecognitionRoot"/> 는 이미 다른 프로젝트로 바뀌어 있을 수 있어 기준으로 못 쓴다
+    /// (연달아 프로젝트실행 하면 늘 처음 프로젝트의 옆에서 찾는다). 솔루션 밖(따로 연 프로젝트)이면 null.
+    /// </remarks>
+    protected string? FindSiblingProjectFolder(string name)
+    {
+        var openProjectRoot = Vision.Labeling.LabelDataset.ConfiguredRoot;
+        var solutionFolder = Path.GetDirectoryName(openProjectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+        return string.IsNullOrEmpty(solutionFolder) ? null : Path.Combine(solutionFolder, name);
+    }
+
+    /// <summary>
+    /// 플레이 화면의 <c>프로젝트실행("사격장")</c> - 옆 프로젝트 폴더에서 빌드된 것(<c>사격장\bin\사격장.mtsx</c>)을
+    /// 찾아 읽고, 이 화면을 그 프로젝트로 바꾼다. 못 찾거나 안 빌드했으면(bin 에 .mtsx 가 없으면) null.
+    /// </summary>
+    protected async System.Threading.Tasks.Task<Input.Scripting.CompiledPlayable?> SwitchToSiblingProjectAsync(string name)
+    {
+        if (FindSiblingProjectFolder(name) is not { } targetFolder) return null;
+
+        var mtsxPath = Path.Combine(targetFolder, "bin", name + Input.Scripting.ScriptFiles.CompiledExtension);
+
+        if (!File.Exists(mtsxPath)) return null;
+
+        var bytes = await File.ReadAllBytesAsync(mtsxPath);
+
+        await SwitchProjectContextAsync(targetFolder);
+
+        return new Input.Scripting.CompiledPlayable(bytes, targetFolder, name);
+    }
 
     /// <summary>새 모델을 읽는 중인지. 5초 검사와 버튼이 겹쳐 두 번 읽지 않게.</summary>
     private int _isDetectorLoading;

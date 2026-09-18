@@ -636,6 +636,9 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     /// <summary>솔루션 안의 다른 프로젝트 줄 Id 앞머리 - 뒤는 .mtsproj 전체 경로.</summary>
     public const string OtherProjectPrefix = "<프로젝트>";
 
+    /// <summary>지금 연 프로젝트가 든 솔루션. 따로 연 프로젝트(솔루션 밖)면 null. 전체 빌드가 쓴다.</summary>
+    public Minguk.Tools.Projects.Solution? CurrentSolution() => Project is { } project ? SolutionOf(project) : null;
+
     /// <summary>지금 열린 솔루션이 이 프로젝트를 담고 있으면 그 솔루션. 아니면 null.</summary>
     private static Minguk.Tools.Projects.Solution? SolutionOf(ScriptProject project)
     {

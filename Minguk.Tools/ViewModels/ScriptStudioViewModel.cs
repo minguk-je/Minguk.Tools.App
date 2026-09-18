@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -10,6 +11,7 @@ using DevExpress.Xpf.Grid;
 
 using NamedRegion = Minguk.Tools.Vision.Regions.NamedRegion;
 using RegionCell = Minguk.Tools.Vision.Regions.RegionCell;
+using ScriptProject = Minguk.Tools.Input.Scripting.Projects.ScriptProject;
 
 using Minguk.Image;
 using Minguk.Tools.Input;
@@ -99,7 +101,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             ActivateTargetAsync,
             RunOnUi,
             message => RunOnUi(() => StatusText = message),
-            OcrEngineForScripts);
+            OcrEngineForScripts,
+            RunProjectFromSourceAsync);
 
         Player = new ScriptPlayer(() => Live.Resolve(Script, Player));
 
@@ -119,6 +122,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         ShowToolWindowCommand = new DelegateCommand<string>(ShowToolWindow, false);
         ResetLayoutCommand = new DelegateCommand(ResetLayout, false);
         BuildCommand = new DelegateCommand(DoBuild, () => Script.IsProject && !Script.IsLocked, false);
+        BuildAllCommand = new DelegateCommand(DoBuildAll, () => Script.IsProject && !Script.IsLocked, false);
+        BuildProjectNodeCommand = new DelegateCommand(DoBuildSelectedProjectNode, () => Script.IsProject && !Script.IsLocked, false);
         SplitVerticalCommand = new DelegateCommand(() => SetSplit(System.Windows.Controls.Orientation.Vertical), false);
         SplitHorizontalCommand = new DelegateCommand(() => SetSplit(System.Windows.Controls.Orientation.Horizontal), false);
         SwapPanesCommand = new DelegateCommand(SwapPanes, false);
@@ -129,9 +134,13 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             SaveAsCommand.RaiseCanExecuteChanged();
             CloseDocumentCommand.RaiseCanExecuteChanged();
             BuildCommand.RaiseCanExecuteChanged();
+            BuildAllCommand.RaiseCanExecuteChanged();
+            BuildProjectNodeCommand.RaiseCanExecuteChanged();
         };
 
         Player.RunningChanged += (_, _) => BuildCommand.RaiseCanExecuteChanged();
+        Player.RunningChanged += (_, _) => BuildAllCommand.RaiseCanExecuteChanged();
+        Player.RunningChanged += (_, _) => BuildProjectNodeCommand.RaiseCanExecuteChanged();
         Player.RunningChanged += (_, _) => RunOrContinueCommand.RaiseCanExecuteChanged();
 
         // 실행이 켜지고 꺼질 때 실행 일시정지 단추를 켜고 끄고, 끝났으면 일시정지를 푼다.
@@ -193,20 +202,29 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>창 > 창 레이아웃 다시 설정.</summary>
     public DelegateCommand ResetLayoutCommand { get; }
 
+    /// <summary>스크립트 화면은 도킹 배치가 있어 미리보기를 나눌 수 있다 - PreviewForwardBar 의 세 버튼을 켠다.</summary>
+    public override bool SupportsPreviewSplit => true;
+
     /// <summary>미리보기 위 · 스크립트 아래. VS XAML 디자이너의 "가로 분할" 자리.</summary>
-    public DelegateCommand SplitVerticalCommand { get; }
+    public override ICommand SplitVerticalCommand { get; }
 
     /// <summary>미리보기와 스크립트를 나란히(기본).</summary>
-    public DelegateCommand SplitHorizontalCommand { get; }
+    public override ICommand SplitHorizontalCommand { get; }
 
     /// <summary>미리보기와 스크립트의 자리를 맞바꾼다.</summary>
-    public DelegateCommand SwapPanesCommand { get; }
+    public override ICommand SwapPanesCommand { get; }
 
     /// <summary>오류 목록 더블 클릭 - 그 파일을 열고 그 줄로.</summary>
     public DelegateCommand<object?> GoToErrorCommand { get; }
 
     /// <summary>Ctrl+Shift+B. 프로젝트를 .NET DLL(.mtsx)로 빌드한다 - 플레이어가 소스 없이 실행한다.</summary>
     public DelegateCommand BuildCommand { get; }
+
+    /// <summary>솔루션 탐색기의 솔루션 줄 메뉴 · 위 도구 줄의 「전체 빌드」 - 솔루션의 프로젝트를 모두 저장하고 빌드한다.</summary>
+    public DelegateCommand BuildAllCommand { get; }
+
+    /// <summary>솔루션 탐색기의 프로젝트 줄(지금 연 것·다른 프로젝트 모두) 메뉴 「빌드」 - 고른 그 프로젝트만.</summary>
+    public DelegateCommand BuildProjectNodeCommand { get; }
 
     /// <summary>
     /// 프로젝트를 IL 로 빌드해 프로젝트 폴더의 <c>bin\&lt;이름&gt;.mtsx</c> 로 쓴다. 리소스가 있으면 옆에 같이 복사한다.
@@ -217,21 +235,118 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// </remarks>
     private async void DoBuild()
     {
+        if (Script.Project.Project is not { } project)
+        {
+            StatusText = "빌드하려면 프로젝트를 열고 시작 파일을 정하세요 (솔루션 탐색기에서 .csx 오른쪽 → 시작 파일로 설정).";
+            return;
+        }
+
+        // 열어 둔 프로젝트는 저장 안 한 탭까지 포함해 굳힌다(Script.Project.ToUnit) - 디스크만 보는 다른 프로젝트 빌드와 다르다.
+        await BuildProjectAsync(project, Script.Project.ToUnit());
+    }
+
+    /// <summary>
+    /// 솔루션 탐색기에서 프로젝트 줄(지금 연 것이든 다른 프로젝트든)을 골라 「빌드」 - 고른 그 프로젝트 하나만 빌드한다.
+    /// </summary>
+    private async void DoBuildSelectedProjectNode()
+    {
+        var node = Script.Project.SelectedNode;
+
+        if (node is not { Kind: ScriptNodeKind.Project })
+        {
+            StatusText = "빌드하려면 솔루션 탐색기에서 프로젝트 줄을 고르세요.";
+            return;
+        }
+
+        if (node.Id == ScriptProjectWorkspace.RootId)
+        {
+            DoBuild();
+            return;
+        }
+
+        var path = node.Id[ScriptProjectWorkspace.OtherProjectPrefix.Length..];
+
+        ScriptProject other;
+
+        try { other = ScriptProject.Load(path); }
+        catch (Exception ex)
+        {
+            StatusText = $"프로젝트를 못 읽었습니다: {ex.Message}";
+            return;
+        }
+
+        await BuildProjectAsync(other, other.ToUnit(new Dictionary<string, string>()));
+    }
+
+    /// <summary>
+    /// 솔루션 탐색기의 솔루션 줄 「전체 빌드」 · 위 도구 줄의 「전체 빌드」 - 지금 열려 있으면 저장부터 하고,
+    /// 솔루션의 프로젝트를 이름 순으로 하나씩 빌드한다. 시작 파일이 없는(공유) 프로젝트는 건너뛴다.
+    /// </summary>
+    private async void DoBuildAll()
+    {
+        if (Script.Project.CurrentSolution() is not { } solution)
+        {
+            StatusText = "전체 빌드는 솔루션 안의 프로젝트에서만 됩니다.";
+            return;
+        }
+
+        Guard(() => Script.Project.SaveAll());
+
+        Live.Console.Print($"전체 빌드 시작: 솔루션 '{solution.Name}' ({solution.Projects.Count}개 프로젝트)");
+
+        var built = 0;
+
+        foreach (var entry in solution.Projects.OrderBy(e => Minguk.Tools.Projects.Solution.NameOf(e), StringComparer.CurrentCultureIgnoreCase))
+        {
+            var filePath = solution.FullPath(entry.Path);
+
+            ScriptProject project;
+
+            try
+            {
+                project = string.Equals(filePath, Script.Project.Project?.FilePath, StringComparison.OrdinalIgnoreCase)
+                    ? Script.Project.Project
+                    : ScriptProject.Load(filePath);
+            }
+            catch (Exception ex)
+            {
+                Live.Console.Print($"'{Minguk.Tools.Projects.Solution.NameOf(entry)}' 을(를) 못 읽었다 - {ex.Message}");
+                continue;
+            }
+
+            var unit = ReferenceEquals(project, Script.Project.Project) ? Script.Project.ToUnit() : project.ToUnit(new Dictionary<string, string>());
+
+            if (await BuildProjectAsync(project, unit)) built++;
+        }
+
+        StatusText = $"전체 빌드 끝 - {built}/{solution.Projects.Count}개 빌드됨.";
+        Live.Console.Print(StatusText);
+    }
+
+    /// <summary>
+    /// 하나로 굳힌 것(<paramref name="unit"/>)을 빌드해 그 프로젝트 폴더의 <c>bin\&lt;이름&gt;.mtsx</c> 로 쓴다.
+    /// 리소스가 있으면 옆에 같이 복사한다. 성공하면 참.
+    /// </summary>
+    /// <remarks>
+    /// 소스가 아니라 IL 이라 텍스트로는 못 본다(작정하면 디컴파일러로는 봄). 일반 사용자는 이 파일을 플레이어에서 실행만 한다.
+    /// 진입점 이름이 우리 것(<see cref="CompiledScriptBuilder.EntryTypeName"/>)이라 Roslyn 을 올려도 예전 파일이 그대로 돈다.
+    /// </remarks>
+    private async Task<bool> BuildProjectAsync(ScriptProject project, ScriptUnit? unit)
+    {
         try
         {
-            if (Script.Project.ToUnit() is not { } unit || string.IsNullOrEmpty(unit.EntryPath))
+            if (unit is null || string.IsNullOrEmpty(unit.EntryPath))
             {
-                StatusText = "빌드하려면 프로젝트를 열고 시작 파일을 정하세요 (솔루션 탐색기에서 .csx 오른쪽 → 시작 파일로 설정).";
-                return;
+                StatusText = $"'{project.Name}' - 시작 파일이 없어 빌드를 건너뜁니다 (솔루션 탐색기에서 .csx 오른쪽 → 시작 파일로 설정).";
+                return false;
             }
 
             if (Script.Engine is not ICompiledScriptEngine builder)
             {
                 StatusText = "프로젝트는 C# 만 빌드합니다.";
-                return;
+                return false;
             }
 
-            var project = Script.Project.Project!;
             var name = project.Name;
 
             StatusText = $"'{name}' 을(를) 빌드하는 중...";
@@ -242,8 +357,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             if (bytes is null || errors.Count > 0)
             {
                 StatusText = $"빌드 실패: {(errors.Count > 0 ? errors[0].ToString() : "알 수 없는 오류")}";
-                foreach (var error in System.Linq.Enumerable.Take(errors, 20)) Live.Console.Print($"빌드 오류: {error}");
-                return;
+                foreach (var error in System.Linq.Enumerable.Take(errors, 20)) Live.Console.Print($"빌드 오류({name}): {error}");
+                return false;
             }
 
             // 완성품은 프로젝트 폴더의 bin 에 둔다(사격장/bin/사격장.mtsx) - 모델·영역·리소스가 이미 프로젝트 폴더에 있어 따로 복사할 것이 없다.
@@ -263,12 +378,56 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             StatusText = $"빌드 완료: {outputPath} ({bytes.Length / 1024.0:0.#} KB){resourceNote}";
             Live.Console.Print($"빌드 완료: {outputPath} ({bytes.Length:N0}바이트){resourceNote}");
             Minguk.Base.Utilities.MessengerUtility.SendMainMessage($"'{name}' 빌드 완료 - 플레이 메뉴의 목록에서 골라 돌립니다 ({outputDirectory}).");
+
+            return true;
         }
         catch (Exception ex)
         {
             Logger.Error(ex, "빌드에 실패했다");
-            StatusText = $"빌드 중 오류: {ex.Message}";
+            StatusText = $"'{project.Name}' 빌드 중 오류: {ex.Message}";
+            return false;
         }
+    }
+
+    /// <summary>
+    /// 스크립트의 <c>프로젝트실행("사격장")</c> - 스크립트 화면은 <b>소스를 연결</b>해서 그대로 돈다(다시 빌드할
+    /// 필요 없이, 고친 것이 바로 반영된다). 플레이 화면의 <see cref="PlayViewModel"/> 쪽은 빌드된 것(.mtsx)을 읽는다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) "스크립트에서 돌리면 프로젝트 파일을 연결시켜서 실행되게" - 개발 중엔 매번 빌드하지 않고
+    /// 바로 다음 프로젝트로 넘어가 보게. 실행 전엔 편집 중인 파일을 다 저장한다 - 옆 프로젝트는 디스크만 읽는다.
+    /// </remarks>
+    private async Task<IReadOnlyList<ScriptError>> RunProjectFromSourceAsync(string name, LiveScriptHost template, System.Threading.CancellationToken token)
+    {
+        Guard(() => Script.Project.SaveAll());
+
+        if (FindSiblingProjectFolder(name) is not { } folder)
+            return [new ScriptError(0, "솔루션 밖이라 다른 프로젝트를 못 찾습니다.")];
+
+        var mtsprojPath = System.IO.Path.Combine(folder, name + ScriptProject.Extension);
+
+        if (!System.IO.File.Exists(mtsprojPath))
+            return [new ScriptError(0, $"프로젝트 '{name}' 을(를) 못 찾았습니다 ({mtsprojPath}).")];
+
+        ScriptProject other;
+
+        try { other = ScriptProject.Load(mtsprojPath); }
+        catch (Exception ex) { return [new ScriptError(0, $"프로젝트를 못 읽었습니다: {ex.Message}")]; }
+
+        var unit = other.ToUnit(new Dictionary<string, string>());
+
+        if (string.IsNullOrEmpty(unit.EntryPath))
+            return [new ScriptError(0, $"'{name}' - 시작 파일이 없습니다 (솔루션 탐색기에서 .csx 오른쪽 → 시작 파일로 설정).")];
+
+        if (Script.Engine is not IProjectScriptEngine engine)
+            return [new ScriptError(0, "프로젝트는 C# 만 이어서 돌립니다.")];
+
+        await SwitchProjectContextAsync(folder);
+
+        var subHost = template.WithResourceRoot(folder);
+        var subApi = new LiveScriptApi(subHost, token);
+
+        return await engine.RunLiveAsync(unit, subApi, null, token);
     }
 
     /// <summary>프로젝트의 <c>Resources</c> 폴더를 빌드 결과물 옆으로 복사한다. 리소스는 소스가 아니라 파일이라 IL 에 못 넣는다.</summary>
@@ -715,14 +874,19 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// <summary>
     /// 영역 그리드 열 너비를 내용에 맞춘다(사용자, 2026-09-16). XAML 첨부 속성은 GridControl 에서만 돌고 그때는 열이 아직 없어 안 먹는다(라벨링 화면과 같다).
     /// </summary>
-    /// <remarks>영역 탭은 아래 탭 줄의 안 고른 탭이라 아직 안 떴을 수 있다 - 뜰 때 한 번 더 건다(뜨면서 너비를 픽셀로 다시 쓰지 않게).</remarks>
+    /// <remarks>
+    /// 영역 탭은 아래 탭 줄의 안 고른 탭이라 아직 안 떴을 수 있다 - 뜰 때 한 번 더 건다(뜨면서 너비를 픽셀로 다시 쓰지 않게).
+    /// <b>Loaded 만으로는 이르다</b>(사용자, 2026-09-19 "클릭하니까 넓어지네") - Loaded 는 떴다는 뜻이지 줄까지 다 그렸다는 뜻이
+    /// 아니라, 그 순간 재면 아직 빈 칸 기준으로 좁게 잰다. 실제 화면을 눌러야 다시 그려지며 맞았던 것도 그래서다.
+    /// 렌더가 끝난 뒤(Background)로 미뤄서 잰다 - ContextIdle 은 더 낮아서 캡처 미리보기가 계속 돌면
+    /// (30fps, Render 우선순위) 큐가 그 밑까지 안 내려가 영영 안 불렸다(실측 - --script-screen 검사가 그걸로 잡혔다).
+    /// </remarks>
     private void FitRegionsGridColumns()
     {
         if (FindControl<GridControl>("RegionsGridObjectService") is not { } grid) return;
 
-        BestFitRegionsGridColumns(grid);
-
-        if (!grid.IsLoaded) grid.Loaded += OnRegionsGridLoaded;
+        if (grid.IsLoaded) DeferredBestFit(grid);
+        else grid.Loaded += OnRegionsGridLoaded;
     }
 
     private void OnRegionsGridLoaded(object sender, System.Windows.RoutedEventArgs e)
@@ -730,8 +894,11 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         if (sender is not GridControl grid) return;
 
         grid.Loaded -= OnRegionsGridLoaded;
-        BestFitRegionsGridColumns(grid);
+        DeferredBestFit(grid);
     }
+
+    private static void DeferredBestFit(GridControl grid)
+        => grid.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() => BestFitRegionsGridColumns(grid)));
 
     /// <summary>
     /// 내용에 딱 맞추면(Auto) 값 칸이 서로 붙어 빽빽했다(사용자, 2026-09-18 "너무 빽빽해") - 잰 값에 열마다 50px 씩 숨 쉴 자리를 더한다

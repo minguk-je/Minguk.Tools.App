@@ -11,6 +11,7 @@ using System.Windows.Input;
 using Minguk.Tools.Capture;
 using Minguk.Tools.Capture.Input;
 using Minguk.Tools.Input.Interop;
+using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Sequencing;
 using Minguk.Tools.Vision.Ocr;
 using Minguk.Tools.Vision.Regions;
@@ -1724,6 +1725,31 @@ public class LiveScriptApi : IDisposable
     public byte[] 리소스바이트(string name) => ResourceBytes(name);
 
     public void 소리(string name) => PlaySound(name);
+
+    // ── 다른 프로젝트로 ──────────────────────────────────────────────────
+    //    같은 솔루션의 옆 프로젝트를 이어서 돌린다. 화면마다 무엇을 도는지 다르다(LiveScriptHost.RunProject 참고) -
+    //    스크립트 화면은 소스를 연결해서, 플레이 화면은 빌드된 것(.mtsx)을 읽어서. 화면(플레이) 은 이 콜백을
+    //    안 줄 수 있다 - 그러면 지원하지 않는다는 뜻으로 멈춘다.
+
+    /// <summary>같은 솔루션의 옆 프로젝트를 이어서 돌린다.</summary>
+    /// <remarks>
+    /// 돌아오지 않는다 - 그 프로젝트의 시작 파일이 끝나야(또는 <c>끝()</c> 을 만나야) 다음 줄로 간다.
+    /// 몹 찾기가 켜져 있으면 그 프로젝트 모델을 다 읽을 때까지(몇 초) 기다렸다가 돈다.
+    /// </remarks>
+    public void RunProject(string name) => Traced("RunProject", Quote(name), () => RunProjectCore(name));
+
+    private void RunProjectCore(string name)
+    {
+        if (_host.RunProject is null)
+            throw Guard("이 화면은 다른 프로젝트로 이어서 돌리는 것을 지원하지 않습니다.");
+
+        var errors = _host.RunProject(name, _host, _token).GetAwaiter().GetResult();
+
+        foreach (var error in errors)
+            Print($"{name}: {error.Message}");
+    }
+
+    public void 프로젝트실행(string 이름) => RunProject(이름);
 
     // ── 설정(솔루션·프로젝트) ────────────────────────────────────────────
     //    설정 탭에서 사람이 만든 칸의 값. 부를 때마다 앱 안의 한 벌에서 읽는다 - 도는 중에 설정 탭에서 바꾸면 다음 호출부터 먹는다.

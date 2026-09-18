@@ -32,6 +32,7 @@ public sealed class LiveScriptSession : IDisposable
     private readonly Func<Task> _activateTarget;
     private readonly Action<string> _notify;
     private readonly Action<Action> _onUi;
+    private readonly Func<string, LiveScriptHost, CancellationToken, Task<IReadOnlyList<ScriptError>>>? _runProject;
     private readonly EmergencyStop _emergency = new();
 
     private LiveScriptApi? _api;
@@ -45,7 +46,8 @@ public sealed class LiveScriptSession : IDisposable
         Func<Task> activateTarget,
         Action<Action> onUi,
         Action<string> notify,
-        Func<Minguk.Tools.Vision.Regions.NamedRegion?, IOcrEngine?>? ocrFor = null)
+        Func<Minguk.Tools.Vision.Regions.NamedRegion?, IOcrEngine?>? ocrFor = null,
+        Func<string, LiveScriptHost, CancellationToken, Task<IReadOnlyList<ScriptError>>>? runProject = null)
     {
         _service = service;
         _requiresForeground = requiresForeground;
@@ -56,6 +58,7 @@ public sealed class LiveScriptSession : IDisposable
         _activateTarget = activateTarget;
         _notify = notify;
         _onUi = onUi;
+        _runProject = runProject;
         Console = new ScriptConsole(onUi);
         Debug = new ScriptDebugSession(onUi);
     }
@@ -257,6 +260,7 @@ public sealed class LiveScriptSession : IDisposable
         OcrFor = _ocrFor,
         Regions = _regions,
         ResourceRoot = resourceRoot,
+        RunProject = _runProject,
         Print = Console.Print,
         Watch = Console.Watch,
         Trace = Console.Trace,

@@ -1,6 +1,7 @@
 ﻿using System;
 
 using Minguk.Tools.Capture;
+using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Vision.Ocr;
 using Minguk.Tools.Vision.Perception;
 
@@ -45,6 +46,17 @@ public sealed class LiveScriptHost
 
     /// <summary>리소스를 찾는 폴더(프로젝트 폴더). 한 파일짜리 스크립트면 null - 리소스 API 가 그렇게 말한다.</summary>
     public string? ResourceRoot { get; init; }
+
+    /// <summary>
+    /// 스크립트의 <c>프로젝트실행("이름")</c> 이 부른다 - 같은 솔루션의 다른 프로젝트를 찾아 이어서 돌리고 오류를 준다.
+    /// 두 번째 인자는 이 host 자신(<c>this</c>) - 새 host 를 만들 때 자리·틀 삼아 복사해 쓰라고 준다.
+    /// </summary>
+    /// <remarks>
+    /// <b>화면마다 무엇을 도는지가 다르다</b>(사용자, 2026-09-19) - 스크립트 화면은 그 프로젝트 소스를 연결해 그대로 돈다
+    /// (다시 빌드할 필요 없이 고친 것이 바로 반영된다). 플레이 화면은 빌드된 것(.mtsx)을 읽어 돈다(소스가 없어도, 다른
+    /// PC 로 폴더만 옮겨도 돈다). 어느 쪽이든 몹 찾기 모델·이름 붙인 자리는 그 프로젝트로 바뀐 채로 돈다.
+    /// </remarks>
+    public Func<string, LiveScriptHost, System.Threading.CancellationToken, System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<ScriptError>>>? RunProject { get; init; }
 
     public required Action<string> Print { get; init; }
 
@@ -91,4 +103,31 @@ public sealed class LiveScriptHost
 
     /// <summary>초당 입력 호출 상한. 끝나지 않는 반복문이 입력을 쏟아붓지 않게.</summary>
     public int MaxInputsPerSecond { get; init; } = 30;
+
+    /// <summary>
+    /// 이 host 를 자리·틀 삼아 리소스 폴더만 다른 것으로 복제한다 - <see cref="RunProject"/> 가 다른 프로젝트로
+    /// 이어서 돌 때 쓴다(같은 캡처 세션·대상 창·입력 경로를 그대로 물려주고 Resources 만 그 프로젝트 것으로).
+    /// </summary>
+    public LiveScriptHost WithResourceRoot(string? resourceRoot) => new()
+    {
+        Service = Service,
+        RequiresForeground = RequiresForeground,
+        Target = Target,
+        Hub = Hub,
+        Ocr = Ocr,
+        OcrFor = OcrFor,
+        Regions = Regions,
+        ResourceRoot = resourceRoot,
+        RunProject = RunProject,
+        Print = Print,
+        Watch = Watch,
+        Trace = Trace,
+        PauseGate = PauseGate,
+        HoldTimeMs = HoldTimeMs,
+        AimScale = AimScale,
+        AimScaleLearned = AimScaleLearned,
+        IsAimScaleAuto = IsAimScaleAuto,
+        AimTolerancePx = AimTolerancePx,
+        MaxInputsPerSecond = MaxInputsPerSecond
+    };
 }

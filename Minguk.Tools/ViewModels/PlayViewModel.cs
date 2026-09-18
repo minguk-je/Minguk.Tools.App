@@ -98,7 +98,8 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
             ActivateTargetAsync,
             RunOnUi,
             message => RunOnUi(() => StatusText = message),
-            OcrEngineForScripts);
+            OcrEngineForScripts,
+            RunProjectCompiledAsync);
 
         Player = new ScriptPlayer(ResolveRun);
 
@@ -196,6 +197,8 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
     {
         get
         {
+            if (SwitchedRecognitionRoot is { } switched) return switched;
+
             if (SelectedScript is not { IsCompiled: true } compiled || Path.GetDirectoryName(compiled.Path) is not { } folder)
                 return base.RecognitionRoot;
 
@@ -203,6 +206,22 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
                 ? Path.GetDirectoryName(folder) ?? folder
                 : folder;
         }
+    }
+
+    /// <summary>
+    /// 스크립트의 <c>프로젝트실행("사격장")</c> - 플레이 화면은 <b>빌드된 것(.mtsx)</b>을 읽어 돈다(소스가 없어도,
+    /// 폴더만 다른 PC 로 옮겨도 돈다). <see cref="ScriptStudioViewModel.RunProjectFromSourceAsync"/> 는 소스를 그대로 잇는다.
+    /// </summary>
+    private async Task<IReadOnlyList<ScriptError>> RunProjectCompiledAsync(string name, Input.Scripting.Live.LiveScriptHost template, System.Threading.CancellationToken token)
+    {
+        var playable = await SwitchToSiblingProjectAsync(name);
+
+        if (playable is null)
+            return [new ScriptError(0, $"프로젝트 '{name}' 을(를) 못 찾았거나 안 빌드했습니다 - 그 프로젝트를 열어 Ctrl+Shift+B 로 빌드하세요.")];
+
+        var subHost = template.WithResourceRoot(playable.ResourceRoot);
+
+        return await CompiledScriptRunner.RunAsync(playable.Assembly, subHost, _ => { }, token);
     }
 
     /// <summary>
