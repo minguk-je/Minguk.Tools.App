@@ -699,8 +699,17 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         FitRegionsGridColumns();
 
+        // 영역 탭이 맨 처음 고른 탭이 아니면 이때는 아직 안 그려져 있어 폭을 못 잰다(사용자, 2026-09-18 여러 번 "너무 빽빽해") -
+        // 그 탭을 실제로 고르는 순간 다시 잰다.
+        if (_dock is not null) _dock.DockItemActivated += OnDockItemActivated;
+
         // 첫 준비가 유독 느리다(C# 은 첫 컴파일, 파이썬은 런타임 받기). 미리 치러 둔다.
         _ = Script.PrepareAsync();
+    }
+
+    private void OnDockItemActivated(object? sender, DevExpress.Xpf.Docking.Base.DockItemActivatedEventArgs e)
+    {
+        if (e.Item?.Name == "RegionsPanel") FitRegionsGridColumns();
     }
 
     /// <summary>
@@ -742,6 +751,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         foreach (var claim in _hotkeyClaims) claim.Dispose();
         _hotkeyClaims.Clear();
         _editor = null;
+        if (_dock is not null) _dock.DockItemActivated -= OnDockItemActivated;
         _dock = null;
 
         Live.Dispose();
