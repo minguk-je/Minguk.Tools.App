@@ -1041,12 +1041,13 @@
                                                       IsChecked="{Binding ShowRegions, Mode=TwoWay}" />
                                 </dxb:ToolBarControl>
                                 <!--
-                                    밝기 기준 미리보기(사용자, 2026-09-18 "콤보만 있으니 잘 모르겠어 도움되는 컨트롤 없어?") - 「지금 읽기」가 자른 그림에
-                                    밝기 기준·반전·확대를 입힌 모습. 자리를 골랐으면 그 안 구역마다 하나씩(사용자 "최대 이미지는 안 보여") -
+                                    미리보기(사용자, 2026-09-18 "콤보만 있으니 잘 모르겠어 도움되는 컨트롤 없어?") - 「지금 읽기」가 자른 그림에
+                                    지금 손질(밝기 기준·반전·확대 - 앞으로 더 늘 수 있다, 그래서 "밝기 기준 미리보기"가 아니라 그냥 "미리보기")을
+                                    입힌 모습. 자리를 골랐으면 그 안 구역마다 하나씩(사용자 "최대 이미지는 안 보여") -
                                     구역이 여럿이면 나란히 가로로 놓고 모자라면 다음 줄로(사용자, 2026-09-18 "옆으로 보여 달라니까").
                                     그리드는 열 너비가 내용에 맞춰져 오른쪽에 빈 자리가 남는다(사용자 "그리드 오른쪽에 여백이 많은데 거기에 놔줘") -
-                                    그리드 오른쪽에 스플리터로 나눠 놓는다(사용자 "스플리터 하나 넣어줘"). 하나도 없으면 스플리터까지 통째로 숨긴다
-                                    (Grid.ColumnDefinitions 의 Auto 열은 안 보이는 요소의 바란 크기를 0 으로 봐서 저절로 접힌다).
+                                    그리드 오른쪽에 스플리터로 나눠 놓는다(사용자 "스플리터 하나 넣어줘"). 늘 보인다(사용자 "일부러 숨길 필요 없어") -
+                                    비어 있으면 그냥 빈 채로 둔다.
                                 -->
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -1217,20 +1218,19 @@
                                         </dxg:GridControl.View>
                                     </controls:BaseGridControl>
 
+                                    <!-- 미리보기 자리는 늘 보인다(사용자, 2026-09-18 "일부러 숨길 필요 없어") - 비어 있으면 그냥 빈 채로. -->
                                     <GridSplitter Grid.Column="1"
                                                   Width="4"
                                                   HorizontalAlignment="Stretch"
                                                   VerticalAlignment="Stretch"
                                                   ResizeBehavior="PreviousAndNext"
-                                                  ShowsPreview="True"
-                                                  Visibility="{Binding HasRegionPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                  ShowsPreview="True" />
 
                                     <Border Grid.Column="2"
                                             Width="280"
                                             Padding="6"
                                             BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                            BorderThickness="1,0,0,0"
-                                            Visibility="{Binding HasRegionPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            BorderThickness="1,0,0,0">
                                         <DockPanel>
                                             <TextBlock Margin="0,0,0,6"
                                                        FontWeight="Bold"

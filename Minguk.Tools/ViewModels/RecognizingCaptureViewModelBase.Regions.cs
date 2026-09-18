@@ -341,6 +341,12 @@ public abstract partial class RecognizingCaptureViewModelBase
                     ? $"「{region.Name}」 을(를) 0.5초마다 읽습니다{(IsRunning ? string.Empty : " - 캡처를 시작하면 읽기 시작합니다")}."
                     : $"「{region.Name}」 계속 읽기를 껐습니다.";
                 break;
+
+            // 밝기 기준·반전·확대 - 손질 값. 그리드에서 고치면 바로 저장한다(사용자, 2026-09-18 "매번 초기화 되네" - 안 저장하니 값만 화면에서
+            // 바뀌고 다음에 열면 도로 꺼짐이었다). 미리보기는 OnPreviewRegionPropertyChanged 가 따로 본다.
+            case nameof(NamedRegion.Threshold) or nameof(NamedRegion.Invert) or nameof(NamedRegion.Scale):
+                SaveRegions();
+                break;
         }
     }
 
@@ -644,9 +650,6 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// </summary>
     public ObservableCollection<RegionPreviewItem> RegionPreviewImages { get; } = [];
 
-    /// <summary>미리보기 칸을 보일지(하나라도 있을 때만). 화면이 <c>BooleanToVisibilityConverter</c> 로 쓴다.</summary>
-    public bool HasRegionPreview => RegionPreviewImages.Count > 0;
-
     /// <summary>고른 자리가 바뀌면 그 자리를 지켜본다(밝기 기준·반전·확대가 바뀔 때마다 미리보기를 새로 입히려고) - 캐시해 둔 원본은 다른 자리 것이라 비운다.</summary>
     private void WatchPreviewRegion(NamedRegion? region)
     {
@@ -668,7 +671,6 @@ public abstract partial class RecognizingCaptureViewModelBase
     {
         _previewRawCrops.Clear();
         RegionPreviewImages.Clear();
-        RaisePropertyChanged(nameof(HasRegionPreview));
     }
 
     private void ReapplyRegionPreview()
@@ -679,8 +681,6 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         foreach (var (cell, raw) in _previewRawCrops)
             RegionPreviewImages.Add(new RegionPreviewItem(cell.Name, Vision.Ocr.RegionPreprocess.Apply(raw, region)));
-
-        RaisePropertyChanged(nameof(HasRegionPreview));
     }
 
     // ── 지금 읽기 ────────────────────────────────────────────────────────
