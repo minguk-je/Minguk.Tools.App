@@ -122,6 +122,31 @@ public sealed class NamedRegion : INotifyPropertyChanged
 
     private double _scale = 1;
 
+    /// <summary>
+    /// 이 자리만 다른 엔진으로 읽는다 - 저장은 이름(<see cref="Vision.Ocr.OcrEngineKind"/> 의 <c>ToString()</c>), 비었으면(기본) 위 콤보에서
+    /// 고른 전체 엔진을 그대로 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-18) "Windows OCR 한글은 읽는데 탄약 부분은 못읽어" - 엔진마다 잘 읽는 자리가 다르다(Windows 는 평범한 글자,
+    /// PP-OCR 은 게임 HUD 각진 숫자). "그리드에 별도로 선택 안 하면 기본으로 쓰고, 지정하면 그걸로".
+    /// </remarks>
+    [JsonPropertyName("ocrEngine")]
+    public string? OcrEngineName
+    {
+        get => _ocrEngineName;
+        set => Set(ref _ocrEngineName, string.IsNullOrWhiteSpace(value) ? null : value);
+    }
+
+    private string? _ocrEngineName;
+
+    /// <summary>고른 엔진(없으면 null - 전체 설정을 따른다). 그리드는 <see cref="OcrEngineName"/> 을 직접 편집하지 않고 이 콤보를 쓴다.</summary>
+    [JsonIgnore]
+    public Ocr.OcrEngineKind? OcrEngine
+    {
+        get => string.IsNullOrEmpty(OcrEngineName) ? null : Ocr.OcrEngineChoice.Parse(OcrEngineName).Kind;
+        set => OcrEngineName = value?.ToString();
+    }
+
     /// <summary>화면에 보일 글 - 「숫자만」 이면(자리든 칸이든) 숫자 덩어리만 띄어 잇는다.</summary>
     public static string Shown(NamedRegion region, RegionCell? cell, string text)
         => region.NumbersOnly || cell is { NumbersOnly: true }

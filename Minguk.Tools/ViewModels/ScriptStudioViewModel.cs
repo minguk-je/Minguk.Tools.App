@@ -98,7 +98,8 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
             () => RegionBook,
             ActivateTargetAsync,
             RunOnUi,
-            message => RunOnUi(() => StatusText = message));
+            message => RunOnUi(() => StatusText = message),
+            OcrEngineForScripts);
 
         Player = new ScriptPlayer(() => Live.Resolve(Script, Player));
 

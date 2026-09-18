@@ -1451,9 +1451,9 @@ public class LiveScriptApi : IDisposable
 
         var found = book.Resolve(name) ?? throw Guard(MissingRegion(book, name));
 
-        // 칸마다 따로 읽어 잇는다 - 자리를 부르면 칸 순서대로, 칸을 부르면 그 칸만.
+        // 칸마다 따로 읽어 잇는다 - 자리를 부르면 칸 순서대로, 칸을 부르면 그 칸만. 자리가 엔진을 지정했으면 그것으로.
         var texts = RegionTargets.Of(found.Region, found.Cell)
-            .Select(target => Ocr().RecognizeAsync(Vision.Ocr.RegionPreprocess.Apply(CropFor(target), found.Region), _token).GetAwaiter().GetResult().Text)
+            .Select(target => Ocr(found.Region).RecognizeAsync(Vision.Ocr.RegionPreprocess.Apply(CropFor(target), found.Region), _token).GetAwaiter().GetResult().Text)
             .ToList();
 
         var (text, numbers) = RegionTargets.Combine(texts);
@@ -1479,6 +1479,11 @@ public class LiveScriptApi : IDisposable
     /// <summary>글자 읽기 엔진. 화면이 든 것을 같이 쓴다 - 한 모델이 한글·영문·숫자를 읽어 따로 둘 것이 없다.</summary>
     private IOcrEngine Ocr()
         => _host.Ocr?.Invoke()
+           ?? throw Guard("글자 읽기 엔진이 없습니다 - 화면 상태 줄의 안내를 보세요(모델 파일이 없거나 엔진을 열지 못했습니다).");
+
+    /// <summary>그 자리가 엔진을 지정했으면 그것으로, 아니면 <see cref="Ocr()"/> 과 같다.</summary>
+    private IOcrEngine Ocr(Vision.Regions.NamedRegion? region)
+        => (_host.OcrFor is { } ocrFor ? ocrFor(region) : _host.Ocr?.Invoke())
            ?? throw Guard("글자 읽기 엔진이 없습니다 - 화면 상태 줄의 안내를 보세요(모델 파일이 없거나 엔진을 열지 못했습니다).");
 
     public IReadOnlyList<ScriptMob> 몹들() => Mobs();

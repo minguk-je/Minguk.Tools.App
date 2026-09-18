@@ -20,6 +20,9 @@ using Minguk.Tools.Vision.Ocr;
 
 namespace Minguk.Tools.ViewModels;
 
+/// <summary>영역 그리드의 「OCR 엔진」 콤보 한 줄 - <see cref="EngineName"/> 이 null 이면 "기본"(전체 설정을 따른다).</summary>
+public sealed record RegionOcrEngineOption(string? EngineName, string Label);
+
 /// <summary>
 /// 잡은 화면에서 글자를 읽는다 - 이름 붙인 자리 중 "계속 읽기" 를 켠 곳, 그리고 몹 머리 위 이름표.
 /// </summary>
@@ -77,6 +80,13 @@ public abstract partial class RecognizingCaptureViewModelBase
     public IReadOnlyList<OcrEngineChoice> OcrEngines => OcrEngineChoice.All;
 
     /// <summary>
+    /// 영역 그리드의 「OCR 엔진」 열이 고르는 것 - 맨 앞은 "기본"(<see cref="Vision.Regions.NamedRegion.OcrEngineName"/> 이 비는 값, null).
+    /// 사용자(2026-09-18) "영역별로 어떤 OCR 쓸지 따로 지정 가능하게" · "그리드에 별도로 선택 안 하면 기본으로, 지정하면 그걸로".
+    /// </summary>
+    public IReadOnlyList<RegionOcrEngineOption> RegionOcrEngineOptions { get; } =
+        [new(null, "기본(위에서 고른 것)"), .. OcrEngineChoice.All.Select(c => new RegionOcrEngineOption(c.Kind.ToString(), c.Name))];
+
+    /// <summary>
     /// 고른 엔진. 바꾸면 지금 것을 버리고 다음 읽기에서 새로 만든다 - 읽는 도중이면 그 읽기가 끝난 뒤 놓인다.
     /// </summary>
     /// <remarks>사용자(2026-09-18) "OCR 종류 선택해서 돌려 볼 수 있게". 앱 전체에 하나(설정 키 <see cref="OcrEngineSettingKey"/>) - 스크립트 화면에서 고르면 플레이도 같은 것으로 읽는다.</remarks>
@@ -88,7 +98,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             if (value is null) return;
 
             AppSettingUtility.Set(OcrEngineSettingKey, value.Kind.ToString());
-            DropOcrEngine();
+            DropAllOcrEngines();
             OcrStatus = $"글자 읽기 엔진: {value.Name} - 다음 읽기부터";
         });
     }
@@ -100,31 +110,44 @@ public abstract partial class RecognizingCaptureViewModelBase
     protected void RestoreOcrEngineChoice()
         => SelectedOcrEngine = OcrEngineChoice.Parse(AppSettingUtility.Get(OcrEngineSettingKey, OcrEngineChoice.Default.Kind.ToString()));
 
-    /// <summary>스크립트의 읽기()가 쓸 엔진. 없으면 null - 스크립트가 그 이유를 말한다.</summary>
+    /// <summary>스크립트의 읽기()가 쓸 엔진(전체 설정 것). 없으면 null - 스크립트가 그 이유를 말한다.</summary>
     protected IOcrEngine? OcrEngineForScripts() => EnsureOcrEngine(out _) ? _ocr : null;
 
     /// <summary>
-    /// OCR 엔진을 한 번만 만든다. 영역 읽기와 이름표 읽기가 같이 쓴다.
+    /// 스크립트의 읽기()가 쓸 엔진 - 자리를 주면 그 자리가 지정한 엔진(없으면 전체 설정 것).
+    /// </summary>
+    /// <remarks>사용자(2026-09-18) "영역별로 어떤 OCR 쓸지 따로 지정 가능하게" - Windows OCR 은 평범한 글자는 읽어도 게임 HUD 각진 숫자는 못 읽었다.</remarks>
+    protected IOcrEngine? OcrEngineForScripts(Vision.Regions.NamedRegion? region)
+        => TryGetOcrEngine(region?.OcrEngine ?? SelectedOcrEngine.Kind, out var engine, out _) ? engine : null;
+
+    /// <summary>
+    /// OCR 엔진을 한 번만 만든다(종류마다 하나) - 영역 읽기·이름표 읽기·자리별 지정 엔진이 다 같이 쓴다.
     /// </summary>
     /// <remarks>
-    /// UI 스레드(토글)와 검출 스레드(이름표) 어디서든 부른다. 학습이 시작·끝나면 엔진을 버리므로(<see cref="DropOcrEngine"/>),
+    /// UI 스레드(토글)와 검출 스레드(이름표) 어디서든 부른다. 학습이 시작·끝나면 다 버리므로(<see cref="DropAllOcrEngines"/>),
     /// 읽기 직전에 늘 여기로 확보해야 한다 - 안 그러면 설정을 되살리는 순서에 따라 이름표가
     /// 조용히 빈 글로 나온다(실제로 그랬다).
     /// </remarks>
-    private bool EnsureOcrEngine(out string? problem)
+    private bool EnsureOcrEngine(out string? problem) => TryGetOcrEngine(SelectedOcrEngine.Kind, out _ocr, out problem);
+
+    /// <summary>종류별로 하나씩 - 자리마다 다른 엔진을 지정해도(사용자, 2026-09-18) 같은 종류면 다시 안 만든다.</summary>
+    private readonly Dictionary<OcrEngineKind, IOcrEngine> _ocrEngines = new();
+
+    private bool TryGetOcrEngine(OcrEngineKind requested, out IOcrEngine? engine, out string? problem)
     {
         problem = null;
 
+        // 학습 중이면 GPU 대신 CPU - 같은 카드에서 CUDA 학습과 DirectML 추론이 겹치면 GPU 가 리셋된다(실측).
+        var kind = Vision.Training.TrainingActivity.IsBusy && requested == OcrEngineKind.PaddleGpu ? OcrEngineKind.PaddleCpu : requested;
+
         lock (_ocrGate)
         {
-            if (_ocr is not null) return true;
+            if (_ocrEngines.TryGetValue(kind, out engine)) return true;
 
             try
             {
-                // 학습 중이면 CPU - 같은 카드에서 CUDA 학습과 DirectML 추론이 겹치면 GPU 가 리셋된다(실측). 학습이 끝나면 엔진을 버려 고른 것으로 돌아간다.
-                var kind = Vision.Training.TrainingActivity.IsBusy && SelectedOcrEngine.Kind == OcrEngineKind.PaddleGpu ? OcrEngineKind.PaddleCpu : SelectedOcrEngine.Kind;
-
-                _ocr = OcrEngineFactory.Create(kind, out var fallback);
+                engine = OcrEngineFactory.Create(kind, out var fallback);
+                _ocrEngines[kind] = engine;
 
                 if (fallback is not null) DispatcherService?.BeginInvoke(() => StatusText = fallback);
 
@@ -133,26 +156,28 @@ public abstract partial class RecognizingCaptureViewModelBase
             catch (Exception ex)
             {
                 problem = ex.Message;
+                engine = null;
                 return false;
             }
         }
     }
 
     /// <summary>
-    /// 엔진을 버린다. 다음 읽기가 그때에 맞는 쪽(학습 중이면 CPU, 아니면 GPU)으로 다시 만든다.
+    /// 만든 엔진을 다 버린다. 다음 읽기가 그때에 맞는 쪽(학습 중이면 CPU, 아니면 GPU)으로 다시 만든다.
     /// </summary>
     /// <remarks>놓기는 백그라운드에서 - 읽는 중이면 엔진이 그 읽기가 끝나기를 기다린다(<see cref="Vision.Ocr.Paddle.PaddleOcrEngine.Dispose"/>).</remarks>
-    private void DropOcrEngine()
+    private void DropAllOcrEngines()
     {
-        IOcrEngine? stale;
+        List<IOcrEngine> stale;
 
         lock (_ocrGate)
         {
-            stale = _ocr;
+            stale = [.. _ocrEngines.Values];
+            _ocrEngines.Clear();
             _ocr = null;
         }
 
-        if (stale is not null) _ = Task.Run(stale.Dispose);
+        foreach (var engine in stale) _ = Task.Run(engine.Dispose);
     }
 
     // ── 몹 머리 위 이름표 ─────────────────────────────────────────────────
@@ -289,14 +314,15 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         try
         {
-            if (!EnsureOcrEngine(out var problem) || _ocr is not { } ocr)
-            {
-                DispatcherService?.BeginInvoke(() => OcrStatus = $"글자 읽기 엔진을 열지 못했습니다. {problem}");
-                return;
-            }
-
             foreach (var (region, target, crop, bounds, width, height) in crops)
             {
+                // 자리가 엔진을 지정했으면 그것, 아니면 위 콤보에서 고른 것(사용자, 2026-09-18 "영역별로 어떤 OCR 쓸지 따로 지정").
+                if (!TryGetOcrEngine(region.OcrEngine ?? SelectedOcrEngine.Kind, out var ocr, out var problem) || ocr is null)
+                {
+                    DispatcherService?.BeginInvoke(() => OcrStatus = $"「{region.Name}」 글자 읽기 엔진을 열지 못했습니다. {problem}");
+                    continue;
+                }
+
                 var upright = Vision.Regions.RegionTargets.Upright(crop, bounds, target, width, height);
                 var outcome = await ocr.RecognizeAsync(Vision.Ocr.RegionPreprocess.Apply(upright, region));
 

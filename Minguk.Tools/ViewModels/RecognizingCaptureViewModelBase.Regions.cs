@@ -343,9 +343,9 @@ public abstract partial class RecognizingCaptureViewModelBase
                     : $"「{region.Name}」 계속 읽기를 껐습니다.";
                 break;
 
-            // 밝기 기준·반전·확대 - 손질 값. 그리드에서 고치면 바로 저장한다(사용자, 2026-09-18 "매번 초기화 되네" - 안 저장하니 값만 화면에서
-            // 바뀌고 다음에 열면 도로 꺼짐이었다). 미리보기는 OnPreviewRegionPropertyChanged 가 따로 본다.
-            case nameof(NamedRegion.Threshold) or nameof(NamedRegion.Invert) or nameof(NamedRegion.Scale):
+            // 밝기 기준·반전·확대·OCR 엔진 - 손질·읽기 값. 그리드에서 고치면 바로 저장한다(사용자, 2026-09-18 "매번 초기화 되네" - 안 저장하니
+            // 값만 화면에서 바뀌고 다음에 열면 도로 꺼짐이었다). 미리보기는 OnPreviewRegionPropertyChanged 가 따로 본다.
+            case nameof(NamedRegion.Threshold) or nameof(NamedRegion.Invert) or nameof(NamedRegion.Scale) or nameof(NamedRegion.OcrEngineName):
                 SaveRegions();
                 break;
         }
@@ -772,7 +772,8 @@ public abstract partial class RecognizingCaptureViewModelBase
         // 프레임 복사를 켜 둬야 허브가 조각을 준다. 한 장 올 때까지 잠깐 기다린다.
         Hub.WantsFrames = true;
 
-        if (!EnsureOcrEngine(out var problem) || _ocr is not { } ocr)
+        // 자리가 엔진을 지정했으면 그것, 아니면 위 콤보에서 고른 것(사용자, 2026-09-18 "영역별로 어떤 OCR 쓸지 따로 지정").
+        if (!TryGetOcrEngine(region.OcrEngine ?? SelectedOcrEngine.Kind, out var ocr, out var problem) || ocr is null)
         {
             StatusText = $"글자 읽기 엔진을 열지 못했습니다. {problem}";
             return;

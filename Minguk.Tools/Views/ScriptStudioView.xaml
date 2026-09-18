@@ -1170,6 +1170,34 @@
                                                     </DataTemplate>
                                                 </dxg:GridColumn.CellTemplate>
                                             </dxg:GridColumn>
+                                            <!--
+                                                OCR 엔진 - 자리 단위(사용자, 2026-09-18 "영역별로 어떤 OCR 쓸지 따로 지정"), 칸 줄에서는 숨긴다.
+                                                기본(null)이면 위 콤보에서 고른 전체 엔진을 그대로 쓴다.
+                                            -->
+                                            <dxg:GridColumn FieldName="OcrEngineName" Header="OCR 엔진">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:ComboBoxEditSettings DisplayMember="Label"
+                                                                              IsTextEditable="False"
+                                                                              ItemsSource="{Binding RegionOcrEngineOptions}"
+                                                                              ValueMember="EngineName" />
+                                                </dxg:GridColumn.EditSettings>
+                                                <dxg:GridColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <dxe:ComboBoxEdit x:Name="PART_Editor">
+                                                            <dxe:ComboBoxEdit.Style>
+                                                                <Style TargetType="dxe:ComboBoxEdit">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
+                                                                                     Value="False">
+                                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </dxe:ComboBoxEdit.Style>
+                                                        </dxe:ComboBoxEdit>
+                                                    </DataTemplate>
+                                                </dxg:GridColumn.CellTemplate>
+                                            </dxg:GridColumn>
                                             <dxg:GridColumn AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
                                             <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
                                             <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">

@@ -653,7 +653,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     private void OnTrainingActivityChanged(object? sender, EventArgs e) => DispatcherService?.BeginInvoke(() => Guard(() =>
     {
         // 글자 읽기 엔진은 몹 찾기가 꺼져 있어도 GPU 를 물 수 있다 - 학습이 시작·끝나면 버려 맞는 쪽으로 다시 연다.
-        DropOcrEngine();
+        DropAllOcrEngines();
 
         if (Vision.Training.TrainingActivity.IsBusy)
         {

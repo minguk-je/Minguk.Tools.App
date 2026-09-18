@@ -29,6 +29,12 @@ public sealed class LiveScriptHost
     public Func<IOcrEngine?>? Ocr { get; init; }
 
     /// <summary>
+    /// 자리를 지정한 읽기(<c>읽기("이름")</c>·<c>숫자읽기("이름")</c>)가 쓸 엔진 - 그 자리가 엔진을 지정했으면 그것, 아니면 <see cref="Ocr"/> 과 같다.
+    /// </summary>
+    /// <remarks>사용자(2026-09-18) "영역별로 어떤 OCR 쓸지 따로 지정 가능하게" - Windows OCR 은 평범한 글자는 읽어도 게임 HUD 각진 숫자는 못 읽었다.</remarks>
+    public Func<Minguk.Tools.Vision.Regions.NamedRegion?, IOcrEngine?>? OcrFor { get; init; }
+
+    /// <summary>
     /// 사람이 화면에서 만들어 둔 이름 붙은 자리들. 스크립트가 <c>숫자읽기("탄약")</c> 처럼 부른다.
     /// </summary>
     /// <remarks>

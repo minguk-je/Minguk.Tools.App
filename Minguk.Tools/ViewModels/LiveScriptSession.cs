@@ -27,6 +27,7 @@ public sealed class LiveScriptSession : IDisposable
     private readonly Func<bool> _requiresForeground;
     private readonly Func<CaptureTarget?> _target;
     private readonly Func<IOcrEngine?> _ocr;
+    private readonly Func<Minguk.Tools.Vision.Regions.NamedRegion?, IOcrEngine?>? _ocrFor;
     private readonly Func<Minguk.Tools.Vision.Regions.RegionBook?> _regions;
     private readonly Func<Task> _activateTarget;
     private readonly Action<string> _notify;
@@ -43,12 +44,14 @@ public sealed class LiveScriptSession : IDisposable
         Func<Minguk.Tools.Vision.Regions.RegionBook?> regions,
         Func<Task> activateTarget,
         Action<Action> onUi,
-        Action<string> notify)
+        Action<string> notify,
+        Func<Minguk.Tools.Vision.Regions.NamedRegion?, IOcrEngine?>? ocrFor = null)
     {
         _service = service;
         _requiresForeground = requiresForeground;
         _target = target;
         _ocr = ocr;
+        _ocrFor = ocrFor;
         _regions = regions;
         _activateTarget = activateTarget;
         _notify = notify;
@@ -251,6 +254,7 @@ public sealed class LiveScriptSession : IDisposable
         Target = _target,
         Hub = Hub,
         Ocr = _ocr,
+        OcrFor = _ocrFor,
         Regions = _regions,
         ResourceRoot = resourceRoot,
         Print = Console.Print,
