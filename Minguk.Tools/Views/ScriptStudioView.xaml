@@ -311,9 +311,10 @@
                                   Hint="학습한 모델로 찾아 점선으로 겹쳐 그린다."
                                   IsChecked="{Binding IsMobDetectionOn}" />
                 <dxb:BarCheckItem Content="추적"
+                                  Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
                                   Hint="프레임 간 추적. 한 프레임짜리 헛것이 사라진다."
                                   IsChecked="{Binding IsTrackingOn}" />
-                <dxb:BarEditItem Content="문턱(%)"
+                <dxb:BarEditItem Content="신뢰도(%)"
                                  EditValue="{Binding DetectMinimumScorePercent}"
                                  EditWidth="56"
                                  Hint="몹 찾기가 이 점수 아래는 버린다. 헛것을 쫓으면 올리고, 진짜를 놓치면 내린다.">
@@ -326,7 +327,7 @@
                 <!-- 글자 읽기 엔진 - 돌려 보며 견준다(사용자, 2026-09-18). 앱 전체에 하나라 플레이도 같은 것으로 읽는다. -->
                 <dxb:BarEditItem Content="글자 읽기"
                                  EditValue="{Binding SelectedOcrEngine, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 EditWidth="150"
+                                 EditWidth="200"
                                  Hint="글자 읽기 엔진. PP-OCRv5 는 한글·영문·숫자를 손질 없이 읽는다(GPU 는 몹 찾기와 GPU 를 나눠 쓴다, CPU 는 그 몫이 없다). PP-OCRv6 는 더 빠르지만 한글이 없다(숫자·영문 HUD 용). Windows 내장 OCR 은 빠르지만 게임 글자에 약하다.">
                     <dxb:BarEditItem.EditSettings>
                         <dxe:ComboBoxEditSettings DisplayMember="Name"
@@ -1023,7 +1024,7 @@
                                                        Hint="고른 영역 안에 따로 읽을 구역을 더한다. 영역이나 그 구역을 골랐을 때만 켜진다.&#10;구역마다 따로 읽고, 스크립트는 읽기(&quot;영역.구역&quot;) 으로 부른다. 구역은 위쪽 동그라미로 돌릴 수 있다." />
                                     <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                                        Command="{Binding TestRegionCommand}"
-                                                       Content="지금 읽기"
+                                                       Content="미리보기"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
                                                        Hint="고른 영역(구역을 골랐으면 그 구역)을 지금 한 번 읽는다." />
                                     <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
@@ -1041,205 +1042,229 @@
                                 </dxb:ToolBarControl>
                                 <!--
                                     밝기 기준 미리보기(사용자, 2026-09-18 "콤보만 있으니 잘 모르겠어 도움되는 컨트롤 없어?") - 「지금 읽기」가 자른 그림에
-                                    밝기 기준·반전·확대를 입힌 모습. 자리를 골랐으면 그 안 구역마다 하나씩(사용자 "최대 이미지는 안 보여").
-                                    그리드는 열 너비가 내용에 맞춰져 오른쪽에 빈 자리가 남는다(사용자, 2026-09-18 "그리드 오른쪽에 여백이 많은데
-                                    거기에 놔줘") - 위에 가로로 두지 않고 오른쪽에 세로로 둔다. 하나도 없으면(아직 「지금 읽기」를 안 눌렀으면) 통째로 숨긴다.
+                                    밝기 기준·반전·확대를 입힌 모습. 자리를 골랐으면 그 안 구역마다 하나씩(사용자 "최대 이미지는 안 보여") -
+                                    구역이 여럿이면 나란히 가로로 놓고 모자라면 다음 줄로(사용자, 2026-09-18 "옆으로 보여 달라니까").
+                                    그리드는 열 너비가 내용에 맞춰져 오른쪽에 빈 자리가 남는다(사용자 "그리드 오른쪽에 여백이 많은데 거기에 놔줘") -
+                                    그리드 오른쪽에 스플리터로 나눠 놓는다(사용자 "스플리터 하나 넣어줘"). 하나도 없으면 스플리터까지 통째로 숨긴다
+                                    (Grid.ColumnDefinitions 의 Auto 열은 안 보이는 요소의 바란 크기를 0 으로 봐서 저절로 접힌다).
                                 -->
-                                <Border Width="240"
-                                        Padding="6"
-                                        BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                        BorderThickness="1,0,0,0"
-                                        DockPanel.Dock="Right"
-                                        Visibility="{Binding HasRegionPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <DockPanel>
-                                        <TextBlock Margin="0,0,0,6"
-                                                   FontWeight="Bold"
-                                                   DockPanel.Dock="Top"
-                                                   Text="밝기 기준 미리보기" />
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                            <ItemsControl ItemsSource="{Binding RegionPreviewImages}">
-                                                <ItemsControl.ItemTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <controls:BaseGridControl Grid.Column="0"
+                                                              AutoGenerateColumns="None"
+                                                              ItemsSource="{Binding Regions}"
+                                                              SelectedItem="{Binding SelectedRegionNode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              SelectionMode="None">
+                                        <dxmvvm:Interaction.Behaviors>
+                                            <!-- 새 자리를 만들면 ViewModel 이 이 그리드의 이름 칸을 편집 상태로 연다(OnRegionCreated). -->
+                                            <dxmvvm:UIObjectService x:Name="RegionsGridObjectService" />
+                                        </dxmvvm:Interaction.Behaviors>
+                                        <dxg:GridControl.Columns>
+                                            <dxg:GridColumn FieldName="Name" Header="이름" />
+                                            <!-- 계속 읽기는 자리 단위 - 칸 줄에서는 체크를 숨긴다. -->
+                                            <dxg:GridColumn FieldName="KeepReading" Header="계속 읽기">
+                                                <dxg:GridColumn.CellTemplate>
                                                     <DataTemplate>
-                                                        <StackPanel Margin="0,0,0,8"
-                                                                    Orientation="Horizontal">
-                                                            <TextBlock Margin="0,0,6,0"
-                                                                       VerticalAlignment="Center"
-                                                                       Text="{Binding Label}" />
-                                                            <Border HorizontalAlignment="Left"
-                                                                    BorderBrush="Gray"
-                                                                    BorderThickness="1">
-                                                                <Image MaxHeight="60"
-                                                                       RenderOptions.BitmapScalingMode="NearestNeighbor"
-                                                                       Source="{Binding Image}"
-                                                                       Stretch="Uniform" />
-                                                            </Border>
-                                                        </StackPanel>
+                                                        <dxe:CheckEdit x:Name="PART_Editor"
+                                                                       HorizontalAlignment="Center">
+                                                            <dxe:CheckEdit.Style>
+                                                                <Style TargetType="dxe:CheckEdit">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
+                                                                                     Value="False">
+                                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </dxe:CheckEdit.Style>
+                                                        </dxe:CheckEdit>
                                                     </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </ScrollViewer>
-                                    </DockPanel>
-                                </Border>
-                                <controls:BaseGridControl AutoGenerateColumns="None"
-                                                          ItemsSource="{Binding Regions}"
-                                                          SelectedItem="{Binding SelectedRegionNode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                          SelectionMode="None">
-                                    <dxmvvm:Interaction.Behaviors>
-                                        <!-- 새 자리를 만들면 ViewModel 이 이 그리드의 이름 칸을 편집 상태로 연다(OnRegionCreated). -->
-                                        <dxmvvm:UIObjectService x:Name="RegionsGridObjectService" />
-                                    </dxmvvm:Interaction.Behaviors>
-                                    <dxg:GridControl.Columns>
-                                        <dxg:GridColumn FieldName="Name" Header="이름" />
-                                        <!-- 계속 읽기는 자리 단위 - 칸 줄에서는 체크를 숨긴다. -->
-                                        <dxg:GridColumn FieldName="KeepReading" Header="계속 읽기">
-                                            <dxg:GridColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <dxe:CheckEdit x:Name="PART_Editor"
-                                                                   HorizontalAlignment="Center">
-                                                        <dxe:CheckEdit.Style>
-                                                            <Style TargetType="dxe:CheckEdit">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
-                                                                                 Value="False">
-                                                                        <Setter Property="Visibility" Value="Hidden" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </dxe:CheckEdit.Style>
-                                                    </dxe:CheckEdit>
-                                                </DataTemplate>
-                                            </dxg:GridColumn.CellTemplate>
-                                        </dxg:GridColumn>
-                                        <!-- 숫자만 - 자리·칸 어느 줄에서나 켠다. 켜면 읽은 글자에 숫자 덩어리만 보인다(스크립트의 숫자읽기와 같은 눈). -->
-                                        <dxg:GridColumn FieldName="NumbersOnly" Header="숫자만">
-                                            <dxg:GridColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <dxe:CheckEdit x:Name="PART_Editor"
-                                                                   HorizontalAlignment="Center" />
-                                                </DataTemplate>
-                                            </dxg:GridColumn.CellTemplate>
-                                        </dxg:GridColumn>
-                                        <!-- 이진화(그레이스케일 + 밝기 기준) - 자리 단위(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아"), 칸 줄에서는 숨긴다. 0 이면 꺼짐. -->
-                                        <dxg:GridColumn FieldName="Threshold" Header="밝기 기준">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:SpinEditSettings MaxValue="255"
-                                                                      MinValue="0" />
-                                            </dxg:GridColumn.EditSettings>
-                                            <dxg:GridColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <dxe:SpinEdit x:Name="PART_Editor">
-                                                        <dxe:SpinEdit.Style>
-                                                            <Style TargetType="dxe:SpinEdit">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
-                                                                                 Value="False">
-                                                                        <Setter Property="Visibility" Value="Hidden" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </dxe:SpinEdit.Style>
-                                                    </dxe:SpinEdit>
-                                                </DataTemplate>
-                                            </dxg:GridColumn.CellTemplate>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="Invert" Header="반전">
-                                            <dxg:GridColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <dxe:CheckEdit x:Name="PART_Editor"
-                                                                   HorizontalAlignment="Center">
-                                                        <dxe:CheckEdit.Style>
-                                                            <Style TargetType="dxe:CheckEdit">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
-                                                                                 Value="False">
-                                                                        <Setter Property="Visibility" Value="Hidden" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </dxe:CheckEdit.Style>
-                                                    </dxe:CheckEdit>
-                                                </DataTemplate>
-                                            </dxg:GridColumn.CellTemplate>
-                                        </dxg:GridColumn>
-                                        <!-- 확대(1~4배) - 게임 HUD 의 작은 글자를 키워 읽는다. 자리 단위, 칸 줄에서는 숨긴다. 1 이면 꺼짐. -->
-                                        <dxg:GridColumn FieldName="Scale" Header="확대">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:SpinEditSettings DisplayFormat="0.0x"
-                                                                      Increment="0.5"
-                                                                      MaxValue="4"
-                                                                      MinValue="1" />
-                                            </dxg:GridColumn.EditSettings>
-                                            <dxg:GridColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <dxe:SpinEdit x:Name="PART_Editor">
-                                                        <dxe:SpinEdit.Style>
-                                                            <Style TargetType="dxe:SpinEdit">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
-                                                                                 Value="False">
-                                                                        <Setter Property="Visibility" Value="Hidden" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </dxe:SpinEdit.Style>
-                                                    </dxe:SpinEdit>
-                                                </DataTemplate>
-                                            </dxg:GridColumn.CellTemplate>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
-                                        <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
-                                        <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="P1" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn AllowEditing="False" FieldName="Y" Header="세로" Visible="False">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="P1" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn AllowEditing="False" FieldName="Width" Header="너비" Visible="False">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="P1" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
-                                        <dxg:GridColumn AllowEditing="False" FieldName="Height" Header="높이" Visible="False">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="P1" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
-                                    </dxg:GridControl.Columns>
-                                    <dxg:GridControl.View>
-                                        <!-- 칸 너비는 내용에 맞춘다(사용자, 2026-09-16) - 열에 Width 를 안 적고, 자동 너비는 ViewModel 이 화면이 뜬 뒤 건다(OnLoaded). -->
-                                        <controls:BaseTreeListView AllowBestFit="True"
-                                                                   AllowEditing="True"
-                                                                   AutoExpandAllNodes="True"
-                                                                   ChildNodesSelector="{StaticResource RegionTreeChildren}"
-                                                                   EditorShowMode="Default"
-                                                                   ShowSearchPanelMode="Never"
-                                                                   TreeDerivationMode="ChildNodesSelector">
-                                            <!-- 오른쪽 버튼 메뉴 - 도구 줄과 같은 것. -->
-                                            <dxg:TreeListView.RowCellMenuCustomizations>
-                                                <dxb:BarButtonItem Command="{Binding View.DataContext.NewRegionCommand}"
-                                                                   Content="새 영역(_N)"
-                                                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}" />
-                                                <dxb:BarButtonItem Command="{Binding View.DataContext.AddCellCommand}"
-                                                                   Content="새 구역(_C)"
-                                                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}" />
-                                                <dxb:BarButtonItem Command="{Binding View.DataContext.TestRegionCommand}"
-                                                                   Content="지금 읽기(_R)"
-                                                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}" />
-                                                <dxb:BarButtonItem Command="{Binding View.DataContext.SaveTemplateCommand}"
-                                                                   Content="영역 이미지 저장(_T)"
-                                                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/picture.png'}" />
-                                                <dxb:BarItemSeparator />
-                                                <dxb:BarButtonItem Command="{Binding View.DataContext.RemoveRegionCommand}"
-                                                                   Content="지우기(_D)"
-                                                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}" />
-                                            </dxg:TreeListView.RowCellMenuCustomizations>
-                                        </controls:BaseTreeListView>
-                                    </dxg:GridControl.View>
-                                </controls:BaseGridControl>
+                                                </dxg:GridColumn.CellTemplate>
+                                            </dxg:GridColumn>
+                                            <!-- 숫자만 - 자리·칸 어느 줄에서나 켠다. 켜면 읽은 글자에 숫자 덩어리만 보인다(스크립트의 숫자읽기와 같은 눈). -->
+                                            <dxg:GridColumn FieldName="NumbersOnly" Header="숫자만">
+                                                <dxg:GridColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <dxe:CheckEdit x:Name="PART_Editor"
+                                                                       HorizontalAlignment="Center" />
+                                                    </DataTemplate>
+                                                </dxg:GridColumn.CellTemplate>
+                                            </dxg:GridColumn>
+                                            <!-- 이진화(그레이스케일 + 밝기 기준) - 자리 단위(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아"), 칸 줄에서는 숨긴다. 0 이면 꺼짐. -->
+                                            <dxg:GridColumn FieldName="Threshold" Header="밝기 기준">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:SpinEditSettings MaxValue="255"
+                                                                          MinValue="0" />
+                                                </dxg:GridColumn.EditSettings>
+                                                <dxg:GridColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <dxe:SpinEdit x:Name="PART_Editor">
+                                                            <dxe:SpinEdit.Style>
+                                                                <Style TargetType="dxe:SpinEdit">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
+                                                                                     Value="False">
+                                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </dxe:SpinEdit.Style>
+                                                        </dxe:SpinEdit>
+                                                    </DataTemplate>
+                                                </dxg:GridColumn.CellTemplate>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn FieldName="Invert" Header="반전">
+                                                <dxg:GridColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <dxe:CheckEdit x:Name="PART_Editor"
+                                                                       HorizontalAlignment="Center">
+                                                            <dxe:CheckEdit.Style>
+                                                                <Style TargetType="dxe:CheckEdit">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
+                                                                                     Value="False">
+                                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </dxe:CheckEdit.Style>
+                                                        </dxe:CheckEdit>
+                                                    </DataTemplate>
+                                                </dxg:GridColumn.CellTemplate>
+                                            </dxg:GridColumn>
+                                            <!-- 확대(1~4배) - 게임 HUD 의 작은 글자를 키워 읽는다. 자리 단위, 칸 줄에서는 숨긴다. 1 이면 꺼짐. -->
+                                            <dxg:GridColumn FieldName="Scale" Header="확대">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:SpinEditSettings DisplayFormat="0.0x"
+                                                                          Increment="0.5"
+                                                                          MaxValue="4"
+                                                                          MinValue="1" />
+                                                </dxg:GridColumn.EditSettings>
+                                                <dxg:GridColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <dxe:SpinEdit x:Name="PART_Editor">
+                                                            <dxe:SpinEdit.Style>
+                                                                <Style TargetType="dxe:SpinEdit">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
+                                                                                     Value="False">
+                                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </dxe:SpinEdit.Style>
+                                                        </dxe:SpinEdit>
+                                                    </DataTemplate>
+                                                </dxg:GridColumn.CellTemplate>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
+                                            <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
+                                            <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="P1" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn AllowEditing="False" FieldName="Y" Header="세로" Visible="False">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="P1" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn AllowEditing="False" FieldName="Width" Header="너비" Visible="False">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="P1" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                            <dxg:GridColumn AllowEditing="False" FieldName="Height" Header="높이" Visible="False">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="P1" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                        </dxg:GridControl.Columns>
+                                        <dxg:GridControl.View>
+                                            <!-- 칸 너비는 내용에 맞춘다(사용자, 2026-09-16) - 열에 Width 를 안 적고, 자동 너비는 ViewModel 이 화면이 뜬 뒤 건다(OnLoaded). -->
+                                            <controls:BaseTreeListView AllowBestFit="True"
+                                                                       AllowEditing="True"
+                                                                       AutoExpandAllNodes="True"
+                                                                       ChildNodesSelector="{StaticResource RegionTreeChildren}"
+                                                                       EditorShowMode="Default"
+                                                                       ShowSearchPanelMode="Never"
+                                                                       TreeDerivationMode="ChildNodesSelector">
+                                                <!-- 오른쪽 버튼 메뉴 - 도구 줄과 같은 것. -->
+                                                <dxg:TreeListView.RowCellMenuCustomizations>
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.NewRegionCommand}"
+                                                                       Content="새 영역(_N)"
+                                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}" />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.AddCellCommand}"
+                                                                       Content="새 구역(_C)"
+                                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}" />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.TestRegionCommand}"
+                                                                       Content="지금 읽기(_R)"
+                                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}" />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.SaveTemplateCommand}"
+                                                                       Content="영역 이미지 저장(_T)"
+                                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/picture.png'}" />
+                                                    <dxb:BarItemSeparator />
+                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.RemoveRegionCommand}"
+                                                                       Content="지우기(_D)"
+                                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}" />
+                                                </dxg:TreeListView.RowCellMenuCustomizations>
+                                            </controls:BaseTreeListView>
+                                        </dxg:GridControl.View>
+                                    </controls:BaseGridControl>
+
+                                    <GridSplitter Grid.Column="1"
+                                                  Width="4"
+                                                  HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Stretch"
+                                                  ResizeBehavior="PreviousAndNext"
+                                                  ShowsPreview="True"
+                                                  Visibility="{Binding HasRegionPreview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                                    <Border Grid.Column="2"
+                                            Width="280"
+                                            Padding="6"
+                                            BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                                            BorderThickness="1,0,0,0"
+                                            Visibility="{Binding HasRegionPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <DockPanel>
+                                            <TextBlock Margin="0,0,0,6"
+                                                       FontWeight="Bold"
+                                                       DockPanel.Dock="Top"
+                                                       Text="미리보기" />
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <ItemsControl ItemsSource="{Binding RegionPreviewImages}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Margin="0,0,10,10">
+                                                                <TextBlock Margin="0,0,0,2"
+                                                                           HorizontalAlignment="Center"
+                                                                           Text="{Binding Label}" />
+                                                                <Border BorderBrush="Gray"
+                                                                        BorderThickness="1">
+                                                                    <Image MaxWidth="120"
+                                                                           MaxHeight="60"
+                                                                           RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                                                           Source="{Binding Image}"
+                                                                           Stretch="Uniform" />
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                        </DockPanel>
+                                    </Border>
+                                </Grid>
                             </DockPanel>
                         </dxdo:LayoutPanel>
 
