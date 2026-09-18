@@ -14,6 +14,9 @@ using Minguk.Tools.Vision.Regions;
 
 namespace Minguk.Tools.ViewModels;
 
+/// <summary>문턱값 미리보기 한 칸 - 어느 구역인지(이름)와 손질을 입힌 그림.</summary>
+public sealed record RegionPreviewItem(string Label, System.Windows.Media.Imaging.BitmapSource Image);
+
 /// <summary>
 /// 이름 붙인 자리 - 미리보기에서 끌어 만들고, 그리드에서 이름·계속 읽기·전처리를 고친다.
 /// </summary>
@@ -629,24 +632,20 @@ public abstract partial class RecognizingCaptureViewModelBase
     // ── 문턱값 미리보기 ──────────────────────────────────────────────────
 
     /// <summary>
-    /// 「지금 읽기」가 자른 원본(손질 전) 그림 - <see cref="RegionPreviewImage"/> 를 다시 만들 때 화면을 또 안 잘라도 되게 들고 있는다.
+    /// 「지금 읽기」가 칸마다 자른 원본(손질 전) 그림 - 문턱값·반전·확대를 바꿀 때마다 화면을 또 안 잘라도 되게 칸별로 들고 있는다.
     /// </summary>
-    private System.Windows.Media.Imaging.BitmapSource? _previewRawCrop;
+    private readonly Dictionary<RegionCell, System.Windows.Media.Imaging.BitmapSource> _previewRawCrops = new(ReferenceEqualityComparer.Instance);
 
     private NamedRegion? _previewWatched;
 
     /// <summary>
-    /// 「지금 읽기」로 자른 자리에 지금 문턱값·반전·확대를 입힌 모습. 숫자만 바꿔서는 눈에 안 보이니(사용자, 2026-09-18
-    /// "콤보만 있으니 잘 모르겠어 도움되는 컨트롤 없어?") 값을 바꿀 때마다(그리드 편집을 마치면) 캐시해 둔 원본에 다시 입혀 보여 준다.
+    /// 「지금 읽기」로 자른 칸마다 지금 문턱값·반전·확대를 입힌 모습(사용자, 2026-09-18 "최대 이미지는 안 보여" - 자리를 골랐으면
+    /// 그 안 칸 전부를 보여야 한다). 숫자만 바꿔서는 눈에 안 보이니 값을 바꿀 때마다(그리드 편집을 마치면) 캐시해 둔 원본에 다시 입혀 보여 준다.
     /// </summary>
-    public System.Windows.Media.Imaging.BitmapSource? RegionPreviewImage
-    {
-        get => GetProperty(() => RegionPreviewImage);
-        private set => SetProperty(() => RegionPreviewImage, value, () => RaisePropertyChanged(nameof(HasRegionPreview)));
-    }
+    public ObservableCollection<RegionPreviewItem> RegionPreviewImages { get; } = [];
 
-    /// <summary>미리보기 칸을 보일지(값이 있을 때만). 화면이 <c>BooleanToVisibilityConverter</c> 로 쓴다.</summary>
-    public bool HasRegionPreview => RegionPreviewImage is not null;
+    /// <summary>미리보기 칸을 보일지(하나라도 있을 때만). 화면이 <c>BooleanToVisibilityConverter</c> 로 쓴다.</summary>
+    public bool HasRegionPreview => RegionPreviewImages.Count > 0;
 
     /// <summary>고른 자리가 바뀌면 그 자리를 지켜본다(문턱값·반전·확대가 바뀔 때마다 미리보기를 새로 입히려고) - 캐시해 둔 원본은 다른 자리 것이라 비운다.</summary>
     private void WatchPreviewRegion(NamedRegion? region)
@@ -667,15 +666,21 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     private void ClearRegionPreview()
     {
-        _previewRawCrop = null;
-        RegionPreviewImage = null;
+        _previewRawCrops.Clear();
+        RegionPreviewImages.Clear();
+        RaisePropertyChanged(nameof(HasRegionPreview));
     }
 
     private void ReapplyRegionPreview()
     {
-        if (_previewRawCrop is not { } raw || SelectedRegion is not { } region) return;
+        if (SelectedRegion is not { } region) return;
 
-        RegionPreviewImage = Vision.Ocr.RegionPreprocess.Apply(raw, region);
+        RegionPreviewImages.Clear();
+
+        foreach (var (cell, raw) in _previewRawCrops)
+            RegionPreviewImages.Add(new RegionPreviewItem(cell.Name, Vision.Ocr.RegionPreprocess.Apply(raw, region)));
+
+        RaisePropertyChanged(nameof(HasRegionPreview));
     }
 
     // ── 지금 읽기 ────────────────────────────────────────────────────────
@@ -712,7 +717,8 @@ public abstract partial class RecognizingCaptureViewModelBase
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var texts = new List<string>();
 
-        var isFirstTarget = true;
+        // 다시 누르면 이 자리의 캐시를 지금 화면으로 새로 채운다(구역을 하나만 골랐으면 그 구역 것만 남는다).
+        _previewRawCrops.Clear();
 
         foreach (var target in RegionTargets.Of(region, cell))
         {
@@ -728,12 +734,8 @@ public abstract partial class RecognizingCaptureViewModelBase
                 return;
             }
 
-            // 첫 칸(구역을 하나만 골랐으면 그것)만 미리보기로 캐시한다 - 눈으로 문턱값을 맞추는 데는 하나면 된다. 다시 눌러도 지금 화면으로 새로 캐신다.
-            if (isFirstTarget)
-            {
-                _previewRawCrop = crop;
-                isFirstTarget = false;
-            }
+            // 자리를 골랐으면(구역을 안 골랐으면) 구역마다 미리보기로 캐시한다(사용자, 2026-09-18 "최대 이미지는 안 보여").
+            _previewRawCrops[target.Cell] = crop;
 
             var read = ocr.RecognizeAsync(Vision.Ocr.RegionPreprocess.Apply(crop, region)).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
 

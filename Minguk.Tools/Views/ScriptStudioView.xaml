@@ -1041,7 +1041,8 @@
                                 </dxb:ToolBarControl>
                                 <!--
                                     문턱값 미리보기(사용자, 2026-09-18 "콤보만 있으니 잘 모르겠어 도움되는 컨트롤 없어?") - 「지금 읽기」가 자른 그림에
-                                    문턱값·반전·확대를 입힌 모습. 값이 없으면(아직 「지금 읽기」를 안 눌렀으면) 통째로 숨긴다.
+                                    문턱값·반전·확대를 입힌 모습. 자리를 골랐으면 그 안 구역마다 하나씩(사용자 "최대 이미지는 안 보여").
+                                    하나도 없으면(아직 「지금 읽기」를 안 눌렀으면) 통째로 숨긴다.
                                 -->
                                 <Border Padding="4"
                                         BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
@@ -1052,13 +1053,30 @@
                                         <TextBlock Margin="0,0,6,0"
                                                    VerticalAlignment="Center"
                                                    Text="문턱값 미리보기:" />
-                                        <Border BorderBrush="Gray"
-                                                BorderThickness="1">
-                                            <Image Height="32"
-                                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
-                                                   Source="{Binding RegionPreviewImage}"
-                                                   Stretch="Uniform" />
-                                        </Border>
+                                        <ItemsControl ItemsSource="{Binding RegionPreviewImages}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="0,0,10,0"
+                                                                Orientation="Horizontal">
+                                                        <TextBlock Margin="0,0,4,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Text="{Binding Label}" />
+                                                        <Border BorderBrush="Gray"
+                                                                BorderThickness="1">
+                                                            <Image Height="32"
+                                                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                                                   Source="{Binding Image}"
+                                                                   Stretch="Uniform" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                     </StackPanel>
                                 </Border>
                                 <controls:BaseGridControl AutoGenerateColumns="None"
