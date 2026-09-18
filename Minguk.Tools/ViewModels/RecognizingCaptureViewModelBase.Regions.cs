@@ -14,7 +14,7 @@ using Minguk.Tools.Vision.Regions;
 
 namespace Minguk.Tools.ViewModels;
 
-/// <summary>문턱값 미리보기 한 칸 - 어느 구역인지(이름)와 손질을 입힌 그림.</summary>
+/// <summary>밝기 기준 미리보기 한 칸 - 어느 구역인지(이름)와 손질을 입힌 그림.</summary>
 public sealed record RegionPreviewItem(string Label, System.Windows.Media.Imaging.BitmapSource Image);
 
 /// <summary>
@@ -629,17 +629,17 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (_previewSurface?.IsMouseCaptured == true) _previewSurface.ReleaseMouseCapture();
     }
 
-    // ── 문턱값 미리보기 ──────────────────────────────────────────────────
+    // ── 밝기 기준 미리보기 ──────────────────────────────────────────────────
 
     /// <summary>
-    /// 「지금 읽기」가 칸마다 자른 원본(손질 전) 그림 - 문턱값·반전·확대를 바꿀 때마다 화면을 또 안 잘라도 되게 칸별로 들고 있는다.
+    /// 「지금 읽기」가 칸마다 자른 원본(손질 전) 그림 - 밝기 기준·반전·확대를 바꿀 때마다 화면을 또 안 잘라도 되게 칸별로 들고 있는다.
     /// </summary>
     private readonly Dictionary<RegionCell, System.Windows.Media.Imaging.BitmapSource> _previewRawCrops = new(ReferenceEqualityComparer.Instance);
 
     private NamedRegion? _previewWatched;
 
     /// <summary>
-    /// 「지금 읽기」로 자른 칸마다 지금 문턱값·반전·확대를 입힌 모습(사용자, 2026-09-18 "최대 이미지는 안 보여" - 자리를 골랐으면
+    /// 「지금 읽기」로 자른 칸마다 지금 밝기 기준·반전·확대를 입힌 모습(사용자, 2026-09-18 "최대 이미지는 안 보여" - 자리를 골랐으면
     /// 그 안 칸 전부를 보여야 한다). 숫자만 바꿔서는 눈에 안 보이니 값을 바꿀 때마다(그리드 편집을 마치면) 캐시해 둔 원본에 다시 입혀 보여 준다.
     /// </summary>
     public ObservableCollection<RegionPreviewItem> RegionPreviewImages { get; } = [];
@@ -647,7 +647,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>미리보기 칸을 보일지(하나라도 있을 때만). 화면이 <c>BooleanToVisibilityConverter</c> 로 쓴다.</summary>
     public bool HasRegionPreview => RegionPreviewImages.Count > 0;
 
-    /// <summary>고른 자리가 바뀌면 그 자리를 지켜본다(문턱값·반전·확대가 바뀔 때마다 미리보기를 새로 입히려고) - 캐시해 둔 원본은 다른 자리 것이라 비운다.</summary>
+    /// <summary>고른 자리가 바뀌면 그 자리를 지켜본다(밝기 기준·반전·확대가 바뀔 때마다 미리보기를 새로 입히려고) - 캐시해 둔 원본은 다른 자리 것이라 비운다.</summary>
     private void WatchPreviewRegion(NamedRegion? region)
     {
         if (_previewWatched is { } old) old.PropertyChanged -= OnPreviewRegionPropertyChanged;

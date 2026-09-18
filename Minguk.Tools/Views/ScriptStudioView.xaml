@@ -1040,44 +1040,45 @@
                                                       IsChecked="{Binding ShowRegions, Mode=TwoWay}" />
                                 </dxb:ToolBarControl>
                                 <!--
-                                    문턱값 미리보기(사용자, 2026-09-18 "콤보만 있으니 잘 모르겠어 도움되는 컨트롤 없어?") - 「지금 읽기」가 자른 그림에
-                                    문턱값·반전·확대를 입힌 모습. 자리를 골랐으면 그 안 구역마다 하나씩(사용자 "최대 이미지는 안 보여").
-                                    하나도 없으면(아직 「지금 읽기」를 안 눌렀으면) 통째로 숨긴다.
+                                    밝기 기준 미리보기(사용자, 2026-09-18 "콤보만 있으니 잘 모르겠어 도움되는 컨트롤 없어?") - 「지금 읽기」가 자른 그림에
+                                    밝기 기준·반전·확대를 입힌 모습. 자리를 골랐으면 그 안 구역마다 하나씩(사용자 "최대 이미지는 안 보여").
+                                    그리드는 열 너비가 내용에 맞춰져 오른쪽에 빈 자리가 남는다(사용자, 2026-09-18 "그리드 오른쪽에 여백이 많은데
+                                    거기에 놔줘") - 위에 가로로 두지 않고 오른쪽에 세로로 둔다. 하나도 없으면(아직 「지금 읽기」를 안 눌렀으면) 통째로 숨긴다.
                                 -->
-                                <Border Padding="4"
+                                <Border Width="240"
+                                        Padding="6"
                                         BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                        BorderThickness="0,0,0,1"
-                                        DockPanel.Dock="Top"
+                                        BorderThickness="1,0,0,0"
+                                        DockPanel.Dock="Right"
                                         Visibility="{Binding HasRegionPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Margin="0,0,6,0"
-                                                   VerticalAlignment="Center"
-                                                   Text="문턱값 미리보기:" />
-                                        <ItemsControl ItemsSource="{Binding RegionPreviewImages}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Horizontal" />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <StackPanel Margin="0,0,10,0"
-                                                                Orientation="Horizontal">
-                                                        <TextBlock Margin="0,0,4,0"
-                                                                   VerticalAlignment="Center"
-                                                                   Text="{Binding Label}" />
-                                                        <Border BorderBrush="Gray"
-                                                                BorderThickness="1">
-                                                            <Image Height="32"
-                                                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
-                                                                   Source="{Binding Image}"
-                                                                   Stretch="Uniform" />
-                                                        </Border>
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
+                                    <DockPanel>
+                                        <TextBlock Margin="0,0,0,6"
+                                                   FontWeight="Bold"
+                                                   DockPanel.Dock="Top"
+                                                   Text="밝기 기준 미리보기" />
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <ItemsControl ItemsSource="{Binding RegionPreviewImages}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Margin="0,0,0,8"
+                                                                    Orientation="Horizontal">
+                                                            <TextBlock Margin="0,0,6,0"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="{Binding Label}" />
+                                                            <Border HorizontalAlignment="Left"
+                                                                    BorderBrush="Gray"
+                                                                    BorderThickness="1">
+                                                                <Image MaxHeight="60"
+                                                                       RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                                                       Source="{Binding Image}"
+                                                                       Stretch="Uniform" />
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </DockPanel>
                                 </Border>
                                 <controls:BaseGridControl AutoGenerateColumns="None"
                                                           ItemsSource="{Binding Regions}"
@@ -1118,8 +1119,8 @@
                                                 </DataTemplate>
                                             </dxg:GridColumn.CellTemplate>
                                         </dxg:GridColumn>
-                                        <!-- 이진화(그레이스케일 + 문턱값) - 자리 단위(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아"), 칸 줄에서는 숨긴다. 0 이면 꺼짐. -->
-                                        <dxg:GridColumn FieldName="Threshold" Header="문턱값">
+                                        <!-- 이진화(그레이스케일 + 밝기 기준) - 자리 단위(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아"), 칸 줄에서는 숨긴다. 0 이면 꺼짐. -->
+                                        <dxg:GridColumn FieldName="Threshold" Header="밝기 기준">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:SpinEditSettings MaxValue="255"
                                                                       MinValue="0" />

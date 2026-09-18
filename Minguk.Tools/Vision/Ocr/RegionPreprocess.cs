@@ -7,7 +7,7 @@ using Minguk.Tools.Vision.Regions;
 namespace Minguk.Tools.Vision.Ocr;
 
 /// <summary>
-/// 자리마다 고른 손질(그레이스케일 + 문턱값 이진화, 확대)을 OCR 에 넣기 전에 자른 그림에 씌운다.
+/// 자리마다 고른 손질(그레이스케일 + 밝기 기준 이진화, 확대)을 OCR 에 넣기 전에 자른 그림에 씌운다.
 /// </summary>
 /// <remarks>
 /// 사용자(2026-09-18) "탄약 숫자도 잘 못 읽잖아" · "게임에서 많이 쓰는 기능들로". <see cref="NamedRegion.Threshold"/> 가 0 이고
@@ -40,7 +40,7 @@ public static class RegionPreprocess
         return result;
     }
 
-    /// <summary>그레이스케일로 바꾼 뒤 문턱값을 기준으로 검거나 희게(반전이면 반대로) 가른다. 제자리에서 고친다.</summary>
+    /// <summary>그레이스케일로 바꾼 뒤 밝기 기준을 기준으로 검거나 희게(반전이면 반대로) 가른다. 제자리에서 고친다.</summary>
     private static void Binarize(byte[] pixels, int threshold, bool invert)
     {
         for (var i = 0; i < pixels.Length; i += 4)
