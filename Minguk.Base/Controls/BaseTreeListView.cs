@@ -70,4 +70,34 @@ public class BaseTreeListView : TreeListView
         this.VerticalScrollbarVisibility = ScrollBarVisibility.Auto;
         this.HorizontalScrollbarVisibility = ScrollBarVisibility.Auto;
     }
+
+    /// <summary>컬럼 폭을 내용에 맞추되 각 컬럼에 <paramref name="addWidth"/> 만큼 여유를 더한다 - 이름·이유는 <see cref="BaseTableView.BestFitColumnsWithPadding"/> 과 같다.</summary>
+    public void BestFitColumnsWithPadding(int addWidth = 4)
+    {
+        BestFitColumnsCore(addWidth, retry: true);
+    }
+
+    private void BestFitColumnsCore(int addWidth, bool retry)
+    {
+        if (DataControl is not GridControl grid) return;
+
+        var anyApplied = false;
+
+        foreach (var column in grid.Columns)
+        {
+            var w = CalcColumnBestFitWidth(column) + addWidth;
+            if (w <= addWidth)
+                continue;
+
+            column.Width = w;
+            anyApplied = true;
+        }
+
+        if (anyApplied == false && retry)
+        {
+            Dispatcher.BeginInvoke(
+                new System.Action(() => BestFitColumnsCore(addWidth, retry: false)),
+                System.Windows.Threading.DispatcherPriority.ContextIdle);
+        }
+    }
 }

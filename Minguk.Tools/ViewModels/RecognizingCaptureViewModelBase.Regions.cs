@@ -8,6 +8,7 @@ using System.Windows.Input;
 
 using DevExpress.Mvvm;
 
+using Minguk.Tools.Capture;
 using Minguk.Tools.Capture.Input;
 using Minguk.Tools.Markup.Regions;
 using Minguk.Tools.Vision.Regions;
@@ -673,14 +674,80 @@ public abstract partial class RecognizingCaptureViewModelBase
         RegionPreviewImages.Clear();
     }
 
-    private void ReapplyRegionPreview()
+    /// <summary>값 하나가 잘못돼도(자른 그림 크기가 이상하다든지) 미리보기 전체가 죽지 않게 - 실패한 칸은 그냥 빼고 나머지는 보여준다.</summary>
+    private void ReapplyRegionPreview() => Guard(() =>
     {
         if (SelectedRegion is not { } region) return;
 
         RegionPreviewImages.Clear();
 
         foreach (var (cell, raw) in _previewRawCrops)
-            RegionPreviewImages.Add(new RegionPreviewItem(cell.Name, Vision.Ocr.RegionPreprocess.Apply(raw, region)));
+        {
+            try
+            {
+                RegionPreviewImages.Add(new RegionPreviewItem(cell.Name, Vision.Ocr.RegionPreprocess.Apply(raw, region)));
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(ex, $"미리보기 「{cell.Name}」 을 다시 입히지 못했다");
+            }
+        }
+    });
+
+    /// <summary>
+    /// 「미리보기」(사용자, 2026-09-18 "체크 형태로 바꿔서 눌러져 있는 동안 계속 갱신") 를 켠 동안 프레임마다(0.3초에 한 번) 고른 자리를
+    /// 지금 화면에서 다시 잘라 미리보기를 새로 입힌다 - 값을 이리저리 바꿔 보며 바로바로 비교할 수 있게.
+    /// </summary>
+    private const int PreviewLiveIntervalMs = 300;
+
+    private volatile bool _isPreviewLive;
+    private long _lastPreviewLiveTicks;
+
+    /// <summary>미리보기를 계속 갱신할지. 켜면 캡처가 돌 때마다(0.3초 간격) 고른 자리를 다시 잘라 새로 입힌다.</summary>
+    public bool IsRegionPreviewLive
+    {
+        get => GetProperty(() => IsRegionPreviewLive);
+        set => SetProperty(() => IsRegionPreviewLive, value, () =>
+        {
+            _isPreviewLive = value;
+            if (value) Hub.WantsFrames = true;
+        });
+    }
+
+    /// <summary>프레임마다 불린다. 캡처 스레드. 미리보기가 켜져 있고 자리를 골랐을 때만, 시간이 됐고 앞의 것이 끝났을 때만.</summary>
+    private void MaybeRefreshRegionPreview(CapturedFrameEventArgs e)
+    {
+        if (!_isPreviewLive || !e.HasPixels) return;
+        if (SelectedRegion is not { } region || region.Width <= 0 || region.Height <= 0) return;
+
+        var now = Environment.TickCount64;
+        if (now - _lastPreviewLiveTicks < PreviewLiveIntervalMs) return;
+
+        _lastPreviewLiveTicks = now;
+
+        var cell = SelectedCell is { } picked && region.Cells.Contains(picked) ? picked : null;
+
+        try
+        {
+            // 픽셀은 이 콜백이 돌아가면 사라진다 - 자르기만 지금, 다시 입히기는 UI 스레드에서.
+            var crops = RegionTargets.Of(region, cell)
+                .Select(target => (target.Cell, Crop: CropFrame(e, RegionTargets.Bounds(target, e.Width, e.Height))))
+                .ToList();
+
+            DispatcherService?.BeginInvoke(() => Guard(() =>
+            {
+                // 그 사이 자리·구역이 바뀌었으면 엉뚱한 자리를 덮어쓰지 않는다.
+                if (!ReferenceEquals(SelectedRegion, region)) return;
+
+                foreach (var (targetCell, crop) in crops) _previewRawCrops[targetCell] = crop;
+
+                ReapplyRegionPreview();
+            }));
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "미리보기를 새로 자르지 못했다");
+        }
     }
 
     // ── 지금 읽기 ────────────────────────────────────────────────────────

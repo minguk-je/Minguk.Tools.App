@@ -710,7 +710,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     {
         if (FindControl<GridControl>("RegionsGridObjectService") is not { } grid) return;
 
-        Minguk.Base.Dependency.GridControlDependency.ApplyColumnAutoWidth(grid, true);
+        BestFitRegionsGridColumns(grid);
 
         if (!grid.IsLoaded) grid.Loaded += OnRegionsGridLoaded;
     }
@@ -720,7 +720,17 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         if (sender is not GridControl grid) return;
 
         grid.Loaded -= OnRegionsGridLoaded;
-        Minguk.Base.Dependency.GridControlDependency.ApplyColumnAutoWidth(grid, true);
+        BestFitRegionsGridColumns(grid);
+    }
+
+    /// <summary>
+    /// 내용에 딱 맞추면(Auto) 값 칸이 서로 붙어 빽빽했다(사용자, 2026-09-18 "너무 빽빽해") - 잰 값에 열마다 50px 씩 숨 쉴 자리를 더한다
+    /// (<see cref="Minguk.Base.Controls.BaseTreeListView.BestFitColumnsWithPadding"/>). Auto 와 달리 그 뒤로는 고정 픽셀이라
+    /// (내용이 바뀌어도 안 줄어든다) 성격상 이쪽이 맞다.
+    /// </summary>
+    private static void BestFitRegionsGridColumns(GridControl grid)
+    {
+        if (grid.View is Minguk.Base.Controls.BaseTreeListView view) view.BestFitColumnsWithPadding(50);
     }
 
     protected override void ReleaseResources()

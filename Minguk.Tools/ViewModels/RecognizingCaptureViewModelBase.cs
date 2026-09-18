@@ -104,6 +104,9 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
 
         // 계속 읽기를 켠 자리도 같은 규칙 - 0.5초에 한 번, 앞의 것이 끝났을 때만.
         MaybeReadRegions(e);
+
+        // 「미리보기」를 켠 동안은 0.3초에 한 번 고른 자리를 새로 잘라 손질(밝기 기준·반전·확대)을 다시 입힌다.
+        MaybeRefreshRegionPreview(e);
     }
 
     /// <summary>자리 편집기가 도는 동안은 클릭이 게임으로 안 가고 휠·오른쪽 끌기가 확대·이동이다.</summary>

@@ -369,7 +369,9 @@
                                    Glyph="{image:FreeImage ResourceName='Axialis/Multimedia/16x16/action_goto_next.png'}"
                                    Hint="프로시저 단위 실행 (F10) - JavaScript·Python 만" />
                 <dxb:BarItemSeparator />
-                <dxb:BarButtonItem Command="{Binding ToggleBreakpointCommand}"
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding ToggleBreakpointCommand}"
+                                   Content="중단점"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/flag_red.png'}"
                                    Hint="중단점 설정/해제 (F9)" />
                 <dxb:BarItemSeparator />
@@ -1022,11 +1024,15 @@
                                                        Content="새 구역"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
                                                        Hint="고른 영역 안에 따로 읽을 구역을 더한다. 영역이나 그 구역을 골랐을 때만 켜진다.&#10;구역마다 따로 읽고, 스크립트는 읽기(&quot;영역.구역&quot;) 으로 부른다. 구역은 위쪽 동그라미로 돌릴 수 있다." />
-                                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
-                                                       Command="{Binding TestRegionCommand}"
-                                                       Content="미리보기"
-                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
-                                                       Hint="고른 영역(구역을 골랐으면 그 구역)을 지금 한 번 읽는다." />
+                                    <!--
+                                        눌러 놓는 동안 계속 갱신(사용자, 2026-09-18 "체크 형태로 바꿔서 눌러져 있는 동안 계속 미리보기 갱신") - 값(밝기 기준·반전·확대)을
+                                        이리저리 바꿔 보며 바로 비교할 수 있다. 한 번만 읽는 것은 그리드 오른쪽 버튼 메뉴의 「지금 읽기」.
+                                    -->
+                                    <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                                                      Content="미리보기"
+                                                      Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
+                                                      Hint="눌러 놓은 동안 고른 자리(구역을 골랐으면 그 구역)를 0.3초마다 다시 잘라 오른쪽 미리보기를 새로 입힌다.&#10;밝기 기준·반전·확대 값을 이리저리 바꿔 보며 바로바로 비교할 수 있다."
+                                                      IsChecked="{Binding IsRegionPreviewLive, Mode=TwoWay}" />
                                     <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                                        Command="{Binding SaveTemplateCommand}"
                                                        Content="영역 이미지 저장"
@@ -1197,7 +1203,7 @@
                                                                        TreeDerivationMode="ChildNodesSelector">
                                                 <!-- 오른쪽 버튼 메뉴 - 도구 줄과 같은 것. -->
                                                 <dxg:TreeListView.RowCellMenuCustomizations>
-                                                    <dxb:BarButtonItem Command="{Binding View.DataContext.NewRegionCommand}"
+                                                    <dxb:BarButtonItem Command="{Binding Path=View.DataContext.NewRegionCommand}"
                                                                        Content="새 영역(_N)"
                                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}" />
                                                     <dxb:BarButtonItem Command="{Binding View.DataContext.AddCellCommand}"

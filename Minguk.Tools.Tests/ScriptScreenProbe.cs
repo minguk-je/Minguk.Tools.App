@@ -561,16 +561,19 @@ internal static class ScriptScreenProbe
             if (treeOk) Console.WriteLine($"[PASS] 영역 패널은 트리 - 「{region.Name}」 밑에 칸 {regionNode!.Nodes.Count}줄");
             else { Console.WriteLine($"[FAIL] 영역 패널 트리가 틀렸다 - 트리 {tree is not null} · 자리 줄 {regionNode is not null} · 칸 줄 {regionNode?.Nodes.Count}"); failures++; }
 
-            // 열 너비는 내용에 맞춘다(사용자, 2026-09-16 - 꽉 채운 너비는 별로). 하네스는 OnLoaded 를 안 거쳐 그 안에서 부르는 것을 직접 부른다.
+            // 열 너비는 내용에 맞추되 50px 씩 여유를 더한다(사용자, 2026-09-16 "꽉 채운 너비는 별로" · 2026-09-18 "너무 빽빽해") -
+            // BestFitColumnsWithPadding 은 고정 픽셀이라(Auto 가 아니다) 값을 아예 못 재면(레이아웃 전) 0 폭인 열이 남는다.
+            // 하네스는 OnLoaded 를 안 거쳐 그 안에서 부르는 것을 직접 부른다.
             if (grid is not null)
             {
                 typeof(ScriptStudioViewModel).GetMethod("FitRegionsGridColumns", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(vm, null);
-                await Pump(100);
+                await Pump(200);
 
-                var widths = grid.Columns.Where(c => c.Visible).Select(c => $"{c.FieldName}:{c.Width.UnitType}").ToList();
-                if (grid.Columns.Where(c => c.Visible).All(c => c.Width.UnitType == DevExpress.Xpf.Grid.GridColumnUnitType.Auto))
-                    Console.WriteLine($"[PASS] 영역 그리드 열 너비는 내용에 맞춘다 - {string.Join(", ", widths)}");
-                else { Console.WriteLine($"[FAIL] 영역 그리드 열 너비가 자동이 아니다 - {string.Join(", ", widths)}"); failures++; }
+                var visible = grid.Columns.Where(c => c.Visible).ToList();
+                var widths = visible.Select(c => $"{c.FieldName}:{c.Width.UnitType}={c.ActualWidth:0}").ToList();
+                if (visible.All(c => c.Width.UnitType == DevExpress.Xpf.Grid.GridColumnUnitType.Pixel && c.ActualWidth > 50))
+                    Console.WriteLine($"[PASS] 영역 그리드 열 너비는 내용에 맞추고 50px 여유를 더한다 - {string.Join(", ", widths)}");
+                else { Console.WriteLine($"[FAIL] 영역 그리드 열 너비가 이상하다 - {string.Join(", ", widths)}"); failures++; }
             }
 
             // 트리도 열 머리글이 기본으로 보인다(사용자, 2026-09-16 - BaseTreeListView 가 늘 꺼 영역 그리드에 머리글이 없었다).
