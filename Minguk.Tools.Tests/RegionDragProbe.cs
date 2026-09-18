@@ -213,6 +213,17 @@ internal static class RegionDragProbe
             failures += Check($"{name} · 놓은 뒤에도 손잡이가 모서리에 있다", gap <= TolerancePx + 1.5, $"모서리와 {gap:0.0}px");
             failures += Check($"{name} · 놓은 영역 크기가 커서가 간 만큼이다", Near(fixture.Region.Rect, expectRegion), $"{Describe(fixture.Region.Rect)} / 기대 {Describe(expectRegion)}");
 
+            // ── 1.5) 자리를 고르기만 한 채(위에서 크기만 끌었다, 아직 안 뚫림) 안쪽을 실제로 눌러 끌면(옮기기) - 끌고 난 뒤에도 뚫리면 안 된다
+            //         (2026-09-18 "선택 후에 클릭하면 바로 구역이 선택되는데" 고침 - 헤드리스 검사(RegionCanvasSelectionTests)는 RegionCanvas.DragMove 가
+            //         Mouse.GetPosition 으로 실제 마우스 자리를 재서 못 잰다. 여기서는 진짜 커서로 잰다).
+            var wholeCellItem = fixture.Canvas.CellItems.Single(c => ReferenceEquals(c.Cell, fixture.Region.Cells[0]));
+            failures += Check($"{name} · 자리를 고르기만 했을 때는 아직 뚫리지 않았다", !wholeCellItem.IsHitTestVisible, $"칸 IsHitTestVisible={wholeCellItem.IsHitTestVisible}");
+
+            var regionCenter = new Point(start.X + (start.Width / 2), start.Y + (start.Height / 2));
+            await DragAsync(fixture, regionCenter, regionCenter + new Vector(30 / zoom, 20 / zoom), () => RectOf(regionItem).TopLeft, zoom);
+            await Settle();
+            failures += Check($"{name} · 자리 안쪽을 눌러 끌면(옮기기) - 끌고 난 뒤에도 뚫리지 않는다", !wholeCellItem.IsHitTestVisible, $"칸 IsHitTestVisible={wholeCellItem.IsHitTestVisible}");
+
             // ── 2) 구역 옮기기(안쪽 잡기) ── 반쪽 구역을 고르고 안쪽을 끈다.
             fixture.Canvas.SelectedCell = fixture.HalfCell;
             await Settle();
