@@ -166,7 +166,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>고른 자리를 지금 읽어 본다 - 자리가 맞는지 확인하는 가장 빠른 길.</summary>
     public ICommand TestRegionCommand => new DelegateCommand(DoTestRegion, () => SelectedRegion is not null);
 
-    /// <summary>고른 자리를 본보기 그림(PNG)으로 저장한다 - 스크립트의 <c>그림찾기</c>·<c>그림누르기</c> 가 쓴다.</summary>
+    /// <summary>고른 자리를 영역 이미지(PNG)로 저장한다 - 스크립트의 <c>그림찾기</c>·<c>그림누르기</c> 가 쓴다.</summary>
     public ICommand SaveTemplateCommand => new DelegateCommand(DoSaveTemplate, () => SelectedRegion is not null);
 
     /// <summary>
@@ -341,8 +341,8 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 고른 자리를 지금 화면에서 잘라 프로젝트 <c>Resources</c> 에 PNG 로 저장한다. 스크립트는 <c>그림누르기("이름.png")</c> 로 부른다.
     /// </summary>
     /// <remarks>
-    /// 사용자(2026-09-18) "사격장 글이 아니고 큰 이미지인데" - 그림으로 된 메뉴 버튼은 본보기 한 장과 견줘 찾는다(<see cref="Vision.Matching.TemplateMatch"/>).
-    /// 본보기를 만드는 길이 이것뿐이다 - 자리를 미리보기에서 맞추고 이 단추를 누른다. 같은 이름이면 덮어쓴다(다시 맞춰 저장하는 일이 잦다).
+    /// 사용자(2026-09-18) "사격장 글이 아니고 큰 이미지인데" - 그림으로 된 메뉴 버튼은 영역 이미지 한 장과 견줘 찾는다(<see cref="Vision.Matching.TemplateMatch"/>).
+    /// 영역 이미지를 만드는 길이 이것뿐이다 - 자리를 미리보기에서 맞추고 이 단추를 누른다. 같은 이름이면 덮어쓴다(다시 맞춰 저장하는 일이 잦다).
     /// </remarks>
     private void DoSaveTemplate() => Guard(() =>
     {
@@ -350,7 +350,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (!IsRunning)
         {
-            StatusText = "먼저 캡처를 시작해 화면을 잡아야 본보기를 만들 수 있습니다.";
+            StatusText = "먼저 캡처를 시작해 화면을 잡아야 영역 이미지를 만들 수 있습니다.";
             return;
         }
 
@@ -382,8 +382,8 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         using (var file = System.IO.File.Create(path)) encoder.Save(file);
 
-        StatusText = $"본보기를 저장했습니다 - {name} ({crop.PixelWidth}x{crop.PixelHeight}). 스크립트에서 그림누르기(\"{name}\") 로 부릅니다.";
-        Logger.Info($"본보기 저장: {path} ({crop.PixelWidth}x{crop.PixelHeight})");
+        StatusText = $"영역 이미지를 저장했습니다 - {name} ({crop.PixelWidth}x{crop.PixelHeight}). 스크립트에서 그림누르기(\"{name}\") 로 부릅니다.";
+        Logger.Info($"영역 이미지 저장: {path} ({crop.PixelWidth}x{crop.PixelHeight})");
     });
 
     private void CommitRename(NamedRegion region)

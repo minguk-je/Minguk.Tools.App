@@ -4,7 +4,6 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
-             xmlns:views="clr-namespace:Minguk.Tools.Views"
              xmlns:dxb="http://schemas.devexpress.com/winfx/2008/xaml/bars"
              xmlns:dxdo="http://schemas.devexpress.com/winfx/2008/xaml/docking"
              xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
@@ -18,6 +17,7 @@
              xmlns:parts="clr-namespace:Minguk.Tools.Views.Parts"
              xmlns:regions="clr-namespace:Minguk.Tools.Markup.Regions"
              xmlns:viewModels="clr-namespace:Minguk.Tools.ViewModels"
+             xmlns:views="clr-namespace:Minguk.Tools.Views"
              Style="{DynamicResource BaseControlStyle}"
              FontFamily="{DynamicResource BaseFontFamily}"
              FontSize="{DynamicResource BaseFontSize}"
@@ -134,8 +134,8 @@
         -->
         <!--
             도구 줄은 하는 일 순서로 두 줄(사용자, 2026-09-17 "성격별로"):
-              윗줄 = 코드 → 돌리기 : 표준(파일·편집) · 디버그(실행·멈춤·중단점·빌드) · 실행 설정(시작 대기·조준 배율·설정 값 창)
-              아랫줄 = 보기        : 캡처(대상 → 시작·중지 → FPS·미리보기 → 담기 → 입력 경로) · 인식(몹 찾기)
+            윗줄 = 코드 → 돌리기 : 표준(파일·편집) · 디버그(실행·멈춤·중단점·빌드) · 실행 설정(시작 대기·조준 배율·설정 값 창)
+            아랫줄 = 보기        : 캡처(대상 → 시작·중지 → FPS·미리보기 → 담기 → 입력 경로) · 인식(몹 찾기)
             한 무리 안에서는 고르는 것 → 켜고 끄는 것 → 값 순서.
             배치를 바꾸면 ScriptStudioViewModel.BarLayoutVersion 을 올린다 - 저장된 옛 자리가 새 배치를 덮는다.
         -->
@@ -377,6 +377,12 @@
                                                   ItemsSource="{Binding OcrEngines}" />
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
+                <dxb:BarItemSeparator />
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding SaveTemplateCommand}"
+                                   Content="영역 이미지 저장"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/camera.png'}"
+                                   Hint="고른 영역을 지금 화면에서 잘라 영역 이미지(Resources\영역이름.png)로 저장한다.&#10;글자가 아닌 그림 버튼(메뉴 카드·아이콘)은 스크립트에서 그림누르기(&quot;영역이름.png&quot;) 로 찾아 누른다." />
             </dxb:Bar>
         </dxb:BarManager.Bars>
 
@@ -1026,7 +1032,7 @@
                                                        Hint="고른 영역(구역을 골랐으면 그 구역)을 지금 한 번 읽는다." />
                                     <dxb:BarButtonItem Command="{Binding SaveTemplateCommand}"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/camera.png'}"
-                                                       Hint="고른 영역을 지금 화면에서 잘라 본보기 그림(Resources\영역이름.png)으로 저장한다.&#10;글자가 아닌 그림 버튼(메뉴 카드·아이콘)은 스크립트에서 그림누르기(&quot;영역이름.png&quot;) 로 찾아 누른다." />
+                                                       Hint="고른 영역을 지금 화면에서 잘라 영역 이미지(Resources\영역이름.png)로 저장한다.&#10;글자가 아닌 그림 버튼(메뉴 카드·아이콘)은 스크립트에서 그림누르기(&quot;영역이름.png&quot;) 로 찾아 누른다." />
                                     <dxb:BarButtonItem Command="{Binding RemoveRegionCommand}"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
                                                        Hint="고른 구역을 지운다(구역이 하나뿐이면 못 지운다). 영역 줄을 골랐으면 영역을 지운다." />
@@ -1069,7 +1075,8 @@
                                         <dxg:GridColumn FieldName="NumbersOnly" Header="숫자만">
                                             <dxg:GridColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <dxe:CheckEdit x:Name="PART_Editor" HorizontalAlignment="Center" />
+                                                    <dxe:CheckEdit x:Name="PART_Editor"
+                                                                   HorizontalAlignment="Center" />
                                                 </DataTemplate>
                                             </dxg:GridColumn.CellTemplate>
                                         </dxg:GridColumn>
@@ -1117,7 +1124,7 @@
                                                                    Content="지금 읽기(_R)"
                                                                    Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}" />
                                                 <dxb:BarButtonItem Command="{Binding View.DataContext.SaveTemplateCommand}"
-                                                                   Content="본보기로 저장(_T)"
+                                                                   Content="영역 이미지 저장(_T)"
                                                                    Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/camera.png'}" />
                                                 <dxb:BarItemSeparator />
                                                 <dxb:BarButtonItem Command="{Binding View.DataContext.RemoveRegionCommand}"
