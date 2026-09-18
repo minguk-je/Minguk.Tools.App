@@ -180,6 +180,26 @@ internal static partial class Program
         }
     }
 
+    /// <summary>
+    /// 작업공간의 진짜 프로젝트를 열어 <b>문법만</b> 본다(돌리지 않는다). <c>--project=&lt;.mtsproj 경로&gt;</c> 를 주면 그것, 없으면 건너뛴다.
+    /// </summary>
+    /// <remarks>사용자(2026-09-18) 사격장 진입 스크립트를 쓰고 나서 - 앱을 띄우지 않고 "이 프로젝트가 컴파일되나" 를 본다.</remarks>
+    internal static void CheckRealProject(string projectPath)
+    {
+        if (!File.Exists(projectPath))
+        {
+            Check("프로젝트 문법 (파일 없음, 건너뜀)", true, projectPath);
+            return;
+        }
+
+        var project = ScriptProject.Load(projectPath);
+        var unit = project.ToUnit(new Dictionary<string, string>());
+        var errors = new RoslynScriptEngine().CheckLiveAsync(unit).GetAwaiter().GetResult();
+
+        Check($"프로젝트 문법: {project.Name}", errors.Count == 0,
+              errors.Count == 0 ? $"파일 {unit.Sources.Count}개" : string.Join(" / ", errors.Take(5).Select(e => $"{e.Line}줄 {e.Message}")));
+    }
+
     private static (IReadOnlyList<ScriptError> Errors, List<string> Printed) RunProject(IProjectScriptEngine engine, ScriptUnit unit, string root)
     {
         var printed = new List<string>();

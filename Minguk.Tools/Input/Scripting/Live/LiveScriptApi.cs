@@ -1086,30 +1086,133 @@ public class LiveScriptApi : IDisposable
 
     private string ReadTextCore(double x, double y, double width, double height)
     {
-        ThrowIfStopping();
-
-        var hub = _host.Hub;
-        if (!hub.IsCapturing) throw Guard("눈이 없습니다 - 화면에서 시작(연결)을 눌러 창을 잡아야 글자를 읽을 수 있습니다.");
-
-        // 처음 부를 때 프레임 복사를 켜고, 한 장 들어올 때까지 잠깐 기다린다.
-        hub.WantsFrames = true;
-
-        var deadline = Environment.TickCount64 + FrameWaitMs;
-        var region = new Rect(x, y, width, height);
-        System.Windows.Media.Imaging.BitmapSource? crop;
-
-        while (!hub.TryCropFrame(region, out crop) || crop is null)
-        {
-            // 리드백을 막 켰으면 캡처가 다시 시작되는 동안 더 기다린다 - 첫 읽기가 그 사이에 걸려 실패하던 것.
-            if (hub.IsPreparingFrames) deadline = Environment.TickCount64 + FrameWaitMs;
-
-            if (Environment.TickCount64 >= deadline) throw Guard("프레임이 들어오지 않습니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.");
-            Wait(50);
-        }
-
+        // 자르기가 먼저다 - 메서드 인자 평가 순서상 Ocr() 을 먼저 부르면 프레임을 기다리기도 전에 "엔진이 없다" 로 먼저 실패한다.
+        // 눈이 없다는 안내(CropFor 안)가 엔진이 없다는 안내보다 앞서야 한다 - 사람이 먼저 볼 문제가 그것이다.
+        var crop = CropFor(new Rect(x, y, width, height));
         var outcome = Ocr().RecognizeAsync(crop, _token).GetAwaiter().GetResult();
 
         return outcome.Text.Replace(Environment.NewLine, " ").Trim();
+    }
+
+    // ── 글자 찾기 - 메뉴·버튼 ────────────────────────────────────────────
+
+    /// <summary>화면 전체(또는 이름 붙인 자리)에서 그 글이 든 낱말·줄을 찾아 자리를 준다. 없으면 null.</summary>
+    /// <remarks>
+    /// 사용자(2026-09-18) "특정 메뉴를 눌러야 한다" - 게임 메뉴는 글자라 OCR 로 찾는다. <c>if (글자찾기("사격장") is { } 자리) 이동클릭(자리.x, 자리.y);</c>
+    /// <b>화면 전체는 조각내어 읽는다</b>(<see cref="FindTextTiles"/>) - 줄 찾기 모델은 긴 변을 640 으로 줄이므로 1080p 를 통째로 넣으면 30px 글자가 10px 이 되어 놓친다.
+    /// 조각마다 OCR 이 한 번씩이라(6조각이면 0.3~0.6초) 매 프레임이 아니라 메뉴가 떴을 때 부른다. 자리를 주면 그 자리만 읽어 빠르다.
+    /// 여러 곳에 있으면 가장 위·왼쪽 것. 낱말 하나에 다 들어 있으면 그 낱말의 자리, 여러 낱말에 걸치면 그 줄의 자리.
+    /// </remarks>
+    public ScriptSpot? FindText(string text, string? regionName = null)
+        => Traced("FindText", regionName is null ? Quote(text) : $"{Quote(text)}, {Quote(regionName)}", () => FindTextCore(text, regionName));
+
+    /// <summary>글을 찾아 그 가운데를 누른다. 찾았으면 참.</summary>
+    public bool PressText(string text, string? regionName = null, object? button = null)
+        => Traced("PressText", regionName is null ? Quote(text) : $"{Quote(text)}, {Quote(regionName)}", () =>
+        {
+            if (FindTextCore(text, regionName) is not { } spot) return false;
+
+            ClickAt(spot.CenterX, spot.CenterY, button);
+            return true;
+        });
+
+    /// <summary>화면 전체를 이만큼씩 나눠 읽는다(가로 × 세로). 1080p 에서 조각 하나가 640×540 - 줄 찾기 모델(640)에 거의 그대로 들어간다.</summary>
+    private const int FindTextTiles = 3;
+
+    private const int FindTextRows = 2;
+
+    /// <summary>이웃 조각과 겹치는 몫 - 경계에 걸린 글자가 어느 한쪽에는 통째로 들어가게.</summary>
+    private const double FindTextOverlap = 0.15;
+
+    private ScriptSpot? FindTextCore(string text, string? regionName)
+    {
+        if (string.IsNullOrWhiteSpace(text)) throw Guard("찾을 글이 비어 있습니다.");
+
+        var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
+
+        if (!CaptureTargetBounds.TryGet(target, out var bounds))
+            throw Guard("대상 창의 자리를 알 수 없습니다 - 창이 닫혔거나 최소화됐습니다.");
+
+        var wanted = text.Trim();
+        var tiles = new List<Rect>();
+
+        if (regionName is not null)
+        {
+            var book = _host.Regions?.Invoke() ?? throw Guard("영역 목록이 없습니다 - 화면에서 데이터셋 폴더를 골라야 합니다.");
+            var found = book.Resolve(regionName) ?? throw Guard(MissingRegion(book, regionName));
+
+            // 칸의 상자(돌린 칸은 감싸는 상자) - 찾은 자리를 화면 좌표로 되돌리려면 자른 자리를 알아야 한다.
+            _host.Hub.TryGetFrameSize(out var frameWidth, out var frameHeight);
+
+            foreach (var region in RegionTargets.Of(found.Region, found.Cell)) tiles.Add(RegionTargets.Bounds(region, frameWidth, frameHeight));
+        }
+        else
+        {
+            var w = 1.0 / FindTextTiles;
+            var h = 1.0 / FindTextRows;
+
+            for (var row = 0; row < FindTextRows; row++)
+                for (var col = 0; col < FindTextTiles; col++)
+                {
+                    var x = Math.Max(0, (col * w) - (w * FindTextOverlap));
+                    var y = Math.Max(0, (row * h) - (h * FindTextOverlap));
+                    var right = Math.Min(1, ((col + 1) * w) + (w * FindTextOverlap));
+                    var bottom = Math.Min(1, ((row + 1) * h) + (h * FindTextOverlap));
+
+                    tiles.Add(new Rect(x, y, right - x, bottom - y));
+                }
+        }
+
+        ScriptSpot? best = null;
+
+        foreach (var tile in tiles)
+        {
+            ThrowIfStopping();
+
+            var crop = CropFor(tile);
+            var outcome = Ocr().RecognizeAsync(crop, _token).GetAwaiter().GetResult();
+
+            foreach (var line in outcome.Lines)
+            {
+                // 낱말 하나에 다 있으면 그 낱말, 아니면 줄 전체(띄어쓰기를 무시하고 견준다 - OCR 이 「사격 장」 으로 나누기도 한다).
+                var word = line.Words.FirstOrDefault(w => Squash(w.Text).Contains(Squash(wanted), StringComparison.OrdinalIgnoreCase));
+                var hit = word.Text is not null ? word : Squash(line.Text).Contains(Squash(wanted), StringComparison.OrdinalIgnoreCase) ? Union(line) : default;
+
+                if (hit.Text is null) continue;
+
+                var spot = ToSpot(hit, tile, bounds);
+
+                if (best is null || spot.CenterY < best.CenterY - 4 || (Math.Abs(spot.CenterY - best.CenterY) <= 4 && spot.CenterX < best.CenterX)) best = spot;
+            }
+        }
+
+        return best;
+    }
+
+    private static string Squash(string text) => text.Replace(" ", string.Empty);
+
+    /// <summary>줄의 낱말들을 감싸는 자리.</summary>
+    private static OcrWord Union(OcrLine line)
+    {
+        if (line.Words.Count == 0) return default;
+
+        var left = line.Words.Min(w => w.Box.Left);
+        var top = line.Words.Min(w => w.Box.Top);
+        var right = line.Words.Max(w => w.Box.Right);
+        var bottom = line.Words.Max(w => w.Box.Bottom);
+
+        return new OcrWord(line.Text, Minguk.Tools.Vision.Labeling.LabelBox.FromCorners(0, left, top, right, bottom));
+    }
+
+    /// <summary>조각 안 0~1 자리 → 프레임 0~1 → 화면 픽셀.</summary>
+    private static ScriptSpot ToSpot(OcrWord word, Rect tile, Rect bounds)
+    {
+        var cx = tile.X + (word.Box.CenterX * tile.Width);
+        var cy = tile.Y + (word.Box.CenterY * tile.Height);
+        var center = PreviewInputMapper.MapRatioToScreen(new Point(cx, cy), bounds);
+
+        return new ScriptSpot((int)Math.Round(center.X), (int)Math.Round(center.Y),
+            (int)Math.Round(word.Box.Width * tile.Width * bounds.Width), (int)Math.Round(word.Box.Height * tile.Height * bounds.Height), word.Text);
     }
 
     /// <summary>글자에서 숫자만. 없으면 null.</summary>
@@ -1303,6 +1406,17 @@ public class LiveScriptApi : IDisposable
     /// <summary>그 자리에서 읽은 숫자를 왼쪽에서 순서대로. 믿을 범위는 스크립트가 고른다.</summary>
     public int[] 숫자들읽기(string 이름) => ReadNumbersAt(이름);
     public bool 글자있나(string 이름) => HasTextAt(이름);
+
+    /// <summary>화면 전체에서 그 글을 찾아 자리를 준다(가운데 화면 픽셀). 없으면 null. 메뉴·버튼용 - 매 프레임이 아니라 메뉴가 떴을 때.</summary>
+    public ScriptSpot? 글자찾기(string 글) => FindText(글);
+
+    /// <summary>이름 붙인 자리 안에서만 찾는다 - 빠르다.</summary>
+    public ScriptSpot? 글자찾기(string 글, string 자리) => FindText(글, 자리);
+
+    /// <summary>글을 찾아 그 가운데를 누른다. 찾았으면 참. <c>글자누르기("사격장")</c>.</summary>
+    public bool 글자누르기(string 글) => PressText(글);
+
+    public bool 글자누르기(string 글, string 자리) => PressText(글, 자리);
 
     // ── 키 ───────────────────────────────────────────────────────────────
 

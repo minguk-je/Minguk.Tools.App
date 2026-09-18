@@ -88,6 +88,8 @@ public static class ScriptApiCatalog
         new("UltimateReady", "궁극기준비", "", "궁극기가 다 찼는가.", ScriptApiMode.Live),
         new("ReadNumbersAt", "숫자들읽기", "name", "이름 붙인 영역에서 읽은 숫자를 구역 순서대로 준다. 「현재」·「최대」 구역이면 [30, 40] - 믿을 범위는 스크립트가 고른다. \"영역.구역\" 이면 그 구역만.", ScriptApiMode.Live),
         new("HasTextAt", "글자있나", "name", "이름 붙인 영역(또는 \"영역.구역\")에 읽을 글자가 있는가. 스크립트 화면의 영역 패널에서 만든 이름.", ScriptApiMode.Live),
+        new("FindText", "글자찾기", "text, [name]", "화면 전체(또는 이름 붙인 자리)에서 그 글이 든 낱말·줄을 찾아 자리(x·y 화면 픽셀, 너비·높이, 글)를 준다. 없으면 null. 화면 전체는 6조각으로 읽어 0.3~0.6초 - 메뉴가 떴을 때 부른다.", ScriptApiMode.Live),
+        new("PressText", "글자누르기", "text, [name], [button]", "글자찾기로 찾아 그 가운데를 누른다. 찾았으면 true. 게임 메뉴·버튼 - 글자누르기(\"사격장\").", ScriptApiMode.Live),
         new("Key", "키", "name", "이름으로 키 한 번. \"F\", \"Space\", \"Enter\", \"Ctrl+Shift+1\".", ScriptApiMode.Live),
         new("KeyDown", "누르기", "name", "키를 누른 채로 둔다. 떼기 전까지.", ScriptApiMode.Live),
         new("KeyUp", "떼기", "name", "누르고 있던 키를 뗀다.", ScriptApiMode.Live),

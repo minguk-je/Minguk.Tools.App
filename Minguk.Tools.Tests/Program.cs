@@ -161,6 +161,16 @@ internal static partial class Program
         // 조준 스레드만 - 닫힌 고리 가짜 허브로 붙기·지나침·배율 배우기(약 30초). 입력은 가짜 어댑터라 안 나간다.
         if (args.Contains("--aim")) return RunAimOnly();
 
+        // 작업공간의 진짜 프로젝트가 컴파일되는지만(돌리지 않는다): --check-project=<.mtsproj 경로>
+        if (args.Any(a => a.StartsWith("--check-project=", StringComparison.OrdinalIgnoreCase)))
+        {
+            CheckRealProject(ArgValue(args, "--check-project=") ?? string.Empty);
+
+            foreach (var line in Results) Console.WriteLine(line);
+
+            return _failures == 0 ? 0 : 1;
+        }
+
         // 같은 검증을 경로만 바꿔 돌린다. 경로마다 실제로 입력이 나가는지 따로 봐야 한다.
         var backend = ParseBackend(args);
 
@@ -271,7 +281,11 @@ internal static partial class Program
 
         try
         {
-            if (Minguk.Tools.Capture.CaptureTarget.EnumerateMonitors().FirstOrDefault() is { } monitor) TestAimLoop(monitor);
+            if (Minguk.Tools.Capture.CaptureTarget.EnumerateMonitors().FirstOrDefault() is { } monitor)
+            {
+                TestAimLoop(monitor);
+                TestFindText(monitor);
+            }
             else Check("조준 스레드 (모니터 없음, 건너뜀)", true, "");
         }
         catch (Exception ex)

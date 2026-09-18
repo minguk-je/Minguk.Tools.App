@@ -204,6 +204,7 @@ internal static partial class Program
         }
 
         TestAimLoop(monitor);
+        TestFindText(monitor);
 
         // ── 상대이동: 작은 이동도 합이 정확하다(걸음마다 반올림해도 어긋나지 않게) ──
         {
@@ -521,6 +522,93 @@ internal static partial class Program
     }
 
     /// <summary>조준 스레드(<see cref="AimLoop"/>) - 닫힌 고리 가짜 허브(<see cref="SimHub"/>)로 붙기·달리는 몹·지나침·배율 배우기를 본다. <c>--aim</c> 은 이것만 돌린다.</summary>
+    /// <summary>
+    /// 메뉴 글자를 찾아 누른다 - 게임 없이, 그린 화면 한 장으로(<see cref="FrameHub"/>).
+    /// </summary>
+    /// <remarks>사용자(2026-09-18) "오버워치 사격장 나갈 테니 사격장 버튼 눌러서 진입". 1080p 화면에 오버워치 메뉴처럼 글자 몇 개를 놓고 「사격장」 만 눌러야 한다.</remarks>
+    private static void TestFindText(CaptureTarget monitor)
+    {
+        if (!Minguk.Tools.Capture.Input.CaptureTargetBounds.TryGet(monitor, out var bounds))
+        {
+            Check("글자찾기 (모니터 자리를 몰라 건너뜀)", true, "");
+            return;
+        }
+
+        // 1080p 화면에 메뉴를 그린다. 「사격장」 은 가운데 아래(0.5, 0.62) 쯤.
+        var menu = DrawMenu([("플레이", 0.5, 0.42), ("사용자 지정 게임", 0.5, 0.52), ("사격장", 0.5, 0.62), ("설정", 0.5, 0.72)]);
+        var hub = new FrameHub(monitor, menu);
+        var adapter = new RecordingAdapter();
+        var printed = new List<string>();
+        var ocr = Minguk.Tools.Vision.Ocr.OcrEngineFactory.Create(Minguk.Tools.Vision.Ocr.OcrEngineKind.PaddleGpu, out _);
+
+        using (ocr)
+        {
+            var host = new LiveScriptHost
+            {
+                Service = new InputService(adapter),
+                RequiresForeground = false,
+                Target = () => monitor,
+                Hub = hub,
+                Ocr = () => ocr,
+                Print = printed.Add,
+                Watch = (_, _) => { },
+                HoldTimeMs = 1
+            };
+
+            using var api = new LiveScriptApi(host, CancellationToken.None);
+
+            var watch = Stopwatch.StartNew();
+            var spot = api.FindText("사격장");
+            watch.Stop();
+
+            // 그린 자리(0.5, 0.62)를 화면 픽셀로.
+            var wantX = bounds.X + (bounds.Width * 0.5);
+            var wantY = bounds.Y + (bounds.Height * 0.62);
+            var offX = spot is null ? double.NaN : Math.Abs(spot.CenterX - wantX);
+            var offY = spot is null ? double.NaN : Math.Abs(spot.CenterY - wantY);
+
+            Check("글자찾기: 화면 전체에서 「사격장」 을 찾아 그린 자리를 준다(30px 안)",
+                  spot is not null && spot.Text.Replace(" ", string.Empty).Contains("사격장", StringComparison.Ordinal) && offX <= 30 && offY <= 30,
+                  spot is null ? $"못 찾음 ({watch.ElapsedMilliseconds}ms)" : $"「{spot.Text}」 ({spot.CenterX}, {spot.CenterY}) 어긋남 {offX:0}·{offY:0}px · {spot.Width}x{spot.Height} · {watch.ElapsedMilliseconds}ms");
+
+            var pressed = api.PressText("사격장");
+            var moved = adapter.Calls.LastOrDefault(c => c.StartsWith("MoveTo", StringComparison.Ordinal));
+            var clicked = adapter.Calls.Any(c => c.StartsWith("Press", StringComparison.Ordinal)) && adapter.Calls.Any(c => c.StartsWith("Release", StringComparison.Ordinal));
+
+            Check("글자누르기: 찾은 자리로 옮겨 누른다", pressed && moved is not null && clicked, $"{moved} · 부른 것 {string.Join(" / ", adapter.Calls.TakeLast(3))}");
+
+            Check("글자찾기: 없는 글은 null", api.FindText("없는메뉴글자") is null, "");
+        }
+    }
+
+    /// <summary>1080p 바탕에 메뉴 글자들을 그린다 - (글, 가로 0~1, 세로 0~1).</summary>
+    private static BitmapSource DrawMenu((string Text, double X, double Y)[] items)
+    {
+        const int width = 1920;
+        const int height = 1080;
+
+        var visual = new System.Windows.Media.DrawingVisual();
+
+        using (var dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(System.Windows.Media.Brushes.Black, null, new Rect(0, 0, width, height));
+
+            foreach (var (text, x, y) in items)
+            {
+                var formatted = new System.Windows.Media.FormattedText(text, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                    new System.Windows.Media.Typeface("Malgun Gothic"), 34, System.Windows.Media.Brushes.White, 96);
+
+                dc.DrawText(formatted, new Point((x * width) - (formatted.Width / 2), (y * height) - (formatted.Height / 2)));
+            }
+        }
+
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+
+        return bitmap;
+    }
+
     private static void TestAimLoop(CaptureTarget monitor)
     {
         // ── 조준 스레드: 몹을 주면 멈추지 않고 따라가 붙고, 움직이는 몹도 쫓고, 목표풀기면 선다(사용자, 2026-09-18 "돌고 멈췄다가 머리로" 가 여전히 부자연스러워 스레드로) ──
@@ -1017,6 +1105,45 @@ internal static partial class Program
         public void PublishFrame(byte[] bgra, int width, int height) { }
         public bool TryCropFrame(Rect ratio, out BitmapSource? crop) { crop = null; return false; }
         public bool TryGetFrameSize(out int width, out int height) { width = height = 0; return false; }
+    }
+
+    /// <summary>화면 그림 한 장을 들고 자르는 가짜 허브 - 글자 찾기(메뉴)를 게임 없이 본다.</summary>
+    private sealed class FrameHub(CaptureTarget target, BitmapSource frame) : IPerceptionHub
+    {
+        public bool IsCapturing => true;
+        public bool IsDetecting => true;
+        public CaptureTarget? Target => target;
+        public bool WantsFrames { get; set; }
+        public bool IsPreparingFrames => false;
+        public void PreparingFrames() { }
+        public DetectionSnapshot? Latest => null;
+
+        public void PublishState(bool capturing, bool detecting, CaptureTarget? target) { }
+        public void PublishDetections(IReadOnlyList<Detection> found, IReadOnlyList<string> names, int frameWidth, int frameHeight, long frameTicks = 0, IReadOnlyList<Detection>? raw = null) { }
+        public void PublishFrame(byte[] bgra, int width, int height) { }
+
+        public bool TryGetFrameSize(out int width, out int height)
+        {
+            width = frame.PixelWidth;
+            height = frame.PixelHeight;
+
+            return true;
+        }
+
+        /// <summary>앱의 허브(<c>PerceptionHub.TryCropFrame</c>)와 같은 반올림 - 내림·올림.</summary>
+        public bool TryCropFrame(Rect ratio, out BitmapSource? crop)
+        {
+            var left = Math.Clamp((int)Math.Floor(ratio.X * frame.PixelWidth), 0, frame.PixelWidth - 1);
+            var top = Math.Clamp((int)Math.Floor(ratio.Y * frame.PixelHeight), 0, frame.PixelHeight - 1);
+            var right = Math.Clamp((int)Math.Ceiling(ratio.Right * frame.PixelWidth), left + 1, frame.PixelWidth);
+            var bottom = Math.Clamp((int)Math.Ceiling(ratio.Bottom * frame.PixelHeight), top + 1, frame.PixelHeight);
+
+            var cropped = new CroppedBitmap(frame, new Int32Rect(left, top, right - left, bottom - top));
+            cropped.Freeze();
+            crop = cropped;
+
+            return true;
+        }
     }
 
     private sealed class FakeHub(CaptureTarget target) : IPerceptionHub

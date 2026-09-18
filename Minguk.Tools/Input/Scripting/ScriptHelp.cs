@@ -48,7 +48,7 @@ public static class ScriptHelp
 
         ["Mobs"] = Mobs, ["NearestMob"] = Mobs, ["TargetMob"] = Mobs, ["ReleaseTarget"] = Mobs, ["WaitMob"] = Mobs,
 
-        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen,
+        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
         ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow,
@@ -77,6 +77,8 @@ public static class ScriptHelp
         ["ReadText"] = "var 글 = 읽기(\"퀘스트\");            // 영역 패널에서 만든 이름\nvar 글2 = 읽기(0.4, 0.9, 0.2, 0.05); // 비율 자리",
         ["ReadNumber"] = "var 탄약 = 숫자읽기(\"탄약\");\nif (탄약 is not null && 탄약 <= 3) 키(\"R\");",
         ["HasTextAt"] = "while (글자있나(\"재장전중\")) 쉬기(100);",
+        ["FindText"] = "if (글자찾기(\"사격장\") is { } 자리)\n    이동클릭(자리.x, 자리.y);",
+        ["PressText"] = "if (!글자누르기(\"사격장\")) 출력(\"사격장 단추가 안 보인다\");",
         ["Wait"] = "쉬기(300);",
         ["IsStopped"] = "while (!중지되었나())\n{\n    // 반복할 일\n    쉬기(10);\n}",
         ["Print"] = "출력($\"탄약 {숫자읽기(\"탄약\")}\");",
