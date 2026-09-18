@@ -298,7 +298,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             foreach (var (region, target, crop, bounds, width, height) in crops)
             {
                 var upright = Vision.Regions.RegionTargets.Upright(crop, bounds, target, width, height);
-                var outcome = await ocr.RecognizeAsync(upright);
+                var outcome = await ocr.RecognizeAsync(Vision.Ocr.RegionPreprocess.Apply(upright, region));
 
                 results.Add((region, target.Cell, outcome.Text.Replace(Environment.NewLine, " ").Trim()));
             }

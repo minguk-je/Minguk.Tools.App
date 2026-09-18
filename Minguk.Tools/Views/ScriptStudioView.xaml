@@ -1076,6 +1076,48 @@
                                                 </DataTemplate>
                                             </dxg:GridColumn.CellTemplate>
                                         </dxg:GridColumn>
+                                        <!-- 이진화(그레이스케일 + 문턱값) - 자리 단위(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아"), 칸 줄에서는 숨긴다. 0 이면 꺼짐. -->
+                                        <dxg:GridColumn FieldName="Threshold" Header="문턱값">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:SpinEditSettings MaxValue="255"
+                                                                      MinValue="0" />
+                                            </dxg:GridColumn.EditSettings>
+                                            <dxg:GridColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <dxe:SpinEdit x:Name="PART_Editor">
+                                                        <dxe:SpinEdit.Style>
+                                                            <Style TargetType="dxe:SpinEdit">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
+                                                                                 Value="False">
+                                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </dxe:SpinEdit.Style>
+                                                    </dxe:SpinEdit>
+                                                </DataTemplate>
+                                            </dxg:GridColumn.CellTemplate>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="Invert" Header="반전">
+                                            <dxg:GridColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <dxe:CheckEdit x:Name="PART_Editor"
+                                                                   HorizontalAlignment="Center">
+                                                        <dxe:CheckEdit.Style>
+                                                            <Style TargetType="dxe:CheckEdit">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding RowData.Row.IsRegion}"
+                                                                                 Value="False">
+                                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </dxe:CheckEdit.Style>
+                                                    </dxe:CheckEdit>
+                                                </DataTemplate>
+                                            </dxg:GridColumn.CellTemplate>
+                                        </dxg:GridColumn>
                                         <dxg:GridColumn AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
                                         <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
                                         <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">

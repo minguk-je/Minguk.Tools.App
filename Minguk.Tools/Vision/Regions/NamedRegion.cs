@@ -23,6 +23,9 @@ namespace Minguk.Tools.Vision.Regions;
 ///
 /// 자리마다 손질·언어·기울기를 고르던 때(2026-09-16 까지)의 키(<c>ink</c>·<c>prep</c>·<c>lang</c>·<c>shear</c>)는 읽을 때 버린다 -
 /// System.Text.Json 은 모르는 키를 건너뛰고, 다음 저장에서 사라진다. 엔진(PP-OCRv5)이 손질 없이 한글·영문·숫자를 읽는다.
+///
+/// <b>단, 흐리거나 대비가 낮은 HUD 는 여전히 헷갈린다</b>(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아") - <see cref="Threshold"/>·<see cref="Invert"/> 로
+/// 자리마다 그레이스케일 + 문턱값(이진화)을 켤 수 있다. 옛 것과 달리 딱 이 둘뿐이고 기본은 꺼짐(<c>Threshold</c> 0)이라 대부분은 손 댈 일이 없다.
 /// </remarks>
 public sealed class NamedRegion : INotifyPropertyChanged
 {
@@ -76,6 +79,32 @@ public sealed class NamedRegion : INotifyPropertyChanged
     }
 
     private bool _numbersOnly;
+
+    /// <summary>
+    /// 이진화 문턱값(0~255). 0 이면 꺼짐(자른 그림 그대로 읽는다). 켜면 그레이스케일로 바꾼 뒤 이 값을 기준으로 검거나 희게 가른다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-18) "탄약 숫자도 잘 못 읽잖아" - PP-OCRv5 가 손질 없이도 대개 읽지만, 대비가 낮거나 배경이 겹친 HUD 는 여전히 헷갈린다.
+    /// 문턱을 넘으면(밝으면) 흰색, 아니면(어두우면) 검은색으로 - 글자 윤곽이 뚜렷해진다. 맞는 값은 자리마다 달라(밝은 글자·어두운 글자) 사람이 눈으로 맞춘다.
+    /// </remarks>
+    [JsonPropertyName("threshold")]
+    public int Threshold
+    {
+        get => _threshold;
+        set => Set(ref _threshold, Math.Clamp(value, 0, 255));
+    }
+
+    private int _threshold;
+
+    /// <summary>이진화 결과를 뒤집는다(밝은 글자 ↔ 어두운 배경). <see cref="Threshold"/> 가 0(꺼짐)이면 상관없다.</summary>
+    [JsonPropertyName("invert")]
+    public bool Invert
+    {
+        get => _invert;
+        set => Set(ref _invert, value);
+    }
+
+    private bool _invert;
 
     /// <summary>화면에 보일 글 - 「숫자만」 이면(자리든 칸이든) 숫자 덩어리만 띄어 잇는다.</summary>
     public static string Shown(NamedRegion region, RegionCell? cell, string text)

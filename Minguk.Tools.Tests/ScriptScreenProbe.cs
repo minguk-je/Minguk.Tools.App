@@ -581,7 +581,7 @@ internal static class ScriptScreenProbe
                 var regionHeaders = regionView.ShowColumnHeaders;
                 var explorerHeaders = explorer?.ShowColumnHeaders;
 
-                if (regionHeaders && explorerHeaders == false) Console.WriteLine("[PASS] 영역 그리드는 열 머리글이 보이고(열 3개), 솔루션 탐색기는 안 보인다");
+                if (regionHeaders && explorerHeaders == false) Console.WriteLine("[PASS] 영역 그리드는 열 머리글이 보이고, 솔루션 탐색기는 안 보인다");
                 else { Console.WriteLine($"[FAIL] 열 머리글 - 영역 {regionHeaders} · 솔루션 탐색기 {explorerHeaders?.ToString() ?? "(못 찾음)"}"); failures++; }
             }
 

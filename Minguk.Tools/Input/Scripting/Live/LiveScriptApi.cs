@@ -1453,7 +1453,7 @@ public class LiveScriptApi : IDisposable
 
         // 칸마다 따로 읽어 잇는다 - 자리를 부르면 칸 순서대로, 칸을 부르면 그 칸만.
         var texts = RegionTargets.Of(found.Region, found.Cell)
-            .Select(target => Ocr().RecognizeAsync(CropFor(target), _token).GetAwaiter().GetResult().Text)
+            .Select(target => Ocr().RecognizeAsync(Vision.Ocr.RegionPreprocess.Apply(CropFor(target), found.Region), _token).GetAwaiter().GetResult().Text)
             .ToList();
 
         var (text, numbers) = RegionTargets.Combine(texts);

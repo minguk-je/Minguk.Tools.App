@@ -670,7 +670,7 @@ public abstract partial class RecognizingCaptureViewModelBase
                 return;
             }
 
-            var read = ocr.RecognizeAsync(crop).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
+            var read = ocr.RecognizeAsync(Vision.Ocr.RegionPreprocess.Apply(crop, region)).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
 
             target.Cell.LastText = NamedRegion.Shown(region, target.Cell, read);
             texts.Add(read);
