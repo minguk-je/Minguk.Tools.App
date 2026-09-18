@@ -597,6 +597,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             _captureSession.TargetFps = CaptureTargetFps;
             _captureSession.FrameArrived += OnFrameArrived;
             _captureSession.Notice += OnSessionNotice;
+            _captureSession.Ended += OnSessionEnded;
             _captureSession.Start();
 
             // 통계를 그리드로 옮기는 건 1초에 한 번. 콜백에서 직접 하면 UI 가 캡처를 붙잡는다.
@@ -1713,6 +1714,38 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         Logger.Info(message);
     }
 
+    /// <summary>
+    /// 세션이 스스로 멈췄다(대상 창이 닫힘). 화면도 중지 상태로 맞추고, 파생 화면이 도는 것(스크립트)을 멈추게 한다(<see cref="OnCaptureEnded"/>).
+    /// </summary>
+    /// <remarks>사용자(2026-09-18) "상대 창이 끊기면 캡처 중지, 스크립트 실행도 중지". 어느 스레드에서든 오므로 UI 스레드로 옮긴다.</remarks>
+    private void OnSessionEnded(object? sender, string reason)
+    {
+        Logger.Info($"캡처 세션이 스스로 멈췄다: {reason}");
+
+        var dispatcher = _uiDispatcher ?? GetService<IDispatcherService>();
+
+        if (dispatcher is null)
+        {
+            HandleCaptureEnded(reason);
+            return;
+        }
+
+        dispatcher.BeginInvoke(() => HandleCaptureEnded(reason));
+    }
+
+    private void HandleCaptureEnded(string reason) => Guard(() =>
+    {
+        if (!IsRunning) return;
+
+        DoStop();
+        StatusText = $"캡처를 멈췄습니다 - {reason}.";
+        MessengerUtility.SendMainMessage($"캡처를 멈췄습니다 - {reason}.");
+        OnCaptureEnded(reason);
+    });
+
+    /// <summary>캡처가 스스로 끝난 뒤(대상 창 닫힘). 파생 화면이 도는 스크립트를 멈춘다. UI 스레드.</summary>
+    protected virtual void OnCaptureEnded(string reason) { }
+
     /// <summary>다음 1초 요약 줄에 붙일 메모. 어느 스레드에서 불려도 된다.</summary>
     protected void Note(string message)
     {
@@ -1864,6 +1897,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         {
             _captureSession.FrameArrived -= OnFrameArrived;
             _captureSession.Notice -= OnSessionNotice;
+            _captureSession.Ended -= OnSessionEnded;
             _captureSession.Dispose();
             _captureSession = null;
         }

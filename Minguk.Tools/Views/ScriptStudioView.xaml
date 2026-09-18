@@ -1050,6 +1050,14 @@
                                                 </DataTemplate>
                                             </dxg:GridColumn.CellTemplate>
                                         </dxg:GridColumn>
+                                        <!-- 숫자만 - 자리·칸 어느 줄에서나 켠다. 켜면 읽은 글자에 숫자 덩어리만 보인다(스크립트의 숫자읽기와 같은 눈). -->
+                                        <dxg:GridColumn FieldName="NumbersOnly" Header="숫자만">
+                                            <dxg:GridColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <dxe:CheckEdit x:Name="PART_Editor" HorizontalAlignment="Center" />
+                                                </DataTemplate>
+                                            </dxg:GridColumn.CellTemplate>
+                                        </dxg:GridColumn>
                                         <dxg:GridColumn AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
                                         <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
                                         <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">

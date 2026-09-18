@@ -277,9 +277,10 @@ public abstract partial class RecognizingCaptureViewModelBase
                 {
                     if (!group.Key.KeepReading) continue;
 
-                    foreach (var (_, cell, text) in group) cell.LastText = text;
+                    // 「숫자만」 이면 숫자 덩어리만 보인다 - 스크립트의 숫자읽기와 같은 눈으로.
+                    foreach (var (_, cell, text) in group) cell.LastText = Vision.Regions.NamedRegion.Shown(group.Key, cell, text);
 
-                    group.Key.LastText = Vision.Regions.RegionTargets.Combine([.. group.Select(r => r.Text)]).Text;
+                    group.Key.LastText = Vision.Regions.NamedRegion.Shown(group.Key, null, Vision.Regions.RegionTargets.Combine([.. group.Select(r => r.Text)]).Text);
                 }
 
                 OcrStatus = $"글자 {results.Select(r => r.Region).Distinct().Count()}곳 ({watch.Elapsed.TotalMilliseconds:0}ms)";

@@ -156,6 +156,7 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
                     var session = _hub._create(Target, wantsReadback);
                     session.FrameArrived += OnFrameArrived;
                     session.Notice += OnNotice;
+                    session.Ended += OnEnded;
                     session.TargetFps = fps;
                     session.Start();
 
@@ -182,11 +183,45 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
 
             session.FrameArrived -= OnFrameArrived;
             session.Notice -= OnNotice;
+            session.Ended -= OnEnded;
 
             try { session.Stop(); }
             catch (Exception) { /* 놓는 길이다. 여기서 터져도 손잡이는 이미 떠났다. */ }
 
             session.Dispose();
+        }
+
+        /// <summary>
+        /// 세션이 스스로 멈췄다(대상 창 닫힘). 손잡이를 모두 멈춘 것으로 하고 알린다 - 그래야 화면이 시작/중지 상태를 맞추고 스크립트를 멈춘다.
+        /// </summary>
+        /// <remarks>세션의 제 이벤트 안에서 불리므로 놓는 것(Dispose)은 밖으로 미룬다 - 제 콜백 안에서 저를 부수지 않게.</remarks>
+        private void OnEnded(object? sender, string reason)
+        {
+            IScreenCaptureAdapter? session;
+            Handle[] handles;
+
+            lock (_gate)
+            {
+                session = _session;
+                if (session is null || !ReferenceEquals(session, sender)) return;
+
+                _session = null;
+                _sessionHasReadback = false;
+                session.FrameArrived -= OnFrameArrived;
+                session.Notice -= OnNotice;
+                session.Ended -= OnEnded;
+                handles = _handles;
+            }
+
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { session.Stop(); }
+                catch (Exception) { /* 이미 멈춘 세션이다. */ }
+
+                session.Dispose();
+            });
+
+            foreach (var handle in handles) handle.RaiseEnded(reason);
         }
 
         /// <summary>캡처 스레드. 도는 손잡이 전부에 같은 프레임을 준다. 픽셀은 이 콜백이 돌아가면 사라지므로 차례로.</summary>
@@ -252,6 +287,8 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
 
         public event EventHandler<string>? Notice;
 
+        public event EventHandler<string>? Ended;
+
         public void Start()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(Handle));
@@ -281,5 +318,14 @@ public sealed class SharedCaptureHub : ICaptureSessionHub
         internal void RaiseFrame(CapturedFrameEventArgs e) => FrameArrived?.Invoke(this, e);
 
         internal void RaiseNotice(string message) => Notice?.Invoke(this, message);
+
+        /// <summary>안쪽 세션이 스스로 멈췄다 - 이 손잡이도 멈춘 것으로 하고 화면에 알린다. 도는 손잡이에게만.</summary>
+        internal void RaiseEnded(string reason)
+        {
+            if (!IsRunning) return;
+
+            IsRunning = false;
+            Ended?.Invoke(this, reason);
+        }
     }
 }

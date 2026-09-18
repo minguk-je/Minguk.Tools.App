@@ -251,9 +251,21 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     private void OnCellPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is not RegionCell cell || _isRevertingName || e.PropertyName != nameof(RegionCell.Name)) return;
+        if (sender is not RegionCell cell || _isRevertingName) return;
 
         var region = Regions.FirstOrDefault(r => r.Cells.Contains(cell));
+
+        // 숫자만 - 저장하고, 이미 읽어 둔 글도 그 눈으로 다시 보인다.
+        if (e.PropertyName == nameof(RegionCell.NumbersOnly))
+        {
+            SaveRegions();
+            if (region is not null) cell.LastText = NamedRegion.Shown(region, cell, cell.LastText);
+            RegionsRevision++;
+            return;
+        }
+
+        if (e.PropertyName != nameof(RegionCell.Name)) return;
+
         var old = _savedCellNames.TryGetValue(cell, out var saved) ? saved : cell.Name;
         var name = cell.Name.Trim();
 
@@ -302,6 +314,13 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             case nameof(NamedRegion.Name):
                 CommitRename(region);
+                break;
+
+            case nameof(NamedRegion.NumbersOnly):
+                SaveRegions();
+                region.LastText = NamedRegion.Shown(region, null, region.LastText);
+                foreach (var cell in region.Cells) cell.LastText = NamedRegion.Shown(region, cell, cell.LastText);
+                RegionsRevision++;
                 break;
 
             case nameof(NamedRegion.KeepReading):
@@ -601,13 +620,13 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             var read = ocr.RecognizeAsync(crop).GetAwaiter().GetResult().Text.Replace(Environment.NewLine, " ").Trim();
 
-            target.Cell.LastText = read;
+            target.Cell.LastText = NamedRegion.Shown(region, target.Cell, read);
             texts.Add(read);
         }
 
         var (text, numbers) = RegionTargets.Combine(texts);
 
-        if (cell is null) region.LastText = text;
+        if (cell is null) region.LastText = NamedRegion.Shown(region, null, text);
 
         StatusText = text.Length == 0
             ? $"「{label}」 에서 아무것도 못 읽었습니다. 구역이 글자를 덮고 있는지 보세요."

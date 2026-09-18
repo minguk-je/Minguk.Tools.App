@@ -72,6 +72,18 @@ internal static partial class Program
         d.Start();
         Check("다른 대상은 다른 세션", made.Count == 4 && made[3].Target.Kind == CaptureTargetKind.Monitor, $"세션 {made.Count}개");
 
+        // 세션이 스스로 멈추면(대상 창 닫힘) 도는 손잡이 전부가 Ended 를 받고 멈춘 것이 된다 - 화면이 그것으로 시작/중지·스크립트를 맞춘다(사용자, 2026-09-18).
+        string? endedA = null, endedC = null;
+        a.Ended += (_, r) => endedA = r;
+        c.Ended += (_, r) => endedC = r;
+        made[2].Close();
+        System.Threading.Thread.Sleep(50);
+        Check("세션이 스스로 멈추면 도는 손잡이가 Ended 를 받고 멈춘다", endedA is not null && endedC is not null && !a.IsRunning && !c.IsRunning && made[2].IsDisposed,
+              $"a '{endedA}' c '{endedC}' · 도는 중 a {a.IsRunning} c {c.IsRunning} · 세션 놓음 {made[2].IsDisposed}");
+
+        a.Start();
+        Check("그 뒤 다시 시작하면 새 세션을 만든다", made.Count == 5 && made[4].IsRunning, $"세션 {made.Count}개");
+
         a.Dispose(); b.Dispose(); c.Dispose(); d.Dispose();
         Check("손잡이를 다 놓으면 세션도 다 놓는다", made.All(s => s.IsDisposed) && hub.ConsumerCount(game) == 0, $"남은 손잡이 {hub.ConsumerCount(game)}");
     }
@@ -91,6 +103,7 @@ internal static partial class Program
 
         public event EventHandler<CapturedFrameEventArgs>? FrameArrived;
         public event EventHandler<string>? Notice;
+        public event EventHandler<string>? Ended;
 
         public void Start() => IsRunning = true;
         public void Stop() => IsRunning = false;
@@ -102,5 +115,12 @@ internal static partial class Program
         });
 
         public void Say(string message) => Notice?.Invoke(this, message);
+
+        /// <summary>대상 창이 닫힌 것처럼 스스로 멈춘다.</summary>
+        public void Close()
+        {
+            IsRunning = false;
+            Ended?.Invoke(this, "대상 창이 닫혔습니다");
+        }
     }
 }

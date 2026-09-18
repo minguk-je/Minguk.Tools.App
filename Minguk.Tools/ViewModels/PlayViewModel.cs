@@ -449,6 +449,16 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         if (_pendingRunPath is { } pending) RunBuild(pending);
     }
 
+    /// <summary>대상 창이 닫혀 캡처가 멈췄다 - 도는 완성품도 세운다(반복 실행이면 다음 바퀴도 안 돈다).</summary>
+    protected override void OnCaptureEnded(string reason)
+    {
+        if (Player.IsIdle) return;
+
+        Logger.Info($"플레이 중지 - {reason}");
+        Player.Stop();
+        StatusText = $"캡처가 멈춰 실행도 멈췄습니다 - {reason}.";
+    }
+
     protected override void ReleaseResources()
     {
         Player.Stop();

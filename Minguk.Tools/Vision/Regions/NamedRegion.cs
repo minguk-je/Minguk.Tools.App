@@ -61,6 +61,28 @@ public sealed class NamedRegion : INotifyPropertyChanged
         set => Set(ref _keepReading, value);
     }
 
+    /// <summary>
+    /// 숫자만 보인다 - 이 자리(와 그 칸들)의 읽은 글에서 숫자 덩어리만 남긴다. 저장한다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-18) "숫자읽기인데 다른 문자 들어오면 그리드에도 안 보이게". 탄약처럼 숫자만 뜻이 있는 자리에서 OCR 이 「4|」·「1O」 같은 것을 주면
+    /// 스크립트의 <c>숫자읽기</c> 는 알아서 숫자만 뽑는데, 영역 패널의 「읽은 글자」 와 미리보기 겹그림에는 그대로 떠서 헷갈렸다. 켜면 「HP 5 / 9」 는 「5 9」 로, 숫자가 없으면 빈 글.
+    /// </remarks>
+    [JsonPropertyName("digits")]
+    public bool NumbersOnly
+    {
+        get => _numbersOnly;
+        set => Set(ref _numbersOnly, value);
+    }
+
+    private bool _numbersOnly;
+
+    /// <summary>화면에 보일 글 - 「숫자만」 이면(자리든 칸이든) 숫자 덩어리만 띄어 잇는다.</summary>
+    public static string Shown(NamedRegion region, RegionCell? cell, string text)
+        => region.NumbersOnly || cell is { NumbersOnly: true }
+            ? string.Join(" ", RegionTargets.NumbersIn(text))
+            : text;
+
     /// <summary>마지막으로 읽은 글(한 줄로). 저장하지 않는다.</summary>
     [JsonIgnore]
     public string LastText

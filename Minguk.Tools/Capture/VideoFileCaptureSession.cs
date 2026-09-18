@@ -101,6 +101,9 @@ public sealed class VideoFileCaptureSession : IScreenCaptureAdapter, IPausableCa
 
     public event EventHandler<string>? Notice;
 
+    /// <summary>영상은 끝나면 되감으므로 스스로 멈추는 일이 없다 - 안 난다.</summary>
+    public event EventHandler<string>? Ended;
+
     /// <summary>
     /// 영상 한 장의 크기. 한 번 읽으면 기억한다. 못 열면 false.
     /// </summary>

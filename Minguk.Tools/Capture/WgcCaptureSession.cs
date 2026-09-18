@@ -76,6 +76,8 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
     /// <summary>대상이 사라졌거나 폴백이 일어났을 때. 사람이 읽을 한 줄.</summary>
     public event EventHandler<string>? Notice;
 
+    public event EventHandler<string>? Ended;
+
     /// <summary>지금 캡처 중인 대상. 폴백이 일어나면 바뀐다.</summary>
     public CaptureTarget Target { get; private set; }
 
@@ -482,6 +484,7 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
                 _running = false;
                 Logger.Error(ex, "모니터 캡처 폴백 실패");
                 Notice?.Invoke(this, $"모니터 캡처로 전환하지 못했다: {ex.Message}");
+                Ended?.Invoke(this, "창에서 프레임이 오지 않고 모니터로도 넘어가지 못했습니다");
                 return;
             }
         }
@@ -493,5 +496,6 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
     {
         Notice?.Invoke(this, "캡처 대상이 닫혔다.");
         Stop();
+        Ended?.Invoke(this, "대상 창이 닫혔습니다");
     }
 }

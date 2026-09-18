@@ -105,7 +105,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         // 도는 동안 글을 잠근다. 도중에 바뀌면 무엇이 나갔는지 알 수 없다.
         Player.RunningChanged += (_, _) => Script.IsLocked = Player.IsRunning;
 
-        RunOrContinueCommand = new DelegateCommand(RunOrContinue, false);
+        // 도는 중에는 실행 단추를 끈다(사용자, 2026-09-18) - 멈춰 있을 때(실행 일시정지·중단점)만 "계속" 으로 산다.
+        RunOrContinueCommand = new DelegateCommand(RunOrContinue, () => Player.IsIdle || IsPaused || Live.Debug.IsPaused, false);
+        Live.Debug.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(Live.Debug.IsPaused)) RunOrContinueCommand.RaiseCanExecuteChanged(); };
         StepCommand = new DelegateCommand(Step, false);
         ToggleBreakpointCommand = new DelegateCommand(ToggleBreakpoint, false);
 
@@ -129,6 +131,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         };
 
         Player.RunningChanged += (_, _) => BuildCommand.RaiseCanExecuteChanged();
+        Player.RunningChanged += (_, _) => RunOrContinueCommand.RaiseCanExecuteChanged();
 
         // 실행이 켜지고 꺼질 때 실행 일시정지 단추를 켜고 끄고, 끝났으면 일시정지를 푼다.
         Player.RunningChanged += (_, _) => SyncPause();
@@ -139,6 +142,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     private async void OnIsPausedChanged() => await GuardAsync(async () =>
     {
         RaisePropertyChanged(nameof(CanPause));
+        RunOrContinueCommand.RaiseCanExecuteChanged();
 
         if (IsPaused)
         {
@@ -515,6 +519,16 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         if (IsPaused) IsPaused = false;
         else if (Live.Debug.IsPaused) Live.Debug.Continue();
         else if (Player.IsIdle) Player.RunOnce();
+    }
+
+    /// <summary>대상 창이 닫혀 캡처가 멈췄다 - 눈이 없는 스크립트는 세울 수밖에 없다(옛 검출로 계속 쏘거나 "눈이 없습니다" 예외로 끝나던 것).</summary>
+    protected override void OnCaptureEnded(string reason)
+    {
+        if (Player.IsIdle) return;
+
+        Logger.Info($"스크립트 중지 - {reason}");
+        Player.Stop();
+        StatusText = $"캡처가 멈춰 스크립트도 멈췄습니다 - {reason}.";
     }
 
     /// <summary>F6 - 대기 중이든 도는 중이든 멈춘다. 비상 정지(Pause)는 도는 동안만 걸리므로 대기 중에는 이것뿐이다.</summary>

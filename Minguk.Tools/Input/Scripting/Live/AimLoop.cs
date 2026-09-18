@@ -164,8 +164,11 @@ internal sealed class AimLoop : IDisposable
     /// <summary>못 본 채 속도로 밀어 주는 시간 상한(ms). 그 뒤로는 마지막 예측 자리에 선다.</summary>
     private const int StaleVelocityMs = 160;
 
-    /// <summary>속도 상한(px/ms). 그보다 빠른 값은 다른 몹으로 잘못 이은 것이다.</summary>
-    private const double MaxVelocityPxPerMs = 1.5;
+    /// <summary>
+    /// 속도 상한(px/ms) - 400px/s. 화면에서 그보다 빠른 몹은 없다(사격장 봇의 옆걸음은 150px/s 쯤). 1.5 였을 때 검출 사각형이 한 장 40px 튄 것을 −363·+619px/s 로 받아,
+    /// 앞서 겨누기·앞먹임이 그쪽으로 밀어 100~180px 꺾기가 반대편으로 87~89px 지나쳤다(실측 2026-09-18).
+    /// </summary>
+    private const double MaxVelocityPxPerMs = 0.4;
 
     /// <summary>새 사각형과 예측의 차이를 받아들이는 비율. 몹은 옆으로 달리므로 가로는 크게, 세로·크기는 흔들림이 커 작게.</summary>
     private const double GainX = 0.75;
@@ -430,9 +433,10 @@ internal sealed class AimLoop : IDisposable
 
         if (Math.Sqrt(Sq(vx) + Sq(vy)) > TeleportPxPerMs) return;
 
+        // 우리가 가만히 있던 쌍이라 가장 깨끗한 표본이다 - 바로 다 믿는다(VelocityConfidence). 붙인 뒤 첫 표본은 반만.
         t.Vx = vx * FirstVelocityAlpha;
         t.Vy = vy * FirstVelocityAlpha * 0.5;
-        t.VelocitySamples = 1;
+        t.VelocitySamples = 2;
     }
 
     /// <summary>그 자리(화면 가운데 기준 머리 거리)에서 가장 가까운 검출 - 크기가 비슷한 것만. 없으면 null.</summary>
@@ -872,8 +876,8 @@ internal sealed class AimLoop : IDisposable
         return ((obsX - t.ObsX + (sentX / scale)) / gap, (obsY - t.ObsY + (sentY / scale)) / gap);
     }
 
-    /// <summary>두 프레임 사이 자리 변화가 이보다 빠르면(px/ms) 움직인 것이 아니라 다른 몹으로 바뀐 것으로 본다 - 화면에서 800px/s 로 달리는 몹은 없다.</summary>
-    private const double TeleportPxPerMs = 0.8;
+    /// <summary>두 프레임 사이 자리 변화가 이보다 빠르면(px/ms) 움직인 것이 아니라 다른 몹이거나 사각형이 튄 것으로 본다 - 화면에서 450px/s 로 달리는 몹은 없다.</summary>
+    private const double TeleportPxPerMs = 0.45;
 
     /// <summary>몹이 서 있다고 볼 속도(px/ms) - 120px/s. 이보다 빠르면 줄어든 거리에 몹의 움직임이 섞여 배율 표본으로 못 쓴다.</summary>
     private const double StillPxPerMs = 0.12;
@@ -999,6 +1003,8 @@ internal sealed class AimLoop : IDisposable
             // 몹이 가는 만큼(속도 앞먹임) - 남은 거리만 쫓으면 달리는 몹을 늘 속도×시간 상수만큼 뒤에서 쫓는다.
             var follow = now - t.SeenTicks <= StaleVelocityMs ? TickMs * scale : 0;
 
+            // 한 번 잰 속도는 반만 - 한 쌍이 튄 것일 수 있다. 두 번 맞으면 다 믿는다.
+            follow *= VelocityConfidence(t);
             wantX += t.Vx * follow;
             wantY += t.Vy * follow;
 
@@ -1040,12 +1046,15 @@ internal sealed class AimLoop : IDisposable
         var age = Math.Max(0, now - t.SeenTicks);
 
         // 화면에 찍힌 몹의 자리도 지연만큼 옛것이다 - 우리 입력만 늦게 보이는 것이 아니다. 그만큼 앞서 겨눈다(150px/s 옆걸음 봇이면 14px - 안 하면 늘 그만큼 뒤를 쏜다).
-        var coast = Math.Min(age, StaleVelocityMs) + (age <= StaleVelocityMs ? MobLeadMs : 0);
+        var coast = (Math.Min(age, StaleVelocityMs) + (age <= StaleVelocityMs ? MobLeadMs : 0)) * VelocityConfidence(t);
         var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, long.MaxValue);
         var scale = Math.Max(0.01, _host.Scale());
 
         return (t.OffX + (t.Vx * coast) - (sx / scale), t.OffY + (t.Vy * coast) - (sy / scale));
     }
+
+    /// <summary>속도를 얼마나 믿나 - 한 번 잰 것은 반, 두 번부터 다.</summary>
+    private static double VelocityConfidence(Track t) => Math.Min(1, t.VelocitySamples / 2.0);
 
     /// <summary>그 프레임 시각의 예상 거리 - 프레임에 이미 반영된 입력(프레임 − 지연 앞)까지만 뺀다.</summary>
     private (double X, double Y) PredictAt(Track t, long frame) => PredictAt(t, frame, _latencyMs);
@@ -1053,7 +1062,7 @@ internal sealed class AimLoop : IDisposable
     /// <summary>지연을 <paramref name="latencyMs"/> 로 가정한 예상 거리. 섞은 자리(<see cref="Track.OffX"/>)는 기준 지연으로 만든 것이라 앞쪽 끝은 그대로 둔다.</summary>
     private (double X, double Y) PredictAt(Track t, long frame, int latencyMs)
     {
-        var gap = Math.Clamp(frame - t.SeenTicks, 0, StaleVelocityMs);
+        var gap = Math.Clamp(frame - t.SeenTicks, 0, StaleVelocityMs) * VelocityConfidence(t);
         var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, frame - latencyMs);
         var scale = Math.Max(0.01, _host.Scale());
 

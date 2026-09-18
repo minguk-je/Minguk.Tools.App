@@ -65,6 +65,16 @@ public sealed class RegionCell : INotifyPropertyChanged
         }
     }
 
+    /// <summary>숫자만 보인다 - 이 칸의 읽은 글에서 숫자 덩어리만 남긴다(<see cref="NamedRegion.NumbersOnly"/>). 저장한다.</summary>
+    [JsonPropertyName("digits")]
+    public bool NumbersOnly
+    {
+        get => _numbersOnly;
+        set => Set(ref _numbersOnly, value);
+    }
+
+    private bool _numbersOnly;
+
     /// <summary>마지막으로 읽은 글(한 줄로). 저장하지 않는다.</summary>
     [JsonIgnore]
     public string LastText

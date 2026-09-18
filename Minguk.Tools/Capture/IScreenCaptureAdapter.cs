@@ -46,6 +46,16 @@ public interface IScreenCaptureAdapter : IDisposable
     /// <summary>사용자에게 알릴 만한 일(대상 전환 등).</summary>
     event EventHandler<string>? Notice;
 
+    /// <summary>
+    /// 세션이 <b>스스로</b> 멈췄다(대상 창이 닫힘 등). 이유가 실린다. 그 뒤 <see cref="IsRunning"/> 은 false 다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Stop"/> 을 부른 쪽에는 안 난다 - 부른 쪽은 이미 안다. 화면이 이것을 받아 제 상태(시작/중지 버튼·스크립트)를 맞춘다(사용자, 2026-09-18
+    /// "상대 창이 끊기면 캡처 중지·스크립트 실행도 중지"). 없던 때는 세션만 멈추고 화면은 캡처 중인 줄 알아, 스크립트가 옛 검출로 계속 돌았다.
+    /// 어느 스레드에서든 날 수 있다.
+    /// </remarks>
+    event EventHandler<string>? Ended;
+
     void Start();
 
     void Stop();
