@@ -44,7 +44,7 @@ public static class ScriptHelp
         ["Key"] = Keyboard, ["KeyDown"] = Keyboard, ["KeyUp"] = Keyboard, ["Walk"] = Keyboard,
 
         ["Click"] = Mouse, ["RightClick"] = Mouse, ["ClickAt"] = Mouse, ["MoveTo"] = Mouse, ["Scroll"] = Mouse,
-        ["Aim"] = Mouse, ["MoveBy"] = Mouse, ["MouseDown"] = Mouse, ["MouseUp"] = Mouse, ["Drag"] = Mouse, ["DragBy"] = Mouse,
+        ["Aim"] = Mouse, ["MoveBy"] = Mouse, ["MoveCursor"] = Mouse, ["SetMouseMode"] = Mouse, ["MouseDown"] = Mouse, ["MouseUp"] = Mouse, ["Drag"] = Mouse, ["DragBy"] = Mouse,
 
         ["Detections"] = Detections, ["NearestDetection"] = Detections, ["TargetDetection"] = Detections, ["ReleaseTarget"] = Detections, ["WaitDetection"] = Detections,
 

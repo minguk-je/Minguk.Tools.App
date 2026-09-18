@@ -26,7 +26,7 @@
     <Color name="ControlKeyword" foreground="#D8A0DF" />
     <Color name="Type" foreground="#ADD8E6" />
     <Color name="Method" foreground="#00FFFF" />
-    <Color name="Local" foreground="#DCDCDC" />
+    <Color name="Local" foreground="#9CDCFE" />
     <Color name="Plain" foreground="#DCDCDC" />
     <Color name="Member" foreground="#EE82EE" />
     <Color name="Number" foreground="#B5CEA8" />
@@ -160,6 +160,8 @@
             <Word>Wait</Word><Word>쉬기</Word>
             <Word>Aim</Word><Word>조준</Word>
             <Word>MoveBy</Word><Word>상대이동</Word>
+            <Word>MoveCursor</Word><Word>커서이동</Word>
+            <Word>SetMouseMode</Word><Word>마우스모드</Word>
             <Word>MouseDown</Word><Word>버튼누르기</Word>
             <Word>MouseUp</Word><Word>버튼떼기</Word>
             <Word>Drag</Word><Word>끌기</Word>

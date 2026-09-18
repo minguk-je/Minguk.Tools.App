@@ -69,6 +69,8 @@ public static class ScriptApiCatalog
         // ── 실시간만: 화면을 읽거나 흐름을 다룬다 ──
         new("Aim", "조준", "검출 | x, y", "검출을 주면 조준 스레드가 8ms 마다 멈추지 않고 머리를 따라가고, 부를 때마다 새 화면을 기다렸다 몸에 들어와 있으면 true(한 화면에 한 번). 좌표를 주면 한 번 움직이고 8px 안이면 true. 커서를 잡는 게임용(이동()은 안 먹는다).", ScriptApiMode.Live),
         new("MoveBy", "상대이동", "dx, dy", "지금 자리에서 이만큼 움직인다.", ScriptApiMode.Live),
+        new("MoveCursor", "커서이동", "x, y, 허용오차", "커서를 그 화면 좌표까지 실제 커서 자리를 보며 걸어간다. 커서가 보이는 메뉴용(일반 화면). 닿으면 true.", ScriptApiMode.Live),
+        new("SetMouseMode", "마우스모드", "\"일반\" | \"조준\"", "마우스 움직임 방식. 조준(기본)=커서를 잡는 게임, 일반=커서가 보이는 메뉴(이동·조준이 커서를 보며 걸어간다). 스크립트 첫머리에서 한 번.", ScriptApiMode.Live),
         new("MouseDown", "버튼누르기", "button", "마우스 버튼을 누른 채로 둔다. 떼기 전까지.", ScriptApiMode.Live),
         new("MouseUp", "버튼떼기", "button", "누르고 있던 마우스 버튼을 뗀다.", ScriptApiMode.Live),
         new("Drag", "끌기", "x, y, button", "버튼을 누른 채 그 화면 좌표로 끌었다가 뗀다. 커서가 보이는 창(RPG)에서.", ScriptApiMode.Live),

@@ -159,7 +159,40 @@ public class LiveScriptApi : IDisposable
         ClickCore(ToButton(button), 0);
     }
 
-    public void MoveTo(int x, int y) => Traced("MoveTo", $"{x}, {y}", () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.MoveTo, X = x, Y = y }));
+    public void MoveTo(int x, int y)
+    {
+        // 일반 모드는 커서를 보며 걸어간다(절대 이동이 안 먹는 메뉴). 커서 자리를 못 읽는 경로면 절대 이동으로.
+        if (_normalMouse && _host.Service.Adapter.GetCursorPosition() is not null)
+        {
+            MoveCursor(x, y);
+            return;
+        }
+
+        Traced("MoveTo", $"{x}, {y}", () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.MoveTo, X = x, Y = y }));
+    }
+
+    private bool _normalMouse;
+
+    /// <summary>
+    /// 마우스 움직임 방식을 고른다 - <c>"조준"</c>(기본, 커서를 잡는 게임: 시야를 돌린다) · <c>"일반"</c>(커서가 보이는 화면: 메뉴·창).
+    /// </summary>
+    /// <remarks>
+    /// 일반 모드에서는 <c>이동()</c>·<c>이동클릭()</c>·<c>조준(x, y)</c>·<c>조준(검출)</c> 이 모두 실제 커서 자리를 보며 그 점까지 걸어간다
+    /// (<see cref="MoveCursor"/>). 조준 모드에서는 지금까지처럼 조준 스레드·화면 가운데 기준이다. 스크립트 첫머리에서 한 번 정한다.
+    /// </remarks>
+    public void SetMouseMode(string mode)
+    {
+        _normalMouse = mode switch
+        {
+            "일반" or "Normal" or "normal" => true,
+            "조준" or "Aim" or "aim" => false,
+            _ => throw Guard($"마우스 모드는 \"일반\" 이나 \"조준\" 입니다: {mode}")
+        };
+
+        if (_normalMouse) ForgetAim();
+    }
+
+    public void 마우스모드(string 모드) => SetMouseMode(모드);
 
     public void Scroll(int notches) => Traced("Scroll", notches.ToString(), () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Scroll, Notches = notches }));
 
@@ -175,7 +208,7 @@ public class LiveScriptApi : IDisposable
     /// 맞았으면(겨눈 뒤의 새 화면에서 목표가 가운데 <see cref="LiveScriptHost.AimTolerancePx"/> 안) true - 이때 누르면 된다.
     /// 아직 멀어 움직였거나, 겨눈 뒤 새 화면이 아직 안 왔으면 false.
     /// </returns>
-    public bool Aim(int x, int y) => Traced("Aim", $"{x}, {y}", () => AimCore(x, y, _host.AimTolerancePx, _host.AimTolerancePx));
+    public bool Aim(int x, int y) => _normalMouse ? MoveCursor(x, y) : Traced("Aim", $"{x}, {y}", () => AimCore(x, y, _host.AimTolerancePx, _host.AimTolerancePx));
 
     /// <summary>
     /// 검출을 겨눈다 - <b>조준 스레드</b>(<see cref="AimLoop"/>)에 붙여 8ms 마다 멈추지 않고 <b>머리</b>를 따라가게 하고, <b>몸에 들어와 있으면</b> 맞은 것(true)으로 친다.
@@ -193,6 +226,8 @@ public class LiveScriptApi : IDisposable
     public bool Aim(ScriptDetection mob)
     {
         ArgumentNullException.ThrowIfNull(mob);
+
+        if (_normalMouse) return MoveCursor(mob.중심x, mob.중심y);
 
         return Traced("Aim", mob.ToString(), () => AimTracked(mob));
     }
@@ -258,6 +293,69 @@ public class LiveScriptApi : IDisposable
         _host.Service.Adapter.MoveMouseBy(deltaX, deltaY);
         _aim?.NoteSent(deltaX, deltaY);
     });
+
+    /// <summary>
+    /// 커서를 그 화면 좌표까지 <b>실제 커서 자리를 보며</b> 걸어간다. 메뉴처럼 커서가 보이는 화면용.
+    /// </summary>
+    /// <remarks>
+    /// 절대 이동이 안 먹는 게임 메뉴(Raw Input)에서, 작은 상대 이동을 여러 번 보내고 그때마다 커서가 실제로 얼마나 갔는지
+    /// 읽어 픽셀당 카운트를 배워 간다(조준은 시야가 도는 게임 전용이라 메뉴에서는 화면 밖으로 튄다 - 실측).
+    /// 커서 자리를 못 읽는 경로(창 메시지·조용한 경로)에서는 걸을 수 없어 그렇게 말한다.
+    /// </remarks>
+    /// <returns>목표에서 <c>tolerance</c> 픽셀 안에 닿았는가.</returns>
+    public bool MoveCursor(int x, int y, int tolerance = 3) => Traced("MoveCursor", $"{x}, {y}", () =>
+    {
+        BeforeInput();
+        ForgetAim();
+
+        const int MaxStepCounts = 40;
+        const int MaxIterations = 80;
+
+        var adapter = _host.Service.Adapter;
+        var scaleX = 1.0;
+        var scaleY = 1.0;
+
+        for (var i = 0; i < MaxIterations; i++)
+        {
+            if (adapter.GetCursorPosition() is not { } cursor)
+                throw Guard("이 입력 경로는 커서 자리를 읽을 수 없어 커서이동을 못 합니다. 입력 경로를 SendInput 이나 Interception 으로 바꿔 보세요.");
+
+            var errX = x - cursor.X;
+            var errY = y - cursor.Y;
+
+            if (Math.Abs(errX) <= tolerance && Math.Abs(errY) <= tolerance) return true;
+
+            var stepX = Math.Clamp((int)Math.Round(errX * scaleX), -MaxStepCounts, MaxStepCounts);
+            var stepY = Math.Clamp((int)Math.Round(errY * scaleY), -MaxStepCounts, MaxStepCounts);
+
+            // 남은 거리가 있는데 반올림으로 0 이 되면 안 간다 - 한 카운트는 보낸다.
+            if (stepX == 0 && Math.Abs(errX) > tolerance) stepX = Math.Sign(errX);
+            if (stepY == 0 && Math.Abs(errY) > tolerance) stepY = Math.Sign(errY);
+
+            SendRelative(stepX, stepY);
+            Wait(25);
+
+            if (adapter.GetCursorPosition() is not { } after) continue;
+
+            // 보낸 카운트 / 실제로 간 픽셀 = 픽셀당 카운트. 안 움직였으면(커서가 안 따라옴) 배로 늘려 본다.
+            scaleX = LearnScale(scaleX, stepX, after.X - cursor.X);
+            scaleY = LearnScale(scaleY, stepY, after.Y - cursor.Y);
+        }
+
+        return false;
+    });
+
+    private static double LearnScale(double scale, int sentCounts, int movedPixels)
+    {
+        if (sentCounts == 0) return scale;
+
+        // 움직임이 없거나 반대로 갔으면 더 크게 보내 본다.
+        if (movedPixels == 0 || Math.Sign(movedPixels) != Math.Sign(sentCounts)) return Math.Min(scale * 2, 20);
+
+        return Math.Clamp(Math.Abs((double)sentCounts / movedPixels), 0.05, 20);
+    }
+
+    public bool 커서이동(int x, int y, int 허용오차 = 3) => MoveCursor(x, y, 허용오차);
 
     /// <summary>버튼을 누른 채로 둔다. <c>버튼떼기</c> 전까지. 비상 정지도 뗄 수 있게 적어 둔다.</summary>
     public void MouseDown(object? button = null) => Traced("MouseDown", ToButton(button).ToString(), () =>
