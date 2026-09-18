@@ -574,6 +574,14 @@ internal static class ScriptScreenProbe
                 if (visible.All(c => c.Width.UnitType == DevExpress.Xpf.Grid.GridColumnUnitType.Pixel && c.ActualWidth > 50))
                     Console.WriteLine($"[PASS] 영역 그리드 열 너비는 내용에 맞추고 50px 여유를 더한다 - {string.Join(", ", widths)}");
                 else { Console.WriteLine($"[FAIL] 영역 그리드 열 너비가 이상하다 - {string.Join(", ", widths)}"); failures++; }
+
+                // OCR 엔진 콤보 - CellTemplate 안에서는 View.DataContext 로 다시 잡아야 목록이 뜬다(사용자, 2026-09-18 "그리드에 OCR 리스트 안나와").
+                var ocrCombo = Descendants<DevExpress.Xpf.Editors.ComboBoxEdit>(grid).FirstOrDefault(c => c.ValueMember == "EngineName");
+                var ocrCount = (ocrCombo?.ItemsSource as System.Collections.IEnumerable)?.Cast<object>().Count() ?? 0;
+
+                if (ocrCombo is not null && ocrCount == vm.RegionOcrEngineOptions.Count)
+                    Console.WriteLine($"[PASS] 영역 그리드 OCR 엔진 콤보에 목록이 뜬다 - {ocrCount}개");
+                else { Console.WriteLine($"[FAIL] 영역 그리드 OCR 엔진 콤보 목록이 안 뜬다 - 찾음 {ocrCombo is not null} · 개수 {ocrCount}"); failures++; }
             }
 
             // 트리도 열 머리글이 기본으로 보인다(사용자, 2026-09-16 - BaseTreeListView 가 늘 꺼 영역 그리드에 머리글이 없었다).

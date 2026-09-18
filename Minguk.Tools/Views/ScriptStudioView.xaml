@@ -1183,7 +1183,15 @@
                                                 </dxg:GridColumn.EditSettings>
                                                 <dxg:GridColumn.CellTemplate>
                                                     <DataTemplate>
-                                                        <dxe:ComboBoxEdit x:Name="PART_Editor">
+                                                        <!--
+                                                            CellTemplate 안 DataContext 는 자리 줄이라 EditSettings 의 ItemsSource(뷰모델 것)가 안 먹는다 -
+                                                            오른쪽 버튼 메뉴와 같은 길(View.DataContext)로 다시 준다.
+                                                        -->
+                                                        <dxe:ComboBoxEdit x:Name="PART_Editor"
+                                                                          DisplayMember="Label"
+                                                                          IsTextEditable="False"
+                                                                          ItemsSource="{Binding View.DataContext.RegionOcrEngineOptions}"
+                                                                          ValueMember="EngineName">
                                                             <dxe:ComboBoxEdit.Style>
                                                                 <Style TargetType="dxe:ComboBoxEdit">
                                                                     <Style.Triggers>
