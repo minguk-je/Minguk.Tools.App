@@ -20,8 +20,59 @@ namespace Minguk.Tools.Tests;
 /// </remarks>
 internal static partial class Program
 {
+    /// <summary>
+    /// 조준 배율 두 가지 안전장치(사용자, 2026-09-19) - 조준 모드에서 배율이 너무 낮으면 한 번 말해 주고, 일반(메뉴) 모드는 배율을 배우지 않는다.
+    /// </summary>
+    private static void TestAimScaleGuards(CaptureTarget monitor)
+    {
+        (List<string> Printed, List<double> Learned, IReadOnlyList<ScriptError> Errors) Run(string source, double scale)
+        {
+            var printed = new List<string>();
+            var learned = new List<double>();
+
+            var host = new LiveScriptHost
+            {
+                Service = new InputService(new RecordingAdapter()),
+                RequiresForeground = false,
+                Target = () => monitor,
+                Hub = new FakeHub(monitor) { FrameTicks = 1 },
+                Print = printed.Add,
+                Watch = (_, _) => { },
+                HoldTimeMs = 1,
+                AimScale = scale,
+                AimScaleLearned = learned.Add,
+                IsAimScaleAuto = () => true
+            };
+
+            using var api = new LiveScriptApi(host, CancellationToken.None);
+            var errors = new RoslynScriptEngine().RunLiveAsync(source, api, null, CancellationToken.None).GetAwaiter().GetResult();
+
+            return (printed, learned, errors);
+        }
+
+        // 조준 모드, 배율 10% - 두 번 겨눠도 경고는 한 번.
+        var (low, _, lowErrors) = Run("조준(100, 100); 조준(100, 100);", 0.1);
+        var warnings = low.Count(p => p.Contains("조준 배율이"));
+
+        Check("조준 배율이 너무 낮으면(10%) 조준 모드에서 한 번만 알려 준다", lowErrors.Count == 0 && warnings == 1, $"경고 {warnings}번 · {low.FirstOrDefault(p => p.Contains("조준 배율이"))}");
+
+        // 정상 배율(100%)이면 말이 없다.
+        var (normal, _, _) = Run("조준(100, 100);", 1.0);
+
+        Check("조준 배율이 정상(100%)이면 알리지 않는다", !normal.Any(p => p.Contains("조준 배율이")), $"출력 {normal.Count}줄");
+
+        // 일반(메뉴) 모드는 낮은 배율이어도 말하지 않고 배우지도 않는다. 가짜 어댑터의 커서는 (0,0) 이라 그 자리를 겨누면 바로 닿는다.
+        var (menu, learned, menuErrors) = Run("마우스모드(\"일반\"); 조준(0, 0);", 0.1);
+
+        Check("일반(메뉴) 모드에서는 낮은 배율이어도 알리지 않고 배율을 배우지도 않는다",
+              menuErrors.Count == 0 && !menu.Any(p => p.Contains("조준 배율이")) && learned.Count == 0,
+              $"오류 {menuErrors.Count} · 출력 {menu.Count}줄 · 배운 것 {learned.Count}번");
+    }
+
     private static void TestProjectMoves(CaptureTarget monitor)
     {
+        TestAimScaleGuards(monitor);
+
         (List<string> Printed, IReadOnlyList<ScriptError> Errors, int MaxDepth) RunFlow(string start, Dictionary<string, string> projects)
             => RunFlowWith(start, name => projects.TryGetValue(name, out var text) ? text : null);
 

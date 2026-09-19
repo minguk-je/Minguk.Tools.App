@@ -208,7 +208,7 @@ public class LiveScriptApi : IDisposable
     /// 맞았으면(겨눈 뒤의 새 화면에서 목표가 가운데 <see cref="LiveScriptHost.AimTolerancePx"/> 안) true - 이때 누르면 된다.
     /// 아직 멀어 움직였거나, 겨눈 뒤 새 화면이 아직 안 왔으면 false.
     /// </returns>
-    public bool Aim(int x, int y) => _normalMouse ? MoveCursor(x, y) : Traced("Aim", $"{x}, {y}", () => AimCore(x, y, _host.AimTolerancePx, _host.AimTolerancePx));
+    public bool Aim(int x, int y) => _normalMouse ? MoveCursor(x, y) : Traced("Aim", $"{x}, {y}", () => { WarnIfAimScaleLow(); return AimCore(x, y, _host.AimTolerancePx, _host.AimTolerancePx); });
 
     /// <summary>
     /// 검출을 겨눈다 - <b>조준 스레드</b>(<see cref="AimLoop"/>)에 붙여 8ms 마다 멈추지 않고 <b>머리</b>를 따라가게 하고, <b>몸에 들어와 있으면</b> 맞은 것(true)으로 친다.
@@ -229,7 +229,32 @@ public class LiveScriptApi : IDisposable
 
         if (_normalMouse) return MoveCursor(mob.중심x, mob.중심y);
 
+        WarnIfAimScaleLow();
+
         return Traced("Aim", mob.ToString(), () => AimTracked(mob));
+    }
+
+    /// <summary>이 배율(1.0 = 100%) 아래면 "느리다" 고 알린다. 로그의 오버워치 실측이 300~400% 라 30% 는 한참 낮다.</summary>
+    private const double LowAimScale = 0.3;
+
+    private bool _aimScaleWarned;
+
+    /// <summary>
+    /// 조준 모드로 처음 겨눌 때 배율이 너무 낮으면 한 번 말해 준다(사용자, 2026-09-19).
+    /// </summary>
+    /// <remarks>
+    /// 메뉴 테스트로 낮춰 둔 10% 가 저장돼 사격장에서 100px 떨어진 몹에 10카운트만 보냈다 - 겨눈다고 하면서 몇 초씩 안 움직여 원인을 로그에서 한참 찾았다.
+    /// 10% 는 배율의 하한(<see cref="MinAimScale"/>)이라 스스로 배울 수도 없다(보낸 양이 학습 문턱 15카운트 아래).
+    /// 시작 배율만 보고 한 번 말하고, 도는 중 배우다 낮아진 것은 다시 말하지 않는다.
+    /// </remarks>
+    private void WarnIfAimScaleLow()
+    {
+        if (_aimScaleWarned) return;
+        _aimScaleWarned = true;
+
+        if (AimScale >= LowAimScale) return;
+
+        _host.Print($"조준 배율이 {AimScale:P0} 로 낮아 조준이 아주 느리게 움직입니다 - 스크립트 화면 도구 줄의 「조준 배율(%)」 을 게임에 맞게 올리세요(처음 100%, 자동을 켜 두면 겨눈 결과를 보고 맞춥니다).");
     }
 
     /// <summary>새 화면을 기다리는 상한(ms). 검출이 0.1초에 한 번이라 보통 그 안에 온다. 넘으면 지금 예측으로 답한다.</summary>
@@ -765,6 +790,9 @@ public class LiveScriptApi : IDisposable
     /// </summary>
     private void LearnSample(double before, double after, double sent)
     {
+        // 일반(메뉴) 모드에서는 배율을 배우지도 저장하지도 않는다 - 그 배율은 게임 시야용이라 메뉴에서 잰 값이 섞이면 게임 조준이 틀어진다(사용자, 2026-09-19).
+        if (_normalMouse) return;
+
         if (_host.AimScaleLearned is null || _host.IsAimScaleAuto?.Invoke() == false) return;
 
         lock (_aimGate) LearnSampleCore(before, after, sent);
