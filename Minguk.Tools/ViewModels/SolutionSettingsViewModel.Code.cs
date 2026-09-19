@@ -8,6 +8,7 @@ using System.Text.Json.Nodes;
 using DevExpress.Mvvm;
 
 using Minguk.Base.Utilities;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Projects.Settings;
 using Minguk.Tools.ViewModels.Settings;
 
@@ -16,6 +17,9 @@ namespace Minguk.Tools.ViewModels;
 public partial class SolutionSettingsViewModel
 {
     private SolutionSettings? _settings;
+
+    /// <summary>지금 층들(프로젝트·솔루션 설정)의 바뀜 구독.</summary>
+    private readonly System.Reactive.Disposables.SerialDisposable _layerEvents = new();
     private string _restoredLayer = nameof(SettingsLayerKind.Solution);
 
     /// <summary>디자인에서 고치는 양식(편집 대상 층의 사본). 고칠 때마다 층에 저장한다.</summary>
@@ -55,8 +59,16 @@ public partial class SolutionSettingsViewModel
             ? [new SettingsLayerOption(SettingsLayerKind.Project, $"이 프로젝트 ({project})")]
             : [new SettingsLayerOption(SettingsLayerKind.Solution, "솔루션 공통"), new SettingsLayerOption(SettingsLayerKind.Project, $"이 프로젝트 ({project})")];
 
-        _settings.Project.Changed += OnLayerChanged;
-        if (_settings.Solution is not null) _settings.Solution.Changed += OnLayerChanged;
+        // 두 층(프로젝트·솔루션)의 바뀜을 한 구독 묶음으로. 층을 갈아 끼우면(DetachLayers) 통째로 끊는다.
+        // 화면 스레드로 넘기는 것은 받는 쪽(OnLayerChanged)이 한다 - 저장 중(_savingForm)인지는 알림이 온 그 순간에 봐야 한다.
+        var layers = new System.Reactive.Disposables.CompositeDisposable();
+        var projectLayer = _settings.Project;
+        layers.Add(RxEvents.From<string?>(h => projectLayer.Changed += h, h => projectLayer.Changed -= h).Listen(OnLayerChanged));
+
+        if (_settings.Solution is { } solution)
+            layers.Add(RxEvents.From<string?>(h => solution.Changed += h, h => solution.Changed -= h).Listen(OnLayerChanged));
+
+        _layerEvents.Disposable = layers;
 
         _switching = true;
 
@@ -79,10 +91,7 @@ public partial class SolutionSettingsViewModel
 
     private void DetachLayers()
     {
-        if (_settings is null) return;
-
-        _settings.Project.Changed -= OnLayerChanged;
-        if (_settings.Solution is not null) _settings.Solution.Changed -= OnLayerChanged;
+        _layerEvents.Disposable = null;
     }
 
     private void LoadWorking()
@@ -246,7 +255,7 @@ public partial class SolutionSettingsViewModel
     }
 
     /// <summary>층이 바뀌었다(스크립트가 값을 썼거나, 파일을 다시 읽었거나, 우리가 저장했거나). 아무 스레드에서나 온다.</summary>
-    private void OnLayerChanged(object? sender, string? name)
+    private void OnLayerChanged(string? name)
     {
         if (_savingForm) return;
 

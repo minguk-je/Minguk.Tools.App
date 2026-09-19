@@ -2,11 +2,13 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
 
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
 
 using Minguk.Base.Utilities;
+using Minguk.Tools.Helper;
 
 using Minguk.Tools.Projects;
 using Minguk.Tools.Source;
@@ -110,14 +112,20 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     protected override void InitializeObservable()
     {
         if (AutomationDocumentManagerService is { } service)
-            service.ActiveDocumentChanged += OnChildActivated;
+            Disposables.Add(RxEvents.From<ActiveDocumentChangedEventHandler, ActiveDocumentChangedEventArgs>(
+                    handler => (sender, e) => handler(sender, e),
+                    h => service.ActiveDocumentChanged += h,
+                    h => service.ActiveDocumentChanged -= h)
+                .Listen(OnChildActivated));
 
-        // 솔루션 탐색기에서 프로젝트 순서를 바꾸면 콤보도 그 순서로(사용자, 2026-09-19). 정적 이벤트라 ReleaseResources 에서 푼다.
-        SolutionWorkspace.Changed += OnSolutionWorkspaceChanged;
+        // 솔루션 탐색기에서 프로젝트 순서를 바꾸면 콤보도 그 순서로(사용자, 2026-09-19). 정적 이벤트 - 닫힐 때 Disposables 가 푼다. 어느 스레드에서 올지 몰라 화면 스레드로.
+        Disposables.Add(RxEvents.From(h => SolutionWorkspace.Changed += h, h => SolutionWorkspace.Changed -= h)
+            .ObserveOnUi()
+            .Listen(_ => OnSolutionWorkspaceChanged()));
     }
 
     /// <summary>솔루션의 프로젝트 순서가 콤보와 달라졌으면 고른 것을 둔 채 다시 채운다. 순서가 같으면 아무것도 안 한다(시작 프로젝트 바꾸기도 이 알림을 낸다).</summary>
-    private void OnSolutionWorkspaceChanged(object? sender, EventArgs e) => System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() => Guard(() =>
+    private void OnSolutionWorkspaceChanged() => Guard(() =>
     {
         if (SolutionWorkspace.Current is not { } solution || _filling) return;
 
@@ -126,7 +134,7 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
         if (order.SequenceEqual(Projects.Select(choice => choice.Entry.Path))) return;
 
         RefillProjectsKeepingStartup();
-    })));
+    });
 
     protected override void OnLoaded()
     {
@@ -150,11 +158,6 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     /// </summary>
     protected override void ReleaseResources()
     {
-        if (AutomationDocumentManagerService is { } service)
-            service.ActiveDocumentChanged -= OnChildActivated;
-
-        SolutionWorkspace.Changed -= OnSolutionWorkspaceChanged;
-
         CloseChildren();
     }
 
@@ -563,7 +566,7 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     /// <summary>아래 탭을 닫거나 여는 중 - 그동안 앞에 오는 탭은 사람이 고른 것이 아니다.</summary>
     private bool _reshuffling;
 
-    private void OnChildActivated(object? sender, ActiveDocumentChangedEventArgs e) => Guard(() =>
+    private void OnChildActivated(ActiveDocumentChangedEventArgs e) => Guard(() =>
     {
         // 탭을 닫고 여는 동안에는 기억하지 않는다 - 닫힐 때 남은 탭이 차례로 앞에 와서 맨 끝(설정)이 기억됐다(사용자, 2026-09-19).
         if (!_reshuffling && e.NewDocument?.Id is string id && !string.IsNullOrEmpty(id)) AppSettingUtility.Set(LastTabKey, id);

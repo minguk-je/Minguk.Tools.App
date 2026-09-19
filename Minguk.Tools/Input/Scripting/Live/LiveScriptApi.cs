@@ -669,6 +669,15 @@ public class LiveScriptApi : IDisposable
 
     private readonly List<double> _aimSamples = [];
 
+    /// <summary>지금 배율보다 크게 높아 떼어 둔 표본 - <see cref="HighSampleRun"/> 개가 연달아 오면 받는다.</summary>
+    private readonly List<double> _highSamples = [];
+
+    /// <summary>표본이 지금 배율의 이 배를 넘으면 떼어 둔다.</summary>
+    private const double HighSampleRatio = 1.6;
+
+    /// <summary>떼어 둔 높은 표본이 이만큼 연달아 오면 배율이 정말 낮은 것으로 보고 받는다.</summary>
+    private const int HighSampleRun = 5;
+
     /// <summary>이보다 가까우면 배율을 안 배운다(px). 검출 사각형의 떨림이 잰 값을 뒤집는다.</summary>
     private const double MinLearnOffsetPx = 40;
 
@@ -888,11 +897,34 @@ public class LiveScriptApi : IDisposable
         }
 
         var measured = Math.Clamp(sent / moved, MinAimScale, MaxAimScale);
+        var scaleNow = _aimScale ??= _host.AimScale;
 
-        // 잰 값 하나로 바꾸지 않는다. 여러 번 잰 것의 가운뎃값을 쓴다 - 이유는 AimSamples 에 적었다.
-        _aimSamples.Add(measured);
+        // 지금 배율의 HighSampleRatio 배 넘는 표본은 곧바로 넣지 않고 떼어 둔다 - 달리는 봇을 따라가며 보낸 양이 섞인 표본은 늘 위로 틀려(5~9, 맞는 값 3.3~3.5)
+        // 9개 중 4개쯤 섞이면서 배율을 4.4 까지 떠밀었다(사격장 실측 2026-09-19). 다만 <b>HighSampleRun 개가 연달아</b> 높으면 배율이 정말 낮은 것이다(처음 100% 로 시작 등) -
+        // 떼어 둔 것을 한꺼번에 넣는다. 사이에 보통 표본이 하나라도 끼면 떼어 둔 것은 버린다.
+        if (measured > scaleNow * HighSampleRatio)
+        {
+            _highSamples.Add(measured);
 
-        if (_aimSamples.Count > AimSamples) _aimSamples.RemoveAt(0);
+            if (_highSamples.Count < HighSampleRun)
+            {
+                Logger.Debug($"배율 표본 보류: 잰 값 {measured:0.00} 이 지금 배율 {scaleNow:0.00} 의 {HighSampleRatio}배를 넘는다 ({_highSamples.Count}/{HighSampleRun})");
+                return;
+            }
+
+            Logger.Debug($"배율 표본 {HighSampleRun}개가 연달아 높다 - 배율이 낮은 것으로 보고 받는다 ([{string.Join(" ", _highSamples.Select(v => v.ToString("0.0")))}])");
+            _aimSamples.AddRange(_highSamples);
+            _highSamples.Clear();
+        }
+        else
+        {
+            _highSamples.Clear();
+
+            // 잰 값 하나로 바꾸지 않는다. 여러 번 잰 것을 순서로 본다 - 이유는 AimSamples 에 적었다.
+            _aimSamples.Add(measured);
+        }
+
+        while (_aimSamples.Count > AimSamples) _aimSamples.RemoveAt(0);
         if (_aimSamples.Count < AimSamples) return;
 
         var sorted = _aimSamples.OrderBy(v => v).ToArray();

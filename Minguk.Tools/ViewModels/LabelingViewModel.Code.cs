@@ -10,6 +10,7 @@ using System.Windows.Media.Imaging;
 using DevExpress.Mvvm;
 
 using Minguk.Base.Utilities;
+using Minguk.Tools.Helper;
 
 using Minguk.Tools.Markup;
 using Minguk.Tools.Vision.Labeling;
@@ -342,7 +343,7 @@ public partial class LabelingViewModel
         }
     }
 
-    private void OnBoxesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnBoxesChanged(NotifyCollectionChangedEventArgs e)
     {
         IsDirty = true;
 
@@ -575,7 +576,7 @@ public partial class LabelingViewModel
     /// 바꾸면 다시 배치가 오는데, 열은 내용 너비라 그리드 너비와 무관해 같은 값이 나오고 거기서 멈춘다(되먹임 없음).
     /// 세로 스크롤 막대와 테두리 몫(24px)은 고정으로 더한다 - 막대가 나타났다 사라지며 패널이 떨리지 않게.
     /// </remarks>
-    private void OnImagesGridLayoutUpdated(object? sender, EventArgs e)
+    private void OnImagesGridLayoutUpdated()
     {
         if (_imagesGrid is not { View: DevExpress.Xpf.Grid.TableView view } grid) return;
 
@@ -611,13 +612,11 @@ public partial class LabelingViewModel
     }
 
     /// <summary>처음에는 어느 칸도 안 열린다. 더블 클릭·더하기 직후에만 연다 - 한 번 누를 때마다 열리면 줄을 고르려다 편집이 된다.</summary>
-    private void OnClassEditorShowing(object sender, DevExpress.Xpf.Grid.ShowingEditorEventArgs e)
+    private void OnClassEditorShowing(DevExpress.Xpf.Grid.ShowingEditorEventArgs e)
         => e.Cancel = !_allowClassEdit;
 
-    private void OnClassEditorHidden(object sender, DevExpress.Xpf.Grid.EditorEventArgs e) => _allowClassEdit = false;
-
     /// <summary>칸을 더블 클릭하면 그 칸(이름·색)을 고친다. 행 번호 자리를 더블 클릭하면 이름 칸이다.</summary>
-    private void OnClassRowDoubleClick(object sender, DevExpress.Xpf.Grid.RowDoubleClickEventArgs e)
+    private void OnClassRowDoubleClick(DevExpress.Xpf.Grid.RowDoubleClickEventArgs e)
     {
         if (_classGrid?.GetRow(e.HitInfo.RowHandle) is not LabelClassRow row) return;
 
@@ -635,11 +634,9 @@ public partial class LabelingViewModel
     /// 빈 이름과 이미 있는 이름은 되돌린다 - 되돌리는 세터가 다시 여기로 오지만 같은 이름이라 곧바로 끝난다.
     /// 목록을 다시 채우지 않는다(줄을 갈아 끼우면 고른 줄이 풀린다). 캔버스에 주는 복사본만 새로 만든다.
     /// </remarks>
-    private void OnClassRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Guard(() =>
+    private void OnClassRowChanged(LabelClassRow row, string? propertyName) => Guard(() =>
     {
-        if (sender is not LabelClassRow row) return;
-
-        if (e.PropertyName == nameof(LabelClassRow.Color))
+        if (propertyName == nameof(LabelClassRow.Color))
         {
             if (_palette.ColorOf(row.Index) == row.Color) return;
 
@@ -652,7 +649,7 @@ public partial class LabelingViewModel
             return;
         }
 
-        if (e.PropertyName != nameof(LabelClassRow.Name)) return;
+        if (propertyName != nameof(LabelClassRow.Name)) return;
 
         var before = _classes.NameOf(row.Index);
         var wanted = row.Name?.Trim() ?? string.Empty;
@@ -699,15 +696,20 @@ public partial class LabelingViewModel
     {
         var index = SelectedClassIndex;
 
-        foreach (var old in Classes) old.PropertyChanged -= OnClassRowChanged;
+        // 옛 줄의 구독을 끊고 새 줄마다 건다 - 한 묶음으로 갈아 끼운다.
+        _classRowEvents.Disposable = null;
         Classes.Clear();
+
+        var rowEvents = new System.Reactive.Disposables.CompositeDisposable();
 
         for (var i = 0; i < _classes.Count; i++)
         {
             var row = new LabelClassRow(i, _classes.NameOf(i), _palette.ColorOf(i));
-            row.PropertyChanged += OnClassRowChanged;
+            rowEvents.Add(RxEvents.PropertyChanged(row).Listen(name => OnClassRowChanged(row, name)));
             Classes.Add(row);
         }
+
+        _classRowEvents.Disposable = rowEvents;
 
         ClassNameSnapshot = _classes.Names.ToArray();
         ClassColors = _palette.Snapshot(_classes.Count);
@@ -795,7 +797,7 @@ public partial class LabelingViewModel
         DoDeleteImageCommand.RaiseCanExecuteChanged();
     }
 
-    private void OnPredictionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnPredictionsChanged()
     {
         DoClearPredictionsCommand.RaiseCanExecuteChanged();
         DoAdoptPredictionsCommand.RaiseCanExecuteChanged();

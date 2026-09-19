@@ -96,11 +96,20 @@ internal static partial class Program
         }
 
         var split = Feed(3.5, 3.5, 3.4, 16, 3.6, 17, 3.5, 15, 16, 18);
-        var agree = Feed(2.0, 3.5, 3.4, 3.6, 3.5, 3.3, 3.7, 3.5, 3.4, 3.6);
+        // 1.6배 안(2.5 → 3.5)이라 표본이 곧바로 들어간다 - 9개가 다 위라 올린다(가까우니 차이의 일부만).
+        var agree = Feed(2.5, 3.5, 3.4, 3.6, 3.5, 3.3, 3.7, 3.5, 3.4, 3.6);
+
+        // 맞는 배율(3.5) 근처에서 5~9 짜리가 섞여 들어와도 올라가지 않는다(떼어 둔다). 처음 배율이 크게 낮으면(1.0) 높은 표본이 연달아 와 결국 배운다.
+        var mixed = Feed(3.5, 3.4, 6.5, 3.5, 3.3, 8.7, 3.6, 5.9, 3.5, 3.4, 7.3, 3.2, 3.6, 9.1, 3.5, 3.4, 6.2, 3.5, 3.3);
+        var fromLow = Feed(1.0, Enumerable.Repeat(3.5, 40).ToArray());
+
+        Check("조준 배율: 지금 배율의 1.6배 넘는 표본은 떼어 두고, 5개가 연달아 오면 받는다",
+              mixed.All(v => v < 3.9) && fromLow.Count > 0 && Math.Abs(fromLow[^1] - 3.5) < 0.3,
+              $"맞는 값 근처 3.50 → {(mixed.Count == 0 ? "그대로" : string.Join(" → ", mixed.Select(v => v.ToString("0.00"))))} · 낮게 시작 1.00 → {string.Join(" → ", fromLow.Select(v => v.ToString("0.00")))}");
 
         Check("조준 배율: 표본 9개 중 7개가 한쪽이어야 옮긴다 - 두 무리로 갈리면 그대로, 한 무리로 모이면 배운다",
-              split.Count == 0 && agree.Count > 0 && Math.Abs(agree[^1] - 3.0) < 0.05,
-              $"갈림 {(split.Count == 0 ? "그대로" : string.Join(" → ", split.Select(v => v.ToString("0.00"))))} · 모임 2.00 → {string.Join(" → ", agree.Select(v => v.ToString("0.00")))}");
+              split.Count == 0 && agree.Count > 0 && agree[^1] > 2.7 && agree[^1] < 3.5,
+              $"갈림 {(split.Count == 0 ? "그대로" : string.Join(" → ", split.Select(v => v.ToString("0.00"))))} · 모임 2.50 → {string.Join(" → ", agree.Select(v => v.ToString("0.00")))}");
     }
 
     /// <summary>

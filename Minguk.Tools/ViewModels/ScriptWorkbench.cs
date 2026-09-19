@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
@@ -124,13 +125,13 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         Project.EditorSettings = this;
 
         // 탭의 글·목록이 바뀌면 프로젝트 전체를 다시 검사한다. 완성·분류가 다른 스레드에서 읽을 글도 떠 둔다.
-        Project.Changed += (_, _) =>
+        _subscriptions.Add(RxEvents.From(h => Project.Changed += h, h => Project.Changed -= h).Listen(_ =>
         {
             Project.SnapshotOpenTexts();
             ScheduleRecompile();
-        };
+        }));
 
-        Project.ProjectChanged += (_, _) =>
+        _subscriptions.Add(RxEvents.From(h => Project.ProjectChanged += h, h => Project.ProjectChanged -= h).Listen(_ =>
         {
             // 프로젝트를 열면 빌드된 것은 잊는다 - 편집·검사는 소스로 한다.
             if (Project.IsOpen) Compiled = null;
@@ -142,16 +143,26 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
 
             RefreshCompletionSource();
             ScheduleRecompile();
-        };
+        }));
 
         NewCommand = new DelegateCommand(DoNew, () => !IsLocked, false);
         OpenCommand = new DelegateCommand(DoOpen, () => !IsLocked, false);
         SaveCommand = new DelegateCommand(DoSave, () => true, false);
         SaveAsCommand = new DelegateCommand(DoSaveAs, () => true, false);
 
-        // 테마가 바뀌면 편집기 색을 다시 잰다. 정적 이벤트라 Dispose 에서 반드시 푼다.
-        DevExpress.Xpf.Core.LightweightThemeManager.CurrentThemeChanged += OnThemeChanged;
+        // 테마가 바뀌면 편집기 색을 다시 잰다. 정적 이벤트라 Dispose 에서 반드시 푼다(_subscriptions).
+        _subscriptions.Add(RxEvents.From<DevExpress.Xpf.Core.ValueChangedEventHandler<DevExpress.Xpf.Core.LightweightTheme>, DevExpress.Xpf.Core.ValueChangedEventArgs<DevExpress.Xpf.Core.LightweightTheme>>(
+                handler => (sender, e) => handler(sender, e),
+                h => DevExpress.Xpf.Core.LightweightThemeManager.CurrentThemeChanged += h,
+                h => DevExpress.Xpf.Core.LightweightThemeManager.CurrentThemeChanged -= h)
+            .Listen(_ => _host.OnUi(ApplyEditorTheme)));
     }
+
+    /// <summary>이 객체의 구독 - 프로젝트 바뀜·테마. Dispose 맨 앞에서 끊는다. 파일 감시는 파일을 바꿀 때마다 갈아 끼우므로 <see cref="_watcherEvents"/>.</summary>
+    private readonly System.Reactive.Disposables.CompositeDisposable _subscriptions = new();
+
+    /// <summary>지금 파일 감시의 구독.</summary>
+    private readonly System.Reactive.Disposables.SerialDisposable _watcherEvents = new();
 
     // ── 커맨드 ───────────────────────────────────────────────────────────
 
@@ -476,7 +487,6 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         }
     }
 
-    private void OnThemeChanged(object? sender, EventArgs e) => _host.OnUi(ApplyEditorTheme);
 
     // ── 설정 저장·복원 ───────────────────────────────────────────────────
 
@@ -827,6 +837,7 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     /// <summary>지금 파일을 보기 시작한다. 파일이 없으면(저장 안 한 글) 보던 것만 놓는다.</summary>
     private void WatchFile()
     {
+        _watcherEvents.Disposable = null;
         _watcher?.Dispose();
         _watcher = null;
         _reloadPending = false;
@@ -843,10 +854,17 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
                 NotifyFilter = System.IO.NotifyFilters.LastWrite | System.IO.NotifyFilters.Size | System.IO.NotifyFilters.FileName,
             };
 
+            IObservable<System.IO.FileSystemEventArgs> On(Action<System.IO.FileSystemEventHandler> add, Action<System.IO.FileSystemEventHandler> remove)
+                => RxEvents.From<System.IO.FileSystemEventHandler, System.IO.FileSystemEventArgs>(handler => (sender, e) => handler(sender, e), add, remove);
+
             // 임시 파일에 쓰고 이름을 바꾸는 편집기(VS Code·VS)는 Changed 가 아니라 Renamed·Created 로 온다.
-            watcher.Changed += OnFileEvent;
-            watcher.Created += OnFileEvent;
-            watcher.Renamed += OnFileEvent;
+            // 묶기(300ms)는 아래 ScheduleReload 의 타이머가 한다 - 잠겨서 못 읽었을 때 다시 시도도 같은 타이머라 Throttle 로 가르지 않는다.
+            _watcherEvents.Disposable = Observable.Merge(
+                    On(h => watcher.Changed += h, h => watcher.Changed -= h),
+                    On(h => watcher.Created += h, h => watcher.Created -= h),
+                    RxEvents.From<System.IO.RenamedEventHandler, System.IO.RenamedEventArgs>(handler => (sender, e) => handler(sender, e), h => watcher.Renamed += h, h => watcher.Renamed -= h)
+                        .Select(e => (System.IO.FileSystemEventArgs)e))
+                .Listen(_ => OnFileEvent(watcher));
             watcher.EnableRaisingEvents = true;
 
             _watcher = watcher;
@@ -858,9 +876,9 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     }
 
     /// <summary>감시 스레드. 여기서는 읽지 않고 묶기만 한다.</summary>
-    private void OnFileEvent(object sender, System.IO.FileSystemEventArgs e)
+    private void OnFileEvent(System.IO.FileSystemWatcher source)
     {
-        if (_disposed || !ReferenceEquals(sender, _watcher)) return;
+        if (_disposed || !ReferenceEquals(source, _watcher)) return;
 
         _reloadRetries = 0;
         ScheduleReload();
@@ -972,11 +990,12 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        DevExpress.Xpf.Core.LightweightThemeManager.CurrentThemeChanged -= OnThemeChanged;
+        _subscriptions.Dispose();
 
         _debounce?.Dispose();
         _debounce = null;
 
+        _watcherEvents.Dispose();
         _watcher?.Dispose();
         _watcher = null;
 

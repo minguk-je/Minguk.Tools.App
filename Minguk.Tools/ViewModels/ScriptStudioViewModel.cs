@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -14,6 +15,7 @@ using RegionCell = Minguk.Tools.Vision.Regions.RegionCell;
 using ScriptProject = Minguk.Tools.Input.Scripting.Projects.ScriptProject;
 
 using Minguk.Image;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
 using Minguk.Tools.Input.Scripting;
@@ -47,6 +49,12 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     public ScriptHelpRow? SelectedHelpRow { get => GetProperty(() => SelectedHelpRow); set => SetProperty(() => SelectedHelpRow, value); }
 
     /// <summary>돌리는 것. 한 번 · 반복 · 중지 · 진행.</summary>
+    /// <summary>
+    /// 이 화면이 만든 것(Player·Script·Live)의 구독. 바탕의 Disposables 는 ReleaseResources <b>앞</b>에서 끊기는데, 여기는 <b>끝</b>에서 끊는다 -
+    /// 닫으며 부르는 <c>Player.Stop()</c> 이 실행 끝남(글 잠금 풀기·제 프로젝트로 돌아가기)을 그대로 거치게.
+    /// </summary>
+    private readonly System.Reactive.Disposables.CompositeDisposable _ownEvents = new();
+
     public ScriptPlayer Player { get; }
 
     /// <summary>실시간 실행에 필요한 것들 - 출력 칸, 비상 정지, API 에 빌려 줄 것.</summary>
@@ -106,12 +114,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         Player = new ScriptPlayer(() => Live.Resolve(Script, Player));
 
-        // 도는 동안 글을 잠근다. 도중에 바뀌면 무엇이 나갔는지 알 수 없다.
-        Player.RunningChanged += (_, _) => Script.IsLocked = Player.IsRunning;
-
         // 도는 중에는 실행 단추를 끈다(사용자, 2026-09-18) - 멈춰 있을 때(실행 일시정지·중단점)만 "계속" 으로 산다.
         RunOrContinueCommand = new DelegateCommand(RunOrContinue, () => Player.IsIdle || IsPaused || Live.Debug.IsPaused, false);
-        Live.Debug.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(Live.Debug.IsPaused)) RunOrContinueCommand.RaiseCanExecuteChanged(); };
+        _ownEvents.Add(RxEvents.PropertyChanged(Live.Debug, nameof(Live.Debug.IsPaused)).Listen(_ => RunOrContinueCommand.RaiseCanExecuteChanged()));
         StepCommand = new DelegateCommand(Step, false);
         ToggleBreakpointCommand = new DelegateCommand(ToggleBreakpoint, false);
 
@@ -129,23 +134,31 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         SwapPanesCommand = new DelegateCommand(SwapPanes, false);
         GoToErrorCommand = new DelegateCommand<object?>(GoToError, false);
 
-        Script.Project.ProjectChanged += (_, _) =>
+        // 아래 구독은 화면이 만든 것(Player·Script·Live)이라 수명이 같다 - 생성자에서 걸고 ReleaseResources 끝에서 푼다(_ownEvents).
+        _ownEvents.Add(RxEvents.From(h => Script.Project.ProjectChanged += h, h => Script.Project.ProjectChanged -= h).Listen(_ =>
         {
             SaveAsCommand.RaiseCanExecuteChanged();
             CloseDocumentCommand.RaiseCanExecuteChanged();
             BuildCommand.RaiseCanExecuteChanged();
             BuildAllCommand.RaiseCanExecuteChanged();
             BuildProjectNodeCommand.RaiseCanExecuteChanged();
-        };
+        }));
 
-        Player.RunningChanged += (_, _) => BuildCommand.RaiseCanExecuteChanged();
-        Player.RunningChanged += (_, _) => BuildAllCommand.RaiseCanExecuteChanged();
-        Player.RunningChanged += (_, _) => BuildProjectNodeCommand.RaiseCanExecuteChanged();
-        Player.RunningChanged += (_, _) => RunOrContinueCommand.RaiseCanExecuteChanged();
+        // 실행이 켜지고 꺼질 때 - 순서가 있다: 글 잠금이 먼저(빌드 단추가 그것을 본다), 그다음 단추 상태, 일시정지 맞추기, 끝났으면 제 프로젝트로 돌아가기.
+        _ownEvents.Add(RxEvents.From(h => Player.RunningChanged += h, h => Player.RunningChanged -= h).Listen(_ =>
+        {
+            // 도는 동안 글을 잠근다. 도중에 바뀌면 무엇이 나갔는지 알 수 없다.
+            Script.IsLocked = Player.IsRunning;
 
-        // 실행이 켜지고 꺼질 때 실행 일시정지 단추를 켜고 끄고, 끝났으면 일시정지를 푼다.
-        Player.RunningChanged += (_, _) => SyncPause();
-        Player.RunningChanged += (_, _) => ReturnToHomeProjectWhenStopped(Player.IsRunning);
+            BuildCommand.RaiseCanExecuteChanged();
+            BuildAllCommand.RaiseCanExecuteChanged();
+            BuildProjectNodeCommand.RaiseCanExecuteChanged();
+            RunOrContinueCommand.RaiseCanExecuteChanged();
+
+            // 실행 일시정지 단추를 켜고 끄고, 끝났으면 일시정지를 푼다.
+            SyncPause();
+            ReturnToHomeProjectWhenStopped(Player.IsRunning);
+        }));
     }
 
     // ── 일시정지 ─────────────────────────────────────────────────────────
@@ -889,13 +902,18 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         // 영역 탭이 맨 처음 고른 탭이 아니면 이때는 아직 안 그려져 있어 폭을 못 잰다(사용자, 2026-09-18 여러 번 "너무 빽빽해") -
         // 그 탭을 실제로 고르는 순간 다시 잰다.
-        if (_dock is not null) _dock.DockItemActivated += OnDockItemActivated;
+        if (_dock is { } dock)
+            Disposables.Add(RxEvents.From<DevExpress.Xpf.Docking.Base.DockItemActivatedEventHandler, DevExpress.Xpf.Docking.Base.DockItemActivatedEventArgs>(
+                    handler => (sender, e) => handler(sender, e),
+                    h => dock.DockItemActivated += h,
+                    h => dock.DockItemActivated -= h)
+                .Listen(OnDockItemActivated));
 
         // 첫 준비가 유독 느리다(C# 은 첫 컴파일, 파이썬은 런타임 받기). 미리 치러 둔다.
         _ = Script.PrepareAsync();
     }
 
-    private void OnDockItemActivated(object? sender, DevExpress.Xpf.Docking.Base.DockItemActivatedEventArgs e)
+    private void OnDockItemActivated(DevExpress.Xpf.Docking.Base.DockItemActivatedEventArgs e)
     {
         if (e.Item?.Name == "RegionsPanel") FitRegionsGridColumns();
     }
@@ -914,17 +932,23 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     {
         if (FindControl<GridControl>("RegionsGridObjectService") is not { } grid) return;
 
-        if (grid.IsLoaded) DeferredBestFit(grid);
-        else grid.Loaded += OnRegionsGridLoaded;
+        if (grid.IsLoaded)
+        {
+            DeferredBestFit(grid);
+            return;
+        }
+
+        // 뜰 때 한 번만(Take(1)). 여러 번 불려도 기다리는 것은 하나 - 새로 걸면 옛것이 풀린다.
+        _regionsGridLoaded.Disposable = RxEvents.From<System.Windows.RoutedEventHandler, System.Windows.RoutedEventArgs>(
+                handler => (sender, e) => handler(sender, e),
+                h => grid.Loaded += h,
+                h => grid.Loaded -= h)
+            .Take(1)
+            .Listen(_ => DeferredBestFit(grid));
     }
 
-    private void OnRegionsGridLoaded(object sender, System.Windows.RoutedEventArgs e)
-    {
-        if (sender is not GridControl grid) return;
-
-        grid.Loaded -= OnRegionsGridLoaded;
-        DeferredBestFit(grid);
-    }
+    /// <summary>영역 그리드가 뜨기를 기다리는 구독(<see cref="FitRegionsGridColumns"/>).</summary>
+    private readonly System.Reactive.Disposables.SerialDisposable _regionsGridLoaded = new();
 
     private static void DeferredBestFit(GridControl grid)
         => grid.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() => BestFitRegionsGridColumns(grid)));
@@ -959,11 +983,12 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         foreach (var claim in _hotkeyClaims) claim.Dispose();
         _hotkeyClaims.Clear();
         _editor = null;
-        if (_dock is not null) _dock.DockItemActivated -= OnDockItemActivated;
+        _regionsGridLoaded.Dispose();
         _dock = null;
 
         Live.Dispose();
         Script.Dispose();
+        _ownEvents.Dispose();
 
         base.ReleaseResources();
     }

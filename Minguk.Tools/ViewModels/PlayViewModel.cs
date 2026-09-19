@@ -11,6 +11,7 @@ using DevExpress.Mvvm.POCO;
 
 using Minguk.Base.Utilities;
 using Minguk.Image;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Hotkeys;
 using Minguk.Tools.Input.Scripting;
@@ -54,6 +55,12 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
 
     /// <summary>고른 스크립트 문서. 여기서는 읽기만 한다(파일 → 계획 → 틀린 줄).</summary>
     public ScriptWorkbench Script { get; }
+
+    /// <summary>
+    /// 이 화면이 만든 것(Player·Script·Live)의 구독. 바탕의 Disposables 는 ReleaseResources <b>앞</b>에서 끊기는데, 여기는 <b>끝</b>에서 끊는다 -
+    /// 닫으며 부르는 <c>Player.Stop()</c> 이 실행 끝남(글 잠금 풀기·제 프로젝트로 돌아가기)을 그대로 거치게.
+    /// </summary>
+    private readonly System.Reactive.Disposables.CompositeDisposable _ownEvents = new();
 
     public ScriptPlayer Player { get; }
 
@@ -106,12 +113,13 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         RefreshScriptsCommand = new DelegateCommand(RefreshScripts, () => Player.IsIdle, false);
         BrowseScriptCommand = new DelegateCommand(DoBrowseScript, () => Player.IsIdle, false);
 
-        Player.RunningChanged += (_, _) => ReturnToHomeProjectWhenStopped(Player.IsRunning);
-        Player.RunningChanged += (_, _) =>
+        // 화면이 만든 Player 라 수명이 같다 - 생성자에서 건다(하네스는 화면 없이 ViewModel 만 만들어 쓴다). 푸는 것은 ReleaseResources 끝(_ownEvents).
+        _ownEvents.Add(RxEvents.From(h => Player.RunningChanged += h, h => Player.RunningChanged -= h).Listen(_ =>
         {
+            ReturnToHomeProjectWhenStopped(Player.IsRunning);
             RefreshScriptsCommand.RaiseCanExecuteChanged();
             BrowseScriptCommand.RaiseCanExecuteChanged();
-        };
+        }));
     }
 
     private static void RunOnUi(Action action)
@@ -499,6 +507,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         _hotkeyClaims.Clear();
 
         Script.Dispose();
+        _ownEvents.Dispose();
 
         base.ReleaseResources();
     }

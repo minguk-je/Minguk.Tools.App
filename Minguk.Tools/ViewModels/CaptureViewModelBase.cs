@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reactive.Disposables;
 using System.Reflection;
 using System.Threading;
 using DevExpress.Mvvm;
@@ -75,6 +76,12 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// 캡처 방식을 바꿔도 이 화면은 손댈 것이 없다.
     /// </summary>
     private IScreenCaptureAdapter? _captureSession;
+
+    /// <summary>지금 세션의 이벤트 구독(프레임·알림·끝남). 세션을 놓을 때 먼저 끊는다 - 화면이 닫힐 때는 바탕의 Disposables 가 한 번 더 끊는다.</summary>
+    private readonly SerialDisposable _sessionEvents = new();
+
+    /// <summary>렌더 시점 구독(<see cref="HookPreviewRendering"/>). 비우면 풀린다.</summary>
+    private readonly SerialDisposable _renderLoop = new();
     private Timer? _statisticsFlushTimer;
 
     /// <summary>타이머 스레드에서 서비스 컨테이너를 뒤지지 않도록, 시작할 때 UI 스레드에서 한 번 꺼내 둔다.</summary>
@@ -422,6 +429,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     protected CaptureViewModelBase()
     {
+        Disposables.Add(_sessionEvents);
+        Disposables.Add(_renderLoop);
+
         PreviewTargetFps = 60;
         CaptureTargetFps = 60;
 
@@ -609,9 +619,11 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             // 세션은 허브에서 받는다. 다른 화면이 같은 창을 잡고 있으면 그 세션을 나눠 쓴다 - 실제 캡처는 한 번이다.
             _captureSession = CaptureSessionHubFactory.Default.Acquire(SelectedTarget, EnableCpuReadback);
             _captureSession.TargetFps = CaptureTargetFps;
-            _captureSession.FrameArrived += OnFrameArrived;
-            _captureSession.Notice += OnSessionNotice;
-            _captureSession.Ended += OnSessionEnded;
+            var session = _captureSession;
+            _sessionEvents.Disposable = new CompositeDisposable(
+                RxEvents.From<CapturedFrameEventArgs>(h => session.FrameArrived += h, h => session.FrameArrived -= h).Listen(OnFrameArrived),
+                RxEvents.From<string>(h => session.Notice += h, h => session.Notice -= h).Listen(OnSessionNotice),
+                RxEvents.From<string>(h => session.Ended += h, h => session.Ended -= h).Listen(OnSessionEnded));
             _captureSession.Start();
 
             // 통계를 그리드로 옮기는 건 1초에 한 번. 콜백에서 직접 하면 UI 가 캡처를 붙잡는다.
@@ -732,7 +744,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     // ── 캡처 콜백. 여기는 스레드풀이다 ────────────────────────────────────────
 
-    private void OnFrameArrived(object? sender, CapturedFrameEventArgs e)
+    private void OnFrameArrived(CapturedFrameEventArgs e)
     {
         lock (_statisticsLock)
         {
@@ -1054,15 +1066,8 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     }
 
     /// <summary>
-    /// 화면이 계속 그려지도록 붙잡아 두는 빈 핸들러.
-    /// D3DImage 의 갱신만으로는 WPF 가 렌더 루프를 계속 돌린다는 보장이 없다.
-    /// </summary>
-    private void OnKeepRendering(object? sender, EventArgs e)
-    {
-    }
-
-    /// <summary>
     /// 렌더 시점 구독을 붙였다 뗀다. UI 스레드에서만 만진다.
+    /// 받는 쪽은 비어 있다 - 붙어 있는 것만으로 화면이 계속 그려진다. D3DImage 의 갱신만으로는 WPF 가 렌더 루프를 계속 돌린다는 보장이 없다.
     /// 떼는 것을 빠뜨리면 미리보기를 꺼도 매 프레임 핸들러가 돌고,
     /// ViewModel 이 CompositionTarget 에 붙들려 탭을 닫아도 살아남는다.
     /// </summary>
@@ -1073,10 +1078,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
         _isRenderLoopHooked = hook;
 
-        if (hook)
-            CompositionTarget.Rendering += OnKeepRendering;
-        else
-            CompositionTarget.Rendering -= OnKeepRendering;
+        _renderLoop.Disposable = hook
+            ? RxEvents.From(h => CompositionTarget.Rendering += h, h => CompositionTarget.Rendering -= h).Listen(_ => { })
+            : null;
     }
 
     /// <summary>
@@ -1722,7 +1726,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         }
     }
 
-    private void OnSessionNotice(object? sender, string message)
+    private void OnSessionNotice(string message)
     {
         Note(message);
         Logger.Info(message);
@@ -1732,7 +1736,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     /// 세션이 스스로 멈췄다(대상 창이 닫힘). 화면도 중지 상태로 맞추고, 파생 화면이 도는 것(스크립트)을 멈추게 한다(<see cref="OnCaptureEnded"/>).
     /// </summary>
     /// <remarks>사용자(2026-09-18) "상대 창이 끊기면 캡처 중지, 스크립트 실행도 중지". 어느 스레드에서든 오므로 UI 스레드로 옮긴다.</remarks>
-    private void OnSessionEnded(object? sender, string reason)
+    private void OnSessionEnded(string reason)
     {
         Logger.Info($"캡처 세션이 스스로 멈췄다: {reason}");
 
@@ -1911,9 +1915,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
         if (_captureSession is not null)
         {
-            _captureSession.FrameArrived -= OnFrameArrived;
-            _captureSession.Notice -= OnSessionNotice;
-            _captureSession.Ended -= OnSessionEnded;
+            _sessionEvents.Disposable = null;
             _captureSession.Dispose();
             _captureSession = null;
         }

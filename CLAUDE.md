@@ -149,7 +149,14 @@ View 의 `Loaded` 와 부모 주입이 **모두** 오면 한 번 돈다:
 - 생성자에는 XAML 이 바인딩할 것만(커맨드·컬렉션·Caption). `OnInitializedCommand`·`OnClosingCommand`·`DoCloseCommand` 는 바탕 것.
 - 로거는 바탕의 `Logger`(새로 만들지 않는다). 메신저는 `OnMessenger` 를 override - **화면이 뜬 뒤에야** 받는다(방금 연 화면에 보낼 요청은 들고 있다가 `OnLoaded` 에서 가져간다).
 - 예외는 `Guard(() => ...)` - NLog + `ExceptionViewer`. 복구가 필요한 곳만 `try/catch`.
-- **정적 이벤트**(`SolutionWorkspace.Changed`·`LightweightThemeManager.CurrentThemeChanged` 등)는 닫힐 때 반드시 푼다.
+- **이벤트는 `+=` 로 걸지 않는다 - `RxEvents`(Core `Helper`) + `.Listen(...)` 으로 구독해 `IDisposable` 로 든다**(사용자, 2026-09-19).
+  - `Subscribe` 말고 `Listen` - Rx 는 받는 쪽이 한 번 던지면 구독을 끊는다(`+=` 는 다음 알림도 받았다). `Listen` 은 로그만 남기고 살려 둔다.
+  - 둘 곳: 정적 이벤트·컨트롤·서비스는 `InitializeObservable`/`InitializeControls` 에서 `Disposables` 에(바탕이 **`ReleaseResources` 앞**에서 끊는다).
+    화면이 만든 것(`Player`·`Script`·`Live`)은 생성자에서 - 하네스가 화면 없이 ViewModel 을 쓴다. 닫으며 부르는 `Player.Stop()` 이 실행 끝남을 거쳐야 해서 스크립트·플레이 화면은 `_ownEvents` 로 `ReleaseResources` **끝**에서 끊는다.
+    도중에 바뀌는 대상(캡처 세션·파일 감시·행마다 `PropertyChanged`)은 `SerialDisposable`·구독표로 들고 예전 `-=` 자리에서 끊는다.
+  - 다른 스레드에서 오는 알림을 화면에 반영할 때 `.ObserveOnUi()`, 몰려오는 알림은 `.Throttle(...)`(탐색기 폴더 감시).
+  - View 코드 비하인드가 제 자식 컨트롤에 거는 것(`Loaded`·버튼 `Click`)은 같이 사라지므로 `+=` 그대로 둔다.
+- **정적 이벤트**(`SolutionWorkspace.Changed`·`LightweightThemeManager.CurrentThemeChanged` 등)는 닫힐 때 반드시 푼다(위 규칙대로 `Disposables` 에 넣으면 된다).
 
 ## 외부와 닿는 것은 어댑터로
 

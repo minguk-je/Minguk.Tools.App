@@ -855,7 +855,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 3GB 카드에서 캡처·DirectML 추론과 CUDA 학습이 같이 돌다 드라이버가 GPU 를 리셋했다(실측). 토글은 켠 채로 두어 끝나면 사람이 다시 켤 것이 없다.
     /// 모델을 내려놓는 동안 <c>_detector</c> 가 null 이라 프레임 콜백은 알아서 건너뛴다(<see cref="MaybeReloadDetector"/> 도 null 이면 안 읽는다).
     /// </remarks>
-    private void OnTrainingActivityChanged(object? sender, EventArgs e) => DispatcherService?.BeginInvoke(() => Guard(() =>
+    private void OnTrainingActivityChanged() => Guard(() =>
     {
         // 글자 읽기 엔진은 검출이 꺼져 있어도 GPU 를 물 수 있다 - 학습이 시작·끝나면 버려 맞는 쪽으로 다시 연다.
         DropAllOcrEngines();
@@ -895,7 +895,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         // 학습이 끝나며 새 모델이 들어왔을 수 있다 - 켤 때와 같은 길로 지금 모델을 읽는다.
         if (IsDetectionOn) OnDetectionChanged();
-    }));
+    });
 
     /// <summary>지난번에 죽으면서 남긴 임시 파일을 치운다. 지금 쓰는 것은 건드리지 않는다.</summary>
     private void SweepStaleScratch()

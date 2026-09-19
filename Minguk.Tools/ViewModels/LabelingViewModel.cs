@@ -3,11 +3,13 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Disposables;
+using System.Reactive.Linq;
 
 using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
 
 using Minguk.Image;
+using Minguk.Tools.Helper;
 
 using Minguk.Tools.Vision.Labeling;
 
@@ -77,6 +79,9 @@ public partial class LabelingViewModel : DocumentViewModelBase, IFollowsProject
 
     private DevExpress.Xpf.Grid.TableView? _classGridView;
 
+    /// <summary>클래스 줄마다 건 <c>PropertyChanged</c> 구독 한 묶음 - 줄을 다시 채울 때(<c>RefreshClassNames</c>) 통째로 갈아 끼운다.</summary>
+    private readonly SerialDisposable _classRowEvents = new();
+
     /// <summary>이름 칸을 열어도 되는 순간인지. 더블 클릭·더하기 직후에만 참이고, 칸이 닫히면 다시 거짓이다.</summary>
     private bool _allowClassEdit;
 
@@ -103,7 +108,8 @@ public partial class LabelingViewModel : DocumentViewModelBase, IFollowsProject
             // 모든 열을 내용 너비(Auto)로. XAML 의 첨부 속성으로는 안 된다 - 콜백이 GridControl 에서만 돌고, 그때는 열이
             // 아직 없어 아무것도 안 바뀐다(실측: 전부 Pixel 로 남았다). 열이 다 만들어진 여기서 직접 부른다.
             Minguk.Base.Dependency.GridControlDependency.ApplyColumnAutoWidth(_imagesGrid, true);
-            _imagesGrid.LayoutUpdated += OnImagesGridLayoutUpdated;
+            var grid = _imagesGrid;
+            Disposables.Add(RxEvents.From(h => grid.LayoutUpdated += h, h => grid.LayoutUpdated -= h).Listen(_ => OnImagesGridLayoutUpdated()));
         }
 
         _classGrid = FindControl<DevExpress.Xpf.Grid.GridControl>("ClassGridObjectService");
@@ -114,22 +120,28 @@ public partial class LabelingViewModel : DocumentViewModelBase, IFollowsProject
 
         // 이름 칸은 더블 클릭·더하기 직후에만 열린다(VS 솔루션 탐색기처럼) - 한 번 누를 때마다 열리면 줄을 고르려다
         // 편집이 된다. 색 칸은 한 번 눌러 바로 고른다 - 글이 아니라 고르기라 실수로 열려도 잃는 것이 없다.
-        view.ShowingEditor += OnClassEditorShowing;
-        view.HiddenEditor += OnClassEditorHidden;
-        view.RowDoubleClick += OnClassRowDoubleClick;
+        Disposables.Add(RxEvents.From<DevExpress.Xpf.Grid.ShowingEditorEventHandler, DevExpress.Xpf.Grid.ShowingEditorEventArgs>(
+                handler => (sender, e) => handler(sender, e), h => view.ShowingEditor += h, h => view.ShowingEditor -= h)
+            .Listen(OnClassEditorShowing));
+        Disposables.Add(RxEvents.From<DevExpress.Xpf.Grid.EditorEventHandler, DevExpress.Xpf.Grid.EditorEventArgs>(
+                handler => (sender, e) => handler(sender, e), h => view.HiddenEditor += h, h => view.HiddenEditor -= h)
+            .Listen(_ => _allowClassEdit = false));
+        Disposables.Add(RxEvents.From<DevExpress.Xpf.Grid.RowDoubleClickEventHandler, DevExpress.Xpf.Grid.RowDoubleClickEventArgs>(
+                handler => (sender, e) => handler(sender, e), h => view.RowDoubleClick += h, h => view.RowDoubleClick -= h)
+            .Listen(OnClassRowDoubleClick));
     }
 
     protected override void InitializeObservable()
     {
         // 사각형이 늘거나 줄면 "안 저장한 것이 있다" 를 세우고 버튼 상태를 다시 본다.
         // 컨트롤이 컬렉션을 직접 고치므로, 바뀐 것을 알 길은 이것뿐이다.
-        Boxes.CollectionChanged += OnBoxesChanged;
+        Disposables.Add(RxEvents.CollectionChanged(Boxes).Listen(OnBoxesChanged));
 
         // 캔버스가 점선을 눌러 라벨로 옮기면 여기서는 모른다. 컬렉션이 바뀌면 버튼 상태를 다시 본다.
-        Predictions.CollectionChanged += OnPredictionsChanged;
-        Disposables.Add(Disposable.Create(() => Predictions.CollectionChanged -= OnPredictionsChanged));
+        Disposables.Add(RxEvents.CollectionChanged(Predictions).Listen(_ => OnPredictionsChanged()));
 
-        Disposables.Add(Disposable.Create(() => Boxes.CollectionChanged -= OnBoxesChanged));
+        // 클래스 줄마다 건 구독(줄을 다시 채울 때 갈아 끼운다).
+        Disposables.Add(_classRowEvents);
     }
 
     /// <summary>
@@ -253,15 +265,6 @@ public partial class LabelingViewModel : DocumentViewModelBase, IFollowsProject
     protected override void ReleaseResources()
     {
         SaveCurrentIfDirty();
-
-        if (_imagesGrid is not null) _imagesGrid.LayoutUpdated -= OnImagesGridLayoutUpdated;
-
-        if (_classGridView is { } view)
-        {
-            view.ShowingEditor -= OnClassEditorShowing;
-            view.HiddenEditor -= OnClassEditorHidden;
-            view.RowDoubleClick -= OnClassRowDoubleClick;
-        }
 
         // 학습을 돌려 둔 채 화면을 닫을 수 있다. 결과를 받을 화면이 없어진 뒤에도
         // GPU 를 물고 있을 이유가 없어 취소는 걸어 둔다.

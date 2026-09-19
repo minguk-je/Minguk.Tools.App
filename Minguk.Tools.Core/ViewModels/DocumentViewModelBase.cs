@@ -64,7 +64,10 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
     /// <summary>탭의 X 를 눌렀을 때 닫힐지 여부. 저장 안 한 편집이 있으면 false 로 막는다.</summary>
     protected bool AllowClose { get; set; } = true;
 
-    /// <summary>InitializeObservable() 에서 만든 구독을 여기 담으면 OnDestroy 에서 한꺼번에 끊긴다.</summary>
+    /// <summary>
+    /// 구독을 담는 곳 - 닫힐 때 ReleaseResources <b>앞</b>에서 한꺼번에 끊긴다. 이벤트는 <c>+=</c> 로 걸지 않고 <see cref="Helper.RxEvents"/> 로 구독해 여기 넣는다.
+    /// 화면이 만든 것(수명이 같은 것)은 생성자에서, 정적 이벤트·컨트롤·서비스는 <see cref="InitializeObservable"/> 에서.
+    /// </summary>
     protected CompositeDisposable Disposables { get; } = new();
 
     /// <summary>셸. 문서로 열렸을 때만 들어온다.</summary>
@@ -198,12 +201,14 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
         // 기본값이 저장값을 덮어써서, 안 연 탭을 닫기만 해도 대상 창·스크립트 같은 설정이 날아간다.
         if (_initialized) Guard(SaveSettings);
 
+        // 구독은 정리(ReleaseResources)보다 <b>먼저</b> 끊는다 - 정리하다 올라온 알림(자식 문서를 닫으며 바뀐 활성 문서, 캡처를 세우며 온 끝남 등)이
+        // 반쯤 치운 화면으로 들어오지 않게. 예전 <c>-=</c> 가 ReleaseResources 맨 앞에 있던 순서와 같다(2026-09-19 Rx 로 옮기며).
+        Guard(Disposables.Dispose);
+
         Guard(ReleaseResources);
 
         Guard(() =>
         {
-            Disposables.Dispose();
-
             MessengerUtility.SendNotification(nameof(OnDestroy), OwnerViewFullName);
             Messenger.Default.Unregister(this);
         });

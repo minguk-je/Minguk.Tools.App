@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
 
 using DevExpress.Mvvm;
 
 using Minguk.Base.Extension;
 using Minguk.Base.Utilities;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Input.Scripting;
 using Minguk.Tools.Input.Scripting.Projects;
 
@@ -89,11 +91,15 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         CloseDocumentCommand = new DelegateCommand<ScriptDocument?>(doc => CloseDocument(doc ?? ActiveDocument), _ => ActiveDocument is not null, false);
         OpenFolderInExplorerCommand = new DelegateCommand(DoOpenFolderInExplorer, () => IsOpen, false);
 
-        // 시작 프로젝트를 솔루션 탭에서 바꾸면 굵은 줄이 따라가야 한다. 정적 이벤트라 Dispose 에서 푼다.
-        Minguk.Tools.Projects.SolutionWorkspace.Changed += OnSolutionChanged;
+        // 시작 프로젝트를 솔루션 탭에서 바꾸면 굵은 줄이 따라가야 한다. 정적 이벤트라 Dispose 에서 푼다(_subscriptions).
+        _subscriptions.Add(RxEvents.From(h => Minguk.Tools.Projects.SolutionWorkspace.Changed += h, h => Minguk.Tools.Projects.SolutionWorkspace.Changed -= h)
+            .Listen(_ => OnSolutionChanged()));
     }
 
-    private void OnSolutionChanged(object? sender, EventArgs e) => _host.OnUi(() =>
+    /// <summary>이 객체의 구독 - 솔루션 바뀜. 폴더 감시·문서별 구독은 따로 갈아 끼우므로 각자 든다.</summary>
+    private readonly System.Reactive.Disposables.CompositeDisposable _subscriptions = new();
+
+    private void OnSolutionChanged() => _host.OnUi(() =>
     {
         RebuildNodes();
         RaisePropertyChanged(nameof(Title));
@@ -282,7 +288,9 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     // ── 폴더 감시 ────────────────────────────────────────────────────────
 
     private FileSystemWatcher? _folderWatcher;
-    private System.Threading.Timer? _folderDebounce;
+
+    /// <summary>폴더 감시 알림 구독 - 모아 두기 + <see cref="FolderDebounceMs"/> 멎으면 반영(Throttle).</summary>
+    private readonly System.Reactive.Disposables.SerialDisposable _folderEvents = new();
     private readonly HashSet<string> _pendingPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _pendingGate = new();
 
@@ -313,17 +321,30 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
                 InternalBufferSize = 64 * 1024
             };
 
-            // 폴더에 오는 "바뀜" 은 버린다 - 안의 것이 생기거나 지워질 때마다 부모 폴더(뿌리까지)에 온다. 뿌리 알림은 전체 다시 훑기를
-            // 부르는데, 폴더를 지우는 도중이면 아직 남은 폴더를 다시 목록에 넣었다(실측: 지운 폴더가 안 빠짐). 파일 것만 받는다.
-            _folderWatcher.Changed += (_, e) => { if (!Directory.Exists(e.FullPath)) QueueFolderChange(e.FullPath); };
-            _folderWatcher.Created += (_, e) => QueueFolderChange(e.FullPath);
-            _folderWatcher.Deleted += (_, e) => QueueFolderChange(e.FullPath);
-            _folderWatcher.Renamed += (_, e) => { QueueFolderChange(e.OldFullPath); QueueFolderChange(e.FullPath); };
-            // 알림이 넘치면(버퍼 초과) 어느 것이 바뀌었는지 모른다 - 폴더 전체를 다시 훑는다.
-            _folderWatcher.Error += (_, _) => QueueFolderChange(project.Directory);
-            _folderWatcher.EnableRaisingEvents = true;
+            var watcher = _folderWatcher;
 
-            _folderDebounce = new System.Threading.Timer(_ => _host.OnUi(ApplyFolderChanges), null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+            IObservable<FileSystemEventArgs> On(Action<FileSystemEventHandler> add, Action<FileSystemEventHandler> remove)
+                => RxEvents.From<FileSystemEventHandler, FileSystemEventArgs>(handler => (sender, e) => handler(sender, e), add, remove);
+
+            var changes = Observable.Merge(
+                // 폴더에 오는 "바뀜" 은 버린다 - 안의 것이 생기거나 지워질 때마다 부모 폴더(뿌리까지)에 온다. 뿌리 알림은 전체 다시 훑기를
+                // 부르는데, 폴더를 지우는 도중이면 아직 남은 폴더를 다시 목록에 넣었다(실측: 지운 폴더가 안 빠짐). 파일 것만 받는다.
+                On(h => watcher.Changed += h, h => watcher.Changed -= h).Where(e => !Directory.Exists(e.FullPath)).Select(e => new[] { e.FullPath }),
+                On(h => watcher.Created += h, h => watcher.Created -= h).Select(e => new[] { e.FullPath }),
+                On(h => watcher.Deleted += h, h => watcher.Deleted -= h).Select(e => new[] { e.FullPath }),
+                RxEvents.From<RenamedEventHandler, RenamedEventArgs>(handler => (sender, e) => handler(sender, e), h => watcher.Renamed += h, h => watcher.Renamed -= h)
+                    .Select(e => new[] { e.OldFullPath, e.FullPath }),
+                // 알림이 넘치면(버퍼 초과) 어느 것이 바뀌었는지 모른다 - 폴더 전체를 다시 훑는다.
+                RxEvents.From<ErrorEventHandler, ErrorEventArgs>(handler => (sender, e) => handler(sender, e), h => watcher.Error += h, h => watcher.Error -= h)
+                    .Select(_ => new[] { project.Directory }));
+
+            // 오는 대로 모아 두고(감시 스레드), 멎은 지 FolderDebounceMs 가 되면 화면 스레드에서 한 번에 반영한다.
+            _folderEvents.Disposable = changes
+                .Do(QueueFolderChanges)
+                .Throttle(TimeSpan.FromMilliseconds(FolderDebounceMs))
+                .Listen(_ => _host.OnUi(ApplyFolderChanges));
+
+            _folderWatcher.EnableRaisingEvents = true;
         }
         catch (Exception ex)
         {
@@ -333,19 +354,17 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
     private void StopWatchingFolder()
     {
+        _folderEvents.Disposable = null;
         _folderWatcher?.Dispose();
         _folderWatcher = null;
-        _folderDebounce?.Dispose();
-        _folderDebounce = null;
 
         lock (_pendingGate) _pendingPaths.Clear();
     }
 
-    private void QueueFolderChange(string path)
+    private void QueueFolderChanges(string[] paths)
     {
-        lock (_pendingGate) _pendingPaths.Add(path);
-
-        _folderDebounce?.Change(FolderDebounceMs, System.Threading.Timeout.Infinite);
+        lock (_pendingGate)
+            foreach (var path in paths) _pendingPaths.Add(path);
     }
 
     /// <summary>모인 알림을 목록에 반영한다. UI 스레드.</summary>
@@ -1318,7 +1337,9 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         if (existing is null)
         {
             existing = new ScriptDocument(fullPath, _host.OnUi) { Settings = EditorSettings };
-            existing.TextChanged += OnDocumentTextChanged;
+            var document = existing;
+            _documentEvents[document] = RxEvents.From(h => document.TextChanged += h, h => document.TextChanged -= h)
+                .Listen(_ => Changed?.Invoke(this, EventArgs.Empty));
             Documents.Add(existing);
         }
 
@@ -1362,13 +1383,14 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         Project?.Save();
     }
 
+    /// <summary>열린 문서마다 건 글 바뀜 구독 - 문서를 닫을 때(<see cref="Detach"/>) 그것만 끊는다.</summary>
+    private readonly Dictionary<ScriptDocument, IDisposable> _documentEvents = new(ReferenceEqualityComparer.Instance);
+
     private void Detach(ScriptDocument doc)
     {
-        doc.TextChanged -= OnDocumentTextChanged;
+        if (_documentEvents.Remove(doc, out var subscription)) subscription.Dispose();
         doc.Dispose();
     }
-
-    private void OnDocumentTextChanged(object? sender, EventArgs e) => Changed?.Invoke(this, EventArgs.Empty);
 
     // ── 컴파일에 넘길 것 ─────────────────────────────────────────────────
 
@@ -1439,7 +1461,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
     public void Dispose()
     {
-        Minguk.Tools.Projects.SolutionWorkspace.Changed -= OnSolutionChanged;
+        _subscriptions.Dispose();
 
         StopWatchingFolder();
 

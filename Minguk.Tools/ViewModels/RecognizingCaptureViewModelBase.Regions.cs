@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Input;
 
@@ -10,6 +11,7 @@ using DevExpress.Mvvm;
 
 using Minguk.Tools.Capture;
 using Minguk.Tools.Capture.Input;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Markup.Regions;
 using Minguk.Tools.Vision.Regions;
 
@@ -233,8 +235,9 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>파일에서 목록을 다시 채운다. 고른 것이 없으면 첫 줄을 고른다 - 빈 채로 두면 지금 읽기·지우기가 다 죽어 보인다.</summary>
     protected void LoadRegions()
     {
-        foreach (var old in _savedNames.Keys) old.PropertyChanged -= OnRegionPropertyChanged;
-        foreach (var old in _savedCellNames.Keys) old.PropertyChanged -= OnCellPropertyChanged;
+        foreach (var subscription in _regionEvents.Values.Concat(_cellEvents.Values)) subscription.Dispose();
+        _regionEvents.Clear();
+        _cellEvents.Clear();
         _savedNames.Clear();
         _savedCellNames.Clear();
 
@@ -249,7 +252,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             Regions.Add(region);
             _savedNames[region] = region.Name;
-            region.PropertyChanged += OnRegionPropertyChanged;
+            _regionEvents[region] = RxEvents.PropertyChanged(region).Listen(name => OnRegionPropertyChanged(region, name));
 
             foreach (var cell in region.Cells) WatchCell(cell);
         }
@@ -262,20 +265,34 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>칸마다 저장된 이름. 트리에서 칸 이름을 고치면 옛 이름과 견줘 겹치거나 틀리면 되돌린다.</summary>
     private readonly Dictionary<RegionCell, string> _savedCellNames = new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>자리·칸마다 건 <c>PropertyChanged</c> 구독 - 목록을 다시 채우거나(LoadRegions) 칸을 지울 때 그것만 끊는다. 화면이 닫힐 때는 <see cref="ReleaseRegionEvents"/>.</summary>
+    private readonly Dictionary<NamedRegion, IDisposable> _regionEvents = new(ReferenceEqualityComparer.Instance);
+
+    private readonly Dictionary<RegionCell, IDisposable> _cellEvents = new(ReferenceEqualityComparer.Instance);
+
     private void WatchCell(RegionCell cell)
     {
         _savedCellNames[cell] = cell.Name;
-        cell.PropertyChanged += OnCellPropertyChanged;
+        _cellEvents[cell] = RxEvents.PropertyChanged(cell).Listen(name => OnCellPropertyChanged(cell, name));
     }
 
-    private void OnCellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    /// <summary>자리·칸·미리보기 자리에 건 구독을 모두 끊는다 - 화면이 닫힐 때.</summary>
+    protected void ReleaseRegionEvents()
     {
-        if (sender is not RegionCell cell || _isRevertingName) return;
+        foreach (var subscription in _regionEvents.Values.Concat(_cellEvents.Values)) subscription.Dispose();
+        _regionEvents.Clear();
+        _cellEvents.Clear();
+        _previewRegionEvents.Dispose();
+    }
+
+    private void OnCellPropertyChanged(RegionCell cell, string? propertyName)
+    {
+        if (_isRevertingName) return;
 
         var region = Regions.FirstOrDefault(r => r.Cells.Contains(cell));
 
         // 숫자만 - 저장하고, 이미 읽어 둔 글도 그 눈으로 다시 보인다.
-        if (e.PropertyName == nameof(RegionCell.NumbersOnly))
+        if (propertyName == nameof(RegionCell.NumbersOnly))
         {
             SaveRegions();
             if (region is not null) cell.LastText = NamedRegion.Shown(region, cell, cell.LastText);
@@ -283,7 +300,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
-        if (e.PropertyName != nameof(RegionCell.Name)) return;
+        if (propertyName != nameof(RegionCell.Name)) return;
 
         var old = _savedCellNames.TryGetValue(cell, out var saved) ? saved : cell.Name;
         var name = cell.Name.Trim();
@@ -325,11 +342,11 @@ public abstract partial class RecognizingCaptureViewModelBase
     });
 
     /// <summary>그리드 칸에서 고친 것 - 이름은 검사해 저장하고, 계속 읽기는 바로 저장한다.</summary>
-    private void OnRegionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnRegionPropertyChanged(NamedRegion region, string? propertyName)
     {
-        if (sender is not NamedRegion region || _isRevertingName) return;
+        if (_isRevertingName) return;
 
-        switch (e.PropertyName)
+        switch (propertyName)
         {
             case nameof(NamedRegion.Name):
                 CommitRename(region);
@@ -352,7 +369,7 @@ public abstract partial class RecognizingCaptureViewModelBase
                 break;
 
             // 밝기 기준·반전·확대·OCR 엔진 - 손질·읽기 값. 그리드에서 고치면 바로 저장한다(사용자, 2026-09-18 "매번 초기화 되네" - 안 저장하니
-            // 값만 화면에서 바뀌고 다음에 열면 도로 꺼짐이었다). 미리보기는 OnPreviewRegionPropertyChanged 가 따로 본다.
+            // 값만 화면에서 바뀌고 다음에 열면 도로 꺼짐이었다). 미리보기는 WatchPreviewRegion 의 구독이 따로 본다.
             case nameof(NamedRegion.Threshold) or nameof(NamedRegion.Invert) or nameof(NamedRegion.Scale) or nameof(NamedRegion.OcrEngineName):
                 SaveRegions();
                 break;
@@ -691,7 +708,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             }
 
             region.Cells.Remove(cell);
-            cell.PropertyChanged -= OnCellPropertyChanged;
+            if (_cellEvents.Remove(cell, out var cellEvents)) cellEvents.Dispose();
             _savedCellNames.Remove(cell);
             SelectedCell = null;
             SaveRegions();
@@ -827,6 +844,9 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     private NamedRegion? _previewWatched;
 
+    /// <summary>미리보기가 지켜보는 자리의 구독(<see cref="WatchPreviewRegion"/>).</summary>
+    private readonly System.Reactive.Disposables.SerialDisposable _previewRegionEvents = new();
+
     /// <summary>
     /// 「지금 읽기」로 자른 칸마다 지금 밝기 기준·반전·확대를 입힌 모습(사용자, 2026-09-18 "최대 이미지는 안 보여" - 자리를 골랐으면
     /// 그 안 칸 전부를 보여야 한다). 숫자만 바꿔서는 눈에 안 보이니 값을 바꿀 때마다(그리드 편집을 마치면) 캐시해 둔 원본에 다시 입혀 보여 준다.
@@ -836,19 +856,18 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>고른 자리가 바뀌면 그 자리를 지켜본다(밝기 기준·반전·확대가 바뀔 때마다 미리보기를 새로 입히려고) - 캐시해 둔 원본은 다른 자리 것이라 비운다.</summary>
     private void WatchPreviewRegion(NamedRegion? region)
     {
-        if (_previewWatched is { } old) old.PropertyChanged -= OnPreviewRegionPropertyChanged;
-
         _previewWatched = region;
 
-        if (region is not null) region.PropertyChanged += OnPreviewRegionPropertyChanged;
+        // 밝기 기준·반전·확대가 바뀔 때만. 새 자리를 걸면 옛 자리 구독은 풀린다.
+        _previewRegionEvents.Disposable = region is null
+            ? null
+            : RxEvents.PropertyChanged(region)
+                .Where(name => name is nameof(NamedRegion.Threshold) or nameof(NamedRegion.Invert) or nameof(NamedRegion.Scale))
+                .Listen(_ => ReapplyRegionPreview());
 
         ClearRegionPreview();
     }
 
-    private void OnPreviewRegionPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(NamedRegion.Threshold) or nameof(NamedRegion.Invert) or nameof(NamedRegion.Scale)) ReapplyRegionPreview();
-    }
 
     private void ClearRegionPreview()
     {

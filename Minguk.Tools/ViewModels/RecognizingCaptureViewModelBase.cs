@@ -8,6 +8,7 @@ using System.Windows.Input;
 using DevExpress.Mvvm;
 
 using Minguk.Tools.Capture;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Markup;
 using Minguk.Tools.Vision.Inference;
 using Minguk.Tools.Vision.Perception;
@@ -168,8 +169,10 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     {
         base.InitializeObservable();
 
-        // 라벨링 화면에서 학습하는 동안 GPU 모델을 내려놓는다(정적 이벤트 - ReleaseResources 에서 푼다).
-        Vision.Training.TrainingActivity.Changed += OnTrainingActivityChanged;
+        // 라벨링 화면에서 학습하는 동안 GPU 모델을 내려놓는다. 정적 이벤트라 닫힐 때 Disposables 가 푼다. 학습 스레드에서 오니 화면 스레드로 넘긴다.
+        Disposables.Add(RxEvents.From(h => Vision.Training.TrainingActivity.Changed += h, h => Vision.Training.TrainingActivity.Changed -= h)
+            .ObserveOnUi()
+            .Listen(_ => OnTrainingActivityChanged()));
     }
 
     protected override void RestoreSettings()
@@ -210,7 +213,7 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     protected override void ReleaseResources()
     {
         Guard(CloseSettingsWindow);
-        Vision.Training.TrainingActivity.Changed -= OnTrainingActivityChanged;
+        ReleaseRegionEvents();
 
         // 눈을 감는다. 스크립트가 옛 결과를 읽지 않게.
         Hub.PublishState(false, false, null);

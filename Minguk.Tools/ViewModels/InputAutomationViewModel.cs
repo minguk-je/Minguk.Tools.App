@@ -5,6 +5,7 @@ using DevExpress.Mvvm;
 using DevExpress.Mvvm.POCO;
 using ICSharpCode.AvalonEdit;
 using Minguk.Image;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Input;
 using Minguk.Tools.Input.Adapters;
 using Minguk.Tools.Input.Hotkeys;
@@ -89,7 +90,7 @@ public partial class InputAutomationViewModel : DocumentViewModelBase
         });
 
         // 계획이 새로 나오면 순서 미리보기를 다시 그린다.
-        Script.PlanChanged += (_, _) => UpdateSequenceText();
+        Disposables.Add(RxEvents.From(h => Script.PlanChanged += h, h => Script.PlanChanged -= h).Listen(_ => UpdateSequenceText()));
 
         // 도는 동안에도 눌린다. 한 바퀴 돌려 보고 지우고 다시 돌리는 것이 흔한 흐름이다.
         DoClearTestPadCommand = new DelegateCommand(() => TestPadText = string.Empty, () => true, false);

@@ -12,6 +12,7 @@ using DevExpress.Mvvm.POCO;
 using DevExpress.Mvvm.UI;
 using DevExpress.Xpf.Accordion;
 using DevExpress.Xpf.Docking;
+using Minguk.Tools.Helper;
 using Minguk.Tools.Models;
 using Minguk.Tools.Source;
 using Newtonsoft.Json;
@@ -40,6 +41,9 @@ namespace Minguk.Tools.ViewModels;
 /// </summary>
 public class MainViewModel : ViewModelBase, ISupportLogicalLayout, Modules.IMainShell
 {
+    /// <summary>셸의 구독. 셸은 앱과 수명이 같아 풀 일이 없지만, 구독은 다른 화면과 같이 <see cref="Helper.RxEvents"/> 로 걸어 여기 모은다.</summary>
+    private readonly System.Reactive.Disposables.CompositeDisposable _subscriptions = new();
+
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
     public bool CanSerialize => true;
@@ -108,7 +112,12 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout, Modules.IMain
             Logger.Trace(string.Empty);
 
             Messenger.Default.Register<MessengerUtility>(this, OnMessenger);
-            DocumentManagerService.ActiveDocumentChanged += OnActiveDocumentChanged;
+            var documents = DocumentManagerService;
+            _subscriptions.Add(RxEvents.From<ActiveDocumentChangedEventHandler, ActiveDocumentChangedEventArgs>(
+                    handler => (sender, e) => handler(sender, e),
+                    h => documents.ActiveDocumentChanged += h,
+                    h => documents.ActiveDocumentChanged -= h)
+                .Listen(OnActiveDocumentChanged));
 
             InitializeUiObjectService();
             InitializeMenu();
@@ -154,7 +163,7 @@ public class MainViewModel : ViewModelBase, ISupportLogicalLayout, Modules.IMain
     }
 
     /// <summary>활성 탭이 바뀌면 해당 메뉴 항목을 굵게(IS_ACTIVE) 표시한다.</summary>
-    private void OnActiveDocumentChanged(object sender, ActiveDocumentChangedEventArgs e)
+    private void OnActiveDocumentChanged(ActiveDocumentChangedEventArgs e)
     {
         try
         {
