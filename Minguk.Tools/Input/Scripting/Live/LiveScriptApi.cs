@@ -314,6 +314,9 @@ public class LiveScriptApi : IDisposable
         var adapter = _host.Service.Adapter;
         var scaleX = 1.0;
         var scaleY = 1.0;
+        var walk = new System.Text.StringBuilder();
+        var moved = false;
+        var first = adapter.GetCursorPosition();
 
         for (var i = 0; i < MaxIterations; i++)
         {
@@ -337,10 +340,25 @@ public class LiveScriptApi : IDisposable
 
             if (adapter.GetCursorPosition() is not { } after) continue;
 
+            // 못 닿았을 때 원인을 볼 수 있게 걸음을 적어 둔다(앞 8걸음 + 마지막 4걸음).
+            if (i < 8 || i >= MaxIterations - 4)
+                walk.Append($"\n  {i}: ({cursor.X},{cursor.Y}) → ({after.X},{after.Y}) 보냄({stepX},{stepY}) 배율({scaleX:0.00},{scaleY:0.00})");
+
             // 보낸 카운트 / 실제로 간 픽셀 = 픽셀당 카운트. 안 움직였으면(커서가 안 따라옴) 배로 늘려 본다.
             scaleX = LearnScale(scaleX, stepX, after.X - cursor.X);
             scaleY = LearnScale(scaleY, stepY, after.Y - cursor.Y);
+
+            // 네 걸음을 보내도 커서가 한 번도 안 움직였으면 더 걸어도 소용없다 - 입력이 게임(또는 커서)에 안 닿는 것이다.
+            if (after != first) moved = true;
+
+            if (i == 3 && !moved)
+            {
+                _host.Print($"커서이동 진단: {adapter}");
+                throw Guard("커서이동: 입력을 보내도 커서가 전혀 움직이지 않습니다. 출력 창의 「커서이동 진단」 줄을 확인하고, 입력 경로를 다른 것으로 바꿔 보세요.");
+            }
         }
+
+        _host.Print($"커서이동 실패: 목표({x},{y}) 에 못 닿았다.{walk}");
 
         return false;
     });

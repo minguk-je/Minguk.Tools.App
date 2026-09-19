@@ -1876,8 +1876,10 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
     private void DisposeSession()
     {
-        // 어댑터가 든 자원(Interception 의 드라이버 컨텍스트)을 놓아 준다.
-        _inputRouter?.InputAdapter.Dispose();
+        // 입력 어댑터는 여기서 닫지 않는다 - 캡처 세션이 아니라 화면의 것이다. 여기서 닫았더니 스크립트가 리드백을 켜며
+        // 세션을 다시 만들 때 Interception 컨텍스트가 닫히고, 라우터는 닫힌 어댑터를 쥔 채 남아 입력이 조용히 사라졌다
+        // (사용자 실측 2026-09-19 - 켤 때부터 Interception 이면 커서가 안 움직였다. SendInput 은 닫을 것이 없어 멀쩡했다).
+        // 닫는 것은 화면이 닫힐 때(ReleaseAdapter)와 경로를 바꿀 때(OnSelectedInputBackendChanged).
 
         Interlocked.Exchange(ref _presentedFrameCountInSecond, 0);
         PreviewFps = 0;
@@ -1908,7 +1910,15 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     {
         ReleaseHotkeys();
         DisposeSession();
+        ReleaseAdapter();
     }
 
-    public void Dispose() => DisposeSession();
+    public void Dispose()
+    {
+        DisposeSession();
+        ReleaseAdapter();
+    }
+
+    /// <summary>입력 어댑터가 든 자원(Interception 의 드라이버 컨텍스트)을 놓는다. 화면이 닫힐 때만.</summary>
+    private void ReleaseAdapter() => _inputRouter?.InputAdapter.Dispose();
 }

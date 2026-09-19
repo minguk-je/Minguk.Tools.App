@@ -27,6 +27,18 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
 
     private IntPtr _context;
 
+    // 진단 - 어느 인스턴스가 언제 만들어지고 닫혔는지, 보낸 것이 드라이버에 들어갔는지(사용자, 2026-09-19 - 켤 때부터 Interception 이면 커서가 안 움직였다).
+    private static int _nextId;
+    private readonly int _id = System.Threading.Interlocked.Increment(ref _nextId);
+    private int _sentOk;
+    private int _sentFailed;
+    private int _sentWhileClosed;
+
+    /// <summary>진단 한 줄. 스크립트가 커서가 안 움직일 때 찍는다.</summary>
+    public override string ToString()
+        => $"Interception #{_id} 컨텍스트 {(_context == IntPtr.Zero ? "닫힘" : "열림")} · 마우스 자리 {MouseDevice} · 보냄 성공 {_sentOk} · 드라이버 거절 {_sentFailed} · 닫힌 뒤 보냄 {_sentWhileClosed}"
+           + $" · 스레드 {Environment.CurrentManagedThreadId}";
+
     public InterceptionInputAdapter()
     {
         try
@@ -63,7 +75,7 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
             catch (Exception ex) { Logger.Warn(ex, "입력 장치 추적을 못 켰다. 붙은 첫 자리로 보낸다."); }
         }
 
-        Logger.Info($"Interception 장치: {DescribeDevices()}");
+        Logger.Info($"Interception #{_id} 만듦 · 장치: {DescribeDevices()}");
     }
 
     private readonly int _firstKeyboard = InterceptionNative.KeyboardFirst;
@@ -247,7 +259,11 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
 
     private bool SendMouse(ushort state, ushort flags = 0, short rolling = 0, int x = 0, int y = 0)
     {
-        if (!IsAvailable) return false;
+        if (!IsAvailable)
+        {
+            if (_sentWhileClosed++ == 0) Logger.Warn($"Interception #{_id} 은 닫혔는데 마우스 입력을 보내려 했다 - 아무 일도 안 일어난다.");
+            return false;
+        }
 
         var stroke = new InterceptionNative.Stroke
         {
@@ -274,8 +290,13 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
     {
         var sent = InterceptionNative.interception_send(_context, device, ref stroke, 1);
 
-        if (sent == 1) return true;
+        if (sent == 1)
+        {
+            _sentOk++;
+            return true;
+        }
 
+        _sentFailed++;
         Logger.Warn($"Interception 이 스트로크를 받지 않았다. 보낸 것 {sent}/1, 디바이스 {device}");
         return false;
     }
@@ -286,6 +307,7 @@ public sealed class InterceptionInputAdapter : IInputAdapter, IScanCodeInput
 
         if (_context == IntPtr.Zero) return;
 
+        Logger.Info($"Interception #{_id} 닫음");
         InterceptionNative.interception_destroy_context(_context);
         _context = IntPtr.Zero;
     }
