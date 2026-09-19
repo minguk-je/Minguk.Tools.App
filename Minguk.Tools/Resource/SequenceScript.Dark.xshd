@@ -161,6 +161,7 @@
             <Word>Aim</Word><Word>조준</Word>
             <Word>MoveBy</Word><Word>상대이동</Word>
             <Word>MoveCursor</Word><Word>커서이동</Word>
+            <Word>MoveToProject</Word><Word>프로젝트이동</Word>
             <Word>SetMouseMode</Word><Word>마우스모드</Word>
             <Word>MouseDown</Word><Word>버튼누르기</Word>
             <Word>MouseUp</Word><Word>버튼떼기</Word>

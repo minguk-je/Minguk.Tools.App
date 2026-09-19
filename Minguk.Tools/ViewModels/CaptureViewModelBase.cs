@@ -66,7 +66,7 @@ public class FrameLogRow
 /// 설정 키는 파생 화면의 이름으로 저장된다(AppSettingUtility 가 실제 타입 이름을 쓴다). 그래서
 /// 캡처 화면과 플레이 화면이 대상 창·fps 를 각자 기억한다 - 게임 창과 데이터 모으는 창이 다를 수 있다.
 /// </remarks>
-public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDisposable
+public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDisposable, IFollowsProject
 {
     private readonly object _statisticsLock = new();
 
@@ -527,6 +527,20 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
         // 게임을 앞에 둔 채로 담을 수 있게. 화면을 닫으면 ReleaseResources 가 푼다.
         if (SupportsCollecting) RegisterHotkeys();
+    }
+
+    // ── 시작 프로젝트 따라가기(IFollowsProject) ────────────────────────────
+
+    /// <inheritdoc/>
+    public virtual string? ProjectSwitchBlocker() => null;
+
+    /// <inheritdoc/>
+    public virtual bool PrepareProjectSwitch() => true;
+
+    /// <summary>대상 목록을 다시 훑는다 - 영상 대상은 프로젝트 Recordings 에서 온다. 잡고 있는 창은 그대로 이어서 잡는다.</summary>
+    public virtual void FollowProject()
+    {
+        if (IsInitialized) RefreshTargets();
     }
 
     /// <summary>캡처할 수 있는 창과 모니터를 다시 훑는다.</summary>

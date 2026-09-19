@@ -48,6 +48,8 @@ internal static partial class Program
             return;
         }
 
+        TestProjectMoves(monitor);
+
         // ── C#: 검출을 읽어 그 자리를 누른다 ──
         const string csharp = """
                               var 목록 = 검출들();

@@ -30,8 +30,9 @@ public sealed record ProjectChoice(string Name, SolutionProjectEntry Entry);
 /// 그래서 부모 넣기·닫기·파기를 DevExpress 가 해 준다. <c>DXTabControl</c> 로 두면 그 신호를 손으로 넘겨야 하고, 틀리면 캡처 세션이
 /// 게임 창을 붙잡는다. 서비스는 <b>이름으로</b> 꺼낸다 - 셸(MainView)에도 같은 서비스가 있어 이름 없이 꺼내면 바깥 것을 잡는다.
 ///
-/// <b>프로젝트를 바꾸면 아래 화면을 닫고 다시 연다.</b> 화면들이 자리(데이터셋·스크립트·프레임 저장)를 열 때 읽고 들고 있기 때문이다 -
-/// 닫고 다시 열어야 새 프로젝트를 본다. 닫기를 막는 화면(저장 안 한 스크립트 등)이 있으면 바꾸기를 그만두고 되돌린다.
+/// <b>프로젝트를 바꾸면 아래 탭은 그대로 두고 화면마다 그 자리에서 따라간다</b>(<see cref="IFollowsProject"/>, 사용자 2026-09-19) -
+/// 예전에는 닫고 다시 열어 탭이 번쩍이고 캡처가 끊겼다. 막는 화면(스크립트가 도는 중·학습 중)이 있거나 저장을 그만두면 콤보를 되돌린다.
+/// <b>솔루션</b>을 바꾸거나 새 프로젝트·솔루션을 만들 때는 지금도 닫고 다시 연다.
 /// </remarks>
 public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
 {
@@ -111,7 +112,21 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
         if (AutomationDocumentManagerService is { } service)
             service.ActiveDocumentChanged += OnChildActivated;
 
+        // 솔루션 탐색기에서 프로젝트 순서를 바꾸면 콤보도 그 순서로(사용자, 2026-09-19). 정적 이벤트라 ReleaseResources 에서 푼다.
+        SolutionWorkspace.Changed += OnSolutionWorkspaceChanged;
     }
+
+    /// <summary>솔루션의 프로젝트 순서가 콤보와 달라졌으면 고른 것을 둔 채 다시 채운다. 순서가 같으면 아무것도 안 한다(시작 프로젝트 바꾸기도 이 알림을 낸다).</summary>
+    private void OnSolutionWorkspaceChanged(object? sender, EventArgs e) => System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() => Guard(() =>
+    {
+        if (SolutionWorkspace.Current is not { } solution || _filling) return;
+
+        var order = solution.Runnable().Select(entry => entry.Path).ToList();
+
+        if (order.SequenceEqual(Projects.Select(choice => choice.Entry.Path))) return;
+
+        RefillProjectsKeepingStartup();
+    })));
 
     protected override void OnLoaded()
     {
@@ -137,6 +152,8 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     {
         if (AutomationDocumentManagerService is { } service)
             service.ActiveDocumentChanged -= OnChildActivated;
+
+        SolutionWorkspace.Changed -= OnSolutionWorkspaceChanged;
 
         CloseChildren();
     }
@@ -224,17 +241,32 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     {
         if (_filling || SelectedProject is not { } choice) return;
 
-        if (!CloseChildren())
+        // 탭을 닫지 않는다 - 화면마다 그 자리에서 새 프로젝트를 따라간다(IFollowsProject, 사용자 2026-09-19).
+        var followers = Children().OfType<IFollowsProject>().ToList();
+
+        if (followers.Select(f => f.ProjectSwitchBlocker()).FirstOrDefault(reason => reason is not null) is { } blocker)
         {
-            RevertProject();
+            RevertProject(blocker);
             return;
+        }
+
+        foreach (var follower in followers)
+        {
+            if (!follower.PrepareProjectSwitch())
+            {
+                RevertProject("그만두어 프로젝트를 바꾸지 않았습니다.");
+                return;
+            }
         }
 
         SolutionWorkspace.SetStartup(choice.Entry);
 
         ApplyProject();
 
-        OpenChildren();
+        foreach (var follower in followers)
+            Guard(follower.FollowProject);
+
+        MessengerUtility.SendMainMessage($"프로젝트를 '{choice.Name}' (으)로 바꿨습니다.");
     });
 
     /// <summary>고른 프로젝트 폴더를 위 칸에 보인다. 화면들은 시작 프로젝트(SolutionWorkspace)에서 자리를 직접 읽는다.</summary>
@@ -271,7 +303,7 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
         MessengerUtility.SendMainMessage("닫지 않은 화면이 있어 솔루션을 바꾸지 않았습니다. 저장하거나 닫은 뒤 다시 고르세요.");
     }
 
-    private void RevertProject()
+    private void RevertProject(string? reason = null)
     {
         _filling = true;
 
@@ -285,7 +317,7 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
             _filling = false;
         }
 
-        MessengerUtility.SendMainMessage("닫지 않은 화면이 있어 프로젝트를 바꾸지 않았습니다. 저장하거나 닫은 뒤 다시 고르세요.");
+        MessengerUtility.SendMainMessage(reason ?? "닫지 않은 화면이 있어 프로젝트를 바꾸지 않았습니다. 저장하거나 닫은 뒤 다시 고르세요.");
     }
 
     // ── 새로 만들기 ──────────────────────────────────────────────────────

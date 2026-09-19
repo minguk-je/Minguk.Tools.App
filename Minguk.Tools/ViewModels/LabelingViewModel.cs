@@ -28,7 +28,7 @@ namespace Minguk.Tools.ViewModels;
 /// 누르게 하면 반드시 잊고, 잊은 것은 되돌릴 수 없다. 대신 무엇이 저장됐는지 늘 보이게
 /// <see cref="StatusText"/> 에 적는다.
 /// </remarks>
-public partial class LabelingViewModel : DocumentViewModelBase
+public partial class LabelingViewModel : DocumentViewModelBase, IFollowsProject
 {
     public static LabelingViewModel Create() => ViewModelSource.Create(() => new LabelingViewModel());
 
@@ -268,6 +268,36 @@ public partial class LabelingViewModel : DocumentViewModelBase
 
         // 모델은 69MB 를 물고 있다. 화면을 닫으면 놓는다.
         ReleaseModel();
+    }
+
+    // ── 시작 프로젝트 따라가기(IFollowsProject) ────────────────────────────
+
+    /// <summary>학습·영상 뽑기는 옛 프로젝트 폴더에 쓰는 중이다 - 끝나거나 멈출 때까지 바꾸지 않는다.</summary>
+    public string? ProjectSwitchBlocker()
+    {
+        if (!IsInitialized) return null;
+        if (IsTraining) return "학습 중에는 프로젝트를 바꿀 수 없습니다 - 라벨링 탭에서 학습을 멈춘 뒤 고르세요.";
+        if (IsExtractingVideo) return "영상에서 사진을 뽑는 중에는 프로젝트를 바꿀 수 없습니다 - 끝나거나 멈춘 뒤 고르세요.";
+
+        return null;
+    }
+
+    /// <summary>고치던 라벨을 옛 프로젝트에 저장한다.</summary>
+    public bool PrepareProjectSwitch()
+    {
+        if (IsInitialized) SaveCurrentIfDirty();
+
+        return true;
+    }
+
+    /// <summary>새 프로젝트의 데이터셋·클래스·사진·모델 목록으로 다시 읽는다. 옛 모델은 놓는다.</summary>
+    public void FollowProject()
+    {
+        if (!IsInitialized) return;
+
+        DatasetRoot = LabelDataset.ConfiguredRoot;
+        ReleaseModel();
+        DoReload();
     }
 
     public ObservableCollection<LabelingRow> Items { get; }

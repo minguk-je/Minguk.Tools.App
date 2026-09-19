@@ -111,7 +111,8 @@ public static class ScriptApiCatalog
         new("SettingList", "설정목록", "name", "목록 칸의 행들. 행은 row[\"HP\"] 로 읽는다.", ScriptApiMode.Live),
         new("HasSetting", "설정있나", "name", "그 이름의 설정 칸이 있는가.", ScriptApiMode.Live),
         new("PlaySound", "소리", "name","프로젝트 리소스의 wav 를 울린다. 끝나기를 기다리지 않는다.", ScriptApiMode.Live),
-        new("RunProject", "프로젝트실행", "name", "같은 솔루션의 옆 프로젝트를 빌드된 것(bin\\이름.mtsx)으로 이어서 돌린다 - 먼저 빌드해 둬야 한다(Ctrl+Shift+B). 그 프로젝트의 모델·자리·리소스로 화면을 바꾼 뒤 돈다. 돌아오지 않는다.", ScriptApiMode.Live),
+        new("RunProject", "프로젝트실행", "name", "같은 솔루션의 옆 프로젝트를 그 줄에서 돌리고 끝나면 다음 줄로 돌아온다(함수 부르기처럼 기다린다). 스크립트 화면은 소스를, 플레이 화면은 빌드된 것(bin\\이름.mtsx)을 돈다. 도는 동안은 그 프로젝트의 모델·자리·리소스, 돌아오면 원래 것으로.", ScriptApiMode.Live),
+        new("MoveToProject", "프로젝트이동", "name", "지금 스크립트를 끝내고 그 프로젝트로 넘어간다 - 돌아오지 않고 쌓이지 않는다. 메인화면 → 영웅선택 → 사격장 → 다시 메인화면처럼 화면을 넘어가는 흐름에.", ScriptApiMode.Live),
         new("Stop", "끝", "", "스크립트를 여기서 끝낸다.", ScriptApiMode.Live)
     ];
 

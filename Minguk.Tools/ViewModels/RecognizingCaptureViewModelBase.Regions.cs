@@ -53,6 +53,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             RaisePropertyChanged(nameof(SelectedRegionNode));
             RegionsRevision++;
             WatchPreviewRegion(value);
+            RefreshSavedTemplate();
         });
     }
 
@@ -70,6 +71,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             // 칸이 바뀌면 자리는 그대로라도 자를 자리가 달라져 캐시해 둔 미리보기 원본이 안 맞는다.
             ClearRegionPreview();
+            RefreshSavedTemplate();
         });
     }
 
@@ -369,6 +371,7 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
+        // 받기를 켠다. 허브는 받기를 멈출 때 프레임을 버리므로 여기서 잘리는 것은 켠 뒤에 들어온 지금 화면이다(PerceptionHub.WantsFrames).
         Hub.WantsFrames = true;
 
         var cell = SelectedCell;
@@ -388,8 +391,8 @@ public abstract partial class RecognizingCaptureViewModelBase
             return;
         }
 
-        var name = (cell is null ? region.Name : $"{region.Name}.{cell.Name}") + ".png";
-        var folder = System.IO.Path.Combine(RecognitionRoot, Input.Scripting.Projects.ScriptProject.ResourceFolder);
+        var name = TemplateFileName(region, cell);
+        var folder = TemplateFolder;
 
         System.IO.Directory.CreateDirectory(folder);
 
@@ -402,7 +405,73 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         StatusText = $"영역 이미지를 저장했습니다 - {name} ({crop.PixelWidth}x{crop.PixelHeight}). 스크립트에서 그림누르기(\"{name}\") 로 부릅니다.";
         Logger.Info($"영역 이미지 저장: {path} ({crop.PixelWidth}x{crop.PixelHeight})");
+
+        // 무엇이 저장됐는지 바로 보인다 - 버튼이 뜨기 전 화면이 저장돼도 모르고 지나간 적이 있다(사용자, 2026-09-19 확인 버튼 → "영웅 선" 글자).
+        RefreshSavedTemplate();
     });
+
+    // ── 저장된 영역 이미지 보기 ──────────────────────────────────────────
+
+    /// <summary>고른 자리(칸)로 저장해 둔 영역 이미지. 없으면 null.</summary>
+    public System.Windows.Media.Imaging.BitmapSource? SavedTemplateImage
+    {
+        get => GetProperty(() => SavedTemplateImage);
+        private set => SetProperty(() => SavedTemplateImage, value);
+    }
+
+    /// <summary>그 이미지의 이름·크기·저장 시각, 없으면 없다는 말.</summary>
+    public string? SavedTemplateCaption
+    {
+        get => GetProperty(() => SavedTemplateCaption);
+        private set => SetProperty(() => SavedTemplateCaption, value);
+    }
+
+    private string TemplateFolder => System.IO.Path.Combine(RecognitionRoot, Input.Scripting.Projects.ScriptProject.ResourceFolder);
+
+    /// <summary>영역 이미지 파일 이름 - 자리 이름, 칸을 골랐으면 「자리.칸」. 스크립트는 그림누르기("이 이름") 로 부른다.</summary>
+    private static string TemplateFileName(NamedRegion region, RegionCell? cell)
+        => (cell is null ? region.Name : $"{region.Name}.{cell.Name}") + ".png";
+
+    /// <summary>고른 자리의 저장된 영역 이미지를 다시 읽는다. 같은 이름으로 덮어쓰므로 캐시하지 않고 파일에서 바로 읽는다.</summary>
+    protected void RefreshSavedTemplate()
+    {
+        if (SelectedRegion is not { } region)
+        {
+            SavedTemplateImage = null;
+            SavedTemplateCaption = null;
+            return;
+        }
+
+        var name = TemplateFileName(region, SelectedCell);
+        var path = System.IO.Path.Combine(TemplateFolder, name);
+
+        if (!System.IO.File.Exists(path))
+        {
+            SavedTemplateImage = null;
+            SavedTemplateCaption = $"{name} - 아직 저장 안 함";
+            return;
+        }
+
+        try
+        {
+            var image = new System.Windows.Media.Imaging.BitmapImage();
+            image.BeginInit();
+            image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;          // 파일을 쥐지 않는다 - 다시 저장할 수 있게
+            image.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache; // 덮어쓴 새 그림을 읽는다
+            image.UriSource = new Uri(path);
+            image.EndInit();
+            image.Freeze();
+
+            SavedTemplateImage = image;
+            SavedTemplateCaption = $"{name} ({image.PixelWidth}x{image.PixelHeight}) · {System.IO.File.GetLastWriteTime(path):HH:mm:ss} 저장";
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, $"영역 이미지를 못 읽었다: {path}");
+            SavedTemplateImage = null;
+            SavedTemplateCaption = $"{name} - 파일을 읽을 수 없습니다";
+        }
+    }
 
     private void CommitRename(NamedRegion region)
     {

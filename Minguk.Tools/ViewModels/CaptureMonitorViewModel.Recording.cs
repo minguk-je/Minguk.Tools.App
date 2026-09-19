@@ -83,6 +83,14 @@ public partial class CaptureMonitorViewModel
         MessengerUtility.SendMainMessage($"녹화를 시작했습니다 - 1초 안쪽마다 디스크에 확정하며 씁니다({path}).");
     }
 
+    /// <summary>녹화 중이면 끝낸다 - 녹화 파일은 옛 프로젝트의 Recordings 에 있다. 새 프로젝트로 이어 쓰면 엉뚱한 곳에 섞인다.</summary>
+    public override bool PrepareProjectSwitch()
+    {
+        if (IsRecording) StopRecording("프로젝트를 바꿔 녹화를 끝냈습니다");
+
+        return base.PrepareProjectSwitch();
+    }
+
     /// <summary>파일을 닫는다. Finalize 가 몇 초 걸릴 수 있어 백그라운드에서 하고 끝나면 알린다.</summary>
     private void StopRecording(string? reason = null)
     {

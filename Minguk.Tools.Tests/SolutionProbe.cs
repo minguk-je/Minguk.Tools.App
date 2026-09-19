@@ -35,6 +35,8 @@ public static class SolutionProbe
             failures += CheckScreensFollowProject(root);
             failures += CheckFindUnder(root);
             failures += CheckSharedProject(root);
+            failures += CheckProjectSwitch(root);
+            failures += CheckProjectOrder(root);
             failures += CheckDataNotListed();
             failures += SolutionSettingsProbe.Run(root);
         }
@@ -297,6 +299,119 @@ public static class SolutionProbe
     /// 솔루션 탐색기에 참조 줄과 그 파일이 뜨고, 그 파일은 이름 바꾸기·삭제가 막히는가.
     /// </summary>
     /// <remarks>빌드(IL)까지만 본다 - 돌리려면 모니터·가짜 허브가 필요하고 그것은 <c>--vision</c> 의 빌드 검사가 본다.</remarks>
+    /// <summary>
+    /// 시작 프로젝트를 바꿔도 스크립트 탭은 안 닫힌다(사용자, 2026-09-19 - VS 처럼). 트리·실행 대상만 새 프로젝트로 바뀌고 그 시작 파일이 앞에 열린다.
+    /// </summary>
+    private static int CheckProjectSwitch(string root)
+    {
+        var failures = 0;
+
+        void Expect(bool ok, string name, string detail)
+        {
+            Report(ok, name, detail);
+            failures += ok ? 0 : 1;
+        }
+
+        var solution = Solution.Create(Path.Combine(root, "바꾸기"), "오버워치");
+        var menu = Minguk.Tools.Input.Scripting.Projects.ScriptProject.Create(Path.Combine(solution.Directory, "메인화면"), "메인화면", "출력(\"메뉴\");\n");
+        var range = Minguk.Tools.Input.Scripting.Projects.ScriptProject.Create(Path.Combine(solution.Directory, "사격장"), "사격장", "출력(\"사격\");\n");
+        solution.Add(menu.FilePath);
+        solution.Add(range.FilePath);
+        solution.Save();
+
+        var workspace = new Minguk.Tools.ViewModels.ScriptProjectWorkspace(new Minguk.Tools.ViewModels.ScriptProjectWorkspaceHost { OnUi = action => action() });
+
+        try
+        {
+            workspace.OpenProject(menu.FilePath);
+
+            var menuDoc = workspace.ActiveDocument;
+            if (menuDoc is not null) menuDoc.Text += "// 저장 안 함\n";
+
+            workspace.SwitchProject(range.FilePath);
+
+            var kept = menuDoc is not null && workspace.Documents.Contains(menuDoc) && menuDoc.IsDirty;
+            var switched = string.Equals(workspace.Project?.FilePath, range.FilePath, StringComparison.OrdinalIgnoreCase);
+            var entryOpen = workspace.ActiveDocument?.FilePath is { } active && active.StartsWith(Path.GetDirectoryName(range.FilePath)!, StringComparison.OrdinalIgnoreCase);
+            var unit = workspace.ToUnit();
+
+            Expect(kept && switched && entryOpen && workspace.Documents.Count == 2 && unit is not null && unit.EntryText.Contains("사격"),
+                   "시작 프로젝트를 바꿔도 열린 탭(저장 안 한 것까지)은 남고, 실행 대상·트리는 새 프로젝트, 그 시작 파일이 앞에 열린다",
+                   $"옛 탭 남음 {kept} · 프로젝트 {Path.GetFileNameWithoutExtension(workspace.Project?.FilePath)} · 앞 탭 {Path.GetFileName(workspace.ActiveDocument?.FilePath)} · 탭 {workspace.Documents.Count}개");
+
+            var before = workspace.Documents.Count;
+            workspace.SwitchProject(range.FilePath);
+
+            Expect(workspace.Documents.Count == before, "같은 프로젝트로 다시 바꾸면 아무 일도 안 한다", $"탭 {workspace.Documents.Count}개");
+        }
+        finally
+        {
+            workspace.Dispose();
+        }
+
+        return failures;
+    }
+
+    /// <summary>
+    /// 솔루션 탐색기에서 프로젝트 줄을 끌어 놓으면 솔루션 파일의 순서가 바뀌고, 트리·콤보(Runnable)가 그 순서를 따른다(사용자, 2026-09-19).
+    /// </summary>
+    private static int CheckProjectOrder(string root)
+    {
+        var failures = 0;
+
+        void Expect(bool ok, string name, string detail)
+        {
+            Report(ok, name, detail);
+            failures += ok ? 0 : 1;
+        }
+
+        var solution = Solution.Create(Path.Combine(root, "순서"), "오버워치");
+
+        foreach (var name in new[] { "메인화면", "영웅선택화면", "사격장" })
+            solution.Add(Minguk.Tools.Input.Scripting.Projects.ScriptProject.Create(Path.Combine(solution.Directory, name), name, "출력(1);").FilePath);
+
+        solution.Save();
+        SolutionWorkspace.Use(solution, remember: false);
+
+        var workspace = new Minguk.Tools.ViewModels.ScriptProjectWorkspace(new Minguk.Tools.ViewModels.ScriptProjectWorkspaceHost { OnUi = action => action() });
+
+        try
+        {
+            // 열린 프로젝트(영웅선택화면)도 제자리 - 예전에는 늘 맨 위였다.
+            workspace.OpenProject(Path.Combine(solution.Directory, "영웅선택화면", "영웅선택화면.mtsproj"));
+
+            string TreeOrder() => string.Join(",", workspace.Nodes
+                .Where(n => n.ParentId == Minguk.Tools.ViewModels.ScriptProjectWorkspace.SolutionId)
+                .Select(n => n.Name));
+
+            Expect(TreeOrder() == "메인화면,영웅선택화면,사격장", "탐색기 프로젝트 줄은 솔루션 순서다(열린 프로젝트도 제자리)", TreeOrder());
+
+            var projects = workspace.Nodes.Where(n => n.ParentId == Minguk.Tools.ViewModels.ScriptProjectWorkspace.SolutionId).ToList();
+            var moved = workspace.MoveProject(projects[2], projects[0]);   // 사격장을 맨 위로
+
+            var saved = string.Join(",", Solution.Load(solution.FilePath).Runnable().Select(Solution.NameOf));
+
+            Expect(moved && TreeOrder() == "사격장,메인화면,영웅선택화면" && saved == "사격장,메인화면,영웅선택화면",
+                   "프로젝트 줄을 끌어 위에 놓으면 그 앞으로 - 솔루션 파일·트리·콤보(Runnable) 순서가 같이 바뀐다",
+                   $"트리 {TreeOrder()} · 파일 {saved}");
+
+            projects = workspace.Nodes.Where(n => n.ParentId == Minguk.Tools.ViewModels.ScriptProjectWorkspace.SolutionId).ToList();
+            workspace.MoveProject(projects[0], projects[2]);                // 사격장을 맨 아래로
+
+            Expect(TreeOrder() == "메인화면,영웅선택화면,사격장", "아래로 끌어 놓으면 그 뒤로", TreeOrder());
+
+            var file = workspace.Nodes.FirstOrDefault(n => n.Kind != Minguk.Tools.ViewModels.ScriptNodeKind.Project && n.Kind != Minguk.Tools.ViewModels.ScriptNodeKind.Solution);
+            Expect(file is not null && !workspace.MoveProject(file, projects[1]), "프로젝트 줄이 아닌 것은 끌어도 순서가 안 바뀐다", file?.Name ?? "(파일 줄 없음)");
+        }
+        finally
+        {
+            workspace.Dispose();
+            SolutionWorkspace.Close();
+        }
+
+        return failures;
+    }
+
     private static int CheckSharedProject(string root)
     {
         var failures = 0;

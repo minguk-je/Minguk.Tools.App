@@ -94,9 +94,11 @@ public sealed class ScriptEditor : TextEditor
         TextArea.TextView.BackgroundRenderers.Add(_underline);
 
         // 선택은 우리가 그린다 - 참조 표시가 있는 줄은 키가 두 줄이라, AvalonEdit 기본 선택은 참조 글자까지 덮었다(사용자, 2026-09-19).
-        TextArea.TextView.BackgroundRenderers.Add(new SelectionRenderer(TextArea, TextArea.SelectionBrush));
-        TextArea.SelectionBrush = Brushes.Transparent;
+        // 선택 색은 AvalonEdit 기본 스타일이 화면에 뜰 때 넣는다 - 만들 때 읽으면 비어 있어 선택이 아예 안 보였다(사용자, 2026-09-19).
+        // 그래서 뜬 뒤에 그 색을 받아 두고 기본 선택 층은 투명하게 한다.
+        TextArea.TextView.BackgroundRenderers.Add(new SelectionRenderer(TextArea, () => _selectionFill));
         TextArea.SelectionBorder = null;
+        TextArea.Loaded += (_, _) => TakeOverSelection();
 
         _margin = new BreakpointMargin(this);
         TextArea.LeftMargins.Insert(0, _margin);
@@ -792,18 +794,43 @@ public sealed class ScriptEditor : TextEditor
         return rect.Height > lineHeight * 1.5 ? new Rect(rect.X, rect.Bottom - lineHeight, rect.Width, lineHeight) : rect;
     }
 
+    /// <summary>우리가 칠하는 선택 색. <see cref="TakeOverSelection"/> 이 기본 스타일의 색을 받아 둔다.</summary>
+    private Brush? _selectionFill;
+
+    /// <summary>기본 선택 색을 받아 두고 기본 층은 투명하게 - 한 번만(탭을 오가면 Loaded 가 또 온다).</summary>
+    private void TakeOverSelection()
+    {
+        if (_selectionFill is not null) return;
+
+        _selectionFill = TextArea.SelectionBrush is { } brush && !ReferenceEquals(brush, Brushes.Transparent)
+            ? brush
+            : SelectionFallback();
+
+        TextArea.SelectionBrush = Brushes.Transparent;
+        TextArea.TextView.InvalidateLayer(KnownLayer.Selection);
+    }
+
+    private static Brush SelectionFallback()
+    {
+        var brush = new SolidColorBrush(SystemColors.HighlightColor) { Opacity = 0.5 };
+        brush.Freeze();
+        return brush;
+    }
+
     /// <summary>선택을 칠한다. 기본 선택 층 대신 - 참조 표시 줄에서 글자 높이만 칠하게(<see cref="CodeOnly"/>).</summary>
-    private sealed class SelectionRenderer(TextArea area, Brush fill) : IBackgroundRenderer
+    private sealed class SelectionRenderer(TextArea area, Func<Brush?> fill) : IBackgroundRenderer
     {
         public KnownLayer Layer => KnownLayer.Selection;
 
         public void Draw(TextView textView, DrawingContext drawingContext)
         {
-            if (area.Selection.IsEmpty) return;
+            if (area.Selection.IsEmpty || fill() is not { } brush) return;
+
+            textView.EnsureVisualLines();
 
             foreach (var segment in area.Selection.Segments)
             foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment))
-                drawingContext.DrawRectangle(fill, null, CodeOnly(textView, rect));
+                drawingContext.DrawRectangle(brush, null, CodeOnly(textView, rect));
         }
     }
 

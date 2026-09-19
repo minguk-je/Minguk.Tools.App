@@ -220,6 +220,27 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// 시작 프로젝트를 바꿨을 때 - <b>열린 탭은 그대로 두고</b> 트리·실행(F5)·빌드 대상만 그 프로젝트로 바꾸고, 그 프로젝트의 시작 파일을 앞에 연다.
+    /// </summary>
+    /// <remarks>
+    /// VS 가 그렇다 - 시작 프로젝트를 바꿔도 열어 둔 문서는 안 닫힌다. 탭은 파일에 매여 있고 제목의 프로젝트 이름도 솔루션에서 찾으므로
+    /// 프로젝트를 갈아 끼워도 그대로 맞다. <see cref="OpenProject"/> 처럼 닫지 않으니 저장을 묻지도 않는다(저장 안 한 탭은 그대로 남는다).
+    /// </remarks>
+    public void SwitchProject(string projectFilePath)
+    {
+        if (Project is { } current && string.Equals(current.FilePath, Path.GetFullPath(projectFilePath), StringComparison.OrdinalIgnoreCase)) return;
+
+        var project = ScriptProject.Load(projectFilePath);
+
+        StopWatchingFolder();
+        Attach(project);
+
+        if (Nodes.FirstOrDefault(n => n.Id == project.Entry) is { } entry) Open(entry);
+
+        _host.Notify?.Invoke($"프로젝트 '{project.Name}' (으)로 바꿨습니다.");
+    }
+
     /// <summary>닫는다. 저장 안 한 탭이 있으면 묻는다. 취소하면 false.</summary>
     public bool CloseProject()
     {
@@ -625,9 +646,113 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
         AddReferenceNodes(project, solution);
 
-        if (solution is not null) AddSolutionProjectNodes(project, solution, startup);
+        if (solution is not null)
+        {
+            AddSolutionProjectNodes(project, solution, startup);
+            OrderProjectsAsSolution(project, solution);
+        }
 
         SelectedNode = Nodes.FirstOrDefault(n => n.Id == selected) ?? Nodes.FirstOrDefault(n => n.Id == RootId) ?? Nodes.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// 프로젝트 줄을 솔루션 파일의 순서로 놓는다 - 열린 프로젝트도 제자리에(예전에는 늘 맨 위, 나머지는 이름 순).
+    /// 트리는 같은 부모 아래 줄을 목록 순서대로 보이므로 프로젝트 줄만 옮기면 된다. 끌어 놓아 바꾼 순서가 여기서 보인다.
+    /// </summary>
+    private void OrderProjectsAsSolution(ScriptProject project, Minguk.Tools.Projects.Solution solution)
+    {
+        var order = solution.Projects.Select(e => solution.FullPath(e.Path)).ToList();
+        var projects = Nodes.Where(n => n.ParentId == SolutionId && n.Kind == ScriptNodeKind.Project).ToList();
+
+        int Rank(ScriptProjectNode node)
+        {
+            var index = order.FindIndex(p => string.Equals(p, ProjectFileOf(node, project), StringComparison.OrdinalIgnoreCase));
+            return index < 0 ? int.MaxValue : index;
+        }
+
+        var sorted = projects.OrderBy(Rank).ToList();
+
+        if (sorted.SequenceEqual(projects)) return;
+
+        foreach (var node in projects) Nodes.Remove(node);
+
+        var at = Nodes.IndexOf(Nodes.First(n => n.Id == SolutionId)) + 1;
+
+        foreach (var node in sorted) Nodes.Insert(at++, node);
+    }
+
+    /// <summary>프로젝트 줄의 .mtsproj 전체 경로. 프로젝트 줄이 아니면 null.</summary>
+    private static string? ProjectFileOf(ScriptProjectNode node, ScriptProject? opened)
+    {
+        if (node.Kind != ScriptNodeKind.Project) return null;
+        if (node.Id == RootId) return opened?.FilePath;
+
+        return node.Id.StartsWith(OtherProjectPrefix, StringComparison.Ordinal) ? node.Id[OtherProjectPrefix.Length..] : null;
+    }
+
+    // ── 펼침 기억 ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 사람이 접어 둔 줄들(안정 키 - 전체 경로). 트리를 다시 만들어도(파일 추가·프로젝트 바꾸기), 앱을 다시 켜도 그대로 접힌다(사용자, 2026-09-19).
+    /// </summary>
+    /// <remarks>
+    /// 펼친 것이 아니라 <b>접은 것</b>을 적는다 - 새로 생긴 폴더·프로젝트는 VS 처럼 펼쳐 보여야 해서다. 줄 Id 는 열린 프로젝트 기준 상대 경로라
+    /// 프로젝트를 바꾸면 뜻이 달라지므로 전체 경로로 바꿔 적는다(<see cref="StableKey"/>).
+    /// </remarks>
+    private readonly HashSet<string> _collapsed = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>설정에 적는 모양 - 접은 줄 키를 | 로 잇는다.</summary>
+    public string CollapsedState
+    {
+        get => string.Join('|', _collapsed);
+        set
+        {
+            _collapsed.Clear();
+
+            foreach (var key in (value ?? string.Empty).Split('|', StringSplitOptions.RemoveEmptyEntries))
+                _collapsed.Add(key);
+        }
+    }
+
+    /// <summary>줄의 안정 키 - 솔루션·프로젝트·폴더·파일의 전체 경로(솔루션 줄은 솔루션 파일 앞에 꺾쇠).</summary>
+    public string StableKey(ScriptProjectNode node) => node.Id switch
+    {
+        SolutionId => SolutionId + (Minguk.Tools.Projects.SolutionWorkspace.Current?.FilePath ?? string.Empty),
+        RootId => Project?.FilePath ?? RootId,
+        var id when id.StartsWith(OtherProjectPrefix, StringComparison.Ordinal) => id[OtherProjectPrefix.Length..],
+        var id when Path.IsPathRooted(id) => id,
+        var id => Project is { } project ? project.FullPath(id) : id
+    };
+
+    public bool IsCollapsed(ScriptProjectNode node) => _collapsed.Contains(StableKey(node));
+
+    public void SetCollapsed(ScriptProjectNode node, bool collapsed)
+    {
+        if (collapsed) _collapsed.Add(StableKey(node));
+        else _collapsed.Remove(StableKey(node));
+    }
+
+    /// <summary>끌어 놓을 수 있는 줄인가 - 솔루션 아래의 프로젝트 줄.</summary>
+    public static bool IsMovableProject(ScriptProjectNode? node)
+        => node is { Kind: ScriptNodeKind.Project, ParentId: SolutionId };
+
+    /// <summary>
+    /// 솔루션 탐색기에서 프로젝트 줄을 다른 프로젝트 줄 위에 놓았다 - 솔루션의 프로젝트 순서를 바꾼다(사용자, 2026-09-19).
+    /// 트리와 솔루션 화면의 프로젝트 콤보가 <see cref="Minguk.Tools.Projects.SolutionWorkspace.Changed"/> 로 따라온다.
+    /// </summary>
+    public bool MoveProject(ScriptProjectNode moving, ScriptProjectNode target)
+    {
+        if (!IsMovableProject(moving) || !IsMovableProject(target) || ReferenceEquals(moving, target)) return false;
+        if (Minguk.Tools.Projects.SolutionWorkspace.Current is not { } solution) return false;
+
+        Minguk.Tools.Projects.SolutionProjectEntry? EntryOf(ScriptProjectNode node)
+            => ProjectFileOf(node, Project) is { } file
+                ? solution.Projects.FirstOrDefault(e => string.Equals(solution.FullPath(e.Path), file, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+        if (EntryOf(moving) is not { } from || EntryOf(target) is not { } to) return false;
+
+        return Minguk.Tools.Projects.SolutionWorkspace.MoveProject(from, to);
     }
 
     /// <summary>솔루션 줄의 Id. 경로와 안 겹치게 꺾쇠를 쓴다.</summary>
@@ -659,7 +784,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     /// </remarks>
     private void AddSolutionProjectNodes(ScriptProject project, Minguk.Tools.Projects.Solution solution, string? startup)
     {
-        foreach (var entry in solution.Projects.OrderBy(e => Minguk.Tools.Projects.Solution.NameOf(e), StringComparer.CurrentCultureIgnoreCase))
+        foreach (var entry in solution.Projects)
         {
             var filePath = solution.FullPath(entry.Path);
 

@@ -734,8 +734,9 @@
                                         </dxg:GridControl.Columns>
 
                                         <dxg:GridControl.View>
+                                            <!-- 펼침은 ProjectTreeBehavior 가 기억대로(기본 펼침) - 전부 펼침(AutoExpandAllNodes)이면 접어 둔 것이 다시 펴졌다. -->
                                             <controls:BaseTreeListView AllowEditing="True"
-                                                                       AutoExpandAllNodes="True"
+                                                                       AutoExpandAllNodes="False"
                                                                        AutoWidth="True"
                                                                        EditorShowMode="MouseUpFocused"
                                                                        ImageFieldName="Glyph"
@@ -920,6 +921,7 @@
                             <!--
                                 ── 문서 탭(프로젝트) ── 파일마다 탭. 저장 안 한 것은 제목 뒤 *.
                                 닫기 × 는 탭마다(사용자, 2026-09-15 - 그룹 오른쪽 끝 하나였다). 누르면 ScriptDocumentsBehavior 가 받아 작업 공간이 닫는다(저장 안 했으면 묻는다).
+                                탭이 넘치면 여러 줄로 쌓는다 - VS 의 "여러 행 탭"(사용자, 2026-09-19).
                             -->
                             <dxdo:DocumentGroup x:Name="ProjectDocumentGroup"
                                                 ClosePageButtonShowMode="InAllTabPageHeaders"
@@ -929,6 +931,7 @@
                                                 ItemWidth="1.4*"
                                                 ItemsSource="{Binding Script.Project.Documents}"
                                                 ShowWhenEmpty="True"
+                                                TabHeaderLayoutType="MultiLine"
                                                 Visibility="{Binding Script.IsProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <dxdo:DocumentGroup.ItemStyle>
                                     <Style TargetType="dxdo:DocumentPanel">
@@ -1264,6 +1267,29 @@
                                             BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
                                             BorderThickness="1,0,0,0">
                                         <DockPanel>
+                                            <!--
+                                                저장된 영역 이미지(사용자, 2026-09-19 "저장된 그림 미리보기 넣어줘") - 고른 자리로 저장해 둔 Resources\자리.png.
+                                                버튼이 뜨기 전 화면이 저장돼 닮음이 0.5 에 머문 적이 있다 - 무엇이 저장됐는지 눈으로 본다.
+                                            -->
+                                            <StackPanel Margin="0,8,0,0"
+                                                        DockPanel.Dock="Bottom">
+                                                <TextBlock Margin="0,0,0,2"
+                                                           FontWeight="Bold"
+                                                           Text="저장된 영역 이미지" />
+                                                <TextBlock Margin="0,0,0,4"
+                                                           Text="{Binding SavedTemplateCaption}"
+                                                           TextWrapping="Wrap" />
+                                                <Border HorizontalAlignment="Left"
+                                                        BorderBrush="Gray"
+                                                        BorderThickness="1">
+                                                    <Image MaxWidth="260"
+                                                           MaxHeight="120"
+                                                           RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                                           Source="{Binding SavedTemplateImage}"
+                                                           Stretch="Uniform"
+                                                           StretchDirection="DownOnly" />
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock Margin="0,0,0,6"
                                                        FontWeight="Bold"
                                                        DockPanel.Dock="Top"

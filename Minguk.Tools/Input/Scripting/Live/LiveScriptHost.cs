@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Minguk.Tools.Capture;
 using Minguk.Tools.Input.Scripting;
@@ -57,6 +60,12 @@ public sealed class LiveScriptHost
     /// PC 로 폴더만 옮겨도 돈다). 어느 쪽이든 검출 모델·이름 붙인 자리는 그 프로젝트로 바뀐 채로 돈다.
     /// </remarks>
     public Func<string, LiveScriptHost, System.Threading.CancellationToken, System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<ScriptError>>>? RunProject { get; init; }
+
+    /// <summary>
+    /// <c>프로젝트이동("이름")</c> 이 남기는 다음 프로젝트. 한 번의 실행(맨 바깥에서 F5 한 번)에 한 벌이고, <see cref="WithResourceRoot"/> 로 만든
+    /// 안쪽 host 도 같은 것을 나눠 쓴다 - 안쪽(프로젝트실행으로 부른 것)에서 이동해도 맨 바깥 실행기가 받는다.
+    /// </summary>
+    public ProjectMoveRequest Moves { get; init; } = new();
 
     public required Action<string> Print { get; init; }
 
@@ -119,6 +128,7 @@ public sealed class LiveScriptHost
         Regions = Regions,
         ResourceRoot = resourceRoot,
         RunProject = RunProject,
+        Moves = Moves,
         Print = Print,
         Watch = Watch,
         Trace = Trace,
@@ -131,3 +141,53 @@ public sealed class LiveScriptHost
         MaxInputsPerSecond = MaxInputsPerSecond
     };
 }
+
+/// <summary>
+/// <c>프로젝트이동</c> 이 남긴 다음 프로젝트 이름. 실행기가 스크립트가 끝난 뒤 꺼내 그 프로젝트를 이어서 돌린다(<see cref="RunWithMovesAsync"/>).
+/// </summary>
+/// <remarks>
+/// <b>왜 부르는 자리에서 바로 돌리지 않나</b>(사용자, 2026-09-19) - <c>프로젝트실행</c> 은 함수처럼 그 줄에서 기다리므로 메인화면 → 영웅선택 → 플레이 → 사격장 처럼
+/// 넘어가기만 하는 흐름에서도 한 겹씩 쌓이고, 사격장이 다시 메인화면을 부르는 돌고 도는 흐름은 끝없이 쌓인다. 이동은 지금 것을 끝낸 뒤 맨 바깥에서
+/// 반복문으로 넘어가므로 쌓이지 않는다.
+/// </remarks>
+public sealed class ProjectMoveRequest
+{
+    private string? _pending;
+
+    /// <summary>남아 있는 이동. 없으면 null.</summary>
+    public string? Pending => Volatile.Read(ref _pending);
+
+    public void Request(string name) => Volatile.Write(ref _pending, name);
+
+    /// <summary>꺼내고 비운다.</summary>
+    public string? Take() => Interlocked.Exchange(ref _pending, null);
+
+    /// <summary>
+    /// 처음 것을 돌리고, 이동이 남아 있는 동안 그 프로젝트를 차례로 이어 돌린다 - 쌓이지 않는 반복문. 마지막 것의 오류를 돌려준다.
+    /// </summary>
+    /// <param name="first">처음 스크립트(F5 로 연 것).</param>
+    /// <param name="runProject">이름으로 프로젝트를 돌린다(host 의 <see cref="LiveScriptHost.RunProject"/>). 없으면 이동을 못 한다.</param>
+    /// <param name="print">"프로젝트 '사격장' 으로 이동" 같은 한 줄.</param>
+    public async Task<IReadOnlyList<ScriptError>> RunWithMovesAsync(
+        Func<Task<IReadOnlyList<ScriptError>>> first,
+        Func<string, Task<IReadOnlyList<ScriptError>>>? runProject,
+        Action<string> print,
+        CancellationToken token)
+    {
+        var errors = await first();
+
+        while (errors.Count == 0 && !token.IsCancellationRequested && Take() is { } next)
+        {
+            if (runProject is null) return [new ScriptError(0, "이 화면은 다른 프로젝트로 이동하는 것을 지원하지 않습니다.")];
+
+            print($"프로젝트 '{next}' (으)로 이동");
+            errors = await runProject(next);
+        }
+
+        // 오류로 끝났으면 남은 이동은 버린다 - 다음 F5 가 엉뚱한 곳으로 가지 않게.
+        Take();
+
+        return errors;
+    }
+}
+

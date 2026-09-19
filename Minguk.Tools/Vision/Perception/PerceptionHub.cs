@@ -37,7 +37,20 @@ public sealed class PerceptionHub : IPerceptionHub
     public bool WantsFrames
     {
         get => _wantsFrames;
-        set => _wantsFrames = value;
+        set
+        {
+            _wantsFrames = value;
+
+            // 받기를 멈추면 들고 있던 프레임을 버린다 - 그 뒤로는 새 프레임이 안 들어와 점점 옛 화면이 되는데, 다음에 켰을 때
+            // 새 프레임보다 먼저 그것이 잘려 버튼이 뜨기 전 화면이 영역 이미지로 저장됐다(사용자, 2026-09-19 "엉뚱한게 저장되어 있네").
+            if (!value)
+                lock (_frameGate)
+                {
+                    _frame = null;
+                    _frameWidth = 0;
+                    _frameHeight = 0;
+                }
+        }
     }
 
     /// <summary>리드백을 켜는 데 걸리는 시간(캡처 재시작). 이보다 오래되면 준비 중이 아니다.</summary>

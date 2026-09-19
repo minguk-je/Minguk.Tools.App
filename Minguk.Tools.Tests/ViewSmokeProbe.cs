@@ -79,6 +79,7 @@ internal static class ViewSmokeProbe
             failures += CheckErrorUnderline();
             failures += CheckCompletion();
             failures += CheckSemanticColoring();
+            failures += CheckSelectionPainted();
             failures += CheckCodeLens();
             failures += CheckPlayProject();
 
@@ -772,6 +773,59 @@ internal static class ViewSmokeProbe
             {
                 host.Close();
             }
+        }
+    }
+
+    /// <summary>
+    /// 편집기 선택이 칠해지는지 - 선택을 우리가 그리게 바꾼 뒤 색을 너무 일찍 읽어 선택이 아예 안 보였다(사용자, 2026-09-19).
+    /// </summary>
+    private static int CheckSelectionPainted()
+    {
+        const int width = 240, height = 80;
+
+        var editor = new Minguk.Tools.Markup.ScriptEditor
+        {
+            Width = width,
+            Height = height,
+            FontSize = 13,
+            FontFamily = new FontFamily("Consolas"),
+            Text = "var 값 = 20000;\n출력(값);"
+        };
+
+        var host = new Window { Width = width + 20, Height = height + 40, ShowInTaskbar = false, WindowStyle = WindowStyle.None, Left = -5000, Top = -5000, Content = editor };
+        host.Show();
+
+        try
+        {
+            editor.UpdateLayout();
+            editor.Select(8, 5);   // "20000"
+
+            var textView = editor.TextArea.TextView;
+            var visual = new DrawingVisual();
+
+            using (var dc = visual.RenderOpen())
+                foreach (var renderer in textView.BackgroundRenderers)
+                    renderer.Draw(textView, dc);
+
+            var target = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            target.Render(visual);
+
+            var pixels = new byte[width * height * 4];
+            target.CopyPixels(pixels, width * 4, 0);
+
+            var painted = 0;
+            for (var i = 3; i < pixels.Length; i += 4) if (pixels[i] > 20) painted++;
+
+            // 기본 선택 층은 투명이어야 한다 - 안 그러면 두 겹으로 칠해져 참조 표시 줄까지 덮는 옛 모양이 돌아온다.
+            var defaultOff = editor.TextArea.SelectionBrush is SolidColorBrush { Color.A: 0 };
+            var ok = painted > 100 && defaultOff;
+
+            Console.WriteLine($"[{(ok ? "PASS" : "FAIL")}] 편집기: 선택한 글자가 칠해진다 - 칠한 픽셀 {painted} · 기본 선택 층 투명 {defaultOff}");
+            return ok ? 0 : 1;
+        }
+        finally
+        {
+            host.Close();
         }
     }
 

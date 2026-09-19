@@ -422,12 +422,22 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
         if (Script.Engine is not IProjectScriptEngine engine)
             return [new ScriptError(0, "프로젝트는 C# 만 이어서 돌립니다.")];
 
+        var previous = SwitchedRecognitionRoot;
+
         await SwitchProjectContextAsync(folder);
 
-        var subHost = template.WithResourceRoot(folder);
-        var subApi = new LiveScriptApi(subHost, token);
+        try
+        {
+            var subHost = template.WithResourceRoot(folder);
+            var subApi = new LiveScriptApi(subHost, token);
 
-        return await engine.RunLiveAsync(unit, subApi, null, token);
+            return await engine.RunLiveAsync(unit, subApi, null, token);
+        }
+        finally
+        {
+            // 돌아왔으면 부른 쪽의 모델·자리로(프로젝트이동 중이면 그대로).
+            await RestoreProjectContextAsync(previous, template);
+        }
     }
 
     /// <summary>프로젝트의 <c>Resources</c> 폴더를 빌드 결과물 옆으로 복사한다. 리소스는 소스가 아니라 파일이라 IL 에 못 넣는다.</summary>
@@ -908,6 +918,18 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     private static void BestFitRegionsGridColumns(GridControl grid)
     {
         if (grid.View is Minguk.Base.Controls.BaseTreeListView view) view.BestFitColumnsWithPadding(50);
+    }
+
+    /// <inheritdoc/>
+    public override string? ProjectSwitchBlocker()
+        => Player.IsRunning ? "스크립트가 도는 중에는 프로젝트를 바꿀 수 없습니다 - 먼저 중지(F6)하세요." : base.ProjectSwitchBlocker();
+
+    /// <summary>검출·자리(바탕)에 더해 솔루션 탐색기·실행 대상을 새 시작 프로젝트로. 열린 탭은 그대로 둔다.</summary>
+    public override void FollowProject()
+    {
+        base.FollowProject();
+
+        if (IsInitialized) Script.FollowStartupProject();
     }
 
     protected override void ReleaseResources()

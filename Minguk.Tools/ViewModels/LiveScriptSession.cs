@@ -137,9 +137,15 @@ public sealed class LiveScriptSession : IDisposable
             {
                 // 줄 단위로 멈출 수 있는 언어에만 디버그 세션을 준다. C# 은 호출 로그로 본다.
                 var debug = engine.SupportsStepping ? Debug : null;
-                var errors = unit is not null && engine is IProjectScriptEngine projectEngine
-                    ? await projectEngine.RunLiveAsync(unit, api, debug, token)
-                    : await engine.RunLiveAsync(source, api, debug, token);
+
+                // 끝에서 프로젝트이동을 불렀으면 그 프로젝트를 여기(맨 바깥)서 이어 돌린다 - 쌓이지 않는다.
+                var errors = await host.Moves.RunWithMovesAsync(
+                    () => unit is not null && engine is IProjectScriptEngine projectEngine
+                        ? projectEngine.RunLiveAsync(unit, api, debug, token)
+                        : engine.RunLiveAsync(source, api, debug, token),
+                    MoveRunner(host, token),
+                    Console.Print,
+                    token);
 
                 return Finish(progress, errors, api, token);
             }
@@ -175,7 +181,11 @@ public sealed class LiveScriptSession : IDisposable
 
             try
             {
-                var errors = await CompiledScriptRunner.RunAsync(compiled.Assembly, host, created => { _api = created; api = created; }, token);
+                var errors = await host.Moves.RunWithMovesAsync(
+                    () => CompiledScriptRunner.RunAsync(compiled.Assembly, host, created => { _api = created; api = created; }, token),
+                    MoveRunner(host, token),
+                    Console.Print,
+                    token);
 
                 return Finish(progress, errors, api, token);
             }
@@ -185,6 +195,10 @@ public sealed class LiveScriptSession : IDisposable
             }
         }, beforeRun);
     }
+
+    /// <summary>프로젝트이동이 남긴 프로젝트를 돌리는 길 - 화면이 준 <see cref="LiveScriptHost.RunProject"/>(소스 또는 빌드된 것). 없으면 이동을 못 한다.</summary>
+    private static Func<string, Task<IReadOnlyList<ScriptError>>>? MoveRunner(LiveScriptHost host, CancellationToken token)
+        => host.RunProject is { } run ? name => run(name, host, token) : null;
 
     /// <summary>실행 결과를 화면에 알리고, 계속 돌릴지(true) 멈출지(false)를 정한다.</summary>
     private bool Finish(IProgress<string> progress, IReadOnlyList<ScriptError> errors, LiveScriptApi? api, CancellationToken token)

@@ -275,6 +275,7 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
     private const string ProjectPathKey = "ScriptProjectPath";
     private const string ProjectDocumentsKey = "ScriptProjectDocuments";
     private const string ProjectActiveKey = "ScriptProjectActive";
+    private const string ExplorerCollapsedKey = "ScriptExplorerCollapsed";
 
     private void ScheduleRecompile()
     {
@@ -324,6 +325,22 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>솔루션 화면에서 시작 프로젝트를 바꿨다 - 열린 탭은 두고 그 프로젝트로 갈아 끼운다(<see cref="ScriptProjectWorkspace.SwitchProject"/>).</summary>
+    public void FollowStartupProject()
+    {
+        if (CurrentProjectFile() is not { } file) return;
+
+        try
+        {
+            Project.SwitchProject(file);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, $"시작 프로젝트를 못 열었다: {file}");
+            MessengerUtility.SendMainMessage($"프로젝트를 열지 못했습니다 - {System.IO.Path.GetFileName(file)} 을(를) 읽을 수 없습니다.");
+        }
+    }
+
     /// <summary>Automation 에서 고른 프로젝트의 .mtsproj. 고른 것이 없거나 파일이 없으면 null.</summary>
     private static string? CurrentProjectFile()
     {
@@ -344,6 +361,7 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
         _host.SetSetting(ProjectPathKey, Project.Project?.FilePath ?? string.Empty);
         _host.SetSetting(ProjectDocumentsKey, string.Join('|', Project.Documents.Select(d => d.FilePath)));
         _host.SetSetting(ProjectActiveKey, Project.ActiveDocument?.FilePath ?? string.Empty);
+        _host.SetSetting(ExplorerCollapsedKey, Project.CollapsedState);
     }
 
     // ── 글과 파일 ────────────────────────────────────────────────────────
@@ -516,7 +534,12 @@ public sealed class ScriptWorkbench : ViewModelBase, IDisposable
             _restoring = false;
         }
 
-        if (_host.IsLive) RestoreProject();
+        if (_host.IsLive)
+        {
+            // 접어 둔 줄을 먼저 - 프로젝트를 열며 트리가 처음 만들어질 때부터 그대로 접혀 나온다.
+            Project.CollapsedState = _host.GetSetting(ExplorerCollapsedKey, string.Empty);
+            RestoreProject();
+        }
     }
 
     /// <summary>언어와 언어별 글을 저장한다. 화면의 SaveSettings 에서 부른다.</summary>

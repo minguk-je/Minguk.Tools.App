@@ -214,14 +214,23 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
     /// </summary>
     private async Task<IReadOnlyList<ScriptError>> RunProjectCompiledAsync(string name, Input.Scripting.Live.LiveScriptHost template, System.Threading.CancellationToken token)
     {
+        var previous = SwitchedRecognitionRoot;
         var playable = await SwitchToSiblingProjectAsync(name);
 
         if (playable is null)
             return [new ScriptError(0, $"프로젝트 '{name}' 을(를) 못 찾았거나 안 빌드했습니다 - 그 프로젝트를 열어 Ctrl+Shift+B 로 빌드하세요.")];
 
-        var subHost = template.WithResourceRoot(playable.ResourceRoot);
+        try
+        {
+            var subHost = template.WithResourceRoot(playable.ResourceRoot);
 
-        return await CompiledScriptRunner.RunAsync(playable.Assembly, subHost, _ => { }, token);
+            return await CompiledScriptRunner.RunAsync(playable.Assembly, subHost, _ => { }, token);
+        }
+        finally
+        {
+            // 돌아왔으면 부른 쪽의 모델·자리로(프로젝트이동 중이면 그대로).
+            await RestoreProjectContextAsync(previous, template);
+        }
     }
 
     /// <summary>

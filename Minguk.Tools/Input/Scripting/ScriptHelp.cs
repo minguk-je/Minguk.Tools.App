@@ -51,7 +51,7 @@ public static class ScriptHelp
         ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
-        ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow, ["RunProject"] = Flow,
+        ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow, ["RunProject"] = Flow, ["MoveToProject"] = Flow,
 
         ["ResourcePath"] = Resources, ["ResourceText"] = Resources, ["ResourceBytes"] = Resources, ["PlaySound"] = Resources,
         ["Setting"] = Resources, ["SetSetting"] = Resources, ["SettingList"] = Resources, ["HasSetting"] = Resources
@@ -92,7 +92,8 @@ public static class ScriptHelp
         ["SetSetting"] = "설정저장(\"사냥횟수\", 설정<int>(\"사냥횟수\") + 1);",
         ["SettingList"] = "foreach (var 줄 in 설정목록(\"물약목록\"))\n    if (줄.Get<bool>(\"켜기\")) 출력(줄[\"키\"]);",
         ["PlaySound"] = "소리(\"알림.wav\");",
-        ["RunProject"] = "프로젝트실행(\"사격장\");   // 사격장/bin/사격장.mtsx 를 먼저 빌드해 둔다"
+        ["RunProject"] = "프로젝트실행(\"공용설정\");   // 끝나면 다음 줄로 돌아온다\n출력(\"돌아왔다\");",
+        ["MoveToProject"] = "if (그림누르기(\"확인.png\"))\n    프로젝트이동(\"사격장\");   // 여기서 끝나고 사격장으로 넘어간다"
     };
 
     public static IReadOnlyList<ScriptHelpRow> Rows { get; } = Build();

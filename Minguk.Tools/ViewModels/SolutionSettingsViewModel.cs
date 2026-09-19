@@ -18,7 +18,7 @@ namespace Minguk.Tools.ViewModels;
 /// <b>양식은 고치면 곧바로 저장한다</b>(환경설정 화면과 같다) - 저장 안 한 양식을 들고 닫기를 묻는 흐름을 두지 않는다.
 /// 이름이 틀리거나 겹치면 저장하지 않고 상태 줄에 이유를 띄운다.
 /// </remarks>
-public partial class SolutionSettingsViewModel : DocumentViewModelBase
+public partial class SolutionSettingsViewModel : DocumentViewModelBase, IFollowsProject
 {
     public static SolutionSettingsViewModel Create() => ViewModelSource.Create(() => new SolutionSettingsViewModel());
 
@@ -100,5 +100,25 @@ public partial class SolutionSettingsViewModel : DocumentViewModelBase
     {
         DetachLayers();
         _settings?.Flush();
+    }
+
+    // ── 시작 프로젝트 따라가기(IFollowsProject) ────────────────────────────
+
+    public string? ProjectSwitchBlocker() => null;
+
+    /// <summary>옛 프로젝트 값을 파일에 쓴다.</summary>
+    public bool PrepareProjectSwitch()
+    {
+        _settings?.Flush();
+
+        return true;
+    }
+
+    /// <summary>새 프로젝트의 양식·값으로 다시 연다. 플레이의 값 창(프로젝트를 박아 둔 것)은 안 따라간다.</summary>
+    public void FollowProject()
+    {
+        if (!IsInitialized || _fixedProject is not null) return;
+
+        OpenProject(Minguk.Tools.Projects.SolutionWorkspace.StartupDirectory);
     }
 }

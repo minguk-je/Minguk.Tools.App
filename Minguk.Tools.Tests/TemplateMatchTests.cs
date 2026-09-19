@@ -61,6 +61,16 @@ internal static partial class Program
                   iconHit is null ? $"못 찾음 (본보기 밝기 {distinct}가지)" : $"닮음 {iconHit.Value.Score:0.000} · 어긋남 {iconOffX:0}·{iconOffY:0}px");
         }
 
+        // 받기를 멈추면 허브가 옛 프레임을 버린다 - 다음에 켰을 때 옛 화면이 영역 이미지로 저장됐다(사용자, 2026-09-19).
+        var hub = new Minguk.Tools.Vision.Perception.PerceptionHub { WantsFrames = true };
+        hub.PublishFrame(new byte[8 * 6 * 4], 8, 6);
+        var hadFrame = hub.TryCropFrame(new Rect(0, 0, 1, 1), out _);
+        hub.WantsFrames = false;
+        hub.WantsFrames = true;
+        var staleGone = !hub.TryCropFrame(new Rect(0, 0, 1, 1), out _);
+
+        Check("허브: 받기를 멈추면 옛 프레임을 버려, 다시 켜도 새 프레임이 올 때까지 안 잘린다", hadFrame && staleGone, $"처음 {hadFrame} · 멈춘 뒤 비었음 {staleGone}");
+
         // 없는 그림 - 닮음이 낮아야 한다(0.8 문턱이면 안 눌린다).
         var stranger = GrayImage.From(DrawNoise(200, 140));
         var wrong = TemplateMatch.Find(haystack, stranger);

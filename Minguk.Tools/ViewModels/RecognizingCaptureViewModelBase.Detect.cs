@@ -421,6 +421,40 @@ public abstract partial class RecognizingCaptureViewModelBase
     }
 
     /// <summary>
+    /// 시작 프로젝트가 바뀌었다 - 이름 붙인 자리·검출 모델·설정 창을 새 프로젝트로. <c>프로젝트실행()</c> 으로 넘어갔던 자리도 푼다
+    /// (안 풀면 그 자리가 계속 이겨 콤보를 바꿔도 옛 모델을 본다).
+    /// </summary>
+    public override void FollowProject()
+    {
+        base.FollowProject();
+
+        if (!IsInitialized) return;
+
+        SwitchedRecognitionRoot = null;
+        LoadRegions();
+        RefreshSavedTemplate();
+
+        if (IsDetectionOn) ReloadDetectorForCurrentRoot();
+
+        FollowSettingsWindow();
+    }
+
+    /// <summary>
+    /// <c>프로젝트실행</c> 으로 부른 프로젝트가 끝나 돌아왔다 - 검출 모델·이름 붙인 자리를 부른 쪽 것(<paramref name="previous"/>, null 이면 이 화면 본래 것)으로 되돌린다.
+    /// </summary>
+    /// <remarks>
+    /// 안 되돌리면 <c>프로젝트실행</c> 다음 줄의 <c>목표()</c>·<c>읽기()</c> 가 부른 프로젝트의 모델·자리를 봤다(사용자, 2026-09-19).
+    /// <c>프로젝트이동</c> 으로 넘어가는 중이면 되돌리지 않는다 - 곧 다른 프로젝트로 바뀌는데 모델을 한 번 더 올리게 된다.
+    /// </remarks>
+    protected async System.Threading.Tasks.Task RestoreProjectContextAsync(string? previous, Input.Scripting.Live.LiveScriptHost template)
+    {
+        if (template.Moves.Pending is not null) return;
+        if (string.Equals(SwitchedRecognitionRoot, previous, StringComparison.OrdinalIgnoreCase)) return;
+
+        await SwitchProjectContextAsync(previous);
+    }
+
+    /// <summary>
     /// 스크립트의 <c>프로젝트실행("사격장")</c> 이 부른다 - 이름 붙인 자리·검출 모델을 그 프로젝트 폴더 기준으로 바꾸고,
     /// 검출이 켜져 있으면 새 모델을 다 읽을 때까지 기다린다(최대 <paramref name="timeoutMs"/>).
     /// </summary>
@@ -428,7 +462,7 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// UI 스레드 것(속성 설정·모델 로딩 시작)은 <see cref="RunOnUiBlocking"/> 로 부르고 돌아온다 - 스크립트 스레드가
     /// 그 사이 값을 반쯤 바뀐 채로 읽지 않게. 기다리는 동안은 스크립트 스레드에서 그냥 <see cref="Task.Delay"/> 한다.
     /// </remarks>
-    protected async System.Threading.Tasks.Task SwitchProjectContextAsync(string projectRoot, int timeoutMs = 15000)
+    protected async System.Threading.Tasks.Task SwitchProjectContextAsync(string? projectRoot, int timeoutMs = 15000)
     {
         RunOnUiBlocking(() =>
         {

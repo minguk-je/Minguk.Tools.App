@@ -1863,9 +1863,33 @@ public class LiveScriptApi : IDisposable
 
         foreach (var error in errors)
             Print($"{name}: {error.Message}");
+
+        // 부른 프로젝트 안에서 프로젝트이동을 불렀으면 여기(부른 쪽)도 끝낸다 - 쌓인 것을 모두 걷고 맨 바깥에서 넘어간다.
+        if (_host.Moves.Pending is not null) Stop();
     }
 
     public void 프로젝트실행(string 이름) => RunProject(이름);
+
+    /// <summary>
+    /// 지금 스크립트를 끝내고 그 프로젝트로 넘어간다 - <c>프로젝트실행</c> 과 달리 돌아오지 않고 쌓이지도 않는다(사용자, 2026-09-19).
+    /// </summary>
+    /// <remarks>
+    /// <c>끝()</c> 처럼 이 줄에서 끝나고, 실행기(맨 바깥)가 그 프로젝트의 시작 파일을 이어서 돌린다(<see cref="ProjectMoveRequest.RunWithMovesAsync"/>).
+    /// 메인화면 → 영웅선택 → 플레이 → 사격장 → 다시 메인화면처럼 돌고 도는 흐름도 쌓이지 않는다. 검출 모델·이름 붙인 자리·리소스는 그 프로젝트 것이 된다.
+    /// </remarks>
+    public void MoveToProject(string name) => Traced("MoveToProject", Quote(name), () =>
+    {
+        if (_host.RunProject is null)
+            throw Guard("이 화면은 다른 프로젝트로 이동하는 것을 지원하지 않습니다.");
+
+        if (string.IsNullOrWhiteSpace(name))
+            throw Guard("이동할 프로젝트 이름을 적으세요 - 프로젝트이동(\"사격장\").");
+
+        _host.Moves.Request(name.Trim());
+        Stop();
+    });
+
+    public void 프로젝트이동(string 이름) => MoveToProject(이름);
 
     // ── 설정(솔루션·프로젝트) ────────────────────────────────────────────
     //    설정 탭에서 사람이 만든 칸의 값. 부를 때마다 앱 안의 한 벌에서 읽는다 - 도는 중에 설정 탭에서 바꾸면 다음 호출부터 먹는다.

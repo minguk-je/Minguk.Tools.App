@@ -84,6 +84,32 @@ public static class SolutionWorkspace
         Changed?.Invoke(null, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// 프로젝트 순서를 바꾼다 - <paramref name="moving"/> 을 <paramref name="target"/> 자리로(아래로 끌면 그 뒤, 위로 끌면 그 앞). 솔루션 파일에 적는다.
+    /// </summary>
+    /// <remarks>
+    /// 솔루션 탐색기에서 프로젝트를 끌어 놓을 때(사용자, 2026-09-19). 솔루션 화면 위 칸의 프로젝트 콤보도 이 순서를 따른다(<see cref="Solution.Runnable"/>).
+    /// </remarks>
+    /// <returns>바꿨으면 true. 같은 자리거나 목록에 없으면 false.</returns>
+    public static bool MoveProject(SolutionProjectEntry moving, SolutionProjectEntry target)
+    {
+        if (Current is not { } solution) return false;
+
+        var from = solution.Projects.IndexOf(moving);
+        var to = solution.Projects.IndexOf(target);
+
+        if (from < 0 || to < 0 || from == to) return false;
+
+        // 빼고 나서 그 번호에 넣으면 아래로 끌 때는 대상 뒤, 위로 끌 때는 대상 앞에 들어간다.
+        solution.Projects.RemoveAt(from);
+        solution.Projects.Insert(to, moving);
+        solution.Save();
+
+        Changed?.Invoke(null, EventArgs.Empty);
+
+        return true;
+    }
+
     // ── 최근 목록 ────────────────────────────────────────────────────────
 
     /// <summary>최근에 연 솔루션들. 파일이 없어진 것도 그대로 준다 - 시작 창이 흐리게 보이고 지울지 묻는다.</summary>

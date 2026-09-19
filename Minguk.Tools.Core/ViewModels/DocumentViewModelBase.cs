@@ -35,6 +35,9 @@ public abstract partial class DocumentViewModelBase : ViewModelBase, IDocumentCo
     private bool _viewInitialized;
     private bool _parentAttached;
     private bool _initialized;
+
+    /// <summary>화면이 한 번 떠서 초기화가 돌았는가. 안 연 탭은 false - 그런 탭은 다시 읽을 것도 없다(처음 뜰 때 읽는다).</summary>
+    protected bool IsInitialized => _initialized;
     private bool _destroyed;
 
     protected DocumentViewModelBase()
