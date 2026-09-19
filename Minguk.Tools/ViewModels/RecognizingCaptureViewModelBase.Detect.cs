@@ -54,6 +54,12 @@ public abstract partial class RecognizingCaptureViewModelBase
 
     private IDetector? _detector;
 
+    /// <summary>
+    /// 모델이 바뀔 때마다(읽기·내려놓기) 하나씩 는다. 도는 검출이 시작할 때 이것을 적어 두었다가, 끝났을 때 달라졌으면 그 사이 오류는 고장이 아니다 -
+    /// 모델을 바꾸는 도중에 옛 모델로 돌던 한 번이 닫힌 모델에 부딪힌 것이다(사용자, 2026-09-19 - 모델 없는 화면으로 넘어가는 순간 이것으로 검출이 꺼졌다).
+    /// </summary>
+    private int _detectorGeneration;
+
     /// <summary>GPU 에서 전처리하는 길(텐서 검출기일 때만). 캡처 장치가 바뀌면 새로 만든다.</summary>
     private Minguk.Tools.Inference.FramePreprocessor? _preprocessor;
     private LabelClasses _detectClasses = new();
@@ -132,6 +138,9 @@ public abstract partial class RecognizingCaptureViewModelBase
         // 켜 둔 채 다시 학습했으면 새 모델을 읽는다. 읽는 동안 _detector 는 null 이라 아래서 걸러진다.
         MaybeReloadDetector();
 
+        // 세대는 모델을 잡는 이 순간에 적는다 - 작업이 뜨기 전에 모델이 바뀌어도 그 오류를 가려낸다(RunDetectCore).
+        var generation = Volatile.Read(ref _detectorGeneration);
+
         if (_detector is null) return;
 
         // 텐서를 받을 수 있는 검출기(ONNX)면 GPU 에 있는 프레임을 그대로 쓴다. 아니면 옛 길(PNG)이라 픽셀이 있어야 한다.
@@ -147,6 +156,9 @@ public abstract partial class RecognizingCaptureViewModelBase
         // 앞의 것이 아직 돌고 있으면 이 프레임은 그냥 흘린다. 큐에 쌓으면 화면이 점점
         // 뒤처진 결과를 보여 주게 된다 - 실시간에서는 늦은 답이 틀린 답이다.
         if (Interlocked.CompareExchange(ref _isDetectRunning, 1, 0) != 0) return;
+
+        // 도는 것이 없음을 잡은 뒤에 적는다 - 앞의 것이 도는 중에 덮으면 그 오류를 잘못 가린다.
+        Volatile.Write(ref _runningGeneration, generation);
 
         _lastDetectTicks = now;
 
@@ -278,8 +290,13 @@ public abstract partial class RecognizingCaptureViewModelBase
         => RunDetectCore(() => _detector!.Detect(_detectScratchPath!, _detectClasses, (float)DetectMinimumScore), size, frameTicks);
 
     /// <summary>찾은 뒤의 일은 두 길이 같다 - 추적·이름표·허브·화면.</summary>
+    /// <summary>지금 도는 검출이 잡은 모델의 세대(<see cref="_detectorGeneration"/>). 검출은 한 번에 하나라(_isDetectRunning) 칸 하나면 된다.</summary>
+    private int _runningGeneration;
+
     private void RunDetectCore(Func<IReadOnlyList<Detection>> detect, (int Width, int Height) size, long frameTicks)
     {
+        var generation = Volatile.Read(ref _runningGeneration);
+
         try
         {
             var watch = Stopwatch.StartNew();
@@ -330,6 +347,11 @@ public abstract partial class RecognizingCaptureViewModelBase
                     : $"{found.Count}마리 ({how}{size.Width}x{size.Height}, {watch.ElapsedMilliseconds}ms): " +
                       string.Join(", ", found.Take(3).Select((d, i) => string.IsNullOrEmpty(names[i]) ? d.Describe : $"{d.Describe} 「{names[i]}」"));
             }));
+        }
+        catch (Exception ex) when (Volatile.Read(ref _detectorGeneration) != generation)
+        {
+            // 도는 사이에 모델이 바뀌었다(다른 프로젝트로 넘어감·다시 학습) - 옛 모델의 마지막 한 번이다. 끄지 않는다.
+            Logger.Debug(ex, "모델이 바뀌는 사이의 검출 한 번이 실패했다 - 무시한다");
         }
         catch (Exception ex)
         {
@@ -392,7 +414,10 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (!File.Exists(modelPath))
         {
-            TurnOffDetection($"학습한 모델이 없습니다. 라벨링 화면에서 먼저 학습하세요 ({DetectorTrainer.ModelFileName}).");
+            // 켜 둔 채 쉰다(사용자, 2026-09-19 "화면 이동하니까 검출 버튼이 꺼지는데 그냥 켜있게") - 모델 없는 화면(영웅선택 등)으로 넘어갈 때마다
+            // 꺼져서 모델 있는 화면으로 돌아와도 다시 켜야 했다. 옛 프로젝트 모델·결과는 버린다(옛 몹을 지금 것으로 주면 안 된다).
+            // 모델 있는 프로젝트로 넘어가면 SwitchProjectContextAsync 가, 여기서 학습해 모델이 생기면 MaybeReloadDetector 가 읽는다.
+            RestWithoutModel($"이 프로젝트에는 학습한 모델이 없어 쉬는 중입니다 - 검출은 켜 둡니다({DetectorTrainer.ModelFileName} 이 생기면 알아서 읽습니다).");
 
             return;
         }
@@ -437,6 +462,34 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (IsDetectionOn) ReloadDetectorForCurrentRoot();
 
         FollowSettingsWindow();
+    }
+
+    /// <summary>
+    /// 스크립트 실행이 다 끝났다(끝남·오류·중지) - <c>프로젝트이동</c>·<c>프로젝트실행</c> 으로 넘어갔던 모델·자리를 이 화면 본래 프로젝트로 되돌린다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) "플레이 했다가 종료되면 원래 선택된 프로젝트로" - 이동은 넘어갈 때 되돌리지 않으므로(곧 다른 곳으로 가니까) 사슬 끝의
+    /// 프로젝트나 중간 것이 남아, 끝난 뒤 영역 패널·검출이 엉뚱한 프로젝트를 봤다. 실행기가 멈출 때 한 번 부른다(<c>Player.RunningChanged</c>).
+    /// </remarks>
+    protected void ReturnToHomeProject()
+    {
+        if (SwitchedRecognitionRoot is null) return;
+
+        SwitchedRecognitionRoot = null;
+        LoadRegions();
+        RefreshSavedTemplate();
+
+        if (IsDetectionOn) ReloadDetectorForCurrentRoot();
+
+        FollowSettingsWindow();
+    }
+
+    /// <summary>실행기가 멈추면(<paramref name="isRunning"/> 이 false) UI 스레드에서 본래 프로젝트로.</summary>
+    protected void ReturnToHomeProjectWhenStopped(bool isRunning)
+    {
+        if (isRunning) return;
+
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() => Guard(ReturnToHomeProject)));
     }
 
     /// <summary>
@@ -545,6 +598,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         // 옛 모델을 쓰는 중일 수 있으니 필드를 먼저 비우고, 끝나기를 기다렸다가 놓는다.
         var stale = _detector;
         _detector = null;
+        Interlocked.Increment(ref _detectorGeneration);
 
         // 도구 줄의 짧은 글과 아래 바의 긴 글, 둘 다 쓴다. 도구 줄은 긴 한글을 안 그리는 일이 있고,
         // 사용자는 "로딩 중인지, 끝났는지, 무엇을 읽었는지" 를 물었다.
@@ -578,6 +632,7 @@ public abstract partial class RecognizingCaptureViewModelBase
                 _detectorPath = modelPath;
                 _tracker.Reset();   // 새 모델의 사각형을 옛 모델의 것과 이어 붙이지 않는다
                 _detector = model;
+                Interlocked.Increment(ref _detectorGeneration);
                 _reloadSeenStamp = default;
 
                 _isDetectorLoading = 0;
@@ -630,12 +685,27 @@ public abstract partial class RecognizingCaptureViewModelBase
         if (now - _lastReloadCheckTicks < 5000) return;
         _lastReloadCheckTicks = now;
 
-        if (_detector is null || Volatile.Read(ref _isDetectorLoading) != 0) return;
+        if (Volatile.Read(ref _isDetectorLoading) != 0) return;
+
+        // 켜 둔 채 모델 없이 쉬는 중이면(RestWithoutModel) 모델이 생겼는지만 본다. 학습 중·학습 때문에 내려놓은 동안은 안 읽는다(GPU 리셋, 실측).
+        var resting = _detector is null && IsDetectionOn && !_pausedForTraining && !Vision.Training.TrainingActivity.IsBusy;
+
+        if (_detector is null && !resting) return;
 
         var dataset = new LabelDataset(RecognitionRoot);
         var modelPath = DetectorFiles.CurrentFor(dataset);
 
         if (!File.Exists(modelPath)) return;
+
+        if (resting)
+        {
+            // 방금 다 써진 파일일 수 있다 - 시각이 2초 넘게 멈춰 있을 때 읽는다(아래 다시 읽기와 같은 규칙).
+            var written = File.GetLastWriteTimeUtc(modelPath);
+            if ((DateTime.UtcNow - written).TotalMilliseconds < 2000) return;
+
+            DispatcherService?.BeginInvoke(() => Guard(() => { if (IsDetectionOn && _detector is null) ReloadDetectorForCurrentRoot(); }));
+            return;
+        }
 
         var stamp = File.GetLastWriteTimeUtc(modelPath);
 
@@ -750,6 +820,24 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 원래 그런 안내가 가는 자리다("요소 검사 중 - …" 도 거기 간다).
     /// 값이 들어 있는지는 로그로 먼저 확인하고 화면을 의심하는 편이 빠르다.
     /// </remarks>
+    /// <summary>검출은 켠 채 모델만 내려놓는다 - 이 프로젝트에 모델이 없을 때. 화면 사각형·허브의 옛 결과도 버린다.</summary>
+    private void RestWithoutModel(string reason)
+    {
+        DropDetectorModel();
+
+        _latestDetections = null;
+        Detections.Clear();
+        _tracker.Reset();
+        ClickDetectionCommand.RaiseCanExecuteChanged();
+
+        // 허브는 검출이 꺼질 때만 옛 결과를 버린다 - 한 번 꺼진 것으로 알렸다가 다시 켠 것으로 알린다.
+        Hub.PublishState(IsRunning, false, SelectedTarget);
+        PublishPerceptionState();
+
+        DetectionStatus = reason;
+        StatusText = reason;
+    }
+
     private void TurnOffDetection(string reason)
     {
         IsDetectionOn = false;
@@ -780,6 +868,7 @@ public abstract partial class RecognizingCaptureViewModelBase
 
             var stale = _detector;
             _detector = null;
+            Interlocked.Increment(ref _detectorGeneration);
             _tracker.Reset();
 
             if (stale is not null)
@@ -830,6 +919,15 @@ public abstract partial class RecognizingCaptureViewModelBase
     private void ReleaseDetector()
     {
         IsDetectionOn = false;
+
+        DropDetectorModel();
+    }
+
+    /// <summary>읽어 둔 모델과 추론 준비물을 놓는다. 켜고 끄기(<see cref="IsDetectionOn"/>)는 건드리지 않는다.</summary>
+    private void DropDetectorModel()
+    {
+        _detectorPath = null;
+        Interlocked.Increment(ref _detectorGeneration);
 
         _detector?.Dispose();
         _detector = null;

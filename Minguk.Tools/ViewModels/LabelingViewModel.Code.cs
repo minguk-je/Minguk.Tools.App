@@ -365,6 +365,81 @@ public partial class LabelingViewModel
     });
 
     /// <summary>
+    /// 데이터셋을 처음으로 - 무엇을 몇 개 지우는지 보여 주고 확인받은 뒤 휴지통으로 보낸다. 모델은 따로 묻는다(사용자, 2026-09-19).
+    /// </summary>
+    /// <remarks>스크립트·영역·본보기(Resources)·설정은 안 건드린다(<see cref="LabelDataset.ResetTargets"/>).</remarks>
+    private void DoResetDataset() => Guard(() =>
+    {
+        var dataset = new LabelDataset(DatasetRoot ?? LabelDataset.DefaultRoot);
+
+        var images = Directory.Exists(dataset.ImageDirectory) ? Directory.EnumerateFiles(dataset.ImageDirectory, "*", SearchOption.AllDirectories).Count() : 0;
+        var labels = Directory.Exists(dataset.LabelDirectory) ? Directory.EnumerateFiles(dataset.LabelDirectory, "*", SearchOption.AllDirectories).Count() : 0;
+        var classes = _classes?.Count ?? 0;
+        var models = dataset.ModelFileCount();
+
+        var message = "이 프로젝트의 데이터셋을 처음으로 되돌립니다 - 휴지통으로 보냅니다.\n\n" +
+                      $"  · 그림 {images}장 (Images)\n  · 라벨 {labels}개 (Labels)\n  · 검출 이름 {classes}개와 색 (classes.txt · class-colors.json)\n  · 학습 내보내기 (data.yaml · coco.json · labels.cache)\n\n" +
+                      "스크립트·영역·본보기 그림(Resources)·설정은 그대로 둡니다.";
+
+        bool includeModels;
+
+        if (models > 0)
+        {
+            var answer = MessageBoxService.ShowMessage(
+                message + $"\n\n학습한 모델(detector.* {models}개 파일)도 지울까요?\n  예 - 모델까지 지운다(검출도 처음부터)\n  아니요 - 모델은 남긴다\n  취소 - 아무것도 안 한다",
+                "데이터셋 초기화", MessageButton.YesNoCancel, MessageIcon.Warning);
+
+            if (answer == MessageResult.Cancel) return;
+            includeModels = answer == MessageResult.Yes;
+        }
+        else
+        {
+            if (MessageBoxService.ShowMessage(message + "\n\n계속할까요?", "데이터셋 초기화", MessageButton.OKCancel, MessageIcon.Warning) != MessageResult.OK) return;
+            includeModels = false;
+        }
+
+        // 지금 그림은 저장하지 않는다 - 곧 지운다. 모델도 놓는다(파일을 쥐고 있으면 휴지통으로 못 보낸다).
+        IsDirty = false;
+        ClearPredictionsForNewImage();
+        ReleaseModel();
+
+        _isReloading = true;
+        try
+        {
+            Items.Clear();
+        }
+        finally
+        {
+            _isReloading = false;
+        }
+
+        _loaded = null;
+        SelectedItem = null;
+        Boxes.Clear();
+
+        IReadOnlyList<string> sent;
+
+        try
+        {
+            sent = dataset.Reset(Helper.FileRecyclerFactory.Create(), includeModels);
+        }
+        catch (IOException ex)
+        {
+            Logger.Warn(ex, "데이터셋 초기화 중 못 보낸 파일이 있다");
+            DoReload();
+            StatusText = "일부를 휴지통으로 보내지 못했습니다 - 그 파일을 연 프로그램(탐색기 미리보기·학습 등)을 닫고 다시 누르세요. 보낸 것은 휴지통에 있습니다.";
+            MessengerUtility.SendMainMessage(StatusText);
+            return;
+        }
+
+        DoReload();
+        RefreshModelSummary();
+
+        StatusText = $"데이터셋을 초기화했습니다 - {sent.Count}개 항목을 휴지통으로 보냈습니다" + (includeModels ? "(모델 포함)" : "(모델은 남김)") + ". 잘못 지웠으면 휴지통에서 되살리고 다시 읽기.";
+        MessengerUtility.SendMainMessage(StatusText);
+    });
+
+    /// <summary>
     /// 지금 그림을 라벨과 함께 휴지통으로 보내고 같은 자리(다음 그림)로 간다. Ctrl+Delete · 그림 목록에서 Delete.
     /// </summary>
     /// <remarks>

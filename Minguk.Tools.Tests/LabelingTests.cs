@@ -232,6 +232,7 @@ internal static partial class Program
 
             TestClassRemovalAndPalette();
             TestImageRecycle();
+            TestDatasetReset();
 
             TestModelChoices();
 
@@ -293,6 +294,62 @@ internal static partial class Program
             Check("그림 지우기: 이름이 겹쳐 라벨을 나눠 가진 그림이면 라벨은 남긴다",
                   shared.Count == 1 && !File.Exists(twinJpg) && File.Exists(twinPng) && File.Exists(dataset.LabelPathFor(twinPng)),
                   $"보낸 것 {string.Join(", ", shared.Select(Path.GetFileName))} · 남은 라벨 {File.Exists(dataset.LabelPathFor(twinPng))}");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (Exception) { }
+        }
+    }
+
+    /// <summary>
+    /// 데이터셋 초기화(사용자, 2026-09-19 "라벨링 이미지 다 제거하고 초기화") - 그림·라벨·검출 이름·색·내보내기는 보내고, 스크립트·영역·본보기·설정은 남긴다.
+    /// </summary>
+    private static void TestDatasetReset()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "minguk-reset-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var dataset = new LabelDataset(root);
+            dataset.EnsureCreated();
+
+            var image = Path.Combine(dataset.ImageDirectory, "가.png");
+            File.WriteAllBytes(image, [0x89, 0x50, 0x4E, 0x47]);
+            LabelFile.Save(dataset.LabelPathFor(image), [LabelBox.FromCorners(0, 0.1, 0.1, 0.3, 0.3)]);
+
+            var classes = dataset.LoadClasses();
+            classes.Add("플레이버튼");
+            dataset.SaveClasses(classes);
+
+            string[] exports = ["data.yaml", "coco.json", "labels.cache"];
+            string[] models = ["detector.onnx", "detector.onnx.json", "detector.yolo11n.onnx", "detector.zip"];
+            string[] keep = ["main.csx", "사격장.mtsproj", "regions.json", "settings.values.json"];
+
+            foreach (var name in exports.Concat(models).Concat(keep)) File.WriteAllText(Path.Combine(root, name), "x");
+            Directory.CreateDirectory(Path.Combine(root, "Resources"));
+            File.WriteAllText(Path.Combine(root, "Resources", "버튼.png"), "x");
+
+            // 모델은 남기는 쪽 - 모델 파일은 보내지 않는다.
+            var without = dataset.ResetTargets(includeModels: false);
+            var withModels = dataset.ResetTargets(includeModels: true);
+
+            var recycled = new System.Collections.Generic.List<string>();
+            var sent = dataset.Reset(new FakeRecycler(recycled), includeModels: false);
+
+            var modelsKept = models.All(m => File.Exists(Path.Combine(root, m)));
+            var keptOk = keep.All(k => File.Exists(Path.Combine(root, k))) && File.Exists(Path.Combine(root, "Resources", "버튼.png"));
+            var gone = !File.Exists(image) && !File.Exists(dataset.ClassesPath) && exports.All(e => !File.Exists(Path.Combine(root, e)));
+            var emptyAgain = Directory.Exists(dataset.ImageDirectory) && !dataset.EnumerateItems().Any() && dataset.LoadClasses().Count == 0;
+
+            Check("데이터셋 초기화: 그림·라벨·검출 이름·내보내기는 보내고, 스크립트·영역·설정·본보기 그림·모델(남기기)은 그대로",
+                  gone && keptOk && modelsKept && emptyAgain && sent.Count == without.Count && !without.Any(p => Path.GetFileName(p).StartsWith("detector.", StringComparison.Ordinal)),
+                  $"보냄 {sent.Count}개 · 지워짐 {gone} · 남음 {keptOk} · 모델 남음 {modelsKept} · 빈 데이터셋 {emptyAgain}");
+
+            // 모델까지 - detector.* 만 더 나간다. 스크립트·영역은 여전히 안 나간다.
+            Check("데이터셋 초기화: 모델까지 지우면 detector.* 만 더 나가고 스크립트·영역은 그대로",
+                  withModels.Count == without.Count + models.Length && withModels.Count(p => Path.GetFileName(p).StartsWith("detector.", StringComparison.Ordinal)) == models.Length
+                  && !withModels.Any(p => keep.Contains(Path.GetFileName(p)) || p.Contains("Resources")),
+                  $"모델 빼면 {without.Count}개 · 모델 포함 {withModels.Count}개");
         }
         finally
         {

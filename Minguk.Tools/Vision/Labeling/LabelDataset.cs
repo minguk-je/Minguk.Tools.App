@@ -258,6 +258,52 @@ public sealed class LabelDataset
         return sent;
     }
 
+    // ── 초기화 ───────────────────────────────────────────────────────────
+
+    /// <summary>학습이 만든 내보내기·캐시. 다시 학습하면 또 생긴다.</summary>
+    private static readonly string[] ExportFiles = ["data.yaml", "coco.json", "labels.cache"];
+
+    /// <summary>
+    /// 초기화하면 휴지통으로 보낼 것들 - 그림·라벨 폴더(통째), 검출 이름·색, 학습 내보내기. <paramref name="includeModels"/> 면 학습한 모델(<c>detector.*</c>)도.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) "라벨링 이미지 다 제거하고 초기화 어떻게 해?" - 손으로 지우다 스크립트·영역·본보기까지 지우기 쉬워 목록을 여기 한 곳에 둔다.
+    /// <b>안 건드리는 것</b>: 스크립트(.csx)·프로젝트(.mtsproj)·Resources(본보기 그림)·regions.json·settings.*.json·bin·Captures·Recordings.
+    /// </remarks>
+    public IReadOnlyList<string> ResetTargets(bool includeModels)
+    {
+        var targets = new List<string>();
+
+        foreach (var folder in new[] { ImageDirectory, LabelDirectory })
+            if (Directory.Exists(folder)) targets.Add(folder);
+
+        foreach (var file in new[] { ClassesPath, PalettePath }.Concat(ExportFiles.Select(name => Path.Combine(Root, name))))
+            if (File.Exists(file)) targets.Add(file);
+
+        if (includeModels && Directory.Exists(Root))
+            targets.AddRange(Directory.EnumerateFiles(Root, "detector.*").OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
+
+        return targets;
+    }
+
+    /// <summary>학습한 모델 파일(<c>detector.*</c>)이 몇 개인가 - 초기화할 때 모델도 지울지 묻는 데 쓴다.</summary>
+    public int ModelFileCount() => Directory.Exists(Root) ? Directory.EnumerateFiles(Root, "detector.*").Count() : 0;
+
+    /// <summary>
+    /// 데이터셋을 처음으로 - <see cref="ResetTargets"/> 를 휴지통으로 보내고 빈 그림·라벨 폴더를 다시 만든다. 보낸 것들을 돌려준다.
+    /// </summary>
+    /// <exception cref="IOException">하나라도 못 보냈다(열려 있는 파일 등). 그 앞의 것은 이미 휴지통에 있다.</exception>
+    public IReadOnlyList<string> Reset(Helper.IFileRecycler recycler, bool includeModels)
+    {
+        var targets = ResetTargets(includeModels);
+
+        foreach (var path in targets) recycler.Recycle(path);
+
+        EnsureCreated();
+
+        return targets;
+    }
+
     /// <summary>
     /// 담을 그림의 이름을 짓는다. 시각으로 지어 이름순이 곧 담은 순서가 되게 한다.
     /// </summary>

@@ -1358,14 +1358,29 @@
                         <!-- 새 줄이 붙으면 맨 아래로 따라간다. 단, 사람이 위로 올려 본 동안에는 멈춘다. -->
                         <dxdo:LayoutPanel x:Name="OutputPanel"
                                           Caption="출력">
-                            <dxe:TextEdit VerticalContentAlignment="Top"
-                                          FontFamily="D2Coding, Consolas, Courier New"
-                                          markup:AutoScrollToEnd.IsEnabled="True"
-                                          AcceptsReturn="True"
-                                          EditValue="{Binding Live.Console.Text, Mode=OneWay}"
-                                          IsReadOnly="True"
-                                          TextWrapping="Wrap"
-                                          VerticalScrollBarVisibility="Auto" />
+                            <DockPanel>
+                                <!-- VS 출력 창처럼 위에 「모두 지우기」(사용자, 2026-09-19) - 출력 글만 비운다(호출·변수는 그대로). -->
+                                <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                                    AllowQuickCustomization="False"
+                                                    DockPanel.Dock="Top"
+                                                    ShowBackground="False"
+                                                    TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                                                    TextBlock.FontSize="{DynamicResource BaseFontSize}">
+                                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                                       Command="{Binding Live.Console.ClearOutputCommand}"
+                                                       Content="모두 지우기"
+                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
+                                                       Hint="출력 칸에 쌓인 글을 모두 지운다. 호출·변수 칸은 그대로 둔다." />
+                                </dxb:ToolBarControl>
+                                <dxe:TextEdit VerticalContentAlignment="Top"
+                                              FontFamily="D2Coding, Consolas, Courier New"
+                                              markup:AutoScrollToEnd.IsEnabled="True"
+                                              AcceptsReturn="True"
+                                              EditValue="{Binding Live.Console.Text, Mode=OneWay}"
+                                              IsReadOnly="True"
+                                              TextWrapping="Wrap"
+                                              VerticalScrollBarVisibility="Auto" />
+                            </DockPanel>
                         </dxdo:LayoutPanel>
 
                         <dxdo:LayoutPanel x:Name="CallsPanel"

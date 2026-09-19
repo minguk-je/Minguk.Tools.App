@@ -106,6 +106,7 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
         RefreshScriptsCommand = new DelegateCommand(RefreshScripts, () => Player.IsIdle, false);
         BrowseScriptCommand = new DelegateCommand(DoBrowseScript, () => Player.IsIdle, false);
 
+        Player.RunningChanged += (_, _) => ReturnToHomeProjectWhenStopped(Player.IsRunning);
         Player.RunningChanged += (_, _) =>
         {
             RefreshScriptsCommand.RaiseCanExecuteChanged();

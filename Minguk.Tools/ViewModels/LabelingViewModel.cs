@@ -43,6 +43,7 @@ public partial class LabelingViewModel : DocumentViewModelBase, IFollowsProject
         Predictions = [];
 
         DoReloadCommand = new DelegateCommand(DoReload, false);
+        DoResetDatasetCommand = new DelegateCommand(DoResetDataset, () => !IsTraining && !IsExtractingVideo, false);
         DoOpenFolderCommand = new DelegateCommand(DoOpenFolder, false);
         DoSaveCommand = new DelegateCommand(DoSave, () => HasImage, false);
         DoDeleteBoxCommand = new DelegateCommand(DoDeleteBox, () => SelectedBoxIndex >= 0, false);

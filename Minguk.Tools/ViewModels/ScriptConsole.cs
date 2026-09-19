@@ -136,6 +136,19 @@ public sealed class ScriptConsole : ViewModelBase
         _watchesUi.Post(() => { lock (_gate) return string.Join(" · ", _watches.Select(p => $"{p.Key}={p.Value}")); }, text => Watches = text);
     }
 
+    /// <summary>출력 칸만 비운다 - VS 출력 창의 「모두 지우기」(사용자, 2026-09-19). 호출·변수 칸은 그대로.</summary>
+    public void ClearOutput()
+    {
+        lock (_gate) _lines.Clear();
+
+        _onUi(() => Text = null);
+    }
+
+    /// <summary>출력 칸 위 「모두 지우기」 버튼.</summary>
+    public DevExpress.Mvvm.DelegateCommand ClearOutputCommand => _clearOutputCommand ??= new DevExpress.Mvvm.DelegateCommand(ClearOutput);
+
+    private DevExpress.Mvvm.DelegateCommand? _clearOutputCommand;
+
     public void Clear()
     {
         lock (_gate)

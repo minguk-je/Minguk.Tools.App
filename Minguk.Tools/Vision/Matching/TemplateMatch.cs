@@ -121,13 +121,18 @@ public static class TemplateMatch
     }
 
     /// <summary>그 범위의 모든 자리에서 닮음을 잰다(끝 포함).</summary>
+    /// <summary>
+    /// 정규화 상호상관을 그 범위에서 훑는다.
+    /// </summary>
+    /// <remarks>
+    /// <b>빠르게 하는 셋</b>(사용자, 2026-09-19 - 47x32 본보기가 한 번에 2.8초라 영웅 선택 화면에서 "한참을 멍때렸다"):
+    /// 창마다의 합·제곱합은 적분 영상으로 한 번에 구하고, 본보기는 평균을 빼 두어 분자가 곱의 합 하나가 되며(Σ(a−ā)(b−b̄) = Σa(b−b̄)),
+    /// 그 곱의 합은 벡터로, 줄은 병렬로 나눈다. 식은 예전과 같다 - 닮음 값이 그대로다.
+    /// </remarks>
     private static List<(int X, int Y, double Score)> Scan(GrayImage haystack, GrayImage needle, int fromX, int fromY, int toX, int toY)
     {
-        var results = new List<(int, int, double)>();
+        if (toX < fromX || toY < fromY) return [];
 
-        if (toX < fromX || toY < fromY) return results;
-
-        // 본보기의 평균·표준편차는 한 번만.
         var count = needle.Width * needle.Height;
         double needleSum = 0, needleSquares = 0;
 
@@ -141,47 +146,103 @@ public static class TemplateMatch
         var needleVariance = (needleSquares / count) - (needleMean * needleMean);
 
         // 본보기가 한 가지 색이면 견줄 것이 없다 - 어디에나 맞는다고 할 수는 없다.
-        if (needleVariance <= 1e-6) return results;
+        if (needleVariance <= 1e-6) return [];
 
         var needleDeviation = Math.Sqrt(needleVariance);
 
-        for (var y = fromY; y <= toY; y++)
+        // 본보기에서 평균을 뺀 것 - 분자가 곱의 합 하나가 된다.
+        var centered = new float[count];
+        for (var i = 0; i < count; i++) centered[i] = (float)(needle.Pixels[i] - needleMean);
+
+        // 훑을 범위만큼의 화면을 float 로, 그리고 합·제곱합 적분 영상.
+        var width = haystack.Width;
+        var spanW = (toX - fromX) + needle.Width;
+        var spanH = (toY - fromY) + needle.Height;
+        var pixels = new float[spanW * spanH];
+        var sums = new double[(spanW + 1) * (spanH + 1)];
+        var squares = new double[(spanW + 1) * (spanH + 1)];
+
+        for (var y = 0; y < spanH; y++)
         {
-            for (var x = fromX; x <= toX; x++)
+            double rowSum = 0, rowSquares = 0;
+            var source = ((fromY + y) * width) + fromX;
+
+            for (var x = 0; x < spanW; x++)
             {
-                double sum = 0, squares = 0, cross = 0;
+                double value = haystack.Pixels[source + x];
+                pixels[(y * spanW) + x] = (float)value;
 
-                for (var ny = 0; ny < needle.Height; ny++)
-                {
-                    var row = ((y + ny) * haystack.Width) + x;
-                    var needleRow = ny * needle.Width;
+                rowSum += value;
+                rowSquares += value * value;
 
-                    for (var nx = 0; nx < needle.Width; nx++)
-                    {
-                        double a = haystack.Pixels[row + nx];
-                        double b = needle.Pixels[needleRow + nx];
+                sums[((y + 1) * (spanW + 1)) + x + 1] = sums[(y * (spanW + 1)) + x + 1] + rowSum;
+                squares[((y + 1) * (spanW + 1)) + x + 1] = squares[(y * (spanW + 1)) + x + 1] + rowSquares;
+            }
+        }
 
-                        sum += a;
-                        squares += a * a;
-                        cross += a * b;
-                    }
-                }
+        double Box(double[] table, int x, int y)
+        {
+            var w = spanW + 1;
+            return table[((y + needle.Height) * w) + x + needle.Width] - table[(y * w) + x + needle.Width]
+                   - table[((y + needle.Height) * w) + x] + table[(y * w) + x];
+        }
 
+        var rows = (toY - fromY) + 1;
+        var perRow = new List<(int, int, double)>[rows];
+
+        System.Threading.Tasks.Parallel.For(0, rows, row =>
+        {
+            var found = new List<(int, int, double)>((toX - fromX) + 1);
+            var pixelSpan = new ReadOnlySpan<float>(pixels);
+            var needleSpan = new ReadOnlySpan<float>(centered);
+
+            for (var col = 0; col <= toX - fromX; col++)
+            {
+                var sum = Box(sums, col, row);
                 var mean = sum / count;
-                var variance = (squares / count) - (mean * mean);
+                var variance = (Box(squares, col, row) / count) - (mean * mean);
 
                 if (variance <= 1e-6) continue;
 
-                var score = ((cross / count) - (mean * needleMean)) / (Math.Sqrt(variance) * needleDeviation);
+                double cross = 0;
 
-                results.Add((x, y, score));
+                for (var ny = 0; ny < needle.Height; ny++)
+                    cross += Dot(pixelSpan.Slice(((row + ny) * spanW) + col, needle.Width), needleSpan.Slice(ny * needle.Width, needle.Width));
+
+                found.Add((fromX + col, fromY + row, cross / count / (Math.Sqrt(variance) * needleDeviation)));
             }
-        }
+
+            perRow[row] = found;
+        });
+
+        var results = new List<(int, int, double)>();
+        foreach (var row in perRow) results.AddRange(row);
 
         return results;
     }
 
-    /// <summary>닮음이 높은 것부터, 서로 겹치지 않게 골라 준다.</summary>
+    /// <summary>두 줄의 곱의 합 - 벡터로 한 번에 여러 칸씩.</summary>
+    private static float Dot(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+    {
+        var total = 0f;
+        var i = 0;
+
+        if (System.Numerics.Vector.IsHardwareAccelerated && a.Length >= System.Numerics.Vector<float>.Count)
+        {
+            var accumulator = System.Numerics.Vector<float>.Zero;
+            var step = System.Numerics.Vector<float>.Count;
+
+            for (; i <= a.Length - step; i += step)
+                accumulator += new System.Numerics.Vector<float>(a.Slice(i, step)) * new System.Numerics.Vector<float>(b.Slice(i, step));
+
+            total = System.Numerics.Vector.Dot(accumulator, System.Numerics.Vector<float>.One);
+        }
+
+        for (; i < a.Length; i++) total += a[i] * b[i];
+
+        return total;
+    }
+
     private static List<(int X, int Y, double Score)> Top(List<(int X, int Y, double Score)> all, int width, int height, int most)
     {
         all.Sort((a, b) => b.Score.CompareTo(a.Score));

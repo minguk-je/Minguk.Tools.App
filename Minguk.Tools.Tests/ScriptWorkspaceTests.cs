@@ -259,6 +259,7 @@ internal static partial class Program
         {
             recycled.Add(Path.GetFullPath(path));
             if (File.Exists(path)) File.Delete(path);
+            else if (Directory.Exists(path)) Directory.Delete(path, recursive: true);   // 실제 휴지통도 폴더째 보낸다
         }
     }
 }

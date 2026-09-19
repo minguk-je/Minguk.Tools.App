@@ -111,6 +111,12 @@
                                Content="다시 읽기"
                                Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/refresh.png'}"
                                ToolTip="캡처 화면에서 새로 담은 그림을 가져옵니다." />
+            <!-- 데이터셋 초기화(사용자, 2026-09-19) - 그림·라벨·검출 이름·학습 내보내기를 휴지통으로. 모델은 따로 묻는다. -->
+            <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                               Command="{Binding DoResetDatasetCommand}"
+                               Content="데이터셋 초기화"
+                               Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
+                               ToolTip="이 프로젝트의 그림·라벨·검출 이름·학습 내보내기를 모두 휴지통으로 보내고 처음부터 시작합니다.&#10;학습한 모델은 지울지 따로 묻습니다. 스크립트·영역·본보기 그림(Resources)·설정은 그대로 둡니다.&#10;학습 중이거나 영상에서 뽑는 중에는 못 누릅니다." />
 
             <dxb:BarItemSeparator />
 
@@ -312,7 +318,8 @@
                                                    Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
                                                    ToolTip="Delete 키로도 됩니다." />
                                 <dxb:BarButtonItem Command="{Binding DoClearBoxesCommand}"
-                                                   Content="모두 지우기" />
+                                                   Content="사각형 모두 지우기"
+                                                   ToolTip="지금 그림의 사각형만 모두 지웁니다. 그림 파일과 다른 그림의 라벨은 그대로입니다.&#10;데이터셋 전체를 지우려면 위 도구 줄의 '데이터셋 초기화'." />
                                 <!-- 그림 자체를 치운다(2026-09-15) - 영상에서 뽑다 섞인 쓸모없는 장면. 사각형 지우기와 헷갈리지 않게 이름에 "그림" 을 넣는다. -->
                                 <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
                                                    Command="{Binding DoDeleteImageCommand}"

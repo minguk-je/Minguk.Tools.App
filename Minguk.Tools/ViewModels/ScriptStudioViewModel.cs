@@ -145,6 +145,7 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         // 실행이 켜지고 꺼질 때 실행 일시정지 단추를 켜고 끄고, 끝났으면 일시정지를 푼다.
         Player.RunningChanged += (_, _) => SyncPause();
+        Player.RunningChanged += (_, _) => ReturnToHomeProjectWhenStopped(Player.IsRunning);
     }
 
     // ── 일시정지 ─────────────────────────────────────────────────────────
@@ -639,6 +640,24 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     {
         using var stream = new System.IO.MemoryStream(Convert.FromBase64String(base64));
         _dock!.RestoreLayoutFromStream(stream);
+
+        ApplyDocumentTabLayout(_dock);
+    }
+
+    /// <summary>
+    /// 스크립트 문서 탭은 넘치면 여러 줄로 - VS 의 "여러 행 탭"(사용자, 2026-09-19).
+    /// </summary>
+    /// <remarks>
+    /// XAML 에 적어도 저장해 둔 배치를 되살리면 그때의 값(한 줄 스크롤)으로 덮인다 - 배치에 탭 머리 모양까지 적힌다. 그래서 되살린 뒤에 다시 건다.
+    /// 배치 버전(<see cref="DockLayoutVersion"/>)을 올리면 사람이 옮겨 둔 창 배치가 다 날아가 그러지 않았다.
+    /// </remarks>
+    public static void ApplyDocumentTabLayout(DevExpress.Xpf.Docking.DockLayoutManager dock)
+    {
+        if (dock.GetItem("ProjectDocumentGroup") is not DevExpress.Xpf.Docking.DocumentGroup group) return;
+
+        // 열거형은 다른 조각(Layout.Core)에 있어 이름을 적지 않고 속성의 형식에서 값을 꺼낸다 - XAML 의 "MultiLine" 과 같다.
+        var property = DevExpress.Xpf.Docking.DocumentGroup.TabHeaderLayoutTypeProperty;
+        group.SetValue(property, Enum.Parse(property.PropertyType, "MultiLine"));
     }
 
     /// <summary>

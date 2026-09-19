@@ -61,6 +61,19 @@ internal static partial class Program
                   iconHit is null ? $"못 찾음 (본보기 밝기 {distinct}가지)" : $"닮음 {iconHit.Value.Score:0.000} · 어긋남 {iconOffX:0}·{iconOffY:0}px");
         }
 
+        // 작은 본보기의 시간 - 47x32(영웅 선택 확인 버튼)가 한 번에 2.8초라 화면에서 "한참을 멍때렸다"(사용자, 2026-09-19). 1080p 전체에서 0.5초 안.
+        {
+            var small = GrayImage.From(Crop(screen, 0.60, 0.44, 47.0 / 1920, 32.0 / 1080));
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var smallHit = TemplateMatch.Find(haystack, small);
+            timer.Stop();
+
+            var smallOk = smallHit is not null && smallHit.Value.Score > 0.95 && Math.Abs(smallHit.Value.X - 0.60) * 1920 <= 4 && timer.ElapsedMilliseconds <= 500;
+
+            Check("본보기: 작은 본보기(47x32)도 1080p 전체에서 0.5초 안에 찾는다", smallOk,
+                  smallHit is null ? $"못 찾음 ({timer.ElapsedMilliseconds}ms)" : $"닮음 {smallHit.Value.Score:0.000} · {timer.ElapsedMilliseconds}ms");
+        }
+
         // 받기를 멈추면 허브가 옛 프레임을 버린다 - 다음에 켰을 때 옛 화면이 영역 이미지로 저장됐다(사용자, 2026-09-19).
         var hub = new Minguk.Tools.Vision.Perception.PerceptionHub { WantsFrames = true };
         hub.PublishFrame(new byte[8 * 6 * 4], 8, 6);

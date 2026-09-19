@@ -17,6 +17,9 @@ public partial class LabelingViewModel
 
     public DelegateCommand DoReloadCommand { get; private set; } = null!;
 
+    /// <summary>데이터셋 초기화 - 그림·라벨·검출 이름·학습 내보내기(모델은 물어서)를 휴지통으로.</summary>
+    public DelegateCommand DoResetDatasetCommand { get; private set; } = null!;
+
     /// <summary>지금 그림을 라벨과 함께 휴지통으로. Ctrl+Delete · 그림 목록에서 Delete.</summary>
     public DelegateCommand DoDeleteImageCommand { get; private set; } = null!;
 
@@ -239,6 +242,7 @@ public partial class LabelingViewModel
         {
             DoTrainCommand.RaiseCanExecuteChanged();
             DoCancelTrainCommand.RaiseCanExecuteChanged();
+            DoResetDatasetCommand?.RaiseCanExecuteChanged();
             RaisePropertyChanged(nameof(IsTrainingBatchVisible));
             RaisePropertyChanged(nameof(CanChooseYoloImageSize));
         });

@@ -116,6 +116,7 @@ internal static class ScriptScreenProbe
                 if (!vm.Script.IsProject) { Console.WriteLine("[FAIL] 프로젝트가 열린 것으로 안 보인다"); failures++; }
                 if (vm.Script.Project.Documents.Count != 2) { Console.WriteLine("[FAIL] 탭이 둘이 아니다"); failures++; }
 
+                failures += CheckMultiLineTabs(window);
                 failures += await CheckExplorerExpansion(window, vm);
                 failures += await CheckPreviewZoom(window, vm);
                 failures += await CheckRegionCanvas(window, vm);
@@ -632,6 +633,42 @@ internal static class ScriptScreenProbe
         vm.PreviewImage = null;
 
         return failures;
+    }
+
+    /// <summary>
+    /// 문서 탭 여러 줄(사용자, 2026-09-19 "여러 행 탭은 안되는데?") - 저장해 둔 배치를 되살리면 그때의 한 줄 스크롤로 덮여 XAML 값이 안 먹었다.
+    /// 옛 배치(한 줄)를 저장했다 되살린 뒤에도 여러 줄인지 본다.
+    /// </summary>
+    private static int CheckMultiLineTabs(Window window)
+    {
+        var dock = Descendants<DevExpress.Xpf.Docking.DockLayoutManager>(window).FirstOrDefault(d => d.GetItem("ProjectDocumentGroup") is not null);
+
+        if (dock?.GetItem("ProjectDocumentGroup") is not DevExpress.Xpf.Docking.DocumentGroup group)
+        {
+            Console.WriteLine("[FAIL] 문서 탭 여러 줄 - 문서 탭 그룹을 못 찾았다");
+            return 1;
+        }
+
+        var property = DevExpress.Xpf.Docking.DocumentGroup.TabHeaderLayoutTypeProperty;
+        var loaded = group.TabHeaderLayoutType.ToString();
+
+        // 옛 배치처럼 - 한 줄로 저장해 두고 여러 줄로 바꾼 뒤 되살린다.
+        group.SetValue(property, Enum.Parse(property.PropertyType, "Scroll"));
+        using var stream = new System.IO.MemoryStream();
+        dock.SaveLayoutToStream(stream);
+        group.SetValue(property, Enum.Parse(property.PropertyType, "MultiLine"));
+
+        stream.Position = 0;
+        dock.RestoreLayoutFromStream(stream);
+        var overwritten = (dock.GetItem("ProjectDocumentGroup") as DevExpress.Xpf.Docking.DocumentGroup)?.TabHeaderLayoutType;
+
+        ScriptStudioViewModel.ApplyDocumentTabLayout(dock);
+        var after = (dock.GetItem("ProjectDocumentGroup") as DevExpress.Xpf.Docking.DocumentGroup)?.TabHeaderLayoutType;
+
+        var ok = loaded == "MultiLine" && after?.ToString() == "MultiLine";
+
+        Console.WriteLine($"[{(ok ? "PASS" : "FAIL")}] 문서 탭 여러 줄 - 뜰 때 {loaded} · 옛 배치 되살리면 {overwritten} · 다시 건 뒤 {after}");
+        return ok ? 0 : 1;
     }
 
     /// <summary>

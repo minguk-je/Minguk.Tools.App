@@ -45,6 +45,7 @@ public partial class LabelingViewModel
             DoExtractVideoCommand.RaiseCanExecuteChanged();
             DoCancelExtractVideoCommand.RaiseCanExecuteChanged();
             DoDeleteImageCommand.RaiseCanExecuteChanged();
+            DoResetDatasetCommand.RaiseCanExecuteChanged();
         });
     }
 
