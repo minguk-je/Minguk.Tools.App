@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -83,10 +84,7 @@ public sealed class LiveScriptSession : IDisposable
         if (script.Compiled is { } compiled) return ResolveCompiled(compiled, player);
 
         if (script.HasError)
-        {
-            MessengerUtility.SendMainMessage("스크립트에 고칠 줄이 있습니다.");
-            return null;
-        }
+            return Refuse($"스크립트에 고칠 줄이 있습니다 - {FirstLine(script.ErrorText)}");
 
         // 프로젝트면 시작할 때 전체를 한 벌로 굳힌다(저장 안 한 탭 포함). 도는 중에 탭을 고쳐도 그 바퀴는 안 바뀐다.
         var unit = script.IsProject ? script.Project.ToUnit() : null;
@@ -95,25 +93,16 @@ public sealed class LiveScriptSession : IDisposable
         if (unit is not null)
         {
             if (engine is not IProjectScriptEngine)
-            {
-                MessengerUtility.SendMainMessage($"{engine.Name} 은(는) 프로젝트를 돌리지 못합니다. 프로젝트는 C# 으로 씁니다.");
-                return null;
-            }
+                return Refuse($"{engine.Name} 은(는) 프로젝트를 돌리지 못합니다. 프로젝트는 C# 으로 씁니다.");
 
             if (string.IsNullOrEmpty(unit.EntryPath))
-            {
-                MessengerUtility.SendMainMessage("시작 파일이 없습니다 - 탐색기에서 .csx 를 오른쪽 눌러 '시작 파일로' 를 고르세요.");
-                return null;
-            }
+                return Refuse("시작 파일이 없습니다 - 탐색기에서 .csx 를 오른쪽 눌러 '시작 파일로' 를 고르세요.");
         }
         else if (string.IsNullOrWhiteSpace(script.Text))
-        {
-            MessengerUtility.SendMainMessage("스크립트가 비어 있습니다.");
-            return null;
-        }
+            return Refuse("스크립트가 비어 있습니다.");
 
         var service = _service();
-        if (service is null) return null;
+        if (service is null) return Refuse("입력 경로가 아직 없습니다 - 화면이 다 뜬 뒤 다시 누르세요.");
 
         service.JitterMs = player.JitterMs;
 
@@ -157,12 +146,30 @@ public sealed class LiveScriptSession : IDisposable
     }
 
     /// <summary>
+    /// 실행을 거절한다 - 이유를 상태 줄·출력 창·로그 셋에 다 남긴다.
+    /// </summary>
+    /// <remarks>
+    /// 게임 화면에서 F5 를 누르면 상태 줄을 못 본다 - 실패 소리("뿌우")만 나고 왜 안 도는지 알 길이 없었다(사용자, 2026-09-19). 로그에는 "문맥이 없다" 뿐이었다.
+    /// </remarks>
+    private ScriptRunContext? Refuse(string reason)
+    {
+        MessengerUtility.SendMainMessage(reason);
+        Console.Print($"실행하지 않았습니다: {reason}");
+        NLog.LogManager.GetCurrentClassLogger().Info($"실행 거절: {reason}");
+
+        return null;
+    }
+
+    private static string FirstLine(string? text)
+        => (text ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? string.Empty;
+
+    /// <summary>
     /// 빌드된 것(.mtsx)을 돌릴 문맥. 소스 경로와 host·비상 정지·끝맺음을 그대로 나눠 쓰고, 실행만 IL 로 한다.
     /// </summary>
     private ScriptRunContext? ResolveCompiled(CompiledPlayable compiled, ScriptPlayer player)
     {
         var service = _service();
-        if (service is null) return null;
+        if (service is null) return Refuse("입력 경로가 아직 없습니다 - 화면이 다 뜬 뒤 다시 누르세요.");
 
         service.JitterMs = player.JitterMs;
 

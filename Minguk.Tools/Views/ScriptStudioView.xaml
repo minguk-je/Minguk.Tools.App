@@ -322,8 +322,8 @@
                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
                                   Hint="학습한 모델로 찾아 점선으로 겹쳐 그린다."
                                   IsChecked="{Binding IsDetectionOn}" />
-                <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
-                                  Content="추적"
+                <dxb:BarCheckItem Content="추적"
+                                  BarItemDisplayMode="ContentAndGlyph"
                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
                                   Hint="프레임 간 추적. 한 프레임짜리 헛것이 사라진다."
                                   IsChecked="{Binding IsTrackingOn}" />

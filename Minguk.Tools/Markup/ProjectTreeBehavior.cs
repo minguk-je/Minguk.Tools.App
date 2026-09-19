@@ -116,6 +116,56 @@ public sealed class ProjectTreeBehavior : Behavior<GridControl>
         }
     }
 
+    /// <summary>
+    /// 줄 목록이 바뀌었다(파일 추가·삭제·이름 바꾸기·프로젝트 바꾸기) - 트리가 다 만들어진 뒤 기억대로 한 번에 펼친다.
+    /// </summary>
+    /// <remarks>
+    /// 줄이 생기는 순간(<see cref="OnNodeChanged"/> 의 Add)에는 그 줄의 내용이 아직 비어 있을 때가 있다 - 처음 열 때는 됐는데, 파일을 지워 트리를
+    /// 다시 만들면 내용 없는 Add 만 와서 기억대로 펴지 못하고 기본값(접힘)으로 남아 트리가 다 접혔다(사용자, 2026-09-19). 그래서 목록이 바뀌면
+    /// 다 만들어진 뒤(Loaded) 모든 줄을 다시 본다. 여러 번 바뀌어도 한 번만 돈다.
+    /// </remarks>
+    private void OnNodesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (_expansionQueued) return;
+        _expansionQueued = true;
+
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+        {
+            _expansionQueued = false;
+            ApplyExpansion();
+        }));
+    }
+
+    private bool _expansionQueued;
+
+    /// <summary>모든 줄을 기억대로 - 접어 둔 것만 접고 나머지는 편다(기본은 펼침).</summary>
+    private void ApplyExpansion()
+    {
+        if (View is not { } view || Workspace is not { } workspace) return;
+
+        _applyingExpansion = true;
+
+        try
+        {
+            foreach (var node in Walk(view.Nodes))
+                if (node.Content is ScriptProjectNode content && node.Nodes.Count > 0)
+                    node.IsExpanded = !workspace.IsCollapsed(content);
+        }
+        finally
+        {
+            _applyingExpansion = false;
+        }
+
+        static System.Collections.Generic.IEnumerable<TreeListNode> Walk(System.Collections.Generic.IEnumerable<TreeListNode> nodes)
+        {
+            foreach (var node in nodes)
+            {
+                yield return node;
+                foreach (var child in Walk(node.Nodes)) yield return child;
+            }
+        }
+    }
+
     private void OnNodeExpanded(object sender, TreeListNodeEventArgs e)
     {
         if (!_applyingExpansion && e.Node.Content is ScriptProjectNode node) Workspace?.SetCollapsed(node, false);
@@ -128,8 +178,17 @@ public sealed class ProjectTreeBehavior : Behavior<GridControl>
 
     private void OnWorkspaceChanged(ScriptProjectWorkspace? old, ScriptProjectWorkspace? now)
     {
-        if (old is not null) old.EditNodeRequested -= OnEditRequested;
-        if (now is not null) now.EditNodeRequested += OnEditRequested;
+        if (old is not null)
+        {
+            old.EditNodeRequested -= OnEditRequested;
+            old.Nodes.CollectionChanged -= OnNodesChanged;
+        }
+
+        if (now is not null)
+        {
+            now.EditNodeRequested += OnEditRequested;
+            now.Nodes.CollectionChanged += OnNodesChanged;
+        }
     }
 
     private void OnRowDoubleClick(object sender, RowDoubleClickEventArgs e)

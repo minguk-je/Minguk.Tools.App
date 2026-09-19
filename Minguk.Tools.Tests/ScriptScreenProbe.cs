@@ -690,6 +690,35 @@ internal static class ScriptScreenProbe
 
         var firstExpanded = Expanded();
 
+        // 아무것도 안 접었으면 트리를 다시 만들어도 펼친 채여야 한다 - 파일 하나 지웠더니 트리가 다 접혔다(사용자, 2026-09-19).
+        workspace.RebuildNodes();
+        await Pump(400);
+        var rebuiltExpanded = Expanded();
+
+        // 파일이 지워지는 두 길 - (1) 디스크에서 사라져 폴더 감시가 트리를 다시 만든다, (2) 목록에서 제외. 확인 대화 상자와 휴지통을 안 거치려고
+        // Delete() 대신 이 둘로 본다(하네스가 대화 상자에서 멈췄다). 임시 프로젝트 안의 파일만 건드린다.
+        var project = workspace.Project!;
+        var doomed = workspace.Nodes.FirstOrDefault(n => n.Kind == ScriptNodeKind.Source && n.Id != project.Entry && !n.IsExternal);
+        bool? afterDelete = null;
+
+        if (doomed is not null)
+        {
+            var path = project.FullPath(doomed.Id);
+            workspace.SelectedNode = doomed;
+            workspace.Documents.ToList().ForEach(d => { if (string.Equals(d.FilePath, path, StringComparison.OrdinalIgnoreCase)) workspace.CloseDocument(d); });
+
+            System.IO.File.Delete(path);
+            await Pump(1500);   // 폴더 감시(300ms 묶기) 뒤 다시 만든다
+            afterDelete = Expanded();
+            Console.WriteLine($"[INFO] 삭제 검사 - {doomed.Name} 디스크에서 지움 · 줄 {workspace.Nodes.Count} · 뿌리 줄 {(workspace.Nodes.Any(n => n.Id == ScriptProjectWorkspace.RootId) ? "있음" : "없음")} · 펼침 {afterDelete}");
+        }
+
+        Console.WriteLine($"[{(firstExpanded == true && rebuiltExpanded == true && afterDelete != false ? "PASS" : "FAIL")}] 탐색기: 다시 만들거나 파일을 지워도 펼친 채 - 처음 {firstExpanded} · 다시 만든 뒤 {rebuiltExpanded} · 지운 뒤 {(afterDelete?.ToString() ?? "(지울 파일 없음)")}");
+        var expandedOk = firstExpanded == true && rebuiltExpanded == true && afterDelete != false;
+
+        // 지우기·다시 만들기로 줄이 새로 만들어졌으니 다시 잡는다.
+        root = workspace.Nodes.First(n => n.Id == ScriptProjectWorkspace.RootId);
+
         // 사람이 접은 것처럼 - 트리의 접기를 부른다(NodeCollapsed 가 온다).
         view.CollapseNode(view.GetNodeByContent(root)!.RowHandle);
         await Pump(200);
@@ -706,7 +735,7 @@ internal static class ScriptScreenProbe
         if (view.GetNodeByContent(workspace.Nodes.First(n => n.Id == ScriptProjectWorkspace.RootId)) is { } again) view.ExpandNode(again.RowHandle);
         await Pump(200);
 
-        var ok = firstExpanded == true && remembered && stillCollapsed && !workspace.IsCollapsed(root);
+        var ok = expandedOk && firstExpanded == true && remembered && stillCollapsed && !workspace.IsCollapsed(root);
 
         Console.WriteLine($"[{(ok ? "PASS" : "FAIL")}] 탐색기 펼침 기억 - 처음 펼침 {firstExpanded} · 접으면 기억 {remembered} · 다시 만들어도 접힘 {stillCollapsed} · 다시 펴면 지움 {!workspace.IsCollapsed(root)}");
         return ok ? 0 : 1;
