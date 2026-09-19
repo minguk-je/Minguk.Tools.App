@@ -158,6 +158,14 @@ internal static partial class Program
         // 가져가지 않는다 - 시각 쪽만 고쳤을 때 이것만 돌리면 된다.
         if (args.Contains("--vision")) return RunVisionOnly();
 
+        // 본보기 그림 대조만(몇 초) - 그림찾기·그림누르기를 고쳤을 때.
+        if (args.Contains("--template"))
+        {
+            TestTemplateMatch();
+            foreach (var line in Results) Console.WriteLine(line);
+            return _failures == 0 ? 0 : 1;
+        }
+
         // 조준 스레드만 - 닫힌 고리 가짜 허브로 붙기·지나침·배율 배우기(약 30초). 입력은 가짜 어댑터라 안 나간다.
         if (args.Contains("--aim")) return RunAimOnly();
 

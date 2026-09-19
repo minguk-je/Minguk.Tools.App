@@ -46,6 +46,21 @@ internal static partial class Program
               dim is not null && dim.Value.Score > 0.9 && Math.Abs(dim.Value.X - 0.55) * 1920 <= 4,
               dim is null ? "못 찾음" : $"닮음 {dim.Value.Score:0.000}");
 
+        // 작은 아이콘 - 48x60 은 첫 계단(1/8)에서 6x8 로 뭉개져 엉뚱한 후보만 남았다(사용자, 2026-09-19 훈련장 아이콘 닮음 0.49).
+        foreach (var (ix, iy) in new[] { (0.08, 0.40), (0.58, 0.45), (0.81, 0.40) })
+        {
+            var icon = Crop(screen, ix, iy, 48.0 / 1920, 60.0 / 1080);
+            var iconGray = GrayImage.From(icon);
+            var iconHit = TemplateMatch.Find(haystack, iconGray);
+            var distinct = iconGray.Pixels.Distinct().Count();
+            var iconOffX = iconHit is null ? double.NaN : Math.Abs(iconHit.Value.X - ix) * 1920;
+            var iconOffY = iconHit is null ? double.NaN : Math.Abs(iconHit.Value.Y - iy) * 1080;
+
+            Check($"본보기: 작은 아이콘(48x60)도 찾는다 ({ix:0.00}, {iy:0.00})",
+                  iconHit is not null && iconHit.Value.Score > 0.95 && iconOffX <= 4 && iconOffY <= 4,
+                  iconHit is null ? $"못 찾음 (본보기 밝기 {distinct}가지)" : $"닮음 {iconHit.Value.Score:0.000} · 어긋남 {iconOffX:0}·{iconOffY:0}px");
+        }
+
         // 없는 그림 - 닮음이 낮아야 한다(0.8 문턱이면 안 눌린다).
         var stranger = GrayImage.From(DrawNoise(200, 140));
         var wrong = TemplateMatch.Find(haystack, stranger);

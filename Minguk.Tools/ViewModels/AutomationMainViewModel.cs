@@ -446,6 +446,21 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     {
         if (AutomationDocumentManagerService is not { } service) return;
 
+        _reshuffling = true;
+
+        try
+        {
+            OpenChildrenCore(service);
+        }
+        finally
+        {
+            _reshuffling = false;
+        }
+    }
+
+    private void OpenChildrenCore(IDocumentManagerService service)
+    {
+
         if (SolutionWorkspace.Current is null || SelectedProject is null) return;
 
         IDocument? first = null;
@@ -480,6 +495,21 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
     {
         if (AutomationDocumentManagerService is not { } service) return true;
 
+        _reshuffling = true;
+
+        try
+        {
+            return CloseChildrenCore(service);
+        }
+        finally
+        {
+            _reshuffling = false;
+        }
+    }
+
+    private bool CloseChildrenCore(IDocumentManagerService service)
+    {
+
         foreach (var document in service.Documents.ToList())
         {
             // 이미 닫힌 문서를 다시 닫으면 DevExpress 안에서 NRE 가 난다(StreamMode 에서 겪었다).
@@ -498,9 +528,13 @@ public class AutomationMainViewModel : DocumentViewModelBase, Modules.IMainShell
 
     private const string LastTabKey = "Automation.LastTab";
 
+    /// <summary>아래 탭을 닫거나 여는 중 - 그동안 앞에 오는 탭은 사람이 고른 것이 아니다.</summary>
+    private bool _reshuffling;
+
     private void OnChildActivated(object? sender, ActiveDocumentChangedEventArgs e) => Guard(() =>
     {
-        if (e.NewDocument?.Id is string id && !string.IsNullOrEmpty(id)) AppSettingUtility.Set(LastTabKey, id);
+        // 탭을 닫고 여는 동안에는 기억하지 않는다 - 닫힐 때 남은 탭이 차례로 앞에 와서 맨 끝(설정)이 기억됐다(사용자, 2026-09-19).
+        if (!_reshuffling && e.NewDocument?.Id is string id && !string.IsNullOrEmpty(id)) AppSettingUtility.Set(LastTabKey, id);
 
         ActiveChild()?.NotifyActivated();
     });

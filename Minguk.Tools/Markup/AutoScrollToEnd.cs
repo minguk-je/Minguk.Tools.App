@@ -19,7 +19,7 @@ namespace Minguk.Tools.Markup;
 /// 끌어내리면, 위를 읽으려 할 때마다 글이 튀어 읽을 수가 없다. 그래서 <b>이미 바닥에 있을 때만</b> 따라간다 -
 /// 위로 올리면 멈추고, 다시 바닥까지 내리면 도로 따라간다. 채팅 창이 하는 것과 같은 규칙이다.
 ///
-/// 스크롤은 <b>글이 실제로 들어간 뒤</b>에 해야 한다. <c>EditValueChanged</c> 시점에는 속 TextBox 가 아직
+/// 바닥에 있었는지는 글이 들어가기 전에 재고, 스크롤은 <b>글이 실제로 들어간 뒤</b>에 해야 한다. <c>EditValueChanged</c> 시점에는 속 TextBox 가 아직
 /// 새 글로 자리를 다시 잡기 전이라, 그 자리에서 부르면 한 번 늦은 자리로 내려간다.
 /// 그래서 디스패처의 <see cref="DispatcherPriority.Background"/> 로 미룬다.
 /// </remarks>
@@ -51,21 +51,22 @@ public static class AutoScrollToEnd
 
     private static void OnEditValueChanged(object sender, EditValueChangedEventArgs e)
     {
-        if (sender is not TextEdit edit) return;
+        if (sender is not TextEdit edit || edit.EditCore is not TextBox box) return;
 
-        // 값이 바뀐 지금이 아니라, 그 글로 자리를 다시 잡은 뒤에 내린다.
-        edit.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ScrollIfAtBottom(edit)));
+        // 바닥에 있었는지는 새 글로 자리를 다시 잡기 <b>전에</b> 잰다. 잡은 뒤에 재면 한 번에 여러 줄이 붙었을 때
+        // (커서이동 실패 13줄, 줄 바꿈된 긴 줄) 바닥에서 한 줄 넘게 떨어진 것으로 보여 멈추고, 그 뒤로 영영 안 따라갔다(사용자, 2026-09-19).
+        var wasAtBottom = IsAtBottom(box);
+
+        // 내리는 것은 그 글로 자리를 다시 잡은 뒤에 한다.
+        if (wasAtBottom)
+            edit.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(box.ScrollToEnd));
     }
 
-    private static void ScrollIfAtBottom(TextEdit edit)
+    private static bool IsAtBottom(TextBox box)
     {
-        if (edit.EditCore is not TextBox box) return;
+        // 아직 그려진 적이 없으면(탭이 숨어 있는 등) 바닥으로 본다 - 처음 보일 때 끝이 보이게.
+        if (box.ExtentHeight <= 0 || box.ViewportHeight <= 0) return true;
 
-        // 아직 그릴 자리가 없으면(탭이 숨어 있는 등) 볼 것도 없다.
-        if (box.ExtentHeight <= 0 || box.ViewportHeight <= 0) return;
-
-        var atBottom = box.VerticalOffset + box.ViewportHeight >= box.ExtentHeight - BottomSlack;
-
-        if (atBottom) box.ScrollToEnd();
+        return box.VerticalOffset + box.ViewportHeight >= box.ExtentHeight - BottomSlack;
     }
 }

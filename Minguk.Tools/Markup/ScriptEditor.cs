@@ -93,6 +93,11 @@ public sealed class ScriptEditor : TextEditor
         TextArea.TextView.BackgroundRenderers.Add(_currentLine);
         TextArea.TextView.BackgroundRenderers.Add(_underline);
 
+        // 선택은 우리가 그린다 - 참조 표시가 있는 줄은 키가 두 줄이라, AvalonEdit 기본 선택은 참조 글자까지 덮었다(사용자, 2026-09-19).
+        TextArea.TextView.BackgroundRenderers.Add(new SelectionRenderer(TextArea, TextArea.SelectionBrush));
+        TextArea.SelectionBrush = Brushes.Transparent;
+        TextArea.SelectionBorder = null;
+
         _margin = new BreakpointMargin(this);
         TextArea.LeftMargins.Insert(0, _margin);
 
@@ -776,6 +781,32 @@ public sealed class ScriptEditor : TextEditor
         }
     }
 
+    /// <summary>
+    /// 줄 칠하기를 코드 글자 높이로 줄인다. 참조 표시(CodeLens)가 붙은 줄은 위에 참조 한 줄만큼 키가 커서, 줄 전체를 칠하면
+    /// "참조 N개" 까지 덮는다 - 코드 글자는 그 줄의 아래쪽에 앉으므로 밑에서 한 줄 높이만 남긴다.
+    /// </summary>
+    private static Rect CodeOnly(TextView textView, Rect rect)
+    {
+        var lineHeight = textView.DefaultLineHeight;
+
+        return rect.Height > lineHeight * 1.5 ? new Rect(rect.X, rect.Bottom - lineHeight, rect.Width, lineHeight) : rect;
+    }
+
+    /// <summary>선택을 칠한다. 기본 선택 층 대신 - 참조 표시 줄에서 글자 높이만 칠하게(<see cref="CodeOnly"/>).</summary>
+    private sealed class SelectionRenderer(TextArea area, Brush fill) : IBackgroundRenderer
+    {
+        public KnownLayer Layer => KnownLayer.Selection;
+
+        public void Draw(TextView textView, DrawingContext drawingContext)
+        {
+            if (area.Selection.IsEmpty) return;
+
+            foreach (var segment in area.Selection.Segments)
+            foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment))
+                drawingContext.DrawRectangle(fill, null, CodeOnly(textView, rect));
+        }
+    }
+
     /// <summary>멈춘 줄을 노랗게 칠한다. 맨 아래 층이라 글과 선택이 그 위에 그대로 보인다.</summary>
     private sealed class CurrentLineRenderer(ScriptEditor owner) : IBackgroundRenderer
     {
@@ -792,7 +823,7 @@ public sealed class ScriptEditor : TextEditor
 
             var line = textView.Document.GetLineByNumber(lineNumber);
 
-            foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, line))
+            foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, line).Select(r => CodeOnly(textView, r)))
                 drawingContext.DrawRectangle(Fill, null, new Rect(0, rect.Top, Math.Max(textView.ActualWidth, rect.Right), rect.Height));
         }
 

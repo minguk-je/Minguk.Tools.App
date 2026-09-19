@@ -358,13 +358,14 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 사용자(2026-09-18) "사격장 글이 아니고 큰 이미지인데" - 그림으로 된 메뉴 버튼은 영역 이미지 한 장과 견줘 찾는다(<see cref="Vision.Matching.TemplateMatch"/>).
     /// 영역 이미지를 만드는 길이 이것뿐이다 - 자리를 미리보기에서 맞추고 이 단추를 누른다. 같은 이름이면 덮어쓴다(다시 맞춰 저장하는 일이 잦다).
     /// </remarks>
-    private void DoSaveTemplate() => Guard(() =>
+    private async void DoSaveTemplate() => await GuardAsync(async () =>
     {
         if (SelectedRegion is not { } region) return;
 
         if (!IsRunning)
         {
             StatusText = "먼저 캡처를 시작해 화면을 잡아야 영역 이미지를 만들 수 있습니다.";
+            Logger.Info("영역 이미지 저장 못 함: 캡처가 멈춰 있다");
             return;
         }
 
@@ -372,15 +373,18 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         var cell = SelectedCell;
         var target = RegionTargets.Of(region, cell)[0];
-        var deadline = Environment.TickCount64 + 1500;
+        // 리드백이 꺼져 있었으면 켜면서 캡처 세션을 다시 만든다 - 첫 프레임까지 1초 넘게 걸린다.
+        // 예전에는 UI 스레드를 Thread.Sleep 으로 붙든 채 1.5초를 기다려 그 사이 프레임이 못 와 저장이 안 됐다(사용자, 2026-09-19).
+        var deadline = Environment.TickCount64 + 5000;
         System.Windows.Media.Imaging.BitmapSource? crop = null;
 
         while (Environment.TickCount64 < deadline && (!RegionTargets.TryCrop(Hub, target, out crop) || crop is null))
-            System.Threading.Thread.Sleep(50);
+            await System.Threading.Tasks.Task.Delay(50);
 
         if (crop is null)
         {
             StatusText = "프레임이 안 옵니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.";
+            Logger.Warn($"영역 이미지 저장 못 함: 5초 안에 프레임이 안 왔다 ({region.Name})");
             return;
         }
 

@@ -34,7 +34,10 @@ public static class TemplateMatch
     public const int CoarseSide = 240;
 
     /// <summary>줄인 단계에서 남기는 후보 수. 서로 겹치지 않는 것만 센다.</summary>
-    public const int CoarseKeep = 5;
+    public const int CoarseKeep = 10;
+
+    /// <summary>첫 계단에서 본보기의 짧은 변이 이만큼은 남게 한다(px). 이보다 작으면 모양이 뭉개져 후보를 잘못 고른다.</summary>
+    public const int CoarseNeedleSide = 16;
 
     /// <summary>본보기가 화면보다 크거나 이보다 작으면(px, 줄인 뒤) 찾지 않는다.</summary>
     public const int MinimumCoarseSide = 4;
@@ -58,7 +61,11 @@ public static class TemplateMatch
         if (most < 1) return [];
 
         // ① 줄여서 대강 - 긴 변을 CoarseSide 로.
-        var shrink = Math.Max(1.0, (double)Math.Max(haystack.Width, haystack.Height) / CoarseSide);
+        // 단, 본보기가 첫 계단에서 CoarseNeedleSide 아래로 뭉개지지 않을 만큼만 줄인다 - 48x60 아이콘을 1/8 로 줄이면 6x8 이 되어
+        // 모양이 사라지고 엉뚱한 자리가 후보로 남았다(사용자, 2026-09-19 훈련장 아이콘 닮음 0.49, 검사에서는 딴 자리 0.89).
+        var shrink = Math.Max(1.0, Math.Min(
+            (double)Math.Max(haystack.Width, haystack.Height) / CoarseSide,
+            (double)Math.Min(needle.Width, needle.Height) / CoarseNeedleSide));
         var smallNeedleWidth = (int)Math.Round(needle.Width / shrink);
         var smallNeedleHeight = (int)Math.Round(needle.Height / shrink);
 
