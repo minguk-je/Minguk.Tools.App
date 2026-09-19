@@ -339,6 +339,8 @@ public sealed class RegionCanvas : Canvas
         {
             item.SourceWidthPx = rect.Width / area.Width * source.Width;
             item.SourceHeightPx = rect.Height / area.Height * source.Height;
+            item.SourceXPx = (rect.X - area.X) / area.Width * source.Width;
+            item.SourceYPx = (rect.Y - area.Y) / area.Height * source.Height;
         }
     }
 

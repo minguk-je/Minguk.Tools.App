@@ -322,8 +322,8 @@
                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
                                   Hint="학습한 모델로 찾아 점선으로 겹쳐 그린다."
                                   IsChecked="{Binding IsDetectionOn}" />
-                <dxb:BarCheckItem Content="추적"
-                                  BarItemDisplayMode="ContentAndGlyph"
+                <dxb:BarCheckItem BarItemDisplayMode="ContentAndGlyph"
+                                  Content="추적"
                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/search.png'}"
                                   Hint="프레임 간 추적. 한 프레임짜리 헛것이 사라진다."
                                   IsChecked="{Binding IsTrackingOn}" />
@@ -1032,6 +1032,12 @@
                                                        Content="영역 이미지 저장"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/picture.png'}"
                                                        Hint="고른 영역을 지금 화면에서 잘라 영역 이미지(Resources\영역이름.png)로 저장한다.&#10;글자가 아닌 그림 버튼(메뉴 카드·아이콘)은 스크립트에서 그림누르기(&quot;영역이름.png&quot;) 로 찾아 누른다." />
+                                    <!-- 연속 저장(사용자, 2026-09-19) - 히트 마커처럼 잠깐 뜨는 것은 저장 버튼으로 그 순간을 못 잡는다. -->
+                                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                                       Command="{Binding SaveTemplateBurstCommand}"
+                                                       Content="연속 저장"
+                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/picture.png'}"
+                                                       Hint="누르고 3초 뒤부터 2초 동안 들어오는 화면마다 고른 영역을 프로젝트 폴더 진단\연속저장 에 저장한다(목록에는 안 들어간다).&#10;히트 마커처럼 잠깐 뜨는 것용 - 누른 뒤 게임으로 넘어가 한 발 맞히고, 끝나면 열리는 폴더에서 마커가 찍힌 것을 골라&#10;Resources 로 옮기고 이름(예: 히트마커.png)을 붙인다. 스크립트는 명중확인(&quot;히트마커.png&quot;)." />
                                     <dxb:BarButtonItem Command="{Binding RemoveRegionCommand}"
                                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
                                                        Hint="고른 구역을 지운다(구역이 하나뿐이면 못 지운다). 영역 줄을 골랐으면 영역을 지운다." />

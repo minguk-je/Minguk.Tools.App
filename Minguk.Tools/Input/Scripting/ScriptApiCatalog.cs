@@ -68,6 +68,9 @@ public static class ScriptApiCatalog
 
         // ── 실시간만: 화면을 읽거나 흐름을 다룬다 ──
         new("Aim", "조준", "검출 | x, y", "검출을 주면 조준 스레드가 8ms 마다 멈추지 않고 머리를 따라가고, 부를 때마다 새 화면을 기다렸다 몸에 들어와 있으면 true(한 화면에 한 번). 좌표를 주면 한 번 움직이고 8px 안이면 true. 커서를 잡는 게임용(이동()은 안 먹는다).", ScriptApiMode.Live),
+        new("SetAimZone", "조준범위", "비율", "조준(검출)이 참(쏴도 됨)을 줄 몸 사각형의 안쪽 비율(기본 0.6 = 가운데 60%). 작을수록 가운데서만 쏜다 - 가장자리에서 쏴 빗나가면 줄인다.", ScriptApiMode.Live),
+        new("SetAimLead", "앞질러겨누기", "ms", "움직이는 검출을 속도 × ms 만큼 앞서 겨눈다(기본 90). 달리는 봇 뒤를 쏘면 늘리고 앞을 쏘면 줄인다.", ScriptApiMode.Live),
+        new("SetAimConfirm", "확인후쏘기", "켬", "조준(검출)이 참을 주려면 마지막 화면에서도 검출이 조준점 근처여야 하는지(기본 true). 끄면 예측만으로 쏜다 - 빠르지만 배율이 틀리면 옆을 쏜다.", ScriptApiMode.Live),
         new("MoveBy", "상대이동", "dx, dy", "지금 자리에서 이만큼 움직인다.", ScriptApiMode.Live),
         new("MoveCursor", "커서이동", "x, y, 허용오차", "커서를 그 화면 좌표까지 실제 커서 자리를 보며 걸어간다. 커서가 보이는 메뉴용(일반 화면). 닿으면 true.", ScriptApiMode.Live),
         new("SetMouseMode", "마우스모드", "\"일반\" | \"조준\"", "마우스 움직임 방식. 조준(기본)=커서를 잡는 게임, 일반=커서가 보이는 메뉴(이동·조준이 커서를 보며 걸어간다). 스크립트 첫머리에서 한 번.", ScriptApiMode.Live),
@@ -95,6 +98,9 @@ public static class ScriptApiCatalog
         new("FindImage", "그림찾기", "resource, [score], [name]", "본보기 그림(프로젝트 Resources 의 PNG - 영역 패널의 「본보기로 저장」)을 화면에서 찾아 자리를 준다. 못 찾으면 null. 그림으로 된 메뉴·버튼용. 밝기가 달라져도 찾지만 크기가 달라지면 못 찾는다.", ScriptApiMode.Live),
         new("HasImage", "그림있나", "resource, [score], [name]", "본보기 그림이 화면(또는 이름 붙인 자리)에 있는가. 스킬 아이콘·버프 표시처럼 자리가 고정된 것은 자리를 주면 훨씬 빠르다.", ScriptApiMode.Live),
         new("ImageScore", "그림닮음", "resource, [name]", "본보기가 얼마나 닮았는지(0~1). 못 찾으면 0. 문턱(기본 0.8)을 잡을 때 눈으로 본다.", ScriptApiMode.Live),
+        new("HealthBar", "체력바", "검출", "그 검출 머리 위 체력바가 몇 할 찼는지(0~1). 못 찾으면 null. 쏘기 전·뒤를 견줘 맞았는지 안다.", ScriptApiMode.Live),
+        new("HitByHealthBar", "명중했나", "검출, 쏘기전, [ms]", "쏘기 전 체력바(체력바(검출))보다 ms(기본 300) 안에 줄면 true, 그대로면 false, 쏘기 전 값을 모르면 null - var 전 = 체력바(검출); 클릭(); if (명중했나(검출, 전) == false) …", ScriptApiMode.Live),
+        new("HitConfirmed", "명중확인", "resource, [ms], [score]", "방금 쏜 것이 맞았는가 - 조준점 둘레에 히트 마커(맞히면 잠깐 뜨는 X)가 ms(기본 300) 안에 뜨면 true. 본보기는 영역 패널의 「연속 저장」 으로 떠서 마커가 찍힌 것을 고른다.", ScriptApiMode.Live),
         new("PressImage", "그림누르기", "resource, [score], [name]", "본보기 그림을 찾아 그 가운데를 누른다. 찾았으면 true - 그림누르기(\"사격장.png\").", ScriptApiMode.Live),
         new("Key", "키", "name", "이름으로 키 한 번. \"F\", \"Space\", \"Enter\", \"Ctrl+Shift+1\".", ScriptApiMode.Live),
         new("KeyDown", "누르기", "name", "키를 누른 채로 둔다. 떼기 전까지.", ScriptApiMode.Live),

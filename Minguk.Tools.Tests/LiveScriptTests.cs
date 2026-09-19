@@ -319,8 +319,9 @@ internal static partial class Program
                       $"{settled:0.00} → {after:0.00} (잡음 2번 뒤)");
             }
 
+            // 참값 가까이 오면 조금씩만 다가가고 2% 안이면 안 바꾼다(흩어진 표본에 튀지 않게, 2026-09-19) - 멀리서 오는 동안 세 번이면 된다.
             Check("조준 배율 배우기: 한 번에 1.5배 넘게 안 바꾸고 참값(3.45)으로 다가간다",
-                  learned.Count >= 4 && !jumped && learned[^1] > 2.5 && learned[^1] < 4.2,
+                  learned.Count >= 3 && !jumped && learned[^1] > 2.5 && learned[^1] < 4.2,
                   string.Join(" → ", learned.Select(v => v.ToString("0.00"))));
         }
 

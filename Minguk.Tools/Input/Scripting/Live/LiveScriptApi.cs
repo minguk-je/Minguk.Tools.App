@@ -194,6 +194,51 @@ public class LiveScriptApi : IDisposable
 
     public void 마우스모드(string 모드) => SetMouseMode(모드);
 
+    private double _aimZone = AimLoop.DefaultOnTargetFraction;
+
+    /// <summary>
+    /// 조준(검출)이 "맞았다"(참)고 볼 몸 사각형의 안쪽 비율 - 0.6 이면 몸 가운데 60% 안에 조준점이 들어와야 쏜다. 작을수록 가운데서만 쏜다(0.1~1).
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) "타겟 사각형 조금 더 안쪽으로. 너무 끝에서 쏘니까 안 맞는 경우가 있네" - 예전 0.9 는 가장자리에 걸친 순간에 쏴 빗나갔다.
+    /// 게임·무기(산탄·저격)마다 알맞은 값이 달라 스크립트 첫머리에서 정한다. 좁히면 쏘는 횟수가 준다(조준이 가운데로 올 때까지 기다린다).
+    /// </remarks>
+    public void SetAimZone(double fraction) => Traced("SetAimZone", fraction.ToString("0.00"), () =>
+    {
+        _aimZone = Math.Clamp(fraction, 0.1, 1.0);
+
+        if (_aim is { } loop) loop.OnTargetFraction = _aimZone;
+    });
+
+    public void 조준범위(double 비율) => SetAimZone(비율);
+
+    private int _aimLeadMs = AimLoop.DefaultLeadMs;
+    private bool _aimConfirm = true;
+
+    /// <summary>
+    /// 움직이는 검출을 속도 × 이 시간(ms)만큼 앞서 겨눈다(기본 90, 0~400). 달리는 봇의 뒤를 쏘면 늘리고, 앞을 쏘면 줄인다.
+    /// </summary>
+    public void SetAimLead(int milliseconds) => Traced("SetAimLead", milliseconds.ToString(), () =>
+    {
+        _aimLeadMs = Math.Clamp(milliseconds, 0, 400);
+
+        if (_aim is { } loop) loop.LeadMs = _aimLeadMs;
+    });
+
+    public void 앞질러겨누기(int 밀리초) => SetAimLead(밀리초);
+
+    /// <summary>
+    /// 조준(검출)이 참을 주려면 마지막으로 본 화면에서도 검출이 조준점 근처여야 하는가(기본 참). 끄면 예측만으로도 쏜다 - 빠르지만 배율이 틀리면 옆을 쏜다.
+    /// </summary>
+    public void SetAimConfirm(bool confirm) => Traced("SetAimConfirm", confirm.ToString(), () =>
+    {
+        _aimConfirm = confirm;
+
+        if (_aim is { } loop) loop.ConfirmOnScreen = confirm;
+    });
+
+    public void 확인후쏘기(bool 켬) => SetAimConfirm(켬);
+
     public void Scroll(int notches) => Traced("Scroll", notches.ToString(), () => Send(new SequenceStepDefinition { Kind = SequenceStepKind.Scroll, Notches = notches }));
 
     /// <summary>
@@ -278,7 +323,7 @@ public class LiveScriptApi : IDisposable
             MayMove: IsTargetInFront,
             Learn: LearnSample,
             Pause: _host.PauseGate,
-            Token: _token));
+            Token: _token)) { OnTargetFraction = _aimZone, LeadMs = _aimLeadMs, ConfirmOnScreen = _aimConfirm };
 
         var frames = loop.FramesConsumed;
 
@@ -597,7 +642,7 @@ public class LiveScriptApi : IDisposable
     private const int MaxAimCounts = 1200;
 
     /// <summary>
-    /// 배율을 고치기 전에 모으는 표본 수. <b>가운뎃값</b>을 쓴다 - 평균이나 섞기가 아니다.
+    /// 배율을 고치기 전에 모으는 표본 수. 평균이나 섞기가 아니라 <b>순서</b>로 본다(7개가 한쪽이어야 옮긴다 - <see cref="LearnSampleCore"/>).
     /// </summary>
     /// <remarks>
     /// <b>잡음이 한쪽으로만 튄다.</b> 검출이 스스로 움직이거나 화면이 덜 돌면 "보낸 것보다 덜 움직였다" 가 되어
@@ -606,12 +651,19 @@ public class LiveScriptApi : IDisposable
     /// 상한 20 까지 올라가 붙었고(잰 값에 16.50 · 6.79 같은 것이 섞였다), 그러자 모든 조준이 상한에 잘려
     /// 화면이 제대로 돌지 못했다.
     ///
-    /// 가운뎃값은 그런 값 몇 개에 흔들리지 않는다. 홀수로 둔다 - 가운데가 하나여야 한다.
+    /// 순서로 보면 그런 값 몇 개에 흔들리지 않는다. 가운뎃값도 한 무리가 다섯이 되면 넘어가서, 7개가 한쪽일 때만 옮긴다.
     /// </remarks>
     private const int AimSamples = 9;
 
     /// <summary>배율이 가질 수 있는 값의 범위(카운트/px).</summary>
     private const double MinAimScale = 0.1;
+
+    /// <summary>기준값이 지금 배율의 이만큼 배 밖이면 "멀다" - 한 번에 크게(1.5배까지) 옮긴다. 안이면 <see cref="NearStep"/> 만큼만 다가간다.</summary>
+    private const double FarRatio = 1.5;
+
+    /// <summary>가까울 때 차이의 몇 할만큼 다가가나. 흩어진 표본에 배율이 튀지 않게.</summary>
+    private const double NearStep = 0.35;
+
 
     private const double MaxAimScale = 20;
 
@@ -844,16 +896,36 @@ public class LiveScriptApi : IDisposable
         if (_aimSamples.Count < AimSamples) return;
 
         var sorted = _aimSamples.OrderBy(v => v).ToArray();
-        var median = sorted[sorted.Length / 2];
         var current = _aimScale ??= _host.AimScale;
 
+        // <b>9개 가운데 7개가 한쪽을 가리킬 때만 옮기고, 그 7번째 값까지만 간다</b> - 올릴 때는 아래에서 3번째, 내릴 때는 위에서 3번째. 가운뎃값은 한 무리가 다섯만 되면 넘어간다.
+        // 이 게임의 표본은 거의 늘 위로 틀린다(검출이 움직이거나 입력이 덜 오른 화면이면 "보낸 만큼 안 좁혀졌다"). 실측(사격장 2026-09-19):
+        //   [1.4 2.2 2.7 3.7 4.4 | 13.8 14.4 17.9 19.3 19.9] → 가운뎃값 13.8, 배율 3.8 → 5.7 → 8.6 → 12.9 로 뛰어 30초 가까이 못 쐈다.
+        //   [3.1 3.4 3.5 | 6.0 6.5 6.5 7.5 7.7 8.9]           → 판을 시작할 때마다 3.5 → 5.3 으로 뛰었다가 천천히 돌아왔다. 맞는 값은 큰 꺾기들로 3.3~3.5.
+        // 처음 배율이 크게 틀린 때는 표본이 다 한쪽에 모이니 그대로 배운다.
+        var low = sorted[2];
+        var high = sorted[^3];
+        double estimate;
+
+        if (low > current) estimate = low;
+        else if (high < current) estimate = high;
+        else
+        {
+            Logger.Debug($"배율 그대로 {current:0.00} - 표본이 양쪽에 있다 ([{string.Join(" ", sorted.Select(v => v.ToString("0.0")))}])");
+            return;
+        }
+
         // 그래도 한 번에 크게 바꾸지 않는다. 게임 안에서 감도가 바뀌는 일은 없으니 서둘 이유가 없다.
-        var next = Math.Clamp(Math.Clamp(median, current / 1.5, current * 1.5), MinAimScale, MaxAimScale);
+        // 가까우면(지금과 FarRatio 안) 차이의 일부만 다가간다 - 흩어진 표본에 배율이 그대로 따라 뛰어 4.75 로 84px 을 꺾다 한참 지나쳤다("조준이 너무 튀는데", 사용자 2026-09-19).
+        // 멀면(처음 배율이 크게 틀림) 1.5배까지 한 번에 간다.
+        var far = estimate > current * FarRatio || estimate < current / FarRatio;
+        var target = far ? estimate : current + ((estimate - current) * NearStep);
+        var next = Math.Clamp(Math.Clamp(target, current / 1.5, current * 1.5), MinAimScale, MaxAimScale);
 
         if (Math.Abs(next - current) / current < 0.02) return;
 
         Logger.Info($"배율 {current:0.00} → {next:0.00} ({before:0} → {after:0}, 보낸 {sent:0}, 잰 값 {measured:0.00}, " +
-                    $"가운뎃값 {median:0.00} of [{string.Join(" ", sorted.Select(v => v.ToString("0.0")))}])");
+                    $"기준 {estimate:0.00} of [{string.Join(" ", sorted.Select(v => v.ToString("0.0")))}])");
 
         _aimScale = next;
         _host.AimScaleLearned!(next);
@@ -1412,6 +1484,253 @@ public class LiveScriptApi : IDisposable
             Score = hit.Score
         };
     }
+
+    // ── 체력바 - 명중 확인 ───────────────────────────────────────────────
+
+    /// <summary>
+    /// 그 검출 머리 위 체력바가 몇 할 찼는가(0~1). 체력바를 못 찾으면 null.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) "체력바로 해줘" - 히트 마커는 가늘고 반투명해 폭발·데미지 숫자와 섞여 못 갈랐다(연속 저장 17장). 체력바는 봇마다 머리 위 한 줄이고
+    /// 칸 색이 뚜렷하다. 게임마다 다른 색·범위는 프로젝트 폴더의 healthbar.json(<see cref="Vision.HealthBars.HealthBarSpec"/>)에 두고, 찾고 재는 규칙은
+    /// 모든 게임이 같다(<see cref="Vision.HealthBars.HealthBarReader"/>). 못 읽은 순간의 조각은 프로젝트 폴더 진단\체력바\ 에 남는다.
+    /// </remarks>
+    public double? HealthBar(ScriptDetection mob)
+    {
+        ArgumentNullException.ThrowIfNull(mob);
+
+        return Traced("HealthBar", mob.ToString(), () => HealthBarCore(mob));
+    }
+
+    public double? 체력바(ScriptDetection 검출) => HealthBar(검출);
+
+    /// <summary>
+    /// 방금 쏜 것이 맞았는가 - 쏘기 전 체력바(<paramref name="before"/>)보다 <paramref name="waitMs"/> 안에 줄면 참, 그대로면 거짓.
+    /// 쏘기 전 값을 모르거나, 쏜 뒤 못 읽었거나 늘어나 보이기만 했으면(겹친 효과) null - 빗나감으로 세지 않게.
+    /// </summary>
+    /// <remarks>
+    /// <c>var 전 = 체력바(검출); 클릭(); if (명중했나(검출, 전) == false) 빗나감++;</c> - 쏜 뒤 화면에 반영되기까지 0.1~0.2초라 기다리며 몇 번 본다.
+    /// 봇이 움직이면 지금 검출 가운데 원래 자리에서 가장 가까운 것의 체력바를 본다.
+    /// </remarks>
+    public bool? HitByHealthBar(ScriptDetection mob, double? before, int waitMs = 300)
+    {
+        ArgumentNullException.ThrowIfNull(mob);
+
+        return Traced("HitByHealthBar", $"{mob}, {before?.ToString("0.00") ?? "모름"}", () => HitByHealthBarCore(mob, before, waitMs));
+    }
+
+    public bool? 명중했나(ScriptDetection 검출, double? 쏘기전) => HitByHealthBar(검출, 쏘기전);
+
+    public bool? 명중했나(ScriptDetection 검출, double? 쏘기전, int 기다림) => HitByHealthBar(검출, 쏘기전, 기다림);
+
+    /// <summary>쏜 뒤 이만큼(ms) 지난 화면부터 "그대로" 를 믿는다 - 입력이 화면에 오르기까지 0.1초 안팎(조준 실측).</summary>
+    private const int ShotLatencyMs = 120;
+
+
+    private bool? HitByHealthBarCore(ScriptDetection mob, double? before, int waitMs)
+    {
+        if (before is null) return null;
+
+        var start = Environment.TickCount64;
+        var deadline = start + Math.Max(0, waitMs);
+        var sawSame = false;
+
+        while (true)
+        {
+            // 봇이 걸었으면 원래 자리에서 가장 가까운 지금 검출로 - 없으면 원래 자리 그대로 본다.
+            var now = NearestTo(mob) ?? mob;
+
+            if (HealthBarCore(now) is { } after)
+            {
+                var drop = HealthBarSpecOrThrow().Drop;
+
+                if (after < before.Value - drop) return true;
+
+                // 늘어난 것은 믿지 않는다 - 맞힌 직후 빨간 데미지 숫자·처치 효과가 바에 겹쳐 찬 칸이 는 것처럼 보였다(실측). 그대로일 때만 "빗나감" 쪽으로 센다.
+                // 쏜 직후(입력이 화면에 오르기 전) 화면은 당연히 그대로다 - 그것으로 빗나감을 세면 안 된다.
+                if (after <= before.Value + drop && Environment.TickCount64 - start >= ShotLatencyMs) sawSame = true;
+            }
+
+            if (Environment.TickCount64 >= deadline) return sawSame ? false : null;
+
+            Wait(40);
+        }
+    }
+
+    /// <summary>지금 검출 가운데 이 검출 자리에서 가장 가까운 것(몸 크기 안). 검출이 꺼져 있거나 없으면 null.</summary>
+    private ScriptDetection? NearestTo(ScriptDetection mob)
+    {
+        if (!_host.Hub.IsDetecting) return null;
+
+        var reach = Math.Max(mob.Width, mob.Height);
+
+        return DetectionsCore()
+            .Select(d => (d, Distance: Math.Sqrt(Math.Pow(d.CenterX - mob.CenterX, 2) + Math.Pow(d.CenterY - mob.CenterY, 2))))
+            .Where(p => p.Distance <= reach)
+            .OrderBy(p => p.Distance)
+            .Select(p => p.d)
+            .FirstOrDefault();
+    }
+
+    private double? HealthBarCore(ScriptDetection mob)
+    {
+        var spec = HealthBarSpecOrThrow();
+        var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
+
+        if (!CaptureTargetBounds.TryGet(target, out var bounds) || bounds.Width <= 0 || bounds.Height <= 0) return null;
+
+        // 찾을 띠 - 검출 사각형 기준 배수(healthbar.json). 봇이 멀어 작아져도 같은 값으로 맞는다.
+        var top = mob.CenterY - (mob.Height / 2.0);
+        var left = Math.Max(bounds.Left, mob.CenterX - (spec.Side * mob.Width));
+        var right = Math.Min(bounds.Right, mob.CenterX + (spec.Side * mob.Width));
+        var up = Math.Max(bounds.Top, top - (spec.Above * mob.Height));
+        var down = Math.Min(bounds.Bottom, top + (spec.Below * mob.Height));
+
+        if (right - left < 10 || down - up < 4) return null;
+
+        var area = new Rect((left - bounds.Left) / bounds.Width, (up - bounds.Top) / bounds.Height, (right - left) / bounds.Width, (down - up) / bounds.Height);
+        var crop = CropFor(area);
+
+        var converted = new System.Windows.Media.Imaging.FormatConvertedBitmap(crop, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+        var width = converted.PixelWidth;
+        var height = converted.PixelHeight;
+        var pixels = new byte[width * height * 4];
+        converted.CopyPixels(pixels, width * 4, 0);
+
+        // 몸 너비(조각 픽셀로 바꿔서)의 이만큼보다 짧은 줄은 바로 안 본다.
+        var minRun = (int)(spec.MinWidth * mob.Width * (width / Math.Max(1.0, right - left)));
+        var reading = Vision.HealthBars.HealthBarReader.Read(pixels, width, height, spec, minRun);
+
+        if (reading is not { } found || found.Fraction <= 0) SaveHealthBarDiagnostic(converted, reading);
+
+        return reading?.Fraction;
+    }
+
+    // ── 체력바 설정·진단 - 프로젝트 폴더 ────────────────────────────────
+
+    private Vision.HealthBars.HealthBarSpec? _healthBarSpec;
+    private DateTime _healthBarSpecStamp;
+
+    /// <summary>
+    /// 프로젝트 폴더의 healthbar.json. 고치면 다음 호출부터 먹는다. 없거나 틀리면 무엇을 적어야 하는지 말하고 멈춘다.
+    /// </summary>
+    private Vision.HealthBars.HealthBarSpec HealthBarSpecOrThrow()
+    {
+        if (_host.ResourceRoot is not { } root)
+            throw Guard("체력바는 프로젝트로 돌릴 때만 씁니다 - 색·범위를 프로젝트 폴더의 healthbar.json 에서 읽습니다.");
+
+        var path = System.IO.Path.Combine(root, Vision.HealthBars.HealthBarSpec.FileName);
+
+        if (!System.IO.File.Exists(path))
+            throw Guard($"프로젝트 폴더에 {Vision.HealthBars.HealthBarSpec.FileName} 이 없습니다 - 체력바 색을 적으세요. 예: " +
+                        "{ \"filled\": [255, 66, 107], \"empty\": [110, 75, 112], \"tolerance\": 45 } (찬 칸·빈 칸 색 R,G,B, 허용 거리). " +
+                        "색은 영역 패널 「연속 저장」 으로 뜬 조각에서 잽니다.");
+
+        var stamp = System.IO.File.GetLastWriteTimeUtc(path);
+
+        if (_healthBarSpec is null || stamp != _healthBarSpecStamp)
+        {
+            try
+            {
+                _healthBarSpec = Vision.HealthBars.HealthBarSpec.Load(path);
+                _healthBarSpecStamp = stamp;
+            }
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or System.IO.IOException)
+            {
+                Logger.Warn(ex, $"체력바 설정을 못 읽었다: {path}");
+                throw Guard($"{Vision.HealthBars.HealthBarSpec.FileName} 을 읽지 못했습니다 - 형식을 보세요(filled·empty 는 [R, G, B] 세 숫자).");
+            }
+        }
+
+        return _healthBarSpec!;
+    }
+
+    /// <summary>한 번 실행에 남길 진단 조각 수.</summary>
+    private const int MaxHealthBarDiagnostics = 40;
+
+    private int _healthBarDiagnostics;
+
+    /// <summary>
+    /// 못 읽었거나 0 으로 읽은 순간의 탐색 조각을 프로젝트 폴더 <c>진단\체력바\</c> 에 남긴다 - 색·범위(healthbar.json)를 실제 화면에 맞추는 재료(사용자, 2026-09-19).
+    /// 한 번 실행에 <see cref="MaxHealthBarDiagnostics"/> 장까지. 이름에 바로 본 줄(y)과 찬 몫을 적는다.
+    /// </summary>
+    private void SaveHealthBarDiagnostic(System.Windows.Media.Imaging.BitmapSource crop, Vision.HealthBars.HealthBarReading? reading)
+    {
+        if (_healthBarDiagnostics >= MaxHealthBarDiagnostics || _host.ResourceRoot is not { } root) return;
+
+        try
+        {
+            var folder = System.IO.Path.Combine(root, "진단", "체력바");
+            System.IO.Directory.CreateDirectory(folder);
+
+            var what = reading is { } r ? $"y{r.Row}_{r.Fraction:0.00}" : "없음";
+            var path = System.IO.Path.Combine(folder, $"{DateTime.Now:HHmmss_fff}_{what}.png");
+
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(crop));
+
+            using (var file = System.IO.File.Create(path)) encoder.Save(file);
+
+            _healthBarDiagnostics++;
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug(ex, "체력바 진단 조각을 못 남겼다");
+        }
+    }
+
+    // ── 명중 확인 - 히트 마커 ────────────────────────────────────────────
+
+    /// <summary>
+    /// 방금 쏜 것이 맞았는가 - 조준점 둘레에 히트 마커(맞히면 잠깐 뜨는 X 표시)가 <paramref name="waitMs"/> 안에 뜨면 참.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) "조준 후 맞췄는지 못맞췄는지 모르지?" - <c>조준(검출)</c> 의 참은 "조준점이 몸 안" 까지다. 쏜 것이 맞았는지는 게임이 보여 주는
+    /// 히트 마커로만 안다. 본보기(Resources 의 PNG)는 영역 패널의 「연속 저장」 으로 쏘는 동안의 화면을 여러 장 떠서 마커가 찍힌 것을 고른다.
+    /// 화면 가운데 작은 자리만 보므로 한 번에 몇 ms 다. 마커는 0.2초쯤 떴다 사라지고 화면은 0.1초마다 올라오므로 기다림은 0.3초가 알맞다.
+    /// 조준점 자체가 마커와 닮으면 늘 참이 된다 - 본보기는 마커의 X 획만 담기게(조준점 한가운데는 빼고) 잡는다.
+    /// </remarks>
+    public bool HitConfirmed(string resourceName, int waitMs = 300, double minimumScore = 0.7)
+        => Traced("HitConfirmed", Quote(resourceName), () => HitConfirmedCore(resourceName, waitMs, minimumScore));
+
+    private bool HitConfirmedCore(string resourceName, int waitMs, double minimumScore)
+    {
+        var needle = Template(resourceName);
+
+        _host.Hub.WantsFrames = true;
+        var deadline = Environment.TickCount64 + Math.Max(0, waitMs);
+
+        while (true)
+        {
+            if (_host.Hub.TryGetFrameSize(out var width, out var height) && width > 0 && height > 0)
+            {
+                // 조준점 둘레 - 본보기의 세 배(최소 160px) 네모. 조준점은 화면 가운데다.
+                var side = Math.Max(160, 3 * Math.Max(needle.Width, needle.Height));
+                var w = Math.Min(1, side / (double)width);
+                var h = Math.Min(1, side / (double)height);
+                var area = new Rect(0.5 - (w / 2), 0.5 - (h / 2), w, h);
+
+                if (_host.Hub.TryCropFrame(area, out var crop) && crop is not null)
+                {
+                    var haystack = Vision.Matching.GrayImage.From(crop);
+
+                    if (needle.Width <= haystack.Width && needle.Height <= haystack.Height
+                        && Vision.Matching.TemplateMatch.Find(haystack, needle) is { } hit && hit.Score >= minimumScore)
+                        return true;
+                }
+            }
+
+            if (Environment.TickCount64 >= deadline) return false;
+
+            Wait(30);
+        }
+    }
+
+    public bool 명중확인(string 본보기) => HitConfirmed(본보기);
+
+    public bool 명중확인(string 본보기, int 기다림) => HitConfirmed(본보기, 기다림);
+
+    public bool 명중확인(string 본보기, int 기다림, double 문턱) => HitConfirmed(본보기, 기다림, 문턱);
 
     private Vision.Matching.GrayImage Template(string resourceName)
     {

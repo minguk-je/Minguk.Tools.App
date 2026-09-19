@@ -48,6 +48,25 @@ public abstract class RegionItemBase : ContentControl
         set => SetValue(SourceWidthPxProperty, value);
     }
 
+    public static readonly DependencyProperty SourceXPxProperty = DependencyProperty.Register(
+        nameof(SourceXPx), typeof(double), typeof(RegionItemBase), new PropertyMetadata(0d));
+
+    /// <summary>원본 화면에서 왼쪽 위 모서리의 X(픽셀). 고르면 어도너 오른쪽 위에 좌표로 보인다. 돌린 칸은 돌리기 전 사각형의 모서리.</summary>
+    public double SourceXPx
+    {
+        get => (double)GetValue(SourceXPxProperty);
+        set => SetValue(SourceXPxProperty, value);
+    }
+
+    public static readonly DependencyProperty SourceYPxProperty = DependencyProperty.Register(
+        nameof(SourceYPx), typeof(double), typeof(RegionItemBase), new PropertyMetadata(0d));
+
+    public double SourceYPx
+    {
+        get => (double)GetValue(SourceYPxProperty);
+        set => SetValue(SourceYPxProperty, value);
+    }
+
     public static readonly DependencyProperty SourceHeightPxProperty = DependencyProperty.Register(
         nameof(SourceHeightPx), typeof(double), typeof(RegionItemBase), new PropertyMetadata(0d));
 

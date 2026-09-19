@@ -44,11 +44,11 @@ public static class ScriptHelp
         ["Key"] = Keyboard, ["KeyDown"] = Keyboard, ["KeyUp"] = Keyboard, ["Walk"] = Keyboard,
 
         ["Click"] = Mouse, ["RightClick"] = Mouse, ["ClickAt"] = Mouse, ["MoveTo"] = Mouse, ["Scroll"] = Mouse,
-        ["Aim"] = Mouse, ["MoveBy"] = Mouse, ["MoveCursor"] = Mouse, ["SetMouseMode"] = Mouse, ["MouseDown"] = Mouse, ["MouseUp"] = Mouse, ["Drag"] = Mouse, ["DragBy"] = Mouse,
+        ["Aim"] = Mouse, ["MoveBy"] = Mouse, ["MoveCursor"] = Mouse, ["SetMouseMode"] = Mouse, ["SetAimZone"] = Mouse, ["SetAimLead"] = Mouse, ["SetAimConfirm"] = Mouse, ["MouseDown"] = Mouse, ["MouseUp"] = Mouse, ["Drag"] = Mouse, ["DragBy"] = Mouse,
 
         ["Detections"] = Detections, ["NearestDetection"] = Detections, ["TargetDetection"] = Detections, ["ReleaseTarget"] = Detections, ["WaitDetection"] = Detections,
 
-        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen,
+        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen, ["HitConfirmed"] = Screen, ["HealthBar"] = Detections, ["HitByHealthBar"] = Detections,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
         ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow, ["RunProject"] = Flow, ["MoveToProject"] = Flow,
@@ -82,6 +82,9 @@ public static class ScriptHelp
         ["FindImage"] = "if (그림찾기(\"사격장.png\") is { } 자리)\n    출력($\"{자리.x}, {자리.y} 닮음 {자리.닮음:0.00}\");",
         ["HasImage"] = "if (그림있나(\"궁극기준비.png\", 0.9, \"궁극기자리\")) 키(\"Q\");",
         ["ImageScore"] = "출력($\"닮음 {그림닮음(\"사격장.png\"):0.00}\");   // 문턱을 잡을 때",
+        ["HitByHealthBar"] = "var 전 = 체력바(검출);\n클릭();\nif (명중했나(검출, 전) == false)   // 0.3초 안에 체력바가 안 줄면 빗나감\n    빗나감++;",
+        ["HealthBar"] = "출력($\"체력 {체력바(검출):P0}\");",
+        ["HitConfirmed"] = "클릭();\nif (!명중확인(\"히트마커.png\"))   // 0.3초 안에 히트 마커가 안 뜨면 빗나감\n    빗나감++;",
         ["PressImage"] = "if (!그림누르기(\"사격장.png\")) 출력(\"사격장 카드가 안 보인다\");",
         ["Wait"] = "쉬기(300);",
         ["IsStopped"] = "while (!중지되었나())\n{\n    // 반복할 일\n    쉬기(10);\n}",

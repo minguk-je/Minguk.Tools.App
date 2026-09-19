@@ -532,6 +532,11 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     /// 폴더 감시가 이것들을 목록에 넣어 탐색기에 Images·Labels 가 떴다 - 넣은 때의 몇 장만 박제돼 라벨링 목록과도 달랐다(사용자, 2026-09-15).
     /// 사진 수백 장이 들어가면 탐색기를 못 쓴다. 이름은 프로젝트 폴더 바로 아래 것만 본다 - 스크립트가 쓰는 Resources 안은 건드리지 않는다.
     /// </remarks>
+    /// <summary>
+    /// 진단 조각(체력바 못 읽은 순간·연속 저장 후보)을 두는 폴더 - 데이터라 목록에 안 넣는다(사용자, 2026-09-19 - 연속 저장 17장이 탐색기에 줄줄이 들어갔다).
+    /// </summary>
+    public const string DiagnosticsFolder = "진단";
+
     private static bool IsDataPath(string[] parts)
     {
         var first = parts[0];
@@ -542,7 +547,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
             if (string.Equals(first, Vision.ProjectPaths.ImagesFolder, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(first, Vision.ProjectPaths.LabelsFolder, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(first, Vision.ProjectPaths.CapturesFolder, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(first, Vision.ProjectPaths.RecordingsFolder, StringComparison.OrdinalIgnoreCase))
+                string.Equals(first, Vision.ProjectPaths.RecordingsFolder, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(first, DiagnosticsFolder, StringComparison.OrdinalIgnoreCase))
                 return true;
 
             if (parts.Length > 1) return false;

@@ -63,7 +63,7 @@ public static class SolutionProbe
     private static int CheckDataNotListed()
     {
         string[] hidden = ["Images", "images/a.png", "Labels/a.txt", "Captures", "Recordings/x.mp4", "classes.txt", "class-colors.json", "data.yaml", "coco.json",
-                           "labels.cache", "regions.json", "settings.form.json", "settings.values.json", "detector.onnx", "detector.yolo11n.onnx.json", "detector.zip.bak", "bin/x.mtsx"];
+                           "labels.cache", "진단/체력바/a.png", "진단/연속저장/b.png", "regions.json", "settings.form.json", "settings.values.json", "detector.onnx", "detector.yolo11n.onnx.json", "detector.zip.bak", "bin/x.mtsx"];
         string[] shown = ["main.csx", "스크립트.csx", "Resources", "Resources/images/a.png", "Resources/regions.json", "공용/도우미.csx", "ImagesTool.csx"];
 
         var wrongHidden = hidden.Where(p => !Minguk.Tools.ViewModels.ScriptProjectWorkspace.IsIgnored(p)).ToList();

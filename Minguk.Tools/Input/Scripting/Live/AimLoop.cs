@@ -155,8 +155,38 @@ internal sealed class AimLoop : IDisposable
     /// </summary>
     private readonly int _latencyMs = 110;
 
-    /// <summary>검출의 자리를 앞서 잡는 시간(ms) - 화면이 늦은 만큼. 입력 지연(<see cref="_latencyMs"/>)보다 조금 짧게 - 입력은 게임이 받아 그리기까지가 더 든다.</summary>
-    private const int DetectionLeadMs = 90;
+    /// <summary>검출의 자리를 앞서 잡는 시간(ms, 기본) - 화면이 늦은 만큼. 입력 지연(<see cref="_latencyMs"/>)보다 조금 짧게 - 입력은 게임이 받아 그리기까지가 더 든다.</summary>
+    public const int DefaultLeadMs = 90;
+
+    private int _leadMs = DefaultLeadMs;
+
+    /// <summary>
+    /// 움직이는 검출을 속도 × 이 시간만큼 앞서 겨눈다(ms, 0~400). 게임마다 화면 지연이 달라 스크립트가 <c>앞질러겨누기(ms)</c> 로 맞춘다(사용자, 2026-09-19 "이동 중에 쏘면 안 맞으니까").
+    /// 달리는 봇 뒤를 쏘면 늘리고, 앞을 쏘면 줄인다.
+    /// </summary>
+    public int LeadMs
+    {
+        get => Volatile.Read(ref _leadMs);
+        set => Volatile.Write(ref _leadMs, Math.Clamp(value, 0, 400));
+    }
+
+    private volatile bool _confirmOnScreen = true;
+
+    /// <summary>
+    /// 맞았다고 하려면 예측뿐 아니라 <b>마지막으로 본 화면에서도</b> 검출이 조준점 근처(조준범위의 <see cref="ScreenConfirmSlack"/> 배 안)에 있어야 하는가(기본 참).
+    /// </summary>
+    /// <remarks>
+    /// 사격장 로그(사용자, 2026-09-19): 마지막 화면에서는 봇이 20px 넘게 떨어져 있었는데 예측만 믿고 "붙었다" 며 쏜 발이 16번 - 체력바로 본 명중 1 · 빗나감 8.
+    /// 배율이 조금만 틀려도 예측은 붙었다는데 실제로는 옆을 쏜다. 휙 꺾은 직후에는 다음 화면(0.1초 안팎)을 기다렸다 쏘게 된다 - 쏘는 속도가 더 중요하면 스크립트가 끈다.
+    /// </remarks>
+    public bool ConfirmOnScreen
+    {
+        get => _confirmOnScreen;
+        set => _confirmOnScreen = value;
+    }
+
+    /// <summary>화면 확인은 조준범위보다 이만큼 넓게 본다 - 마지막 화면은 우리가 그 뒤에 보낸 만큼 늦으므로.</summary>
+    private const double ScreenConfirmSlack = 1.5;
 
     /// <summary>지연이 이 사이 어디인지 모른다고 본다(ms). 이 띠 안에 보낸 양이 프레임 사이에 바뀐 만큼이 그 화면의 불확실함이다.</summary>
     private const int LatencyMinMs = 40;
@@ -232,8 +262,20 @@ internal sealed class AimLoop : IDisposable
     /// <summary>마지막으로 본 지 이보다 오래됐으면 맞았다고 하지 않는다(ms) - 예측만으로는 쏘지 않는다.</summary>
     private const int OnTargetMaxAgeMs = 300;
 
-    /// <summary>맞았다고 볼 몸 사각형의 비율. 가장자리에 걸친 것은 빼고.</summary>
-    private const double OnTargetFraction = 0.9;
+    /// <summary>
+    /// 맞았다고 볼 몸 사각형의 비율(기본). 가장자리에 걸친 것은 빼고 - 0.9 로는 끝에 걸친 순간에 쏴 빗나갔다(사용자, 2026-09-19 "타겟 사각형 조금 더 안쪽으로").
+    /// 스크립트가 <c>조준범위(0.5)</c> 로 바꾼다(<see cref="OnTargetFraction"/>).
+    /// </summary>
+    public const double DefaultOnTargetFraction = 0.6;
+
+    private double _onTargetFraction = DefaultOnTargetFraction;
+
+    /// <summary>맞았다고 볼 몸 사각형의 비율(0.1~1). 게임·무기마다 다르다 - 스크립트가 정한다.</summary>
+    public double OnTargetFraction
+    {
+        get => Volatile.Read(ref _onTargetFraction);
+        set => Volatile.Write(ref _onTargetFraction, Math.Clamp(value, 0.1, 1.0));
+    }
 
     /// <summary>보낸 기록을 남기는 시간(ms).</summary>
     private const int SentHistoryMs = 1000;
@@ -278,6 +320,9 @@ internal sealed class AimLoop : IDisposable
     private double _flickFromX;
     private double _flickFromY;
     private long _flickFromTicks;
+
+    /// <summary>꺾기 시작한 뒤 검출이 낸 가장 빠른 속도(px/ms, 한 축) - 확인 화면 표본을 거른다(<see cref="Track.AnchorMaxSpeed"/> 와 같은 까닭).</summary>
+    private double _flickMaxSpeed;
 
     /// <summary>마지막 확인 화면의 프레임 시각 - 그 직후의 화면은 조심해서 받는다.</summary>
     private long _settledFrameTicks = long.MinValue / 2;
@@ -341,6 +386,9 @@ internal sealed class AimLoop : IDisposable
 
         /// <summary>이 닻으로 이미 표본을 줬는가 - 닻 하나에 표본 하나.</summary>
         public bool AnchorUsed;
+
+        /// <summary>닻을 놓은 뒤 검출이 낸 가장 빠른 속도(px/ms, 한 축). 한 번이라도 달렸으면 그 닻으로는 표본을 안 준다.</summary>
+        public double AnchorMaxSpeed;
     }
 
     /// <summary>붙잡고 따라가는 중인가. 놓쳤거나(<see cref="LockGraceMs"/>) 뗐으면 false.</summary>
@@ -539,7 +587,7 @@ internal sealed class AimLoop : IDisposable
         }
     }
 
-    /// <summary>조준점이 몸 사각형 안(<see cref="OnTargetFraction"/>)에 있는가 - 최근에 본 것일 때만.</summary>
+    /// <summary>조준점이 몸 사각형 안쪽(<see cref="OnTargetFraction"/>)에 있는가 - 최근에 본 것일 때만.</summary>
     public bool IsOnTarget()
     {
         lock (_sync)
@@ -550,9 +598,11 @@ internal sealed class AimLoop : IDisposable
             if (now - t.SeenTicks > OnTargetMaxAgeMs) return false;
 
             var (ex, ey) = Predict(t, now);
-            var bodyY = ey + ((0.5 - ScriptDetection.HeadFraction) * t.H);
 
-            if (Math.Abs(ex) > t.W / 2 * OnTargetFraction || Math.Abs(bodyY) > t.H / 2 * OnTargetFraction) return false;
+            if (!InsideZone(ex, ey, t, OnTargetFraction)) return false;
+
+            // 마지막으로 본 화면에서도 근처였는가 - 예측만으로 쏘지 않는다(ConfirmOnScreen).
+            if (ConfirmOnScreen && !InsideZone(t.ObsX, t.ObsY, t, OnTargetFraction * ScreenConfirmSlack)) return false;
 
             // 마지막 화면 뒤로 몸 반쪽 넘게 움직였으면 아직 화면으로 확인된 자리가 아니다 - 배율이 틀리면 예측은 붙었다는데 실제로는 멀어, 허공에 쏜다.
             var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, long.MaxValue);
@@ -560,6 +610,25 @@ internal sealed class AimLoop : IDisposable
 
             return Math.Abs(sx) / scale <= t.W / 2 && Math.Abs(sy) / scale <= t.H / 2;
         }
+    }
+
+    /// <summary>
+    /// 겨누는 자리(머리)에서 이만큼 떨어진 조준점이 쏠 범위 안인가 - 가로는 몸 너비 × 비율의 반, 세로는 몸 높이 × 비율의 반. 위로는 몸 위 모서리를 넘지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 예전에는 몸 <b>가운데</b>를 중심으로 쟀다. 겨누는 곳은 머리(위에서 22%)라 가운데보다 몸 높이의 28% 위인데, 조준범위를 0.5 로 좁히자 허용이 25% 가 되어
+    /// 머리를 정확히 겨눠도 범위 밖이었다 - 28초 동안 9발만 쐈다(사용자, 2026-09-19). 그래서 범위를 겨누는 자리에 둔다.
+    /// </remarks>
+    private static bool InsideZone(double offsetX, double offsetY, Track t, double fraction)
+    {
+        var halfWidth = t.W / 2 * fraction;
+        var halfHeight = t.H / 2 * fraction;
+
+        // 머리 위쪽은 몸 위 모서리까지만 - 그 위는 허공이다.
+        var above = Math.Min(halfHeight, ScriptDetection.HeadFraction * t.H);
+
+        // offsetY 는 겨누는 자리가 조준점에서 얼마나 떨어졌나(아래가 +). 조준점이 머리보다 위에 있으면 offsetY 가 + 다.
+        return Math.Abs(offsetX) <= halfWidth && offsetY <= above && offsetY >= -halfHeight;
     }
 
     /// <summary>이 프레임에서 아직 "맞았다" 를 안 줬으면 주고 참. 한 프레임에 한 번만 쏘게 - 예측만으로 연달아 누르지 않는다.</summary>
@@ -749,7 +818,7 @@ internal sealed class AimLoop : IDisposable
 
                 _settledFrameTicks = frame;
 
-                if (_flickFromTicks > 0 && Math.Abs(t.Vx) <= StillPxPerMs && Math.Abs(t.Vy) <= StillPxPerMs)
+                if (_flickFromTicks > 0 && Math.Max(_flickMaxSpeed, Speed(t)) <= StillPxPerMs)
                 {
                     var (flickX, flickY) = SentBetween(_flickFromTicks - LatencyMinMs, long.MaxValue);
                     var horizontal = Math.Abs(flickX) >= Math.Abs(flickY);
@@ -800,6 +869,13 @@ internal sealed class AimLoop : IDisposable
                 t.VelocitySamples = 0;
             }
 
+            // 표본을 줄 때 "서 있었나" 는 그 순간 속도가 아니라 <b>닻·꺾기 뒤로 가장 빨랐던 속도</b>로 본다. 옆으로 걷다 서거나 돌아서는 봇을 따라가는 동안 보낸 양이 쌓인 뒤
+            // 마침 속도가 0 근처인 프레임에 표본이 들어가 "많이 보냈는데 조금 좁혀졌다" 가 됐다 - 14~20 짜리 표본이 9개 중 5개를 채워 배율이 3.8 → 5.7 → 8.6 → 12.9 로
+            // 뛰었고, 조준이 좌우로 크게 흔들려 30초 가까이 못 쐈다(사격장 실측 2026-09-19, 맞는 배율 3.5 안팎).
+            var speed = Speed(t);
+            t.AnchorMaxSpeed = Math.Max(t.AnchorMaxSpeed, speed);
+            if (_flickFromTicks > 0) _flickMaxSpeed = Math.Max(_flickMaxSpeed, speed);
+
             // 배율 표본 - <b>닻(멈춰 서 있던 프레임) → 지금</b> 보낸 총량 ÷ 줄어든 거리. 프레임마다 재면 지연 안의 입력이 반영됐는지 몰라 못 믿는데, 닻에서부터 길게 재면
             // 그 모르는 부분(띠 안에 보낸 양)이 총량에 견줘 작아진다 - 15% 아래일 때 한 번 준다. 완전히 멈춰 서기를 기다리면 배율이 많이 틀린 동안에는(끝없이 조금씩
             // 고쳐 가느라) 표본이 영영 안 나온다. 검출이 달리는 중(속도 120px/s 넘게)에는 줄어든 거리에 검출의 움직임이 섞여 안 준다. 닻은 다시 멈춰 서면 새로 놓는다.
@@ -808,7 +884,7 @@ internal sealed class AimLoop : IDisposable
                 var horizontal = Math.Abs(totalX) >= Math.Abs(totalY);
                 var total = horizontal ? totalX : totalY;
                 var band = horizontal ? bandX : bandY;
-                var still = Math.Abs(t.Vx) <= StillPxPerMs && Math.Abs(t.Vy) <= StillPxPerMs;
+                var still = t.AnchorMaxSpeed <= StillPxPerMs;
 
                 if (!t.AnchorUsed && still && Math.Abs(total) >= 60 && Math.Abs(band) <= Math.Abs(total) * 0.15)
                 {
@@ -822,6 +898,7 @@ internal sealed class AimLoop : IDisposable
                     t.AnchorX = obsX;
                     t.AnchorY = obsY;
                     t.AnchorUsed = false;
+                    t.AnchorMaxSpeed = speed;
                 }
             }
 
@@ -896,6 +973,9 @@ internal sealed class AimLoop : IDisposable
 
     /// <summary>두 프레임 사이 자리 변화가 이보다 빠르면(px/ms) 움직인 것이 아니라 다른 검출이거나 사각형이 튄 것으로 본다 - 화면에서 450px/s 로 달리는 검출은 없다.</summary>
     private const double TeleportPxPerMs = 0.45;
+
+    /// <summary>검출의 빠르기(px/ms) - 두 축 가운데 큰 것. <see cref="StillPxPerMs"/> 와 견준다.</summary>
+    private static double Speed(Track t) => Math.Max(Math.Abs(t.Vx), Math.Abs(t.Vy));
 
     /// <summary>검출이 서 있다고 볼 속도(px/ms) - 120px/s. 이보다 빠르면 줄어든 거리에 검출의 움직임이 섞여 배율 표본으로 못 쓴다.</summary>
     private const double StillPxPerMs = 0.12;
@@ -978,6 +1058,7 @@ internal sealed class AimLoop : IDisposable
                 _flickUnsureX = Math.Abs(unsureX);
                 _flickUnsureY = Math.Abs(unsureY);
                 _flickFromTicks = t.SeenTicks;
+                _flickMaxSpeed = Speed(t);
 
                 Logger.Debug($"꺾기 시작: 거리({ex:0}, {ey:0}) 남김({_holdX:0}, {_holdY:0})");
             }
@@ -1076,7 +1157,7 @@ internal sealed class AimLoop : IDisposable
         var age = Math.Max(0, now - t.SeenTicks);
 
         // 화면에 찍힌 검출의 자리도 지연만큼 옛것이다 - 우리 입력만 늦게 보이는 것이 아니다. 그만큼 앞서 겨눈다(150px/s 옆걸음 봇이면 14px - 안 하면 늘 그만큼 뒤를 쏜다).
-        var coast = (Math.Min(age, StaleVelocityMs) + (age <= StaleVelocityMs ? DetectionLeadMs : 0)) * VelocityConfidence(t);
+        var coast = (Math.Min(age, StaleVelocityMs) + (age <= StaleVelocityMs ? LeadMs : 0)) * VelocityConfidence(t);
         var (sx, sy) = SentBetween(t.SeenTicks - _latencyMs, long.MaxValue);
         var scale = Math.Max(0.01, _host.Scale());
 

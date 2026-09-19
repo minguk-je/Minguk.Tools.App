@@ -179,6 +179,12 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>고른 자리를 영역 이미지(PNG)로 저장한다 - 스크립트의 <c>그림찾기</c>·<c>그림누르기</c> 가 쓴다.</summary>
     public ICommand SaveTemplateCommand => new DelegateCommand(DoSaveTemplate, () => SelectedRegion is not null);
 
+    /// <summary>「연속 저장」 - 잠깐 뜨는 것(히트 마커)을 잡으려고 몇 초 동안 들어오는 화면마다 그 자리를 저장한다.</summary>
+    public ICommand SaveTemplateBurstCommand => _saveTemplateBurstCommand ??= new DelegateCommand(DoSaveTemplateBurst, () => SelectedRegion is not null && !_burstSaving);
+
+    private DelegateCommand? _saveTemplateBurstCommand;
+    private bool _burstSaving;
+
     /// <summary>
     /// 미리보기 캔버스가 자리를 옮기거나 크기를 바꿀 때마다 준다. 끄는 동안은 자리만 고치고, 놓으면 저장한다.
     /// </summary>
@@ -408,6 +414,109 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         // 무엇이 저장됐는지 바로 보인다 - 버튼이 뜨기 전 화면이 저장돼도 모르고 지나간 적이 있다(사용자, 2026-09-19 확인 버튼 → "영웅 선" 글자).
         RefreshSavedTemplate();
+    });
+
+    // ── 연속 저장 - 잠깐 뜨는 것 ─────────────────────────────────────────
+
+    /// <summary>누른 뒤 게임으로 넘어갈 틈(ms).</summary>
+    private const int BurstDelayMs = 3000;
+
+    /// <summary>저장하는 동안(ms). 그 사이 한 발 맞히면 된다.</summary>
+    private const int BurstLengthMs = 2000;
+
+    /// <summary>
+    /// 3초 뒤부터 2초 동안 들어오는 화면마다 고른 자리를 프로젝트 폴더 <c>진단\연속저장\자리_000.png</c> 로 저장한다. 앞 장과 같은 그림은 건너뛴다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-19) - 히트 마커는 맞힌 직후 0.2초쯤만 떠서 「영역 이미지 저장」 버튼으로는 그 순간을 못 잡는다. 누르고 게임으로 넘어가 한 발 맞히면
+    /// 그 사이 화면이 여러 장 남는다 - 탐색기로 폴더를 열어 주니 마커가 찍힌 것을 골라 Resources 로 옮기고 이름(예: 히트마커.png)을 붙이면 된다.
+    /// 화면은 0.1초마다 올라오므로 2초면 20장 안팎이다. 저장하는 동안은 버튼이 꺼진다.
+    /// </remarks>
+    private async void DoSaveTemplateBurst() => await GuardAsync(async () =>
+    {
+        if (SelectedRegion is not { } region) return;
+
+        if (!IsRunning)
+        {
+            StatusText = "먼저 캡처를 시작해 화면을 잡아야 연속 저장을 할 수 있습니다.";
+            return;
+        }
+
+        _burstSaving = true;
+        _saveTemplateBurstCommand?.RaiseCanExecuteChanged();
+
+        try
+        {
+            var cell = SelectedCell;
+            var target = RegionTargets.Of(region, cell)[0];
+            var stem = System.IO.Path.GetFileNameWithoutExtension(TemplateFileName(region, cell));
+            // 고르기 전의 후보라 리소스가 아니다 - 프로젝트 폴더 진단\연속저장(목록에 안 들어간다). 고른 것만 Resources 로 옮긴다.
+            var folder = System.IO.Path.Combine(RecognitionRoot, Minguk.Tools.ViewModels.ScriptProjectWorkspace.DiagnosticsFolder, "연속저장");
+
+            System.IO.Directory.CreateDirectory(folder);
+
+            // 받기를 먼저 켠다 - 리드백을 켜며 세션을 다시 만드는 동안 넘어갈 틈이 흐른다.
+            Hub.WantsFrames = true;
+
+            for (var left = BurstDelayMs / 1000; left > 0; left--)
+            {
+                StatusText = $"연속 저장: {left}초 뒤 시작 - 게임으로 넘어가 맞힐 준비를 하세요.";
+                await System.Threading.Tasks.Task.Delay(1000);
+            }
+
+            StatusText = $"연속 저장 중({BurstLengthMs / 1000}초) - 지금 맞히세요.";
+
+            var end = Environment.TickCount64 + BurstLengthMs;
+            var saved = 0;
+            byte[]? previous = null;
+
+            while (Environment.TickCount64 < end)
+            {
+                if (RegionTargets.TryCrop(Hub, target, out var crop) && crop is not null)
+                {
+                    var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(crop));
+
+                    using var memory = new System.IO.MemoryStream();
+                    encoder.Save(memory);
+                    var bytes = memory.ToArray();
+
+                    // 화면이 안 바뀌었으면(같은 프레임을 또 잘랐으면) 건너뛴다.
+                    if (previous is null || !bytes.AsSpan().SequenceEqual(previous))
+                    {
+                        await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(folder, $"{stem}_{saved:000}.png"), bytes);
+                        previous = bytes;
+                        saved++;
+                    }
+                }
+
+                await System.Threading.Tasks.Task.Delay(30);
+            }
+
+            Logger.Info($"연속 저장: {saved}장 · {folder}");
+
+            if (saved == 0)
+            {
+                StatusText = "연속 저장: 프레임이 안 와 한 장도 못 저장했습니다 - 캡처가 돌고 있는지 보세요.";
+                return;
+            }
+
+            StatusText = $"연속 저장: {saved}장을 진단\\연속저장 에 저장했습니다. 마커가 찍힌 것을 골라 Resources 로 옮기고 이름(예: 히트마커.png)을 붙이세요.";
+
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug(ex, "탐색기를 못 열었다");
+            }
+        }
+        finally
+        {
+            _burstSaving = false;
+            _saveTemplateBurstCommand?.RaiseCanExecuteChanged();
+        }
     });
 
     // ── 저장된 영역 이미지 보기 ──────────────────────────────────────────
