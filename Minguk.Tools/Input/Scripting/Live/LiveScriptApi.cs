@@ -1517,6 +1517,52 @@ public class LiveScriptApi : IDisposable
         };
     }
 
+    // ── 영역 그대로 누르기 ───────────────────────────────────────────────
+
+    /// <summary>
+    /// 이름 붙인 자리(또는 "자리.칸")의 <b>가운데</b> 자리를 준다 - 화면 픽셀. 자리가 없으면 멈춘다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-21) "영역 그냥 누르고 싶은데" - 버튼이 늘 같은 데 있으면 글자·그림을 찾을 것 없이 그 자리를 그냥 누르면 된다.
+    /// 자리는 0~1 비율로 저장되므로 창 크기가 바뀌어도 따라간다. 찾는 것이 없으니 <see cref="PressImage"/>·<see cref="PressText"/> 보다 빠르고 확실하다 -
+    /// 대신 화면이 바뀌어 그 자리에 다른 것이 있어도 그냥 누른다(눌러도 되는지는 <c>글자있나</c>·<c>그림있나</c> 로 먼저 본다).
+    /// </remarks>
+    public ScriptSpot RegionSpot(string name) => Traced("RegionSpot", Quote(name), () => RegionSpotCore(name))!;
+
+    /// <summary>이름 붙인 자리의 가운데를 누른다.</summary>
+    public void PressRegion(string name, object? button = null)
+        => Traced("PressRegion", Quote(name), () =>
+        {
+            var spot = RegionSpotCore(name);
+            ClickAt(spot.CenterX, spot.CenterY, button);
+        });
+
+    public ScriptSpot 영역자리(string 자리) => RegionSpot(자리);
+
+    public void 영역누르기(string 자리) => PressRegion(자리);
+
+    public void 영역누르기(string 자리, object? 버튼) => PressRegion(자리, 버튼);
+
+    private ScriptSpot RegionSpotCore(string name)
+    {
+        var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
+
+        if (!CaptureTargetBounds.TryGet(target, out var bounds))
+            throw Guard("대상 창의 자리를 알 수 없습니다 - 창이 닫혔거나 최소화됐습니다.");
+
+        var book = _host.Regions?.Invoke() ?? throw Guard("영역 목록이 없습니다 - 화면에서 데이터셋 폴더를 골라야 합니다.");
+        var found = book.Resolve(name) ?? throw Guard(MissingRegion(book, name));
+
+        _host.Hub.TryGetFrameSize(out var frameWidth, out var frameHeight);
+
+        // 칸을 줬으면 그 칸, 자리만 줬으면 자리 전체(돌린 칸이면 그 칸을 감싸는 사각형)의 가운데.
+        var area = RegionTargets.Bounds(RegionTargets.Of(found.Region, found.Cell)[0], frameWidth, frameHeight);
+        var center = PreviewInputMapper.MapRatioToScreen(new Point(area.X + (area.Width / 2), area.Y + (area.Height / 2)), bounds);
+
+        return new ScriptSpot((int)Math.Round(center.X), (int)Math.Round(center.Y),
+            (int)Math.Round(area.Width * bounds.Width), (int)Math.Round(area.Height * bounds.Height), name);
+    }
+
     // ── 체력바 - 명중 확인 ───────────────────────────────────────────────
 
     /// <summary>

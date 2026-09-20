@@ -102,6 +102,8 @@ public static class ScriptApiCatalog
         new("HitByHealthBar", "명중했나", "검출, 쏘기전, [ms]", "쏘기 전 체력바(체력바(검출))보다 ms(기본 300) 안에 줄면 true, 그대로면 false, 쏘기 전 값을 모르면 null - var 전 = 체력바(검출); 클릭(); if (명중했나(검출, 전) == false) …", ScriptApiMode.Live),
         new("HitConfirmed", "명중확인", "resource, [ms], [score]", "방금 쏜 것이 맞았는가 - 조준점 둘레에 히트 마커(맞히면 잠깐 뜨는 X)가 ms(기본 300) 안에 뜨면 true. 본보기는 영역 패널의 「연속 저장」 으로 떠서 마커가 찍힌 것을 고른다.", ScriptApiMode.Live),
         new("PressImage", "그림누르기", "resource, [score], [name]", "본보기 그림을 찾아 그 가운데를 누른다. 찾았으면 true - 그림누르기(\"사격장.png\").", ScriptApiMode.Live),
+        new("PressRegion", "영역누르기", "name, [button]", "이름 붙인 영역(또는 \"영역.구역\")의 가운데를 그냥 누른다 - 늘 같은 자리에 있는 버튼은 찾을 것 없이 이쪽이 빠르다. 영역누르기(\"시작버튼\")", ScriptApiMode.Live),
+        new("RegionSpot", "영역자리", "name", "이름 붙인 영역의 가운데 자리(화면 픽셀)와 크기. 눌러 보기 전에 어디인지 볼 때. var 자리 = 영역자리(\"시작버튼\"); 출력(자리.x);", ScriptApiMode.Live),
         new("Key", "키", "name", "이름으로 키 한 번. \"F\", \"Space\", \"Enter\", \"Ctrl+Shift+1\".", ScriptApiMode.Live),
         new("KeyDown", "누르기", "name", "키를 누른 채로 둔다. 떼기 전까지.", ScriptApiMode.Live),
         new("KeyUp", "떼기", "name", "누르고 있던 키를 뗀다.", ScriptApiMode.Live),

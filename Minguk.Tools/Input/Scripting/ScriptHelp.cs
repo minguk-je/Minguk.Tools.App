@@ -48,7 +48,7 @@ public static class ScriptHelp
 
         ["Detections"] = Detections, ["NearestDetection"] = Detections, ["TargetDetection"] = Detections, ["ReleaseTarget"] = Detections, ["WaitDetection"] = Detections,
 
-        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen, ["HitConfirmed"] = Screen, ["HealthBar"] = Detections, ["HitByHealthBar"] = Detections,
+        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen, ["PressRegion"] = Screen, ["RegionSpot"] = Screen, ["HitConfirmed"] = Screen, ["HealthBar"] = Detections, ["HitByHealthBar"] = Detections,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
         ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow, ["RunProject"] = Flow, ["MoveToProject"] = Flow,
@@ -86,6 +86,8 @@ public static class ScriptHelp
         ["HealthBar"] = "출력($\"체력 {체력바(검출):P0}\");",
         ["HitConfirmed"] = "클릭();\nif (!명중확인(\"히트마커.png\"))   // 0.3초 안에 히트 마커가 안 뜨면 빗나감\n    빗나감++;",
         ["PressImage"] = "if (!그림누르기(\"사격장.png\")) 출력(\"사격장 카드가 안 보인다\");",
+        ["PressRegion"] = "영역누르기(\"시작버튼\");            // 영역 패널에서 만든 자리의 가운데를 그냥 누른다\n영역누르기(\"메뉴.닫기\", \"Right\");",
+        ["RegionSpot"] = "var 자리 = 영역자리(\"시작버튼\");\n출력($\"{자리.x}, {자리.y} 크기 {자리.너비}x{자리.높이}\");",
         ["Wait"] = "쉬기(300);",
         ["IsStopped"] = "while (!중지되었나())\n{\n    // 반복할 일\n    쉬기(10);\n}",
         ["Print"] = "출력($\"탄약 {숫자읽기(\"탄약\")}\");",

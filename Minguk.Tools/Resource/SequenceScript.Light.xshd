@@ -160,6 +160,8 @@
             <Word>MoveBy</Word><Word>상대이동</Word>
             <Word>MoveCursor</Word><Word>커서이동</Word>
             <Word>HitConfirmed</Word><Word>명중확인</Word>
+            <Word>PressRegion</Word><Word>영역누르기</Word>
+            <Word>RegionSpot</Word><Word>영역자리</Word>
             <Word>HealthBar</Word><Word>체력바</Word>
             <Word>HitByHealthBar</Word><Word>명중했나</Word>
             <Word>MoveToProject</Word><Word>프로젝트이동</Word>
