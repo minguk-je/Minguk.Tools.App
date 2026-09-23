@@ -15,7 +15,11 @@ namespace Minguk.Tools.Markup.Regions;
 public sealed record RegionEdit(NamedRegion Region, Rect Rect, bool Completed);
 
 /// <summary>칸을 끌어 옮기거나 크기·각도를 바꾼 결과. <see cref="Rect"/> 는 자리 기준 0~1(돌리기 전 상자), <see cref="Angle"/> 은 도.</summary>
-public sealed record CellEdit(NamedRegion Region, RegionCell Cell, Rect Rect, double Angle, bool Completed);
+public sealed record CellEdit(NamedRegion Region, RegionCell Cell, Rect Rect, double Angle, bool Completed)
+{
+    /// <summary>마스크 꼭짓점을 고쳤으면 새 다각형(칸 기준 0~1), 아니면 null(그대로 둔다).</summary>
+    public IReadOnlyList<Point>? Mask { get; init; }
+}
 
 /// <summary>
 /// 미리보기 그림 위에 이름 붙인 자리(<see cref="RegionItem"/>)와 그 안의 칸(<see cref="RegionCellItem"/>)을 놓는 캔버스. 영역 지정 중에만 마우스를 받는다.
@@ -309,6 +313,7 @@ public sealed class RegionCanvas : Canvas
 
             if (ReferenceEquals(item, _dragging)) continue;
 
+            item.DisplayMask = cell.Mask;
             item.CellAngle = cell.Angle;
             Place(item, RegionGeometry.CellToCanvas(cell.Rect, regionCanvas), area, source);
         }
@@ -511,11 +516,113 @@ public sealed class RegionCanvas : Canvas
         ReportCell(item, rect, angle, owner, completed: false);
     }
 
+    // ── 마스크 꼭짓점 ────────────────────────────────────────────────────
+    //    칸 어도너 위의 꼭짓점·변 가운데 손잡이(RegionMaskEditor)가 부른다. 좌표는 칸 안(돌린 좌표계) 픽셀을 칸 기준 0~1 로 바꾼 것 -
+    //    Mouse.GetPosition(칸) 이 칸의 회전까지 풀어 준다. 끄는 동안은 항목(DisplayMask)만 고치고 올리며, 놓으면(EndDrag) 저장한다.
+
+    /// <summary>이번 끌기가 마스크 꼭짓점 끌기인가 - 놓을 때 상자 대신 마스크를 올린다.</summary>
+    private bool _maskDragging;
+
+    /// <summary>꼭짓점 끌기를 시작한다(손잡이를 누른 순간). 하네스도 부른다.</summary>
+    public void BeginMaskDrag(RegionCellItem item)
+    {
+        BeginDrag(item);
+        _maskDragging = true;
+    }
+
+    /// <summary>꼭짓점 끌기를 마친다 - 움직였으면 마스크를 저장하라고 올린다. 하네스도 부른다.</summary>
+    public void EndMaskDrag(RegionCellItem item) => EndDrag(item);
+
+    /// <summary>끄는 중인 꼭짓점을 지금 마우스 자리로.</summary>
+    internal void DragMaskVertex(RegionCellItem item, int index)
+    {
+        if (!ReferenceEquals(item, _dragging)) return;
+
+        MoveMaskVertex(item, index, Mouse.GetPosition(item));
+    }
+
+    /// <summary>꼭짓점 하나를 칸 안 자리(칸 좌표 픽셀, 돌리기 전)로 옮긴다. 칸 밖으로는 안 나간다. 하네스가 마우스 없이 부른다.</summary>
+    public void MoveMaskVertex(RegionCellItem item, int index, Point local)
+    {
+        var points = item.DisplayMask.ToArray();
+        var (width, height) = SizeOf(item);
+
+        if (index < 0 || index >= points.Length || width <= 0 || height <= 0) return;
+
+        var ratio = new Point(Math.Round(Math.Clamp(local.X / width, 0, 1), 4), Math.Round(Math.Clamp(local.Y / height, 0, 1), 4));
+
+        if (points[index] == ratio) return;
+
+        points[index] = ratio;
+        _dragMoved = true;
+        item.DisplayMask = points;
+        ReportMask(item, points, completed: false);
+    }
+
+    /// <summary>
+    /// <paramref name="after"/> 번 꼭짓점과 다음 꼭짓점 사이(변 가운데)에 꼭짓점을 넣고 그 번호를 준다 - 변 가운데 손잡이를 끌기 시작할 때. 저장은 놓을 때.
+    /// </summary>
+    public int InsertMaskVertex(RegionCellItem item, int after)
+    {
+        var points = item.DisplayMask.ToList();
+
+        if (points.Count < 3 || after < 0 || after >= points.Count) return -1;
+
+        var a = points[after];
+        var b = points[(after + 1) % points.Count];
+
+        points.Insert(after + 1, new Point(Math.Round((a.X + b.X) / 2, 4), Math.Round((a.Y + b.Y) / 2, 4)));
+        _dragMoved = true;
+        item.DisplayMask = points;
+        ReportMask(item, points, completed: false);
+
+        return after + 1;
+    }
+
+    /// <summary>꼭짓점을 뺀다(오른쪽 버튼). 셋은 남긴다 - 그보다 적으면 다각형이 아니다. 바로 저장한다. 뺐으면 참.</summary>
+    public bool RemoveMaskVertex(RegionCellItem item, int index)
+    {
+        var points = item.DisplayMask.ToList();
+
+        if (points.Count <= 3 || index < 0 || index >= points.Count) return false;
+
+        points.RemoveAt(index);
+        item.DisplayMask = points;
+        ReportMask(item, points, completed: true);
+
+        return true;
+    }
+
+    private static (double Width, double Height) SizeOf(FrameworkElement item)
+        => (double.IsNaN(item.Width) ? item.ActualWidth : item.Width, double.IsNaN(item.Height) ? item.ActualHeight : item.Height);
+
+    private void ReportMask(RegionCellItem item, IReadOnlyList<Point> mask, bool completed)
+    {
+        if (item is not { Region: { } region, Cell: { } cell }) return;
+
+        // 상자·각도는 칸의 저장값 그대로 - 마스크만 바뀌었다(캔버스 픽셀을 다시 비율로 바꾸면 반올림으로 칸이 살짝 움직인다).
+        var edit = new CellEdit(region, cell, cell.Rect, cell.Angle, completed) { Mask = mask };
+
+        if (CellEditCommand?.CanExecute(edit) == true) CellEditCommand.Execute(edit);
+    }
+
     internal void EndDrag(RegionItemBase item)
     {
         if (!ReferenceEquals(_dragging, item)) return;
 
         _dragging = null;
+
+        var maskDragging = _maskDragging;
+        _maskDragging = false;
+
+        if (maskDragging)
+        {
+            if (_dragMoved && item is RegionCellItem cellItem) ReportMask(cellItem, cellItem.DisplayMask, completed: true);
+
+            _drillCandidate = null;
+            _dragMoved = false;
+            return;
+        }
 
         // 눌렀다 뗀 것은 고르기일 뿐이다. 안 움직였는데 "옮겼다" 고 저장하면 안 된다.
         if (_dragMoved)

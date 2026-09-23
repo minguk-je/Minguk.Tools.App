@@ -93,6 +93,11 @@ Minguk.Tools    Minguk.Tools.Training     ← 모듈. 화면 + 메뉴를 들고 
 - 미리보기 판·입력 전달 도구 줄은 `Views/Parts`(`CapturePreviewPanel`·`PreviewForwardBar`). 겹그림은 판의 `Overlay`, 영역 편집기는 `Editor` 자리.
 - **본보기 그림**(2026-09-18): 그림으로 된 메뉴·아이콘은 영역 패널의 `[본보기로 저장]` 으로 `Resources\<영역이름>.png` 를 만들고 스크립트가 `그림누르기("사격장.png")` 로 찾아 누른다
   (`Vision/Matching/TemplateMatch` - 정규화 상호상관, 계단 셋 1/8→1/2→원본, 1080p 0.5초). 밝기는 견디고 크기는 못 견딘다. 자세한 것은 `docs/실시간-스크립트.md`.
+  - **마스크**(2026-09-23, 사용자 "폴리곤 식의 구역을 자유롭게 지정해서 이부분만 매칭"): 구역의 다각형(`RegionCell.Mask`, 구역 기준 0~1)을 영역 패널 `[마스크]` 로 놓고 꼭짓점 손잡이(`RegionMaskEditor`, 칸 어도너 위 층)로 고친다.
+    저장하면 밖이 투명한 PNG - **알파가 곧 마스크**라 그림찾기 API 는 그대로다. 알파는 본보기만 본다(`GrayImage.From(..., useAlpha: true)`, 화면 조각은 안 본다).
+- **미니맵 방향**(2026-09-23, 사용자 "미니맵으로 방향 보면서 처리가 가능해?"): 자동 이동이 안 되는 곳에서 미니맵 화살표로 몸 방위를, 노란 마커로 목표 방위를 읽어 걷는다
+  (`방위()`·`목표방위()`·`가기(방위, 밀리초)`, `Vision/Minimap`). 준비는 「미니맵」 이름의 영역 + 도구 줄 `[미니맵 익히기]` 한 번.
+  **화살표는 몸 방향이지 카메라 방향이 아니다**(마우스만 돌리면 안 돈다) - 그래서 회전 배율도 걷기를 끼워 잰다. 자세한 것·실측은 `docs/실시간-스크립트.md`.
 - **자리 안 칸**(2026-09-16): 자리(`NamedRegion`)는 그룹, 칸(`RegionCell`, 자리 기준 0~1, 돌릴 수 있음)만 읽는다. 스크립트 `읽기("자리.칸")`. 칸은 별개 항목·별개 어도너(`RegionCellItem`·`RegionCellAdorner`),
   영역 패널은 트리. 자세한 것·함정(돌린 칸 손잡이 변위는 돌린 좌표계, 회전은 픽셀 공간)은 `docs/검출.md`.
   - **칸은 자리를 "뚫어야" 클릭을 받는다**(2026-09-18, 사용자 "클릭하니까 처음부터 구역이 선택되네"): 새 자리는 자리와 같은 크기의 「전체」 칸으로 시작하고 칸이 자리 위 형제(z 순서 위)라,
@@ -256,6 +261,7 @@ dotnet run --project Minguk.Tools.Tests -c Debug -- --vision              # 라�
 dotnet run --project Minguk.Tools.Tests -c Debug -- --aim                 # 조준 스레드만 - 가짜 게임으로 꺾기·지나침·달리는 검출·배율 배우기 + 메뉴 글자 찾기 (안전, 40초)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --check-project=<.mtsproj> # 작업공간의 진짜 프로젝트가 컴파일되는지만 (안전, 안 돌린다)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --ocr                 # 글자 읽기만 (안전, CPU·GPU)
+dotnet run --project Minguk.Tools.Tests -c Debug -- --minimap             # 미니맵 방향 읽기만 - 실제 게임 화면 5장 (안전, 1초)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --ocr-bench --project=<프로젝트> --truth=Minguk.Tools.Tests/OcrData/<게임>.tsv   # 실제 화면 정답률
 dotnet run --project Minguk.Tools.Tests -c Debug -- --solution            # 솔루션·공유 프로젝트·탐색기·▶ 찾기 (안전, 임시 폴더)
 dotnet run --project Minguk.Tools.Tests -c Debug -- --script-screen       # 스크립트 화면 화면 밖 띄우기·바인딩 오류·정렬·PNG (안전)

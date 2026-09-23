@@ -133,6 +133,8 @@ public static class TemplateMatch
     {
         if (toX < fromX || toY < fromY) return [];
 
+        if (needle.Mask is not null) return ScanMasked(haystack, needle, fromX, fromY, toX, toY);
+
         var count = needle.Width * needle.Height;
         double needleSum = 0, needleSquares = 0;
 
@@ -210,6 +212,116 @@ public static class TemplateMatch
                     cross += Dot(pixelSpan.Slice(((row + ny) * spanW) + col, needle.Width), needleSpan.Slice(ny * needle.Width, needle.Width));
 
                 found.Add((fromX + col, fromY + row, cross / count / (Math.Sqrt(variance) * needleDeviation)));
+            }
+
+            perRow[row] = found;
+        });
+
+        var results = new List<(int, int, double)>();
+        foreach (var row in perRow) results.AddRange(row);
+
+        return results;
+    }
+
+    /// <summary>마스크 안 무게의 합이 이보다 작으면(픽셀 수) 견줄 것이 없다고 본다 - 몇 픽셀짜리 마스크는 어디에나 맞는다.</summary>
+    public const double MinimumMaskedArea = 12;
+
+    /// <summary>
+    /// 마스크 본보기(<see cref="GrayImage.Mask"/>)의 정규화 상호상관 - 본보기·조각 모두 마스크 안 픽셀만으로 평균·분산을 낸다.
+    /// </summary>
+    /// <remarks>
+    /// <b>식</b>(무게 w, 무게 합 W) - 본보기 평균 n̄ = Σwn/W, 조각 평균 p̄ = Σwp/W. 분자 Σw(n−n̄)(p−p̄) 는 Σw(n−n̄)=0 이라 Σw(n−n̄)p 하나가 된다.
+    /// 조각의 합·제곱합이 창마다 무게가 달라 적분 영상을 못 쓰므로, 곱의 합이 셋이다(분자·Σwp·Σwp²) - 마스크 없는 것보다 두세 배 느리다.
+    ///
+    /// <b>조각 값에서 128 을 뺀다</b> - 상관은 조각 값을 한 값만큼 옮겨도 그대로인데(Σw(n−n̄)=0), float 로 제곱합을 쌓을 때 값이 작아야 분산(제곱합 − 평균²)이
+    /// 덜 뭉개진다.
+    /// </remarks>
+    private static List<(int X, int Y, double Score)> ScanMasked(GrayImage haystack, GrayImage needle, int fromX, int fromY, int toX, int toY)
+    {
+        var count = needle.Width * needle.Height;
+        var mask = needle.Mask!;
+        var weights = new float[count];
+        double total = 0, needleSum = 0;
+
+        for (var i = 0; i < count; i++)
+        {
+            weights[i] = mask[i] / 255f;
+            total += weights[i];
+            needleSum += weights[i] * needle.Pixels[i];
+        }
+
+        if (total < MinimumMaskedArea) return [];
+
+        var needleMean = needleSum / total;
+        double needleVariance = 0;
+
+        for (var i = 0; i < count; i++)
+        {
+            var d = needle.Pixels[i] - needleMean;
+            needleVariance += weights[i] * d * d;
+        }
+
+        needleVariance /= total;
+
+        // 마스크 안이 한 가지 색이면 견줄 것이 없다.
+        if (needleVariance <= 1e-6) return [];
+
+        var needleDeviation = Math.Sqrt(needleVariance);
+
+        // 무게를 곱해 둔 평균 뺀 본보기 - 마스크 밖은 0 이라 분자에 안 들어간다.
+        var centered = new float[count];
+        for (var i = 0; i < count; i++) centered[i] = (float)(weights[i] * (needle.Pixels[i] - needleMean));
+
+        var width = haystack.Width;
+        var spanW = (toX - fromX) + needle.Width;
+        var spanH = (toY - fromY) + needle.Height;
+        var pixels = new float[spanW * spanH];
+        var squares = new float[spanW * spanH];
+
+        for (var y = 0; y < spanH; y++)
+        {
+            var source = ((fromY + y) * width) + fromX;
+
+            for (var x = 0; x < spanW; x++)
+            {
+                var value = haystack.Pixels[source + x] - 128f;
+
+                pixels[(y * spanW) + x] = value;
+                squares[(y * spanW) + x] = value * value;
+            }
+        }
+
+        var rows = (toY - fromY) + 1;
+        var perRow = new List<(int, int, double)>[rows];
+
+        System.Threading.Tasks.Parallel.For(0, rows, row =>
+        {
+            var found = new List<(int, int, double)>((toX - fromX) + 1);
+            var pixelSpan = new ReadOnlySpan<float>(pixels);
+            var squareSpan = new ReadOnlySpan<float>(squares);
+            var needleSpan = new ReadOnlySpan<float>(centered);
+            var weightSpan = new ReadOnlySpan<float>(weights);
+
+            for (var col = 0; col <= toX - fromX; col++)
+            {
+                double cross = 0, sum = 0, sumSquares = 0;
+
+                for (var ny = 0; ny < needle.Height; ny++)
+                {
+                    var at = ((row + ny) * spanW) + col;
+                    var weightRow = weightSpan.Slice(ny * needle.Width, needle.Width);
+
+                    cross += Dot(pixelSpan.Slice(at, needle.Width), needleSpan.Slice(ny * needle.Width, needle.Width));
+                    sum += Dot(pixelSpan.Slice(at, needle.Width), weightRow);
+                    sumSquares += Dot(squareSpan.Slice(at, needle.Width), weightRow);
+                }
+
+                var mean = sum / total;
+                var variance = (sumSquares / total) - (mean * mean);
+
+                if (variance <= 1e-6) continue;
+
+                found.Add((fromX + col, fromY + row, cross / total / (Math.Sqrt(variance) * needleDeviation)));
             }
 
             perRow[row] = found;

@@ -188,6 +188,17 @@ public abstract partial class RecognizingCaptureViewModelBase
     private bool _burstSaving;
 
     /// <summary>
+    /// 고른 구역(영역을 골랐으면 첫 구역)에 본보기 마스크(다각형)를 놓는다 - 영역 이미지는 그 안만 담고 그림찾기는 그 안만 견준다.
+    /// </summary>
+    public ICommand AddMaskCommand => new DelegateCommand(DoAddMask, () => SelectedRegion is not null);
+
+    /// <summary>고른 구역의 마스크를 지운다 - 다시 사각형 전체를 견준다.</summary>
+    public ICommand RemoveMaskCommand => new DelegateCommand(DoRemoveMask, () => MaskTarget?.HasMask == true);
+
+    /// <summary>마스크를 놓을 구역 - 고른 구역, 없으면 고른 영역의 첫 구역(영역 이미지 저장이 자르는 것과 같다).</summary>
+    private RegionCell? MaskTarget => SelectedCell is { } cell && SelectedRegion?.Cells.Contains(cell) == true ? cell : SelectedRegion?.Cells.FirstOrDefault();
+
+    /// <summary>
     /// 미리보기 캔버스가 자리를 옮기거나 크기를 바꿀 때마다 준다. 끄는 동안은 자리만 고치고, 놓으면 저장한다.
     /// </summary>
     public ICommand RegionEditCommand => new DelegateCommand<RegionEdit>(ApplyRegionEdit);
@@ -200,10 +211,18 @@ public abstract partial class RecognizingCaptureViewModelBase
         edit.Cell.Rect = edit.Rect;
         edit.Cell.Angle = edit.Angle;
 
+        if (edit.Mask is not null) edit.Cell.Mask = edit.Mask;
+
         if (!edit.Completed) return;
 
         SaveRegions();
         RegionsRevision++;
+
+        if (edit.Mask is not null)
+        {
+            StatusText = $"「{edit.Region.Name}.{edit.Cell.Name}」 마스크를 고쳤습니다 - 꼭짓점 {edit.Cell.Mask.Count}개. 영역 이미지를 다시 저장해야 그림찾기에 들어갑니다.";
+            return;
+        }
 
         StatusText = $"「{edit.Region.Name}.{edit.Cell.Name}」 구역을 고쳤습니다 - " +
                      $"{edit.Cell.X * 100:0.0}%, {edit.Cell.Y * 100:0.0}%  {edit.Cell.Width * 100:0.0}% x {edit.Cell.Height * 100:0.0}%" +
@@ -419,6 +438,10 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         System.IO.Directory.CreateDirectory(folder);
 
+        // 구역에 마스크(다각형)가 있으면 밖을 투명으로 - 그림찾기가 투명한 곳을 빼고 견준다(사용자, 2026-09-23).
+        var masked = target.Cell.HasMask;
+        if (masked) crop = Vision.Matching.PolygonMask.Apply(crop, target.Cell.Mask);
+
         var path = System.IO.Path.Combine(folder, name);
         var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
 
@@ -426,8 +449,8 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         using (var file = System.IO.File.Create(path)) encoder.Save(file);
 
-        StatusText = $"영역 이미지를 저장했습니다 - {name} ({crop.PixelWidth}x{crop.PixelHeight}). 스크립트에서 그림누르기(\"{name}\") 로 부릅니다.";
-        Logger.Info($"영역 이미지 저장: {path} ({crop.PixelWidth}x{crop.PixelHeight})");
+        StatusText = $"영역 이미지를 저장했습니다 - {name} ({crop.PixelWidth}x{crop.PixelHeight}{(masked ? ", 마스크 안만 견줌" : string.Empty)}). 스크립트에서 그림누르기(\"{name}\") 로 부릅니다.";
+        Logger.Info($"영역 이미지 저장: {path} ({crop.PixelWidth}x{crop.PixelHeight}){(masked ? $" 마스크 꼭짓점 {target.Cell.Mask.Count}개" : string.Empty)}");
 
         // 무엇이 저장됐는지 바로 보인다 - 버튼이 뜨기 전 화면이 저장돼도 모르고 지나간 적이 있다(사용자, 2026-09-19 확인 버튼 → "영웅 선" 글자).
         RefreshSavedTemplate();
@@ -491,6 +514,9 @@ public abstract partial class RecognizingCaptureViewModelBase
             {
                 if (RegionTargets.TryCrop(Hub, target, out var crop) && crop is not null)
                 {
+                    // 영역 이미지 저장과 같게 - 고른 것을 Resources 로 옮기면 마스크째 그대로 쓴다.
+                    if (target.Cell.HasMask) crop = Vision.Matching.PolygonMask.Apply(crop, target.Cell.Mask);
+
                     var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
                     encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(crop));
 
@@ -692,6 +718,46 @@ public abstract partial class RecognizingCaptureViewModelBase
                      (IsInputForwardingEnabled ? " 미리보기에서 옮기려면 입력 전달을 끄세요." : string.Empty);
 
         OnCellCreated(cell);
+    });
+
+    /// <summary>
+    /// 구역에 처음 모양(가운데 팔각형)의 마스크를 놓고 그 구역을 고른다 - 꼭짓점 손잡이는 고른 구역에만 뜬다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-23) "Adorner 안에 폴리곤 식의 구역을 자유롭게 지정해서 이부분만 매칭 해라". 점을 찍어 그리는 대신 처음 모양을 고쳐 간다
+    /// (<see cref="RegionMaskEditor"/> - 빈 곳 누르기는 이미 새 영역이다).
+    /// </remarks>
+    private void DoAddMask() => Guard(() =>
+    {
+        if (SelectedRegion is not { } region || MaskTarget is not { } cell) return;
+
+        var created = !cell.HasMask;
+
+        if (created)
+        {
+            cell.Mask = Vision.Matching.PolygonMask.DefaultShape();
+            SaveRegions();
+        }
+
+        SelectedCell = cell;
+        ShowRegions = true;
+        RegionsRevision++;
+
+        var how = "꼭짓점(노랑 네모)을 끌어 모양을 맞추고, 변 가운데 점을 끌면 꼭짓점이 늘고, 꼭짓점을 오른쪽 버튼으로 누르면 빠집니다. 다 맞췄으면 [영역 이미지 저장].";
+
+        StatusText = (created ? $"「{region.Name}.{cell.Name}」 에 마스크를 놓았습니다 - " : $"「{region.Name}.{cell.Name}」 에는 이미 마스크가 있습니다 - ") + how +
+                     (IsInputForwardingEnabled ? " 미리보기에서 고치려면 입력 전달을 끄세요." : string.Empty);
+    });
+
+    private void DoRemoveMask() => Guard(() =>
+    {
+        if (SelectedRegion is not { } region || MaskTarget is not { HasMask: true } cell) return;
+
+        cell.Mask = [];
+        SaveRegions();
+        RegionsRevision++;
+
+        StatusText = $"「{region.Name}.{cell.Name}」 마스크를 지웠습니다 - 영역 이미지를 다시 저장하면 사각형 전체를 견줍니다.";
     });
 
     private void DoRemoveRegion() => Guard(() =>

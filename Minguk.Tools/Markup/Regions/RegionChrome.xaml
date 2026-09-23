@@ -31,6 +31,15 @@
     <SolidColorBrush x:Key="RegionCellSelectedBrush"
                      Color="#FF2EE06A" />
 
+    <!--
+        본보기 마스크(사용자, 2026-09-23 "폴리곤 식의 구역을 자유롭게 지정해서 이부분만 매칭") - 노랑 테두리, 다각형 밖은 어둡게.
+        자리(하늘색·마젠타)·칸(초록)과 한눈에 갈린다. 어둡게 칠한 곳이 영역 이미지에서 투명해져 그림찾기가 안 보는 곳이다.
+    -->
+    <SolidColorBrush x:Key="RegionMaskBrush"
+                     Color="#FFFFD60A" />
+    <SolidColorBrush x:Key="RegionMaskShadeBrush"
+                     Color="#80000000" />
+
     <!-- 고른 자리의 보이는 손잡이 - 라벨링 캔버스처럼 6px 네모. 잡는 것은 위 투명 Thumb 이다. -->
     <Style x:Key="RegionGrip"
            TargetType="{x:Type Rectangle}">
@@ -224,6 +233,15 @@
                     <Grid DataContext="{Binding RelativeSource={RelativeSource TemplatedParent}}">
                         <regions:RegionMoveThumb Cursor="SizeAll"
                                                  Template="{StaticResource RegionMoveThumbTemplate}" />
+                        <!-- 마스크 - 밖은 어둡게, 테두리는 노랑. 마스크가 없으면 Data 가 null 이라 안 그린다. -->
+                        <Path Fill="{StaticResource RegionMaskShadeBrush}"
+                              Data="{Binding MaskShade}"
+                              IsHitTestVisible="False" />
+                        <Path Stroke="{StaticResource RegionMaskBrush}"
+                              StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=1.5}"
+                              Data="{Binding MaskOutline}"
+                              IsHitTestVisible="False"
+                              StrokeLineJoin="Round" />
                         <Rectangle Stroke="{StaticResource RegionCellBrush}"
                                    StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=1}"
                                    IsHitTestVisible="False"
@@ -374,6 +392,54 @@
                                 </TextBlock>
                             </Border>
                         </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        마스크 꼭짓점 손잡이 - 노랑 네모 8px(검은 테). 잡히는 곳은 투명 12px. 점 자리에 왼쪽 위가 놓이므로(RegionMaskEditor) 절반만큼 왼쪽 위로 비켜 그린다.
+    -->
+    <Style TargetType="{x:Type regions:RegionMaskVertexThumb}">
+        <Setter Property="Cursor" Value="SizeAll" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type regions:RegionMaskVertexThumb}">
+                    <Grid Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=12}"
+                          Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=12}"
+                          Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='-6,-6,0,0'}"
+                          Background="Transparent">
+                        <Rectangle Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=8}"
+                                   Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=8}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Fill="{StaticResource RegionMaskBrush}"
+                                   Stroke="Black"
+                                   StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=1}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 마스크 변 가운데 손잡이 - 속이 빈 작은 동그라미. 끌면 꼭짓점이 는다. -->
+    <Style TargetType="{x:Type regions:RegionMaskMidThumb}">
+        <Setter Property="Cursor" Value="Cross" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type regions:RegionMaskMidThumb}">
+                    <Grid Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
+                          Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=10}"
+                          Margin="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter='-5,-5,0,0'}"
+                          Background="Transparent">
+                        <Ellipse Width="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=6}"
+                                 Height="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=6}"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Fill="#99000000"
+                                 Stroke="{StaticResource RegionMaskBrush}"
+                                 StrokeThickness="{Binding InverseZoom, Converter={StaticResource Zoom}, ConverterParameter=1}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

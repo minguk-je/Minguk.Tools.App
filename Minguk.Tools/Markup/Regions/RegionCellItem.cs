@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
@@ -59,4 +62,84 @@ public sealed class RegionCellItem : RegionItemBase
     public override double Angle => CellAngle;
 
     protected override Adorner CreateAdorner() => new RegionCellAdorner(this);
+
+    // ── 마스크 ───────────────────────────────────────────────────────────
+
+    public static readonly DependencyProperty DisplayMaskProperty = DependencyProperty.Register(
+        nameof(DisplayMask), typeof(IReadOnlyList<Point>), typeof(RegionCellItem),
+        new PropertyMetadata(Array.Empty<Point>(), (d, _) => ((RegionCellItem)d).OnDisplayMaskChanged()));
+
+    /// <summary>그릴 마스크 다각형(칸 기준 0~1). 끄는 동안은 칸의 저장값보다 앞선다. 점 셋 미만이면 없다.</summary>
+    public IReadOnlyList<Point> DisplayMask
+    {
+        get => (IReadOnlyList<Point>?)GetValue(DisplayMaskProperty) ?? [];
+        set => SetValue(DisplayMaskProperty, value);
+    }
+
+    /// <summary>마스크가 바뀌었다 - 꼭짓점 손잡이(<see cref="RegionMaskEditor"/>)가 다시 놓는다.</summary>
+    public event EventHandler? DisplayMaskChanged;
+
+    public static readonly DependencyProperty MaskOutlineProperty = DependencyProperty.Register(
+        nameof(MaskOutline), typeof(Geometry), typeof(RegionCellItem), new PropertyMetadata(null));
+
+    /// <summary>마스크 테두리(칸 픽셀). 마스크가 없으면 null.</summary>
+    public Geometry? MaskOutline
+    {
+        get => (Geometry?)GetValue(MaskOutlineProperty);
+        private set => SetValue(MaskOutlineProperty, value);
+    }
+
+    public static readonly DependencyProperty MaskShadeProperty = DependencyProperty.Register(
+        nameof(MaskShade), typeof(Geometry), typeof(RegionCellItem), new PropertyMetadata(null));
+
+    /// <summary>마스크 밖(칸 상자에서 다각형을 뺀 곳) - 어둡게 칠해 "여기는 안 본다" 를 보인다. 마스크가 없으면 null.</summary>
+    public Geometry? MaskShade
+    {
+        get => (Geometry?)GetValue(MaskShadeProperty);
+        private set => SetValue(MaskShadeProperty, value);
+    }
+
+    private void OnDisplayMaskChanged()
+    {
+        UpdateMaskGeometry();
+        DisplayMaskChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        UpdateMaskGeometry();
+    }
+
+    private void UpdateMaskGeometry()
+    {
+        var points = DisplayMask;
+        var width = RenderSize.Width;
+        var height = RenderSize.Height;
+
+        if (points.Count < 3 || width <= 0 || height <= 0)
+        {
+            MaskOutline = null;
+            MaskShade = null;
+            return;
+        }
+
+        var polygon = new StreamGeometry();
+
+        using (var context = polygon.Open())
+        {
+            context.BeginFigure(new Point(points[0].X * width, points[0].Y * height), isFilled: true, isClosed: true);
+            context.PolyLineTo([.. points.Skip(1).Select(p => new Point(p.X * width, p.Y * height))], isStroked: true, isSmoothJoin: false);
+        }
+
+        polygon.Freeze();
+
+        var shade = new GeometryGroup { FillRule = FillRule.EvenOdd };
+        shade.Children.Add(new RectangleGeometry(new Rect(0, 0, width, height)));
+        shade.Children.Add(polygon);
+        shade.Freeze();
+
+        MaskOutline = polygon;
+        MaskShade = shade;
+    }
 }

@@ -757,7 +757,7 @@ internal static class ScriptScreenProbe
 
         var rows = vm.HelpRows;
         var missing = Minguk.Tools.Input.Scripting.ScriptApiCatalog.Entries.Where(e => !rows.Any(r => r.English == e.Signature)).Select(e => e.Name).ToList();
-        var others = rows.Count(r => r.Group.StartsWith("9.", StringComparison.Ordinal));
+        var others = rows.Count(r => string.Equals(r.Group, Minguk.Tools.Input.Scripting.ScriptHelp.Other, StringComparison.Ordinal));
 
         if (sameGroup && missing.Count == 0 && others == 0)
             Console.WriteLine($"[PASS] 도움말 패널 - 솔루션 탐색기 탭 그룹 · {rows.Count}줄 · 함수 {Minguk.Tools.Input.Scripting.ScriptApiCatalog.Entries.Count}개 빠짐없이 분류됨");

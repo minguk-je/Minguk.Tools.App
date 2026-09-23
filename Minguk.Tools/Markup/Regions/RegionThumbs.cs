@@ -82,6 +82,18 @@ public sealed class RegionResizeThumb : Thumb
     }
 }
 
+/// <summary>마스크 꼭짓점 손잡이(<see cref="RegionMaskEditor"/>). 모양은 <c>RegionChrome.xaml</c>.</summary>
+public sealed class RegionMaskVertexThumb : Thumb
+{
+    public RegionMaskVertexThumb() => Style = RegionChromeResources.StyleFor(typeof(RegionMaskVertexThumb));
+}
+
+/// <summary>마스크 변 가운데 손잡이 - 끌면 그 자리에 꼭짓점이 는다. 모양은 <c>RegionChrome.xaml</c>.</summary>
+public sealed class RegionMaskMidThumb : Thumb
+{
+    public RegionMaskMidThumb() => Style = RegionChromeResources.StyleFor(typeof(RegionMaskMidThumb));
+}
+
 /// <summary>
 /// 칸 위쪽의 회전 손잡이. 참조한 <c>RotateThumb</c> - 자리 어도너에서는 뺐던 것을 칸 어도너에 되살렸다(사용자 2026-09-16 「대각선 사각」).
 /// </summary>

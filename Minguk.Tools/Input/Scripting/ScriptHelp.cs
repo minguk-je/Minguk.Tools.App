@@ -33,9 +33,18 @@ public static class ScriptHelp
     private const string Detections = "4. 검출";
     private const string DetectionProperties = "5. 검출의 속성 (검출.이름 처럼)";
     private const string Screen = "6. 화면 글자 읽기";
-    private const string Flow = "7. 흐름 · 출력";
-    private const string Resources = "8. 리소스 · 설정";
-    private const string Other = "9. 기타";
+    private const string Minimap = "7. 미니맵 · 방향";
+    private const string Flow = "8. 흐름 · 출력";
+    private const string Resources = "9. 리소스 · 설정";
+
+    /// <summary>
+    /// 분류를 안 적은 함수가 모이는 자리. 번호를 크게 두어 어떤 정렬에서도 맨 끝이고, 분류를 하나 더해도 번호가 안 겹친다.
+    /// </summary>
+    /// <remarks>
+    /// 검사(<c>--script-screen</c>)가 이 이름으로 「분류 안 된 함수」를 센다 - 글자를 박아 두면 분류를 늘릴 때 어긋난다
+    /// (미니맵 분류를 넣어 리소스가 9번이 되자 검사가 리소스 8줄을 기타로 셌다, 2026-09-23).
+    /// </remarks>
+    public const string Other = "99. 기타";
 
     /// <summary>함수 영문 이름 → 분류.</summary>
     private static readonly Dictionary<string, string> GroupOf = new(StringComparer.Ordinal)
@@ -51,6 +60,9 @@ public static class ScriptHelp
         ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen, ["PressRegion"] = Screen, ["RegionSpot"] = Screen, ["HitConfirmed"] = Screen, ["HealthBar"] = Detections, ["HitByHealthBar"] = Detections,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
+        ["Heading"] = Minimap, ["TargetBearing"] = Minimap, ["TargetBearings"] = Minimap, ["BearingTo"] = Minimap,
+        ["Face"] = Minimap, ["GoTo"] = Minimap, ["GoToTarget"] = Minimap, ["TurnScale"] = Minimap,
+
         ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow, ["RunProject"] = Flow, ["MoveToProject"] = Flow,
 
         ["ResourcePath"] = Resources, ["ResourceText"] = Resources, ["ResourceBytes"] = Resources, ["PlaySound"] = Resources,
@@ -60,6 +72,15 @@ public static class ScriptHelp
     /// <summary>함수 영문 이름 → 예시.</summary>
     private static readonly Dictionary<string, string> ExampleOf = new(StringComparer.Ordinal)
     {
+        ["Heading"] = "출력(방위());   // 0=북 · 90=동 · 180=남 · 270=서",
+        ["TargetBearing"] = "var 목표 = 목표방위();\nif (목표 != null) 출력(목표);   // 방위 237도 · 거리 105px · 돌 각 -14도",
+        ["TargetBearings"] = "foreach (var 표 in 목표방위들()) 출력(표);",
+        ["BearingTo"] = "if (Math.Abs(방위차(90)) > 10) 바라보기(90);",
+        ["Face"] = "바라보기(180);   // 남쪽을 보도록 마우스를 돌린다(한 번짜리)",
+        ["GoTo"] = "가기(237, 3000);   // 남서쪽으로 3초 걷는다 - 걷는 동안 미니맵을 보며 고친다",
+        ["GoToTarget"] = "if (!목표로가기(5000)) 출력(\"미니맵에 목표 표시가 없습니다\");",
+        ["TurnScale"] = "출력(회전배율());   // 도/카운트. 모르면 그 자리에서 재서 적어 둔다",
+
         ["Type"] = "글자(\"안녕하세요\");",
         ["TypeLine"] = "줄입력(\"/초대 친구\");",
         ["Key"] = "키(\"R\");\n키(\"Ctrl+Shift+1\");",

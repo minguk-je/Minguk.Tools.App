@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
@@ -162,6 +162,15 @@ internal static partial class Program
         if (args.Contains("--template"))
         {
             TestTemplateMatch();
+            TestMaskedTemplate();
+            foreach (var line in Results) Console.WriteLine(line);
+            return _failures == 0 ? 0 : 1;
+        }
+
+        // 미니맵 방향 읽기만(1초 안) - 실제 게임 화면 다섯 장으로 방위·마커·눈금을 본다.
+        if (args.Contains("--minimap"))
+        {
+            TestMinimap();
             foreach (var line in Results) Console.WriteLine(line);
             return _failures == 0 ? 0 : 1;
         }
@@ -246,6 +255,9 @@ internal static partial class Program
         TestRegionChrome();
         TestRegionCanvasSelection();
         TestTemplateMatch();
+        TestMaskedTemplate();
+        TestRegionMaskEditing();
+        TestMinimap();
         TestCompiledScript();
         TestTrainingActivity();
         TestVideoRecorder();

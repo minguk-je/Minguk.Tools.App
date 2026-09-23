@@ -96,16 +96,29 @@ public sealed class RegionCellAdorner : Adorner
         // 캔버스 1px(화면 8~10px) 단위로 뭉개 그리는 손잡이는 안쪽·잡는 띠는 바깥쪽으로 갈렸다(사용자, 2026-09-17, --script-screen 이 잡는다).
         UseLayoutRounding = false;
         _chrome = new RegionCellChrome { DataContext = item };
-        _visuals = new VisualCollection(this) { _chrome };
+
+        // 마스크 꼭짓점은 크기 손잡이 위 - 나중에 넣은 시각 자식이 위에 그려지고 먼저 잡힌다.
+        MaskEditor = new RegionMaskEditor(item);
+        _visuals = new VisualCollection(this) { _chrome, MaskEditor };
     }
+
+    /// <summary>마스크 꼭짓점 손잡이 층. 하네스가 본다.</summary>
+    public RegionMaskEditor MaskEditor { get; }
 
     protected override int VisualChildrenCount => _visuals.Count;
 
     protected override Visual GetVisualChild(int index) => _visuals[index];
 
+    protected override Size MeasureOverride(Size constraint)
+    {
+        MaskEditor.Measure(constraint);
+        return base.MeasureOverride(constraint);
+    }
+
     protected override Size ArrangeOverride(Size finalSize)
     {
         _chrome.Arrange(new Rect(finalSize));
+        MaskEditor.Arrange(new Rect(finalSize));
         return finalSize;
     }
 }

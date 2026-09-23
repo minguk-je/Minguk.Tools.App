@@ -52,7 +52,7 @@ public enum LiveScriptOutcome
 /// 상속으로 그대로 스코프에 들어와, 스크립팅 전역과 똑같이 이름만으로 불린다. 진입점 이름을 우리가 쥐므로
 /// Roslyn 을 올려도 안 깨진다 - 스크립팅 내부(제출 factory)에 기대지 않는다.
 /// </remarks>
-public class LiveScriptApi : IDisposable
+public partial class LiveScriptApi : IDisposable
 {
     private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
@@ -1824,7 +1824,8 @@ public class LiveScriptApi : IDisposable
         image.EndInit();
         image.Freeze();
 
-        var gray = Vision.Matching.GrayImage.From(image);
+        // 알파가 마스크다 - 영역 이미지 저장이 구역의 다각형 밖을 투명으로 칠해 둔다(PolygonMask). 투명한 곳은 대조에서 빠진다.
+        var gray = Vision.Matching.GrayImage.From(image, useAlpha: true);
         _templates[resourceName] = gray;
 
         return gray;

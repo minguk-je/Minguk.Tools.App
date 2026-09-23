@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using System.Windows;
@@ -63,6 +65,46 @@ public sealed class RegionCell : INotifyPropertyChanged
             Width = Math.Round(value.Width, 4);
             Height = Math.Round(value.Height, 4);
         }
+    }
+
+    /// <summary>
+    /// 본보기 마스크 - 칸 기준 0~1 다각형(돌리기 전 상자 안). 비었으면(점 셋 미만) 없다. 저장한다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-23) "Adorner 안에 폴리곤 식의 구역을 자유롭게 지정해서 이부분만 매칭" - 「영역 이미지 저장」 이 다각형 밖을 투명으로 칠해 PNG 에 담고,
+    /// <c>그림찾기</c>·<c>그림누르기</c>·<c>명중확인</c> 은 투명한 곳을 빼고 견준다(<see cref="Matching.PolygonMask"/>·<see cref="Matching.TemplateMatch"/>).
+    /// 둥근 아이콘·뒤가 비치는 버튼·안쪽 그림만 바뀌는 카드용. 글자 읽기는 이것을 안 본다.
+    /// 칸 기준이라 칸을 옮기고 늘리고 돌리면 따라간다 - 저장되는 그림이 곧 칸을 세운 그림이기 때문이다.
+    /// </remarks>
+    [JsonIgnore]
+    public IReadOnlyList<Point> Mask
+    {
+        get => _mask;
+        set
+        {
+            var points = value is null ? [] : value.Select(p => new Point(Math.Round(Math.Clamp(p.X, 0, 1), 4), Math.Round(Math.Clamp(p.Y, 0, 1), 4))).ToArray();
+
+            if (_mask.SequenceEqual(points)) return;
+
+            _mask = points;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Mask)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasMask)));
+        }
+    }
+
+    private Point[] _mask = [];
+
+    /// <summary>마스크가 있는가(점 셋 이상).</summary>
+    [JsonIgnore]
+    public bool HasMask => _mask.Length >= 3;
+
+    /// <summary>파일 모양 - <c>"mask": [[x, y], ...]</c>. 없으면 적지 않는다(옛 파일과 같은 모양).</summary>
+    [JsonPropertyName("mask")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double[][]? MaskData
+    {
+        get => HasMask ? [.. _mask.Select(p => new[] { p.X, p.Y })] : null;
+        set => Mask = value is null ? [] : [.. value.Where(pair => pair is { Length: >= 2 }).Select(pair => new Point(pair[0], pair[1]))];
     }
 
     /// <summary>숫자만 보인다 - 이 칸의 읽은 글에서 숫자 덩어리만 남긴다(<see cref="NamedRegion.NumbersOnly"/>). 저장한다.</summary>

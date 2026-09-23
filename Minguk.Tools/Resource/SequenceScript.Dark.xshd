@@ -205,6 +205,14 @@
             <Word>SettingList</Word><Word>설정목록</Word>
             <Word>HasSetting</Word><Word>설정있나</Word>
             <Word>PlaySound</Word><Word>소리</Word>
+            <Word>Heading</Word><Word>방위</Word>
+            <Word>TargetBearing</Word><Word>목표방위</Word>
+            <Word>TargetBearings</Word><Word>목표방위들</Word>
+            <Word>BearingTo</Word><Word>방위차</Word>
+            <Word>Face</Word><Word>바라보기</Word>
+            <Word>GoTo</Word><Word>가기</Word>
+            <Word>GoToTarget</Word><Word>목표로가기</Word>
+            <Word>TurnScale</Word><Word>회전배율</Word>
         </Keywords>
 
         <!--  이름 뒤에 ( 가 오면 메서드 - 스크립트 안에서 만든 함수도 VS 처럼 칠해진다.  -->
