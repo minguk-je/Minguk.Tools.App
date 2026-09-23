@@ -27,15 +27,16 @@ public sealed record ScriptHelpRow(string Group, string Name, string English, st
 /// </remarks>
 public static class ScriptHelp
 {
-    private const string Basics = "1. 기본 사용법";
-    private const string Keyboard = "2. 키보드";
-    private const string Mouse = "3. 마우스";
-    private const string Detections = "4. 검출";
-    private const string DetectionProperties = "5. 검출의 속성 (검출.이름 처럼)";
-    private const string Screen = "6. 화면 글자 읽기";
-    private const string Minimap = "7. 미니맵 · 방향";
-    private const string Flow = "8. 흐름 · 출력";
-    private const string Resources = "9. 리소스 · 설정";
+    private const string Basics = "01. 기본 사용법";
+    private const string Keyboard = "02. 키보드";
+    private const string Mouse = "03. 마우스";
+    private const string Detections = "04. 검출";
+    private const string DetectionProperties = "05. 검출의 속성 (검출.이름 처럼)";
+    private const string Screen = "06. 화면 글자 읽기";
+    private const string Minimap = "07. 미니맵 · 방향";
+    private const string Llm = "08. LLM 판단";
+    private const string Flow = "09. 흐름 · 출력";
+    private const string Resources = "10. 리소스 · 설정";
 
     /// <summary>
     /// 분류를 안 적은 함수가 모이는 자리. 번호를 크게 두어 어떤 정렬에서도 맨 끝이고, 분류를 하나 더해도 번호가 안 겹친다.
@@ -63,6 +64,8 @@ public static class ScriptHelp
         ["Heading"] = Minimap, ["TargetBearing"] = Minimap, ["TargetBearings"] = Minimap, ["BearingTo"] = Minimap,
         ["Face"] = Minimap, ["GoTo"] = Minimap, ["GoToTarget"] = Minimap, ["TurnScale"] = Minimap,
 
+        ["SituationSummary"] = Llm, ["Judge"] = Llm, ["JudgeScreen"] = Llm, ["Ask"] = Llm, ["AskScreen"] = Llm, ["CorrectJudgement"] = Llm, ["SetJudgeRules"] = Llm,
+
         ["Wait"] = Flow, ["IsStopped"] = Flow, ["Print"] = Flow, ["Watch"] = Flow, ["Stop"] = Flow, ["RunProject"] = Flow, ["MoveToProject"] = Flow,
 
         ["ResourcePath"] = Resources, ["ResourceText"] = Resources, ["ResourceBytes"] = Resources, ["PlaySound"] = Resources,
@@ -80,6 +83,14 @@ public static class ScriptHelp
         ["GoTo"] = "가기(237, 3000);   // 남서쪽으로 3초 걷는다 - 걷는 동안 미니맵을 보며 고친다",
         ["GoToTarget"] = "if (!목표로가기(5000)) 출력(\"미니맵에 목표 표시가 없습니다\");",
         ["TurnScale"] = "출력(회전배율());   // 도/카운트. 모르면 그 자리에서 재서 적어 둔다",
+
+        ["SituationSummary"] = "var 상황 = 상황요약(\"지역, 퀘스트, 체력, 검출\");\n출력(상황);   // 지역: 붉은 가시 왕관섬\\n퀘스트: …\\n검출: 늑대 2(가장 가까운 것 왼쪽 가까이)",
+        ["Judge"] = "if (숫자읽기(\"체력\") < 30) { 키(\"F1\"); continue; }   // 분명한 규칙은 스크립트가 먼저\n\nvar 할일 = 판단(상황요약(\"퀘스트, 검출, 가방\"), \"공격, 줍기, 대화, 사냥터로이동\");\nif (할일 == \"공격\") 키(\"1\");",
+        ["JudgeScreen"] = "var 창 = 화면판단(\"지금 뜬 창은 무엇인가? 글: \" + 읽기(\"창제목\"), \"퀘스트수락, 보상, 상점, 없음\", \"가운데창\");",
+        ["Ask"] = "출력(물어보기(\"이 퀘스트 글을 한 줄로 줄여 줘: \" + 읽기(\"퀘스트\")));",
+        ["AskScreen"] = "출력(화면물어보기(\"화면에 몬스터가 있나? 있으면 몇 마리?\"));",
+        ["CorrectJudgement"] = "판단고치기(\"체력 90%. 가방 80/80. 몬스터 없음.\", \"귀환\");   // 다음부터 예시로 넣는다",
+        ["SetJudgeRules"] = "판단규칙(\"1. 체력 30% 아래면 물약\\n2. 가방이 가득 차면 귀환\");",
 
         ["Type"] = "글자(\"안녕하세요\");",
         ["TypeLine"] = "줄입력(\"/초대 친구\");",

@@ -402,15 +402,18 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 사용자(2026-09-18) "사격장 글이 아니고 큰 이미지인데" - 그림으로 된 메뉴 버튼은 영역 이미지 한 장과 견줘 찾는다(<see cref="Vision.Matching.TemplateMatch"/>).
     /// 영역 이미지를 만드는 길이 이것뿐이다 - 자리를 미리보기에서 맞추고 이 단추를 누른다. 같은 이름이면 덮어쓴다(다시 맞춰 저장하는 일이 잦다).
     /// </remarks>
-    private async void DoSaveTemplate() => await GuardAsync(async () =>
+    private async void DoSaveTemplate() => await GuardAsync(async () => await SaveTemplateAsync());
+
+    /// <summary>고른 자리(칸)를 영역 이미지로 저장하고 파일 이름을 준다. 못 했으면 null(이유는 상태 줄에). 스크립트 도우미가 기다려 부른다.</summary>
+    protected async System.Threading.Tasks.Task<string?> SaveTemplateAsync()
     {
-        if (SelectedRegion is not { } region) return;
+        if (SelectedRegion is not { } region) return null;
 
         if (!IsRunning)
         {
             StatusText = "먼저 캡처를 시작해 화면을 잡아야 영역 이미지를 만들 수 있습니다.";
             Logger.Info("영역 이미지 저장 못 함: 캡처가 멈춰 있다");
-            return;
+            return null;
         }
 
         // 받기를 켠다. 허브는 받기를 멈출 때 프레임을 버리므로 여기서 잘리는 것은 켠 뒤에 들어온 지금 화면이다(PerceptionHub.WantsFrames).
@@ -430,7 +433,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             StatusText = "프레임이 안 옵니다 - 캡처가 돌고 있는지, CPU 리드백이 켜져 있는지 보세요.";
             Logger.Warn($"영역 이미지 저장 못 함: 5초 안에 프레임이 안 왔다 ({region.Name})");
-            return;
+            return null;
         }
 
         var name = TemplateFileName(region, cell);
@@ -454,7 +457,9 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         // 무엇이 저장됐는지 바로 보인다 - 버튼이 뜨기 전 화면이 저장돼도 모르고 지나간 적이 있다(사용자, 2026-09-19 확인 버튼 → "영웅 선" 글자).
         RefreshSavedTemplate();
-    });
+
+        return name;
+    }
 
     // ── 연속 저장 - 잠깐 뜨는 것 ─────────────────────────────────────────
 
@@ -688,6 +693,33 @@ public abstract partial class RecognizingCaptureViewModelBase
 
         if (SelectedRegion is { } created) OnRegionCreated(created);
     }
+
+    /// <summary>
+    /// 이름을 정해 자리를 넣고 고른다 - 이름 칸은 열지 않는다(스크립트 도우미가 이름을 이미 정했다). 이름이 겹치면 덮어쓰니 부르는 쪽이 먼저 가른다.
+    /// </summary>
+    protected NamedRegion? CreateRegion(string name, Rect rect)
+    {
+        RegionBook.Put(new NamedRegion { Name = name, Rect = rect });
+        SaveRegions();
+        LoadRegions();
+
+        SelectedCell = null;
+        SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+        ShowRegions = true;
+
+        return SelectedRegion;
+    }
+
+    /// <summary>자리를 지운다(스크립트 도우미가 [버리기] 때).</summary>
+    protected void DeleteRegion(NamedRegion region)
+    {
+        RegionBook.Remove(region.Name);
+        SaveRegions();
+        LoadRegions();
+    }
+
+    /// <summary>그 이름의 본보기 파일(Resources\이름.png)이 이미 있는가 - 도우미가 이름을 고를 때 덮어쓰지 않게.</summary>
+    protected bool TemplateExists(string name) => System.IO.File.Exists(System.IO.Path.Combine(TemplateFolder, name + ".png"));
 
     /// <summary>새 자리가 생겼다. 화면은 영역 목록을 앞으로 띄우고 이름 칸을 편집 상태로 연다.</summary>
     protected virtual void OnRegionCreated(NamedRegion region) { }

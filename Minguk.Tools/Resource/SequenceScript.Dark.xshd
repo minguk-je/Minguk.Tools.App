@@ -213,6 +213,13 @@
             <Word>GoTo</Word><Word>가기</Word>
             <Word>GoToTarget</Word><Word>목표로가기</Word>
             <Word>TurnScale</Word><Word>회전배율</Word>
+            <Word>SituationSummary</Word><Word>상황요약</Word>
+            <Word>Judge</Word><Word>판단</Word>
+            <Word>JudgeScreen</Word><Word>화면판단</Word>
+            <Word>Ask</Word><Word>물어보기</Word>
+            <Word>AskScreen</Word><Word>화면물어보기</Word>
+            <Word>CorrectJudgement</Word><Word>판단고치기</Word>
+            <Word>SetJudgeRules</Word><Word>판단규칙</Word>
         </Keywords>
 
         <!--  이름 뒤에 ( 가 오면 메서드 - 스크립트 안에서 만든 함수도 VS 처럼 칠해진다.  -->

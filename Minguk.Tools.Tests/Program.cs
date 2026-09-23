@@ -175,6 +175,9 @@ internal static partial class Program
             return _failures == 0 ? 0 : 1;
         }
 
+        // 진짜 Ollama 로 판단 시간·정확도(아이온2 사냥 장면 8개) - 모델 올리기만 1~2분.
+        if (args.Contains("--llm")) return LiveLlmCheck.Run(args);
+
         // 조준 스레드만 - 닫힌 고리 가짜 허브로 붙기·지나침·배율 배우기(약 30초). 입력은 가짜 어댑터라 안 나간다.
         if (args.Contains("--aim")) return RunAimOnly();
 
@@ -257,6 +260,8 @@ internal static partial class Program
         TestTemplateMatch();
         TestMaskedTemplate();
         TestRegionMaskEditing();
+        TestLlm();
+        TestScriptAssistant();
         TestMinimap();
         TestCompiledScript();
         TestTrainingActivity();

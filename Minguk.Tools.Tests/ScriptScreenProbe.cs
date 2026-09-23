@@ -127,6 +127,7 @@ internal static class ScriptScreenProbe
                 Console.WriteLine($"[INFO] 화면을 찍었다: {output}");
 
                 failures += await CheckHelpPanel(window, vm, Path.ChangeExtension(output, null) + "-help.png");
+                failures += await CheckAssistantPanel(window, vm, Path.ChangeExtension(output, null) + "-assistant.png");
             }
             catch (Exception ex)
             {
@@ -779,6 +780,44 @@ internal static class ScriptScreenProbe
 
         Render(window, output);
         Console.WriteLine($"[INFO] 도움말 화면을 찍었다: {output}");
+
+        return failures;
+    }
+
+    /// <summary>
+    /// AI 도우미 패널(사용자, 2026-09-24 "현재 화면 미리보기로 보여주고 오른쪽 위에 버튼 눌러줘") - 영역 패널과 같은 아래 탭 줄에 있고, 요청·할 일·코드 칸이 뜨고 정렬이 맞는다.
+    /// </summary>
+    /// <remarks>모델은 부르지 않는다 - 칸에 값만 넣어 모양을 본다(진짜 모델은 <c>--llm</c>).</remarks>
+    private static async System.Threading.Tasks.Task<int> CheckAssistantPanel(Window window, ScriptStudioViewModel vm, string output)
+    {
+        var failures = 0;
+        var dock = Descendants<DevExpress.Xpf.Docking.DockLayoutManager>(window).FirstOrDefault();
+        var assistant = dock?.GetItem("AssistantPanel") as DevExpress.Xpf.Docking.LayoutPanel;
+        var regions = dock?.GetItem("RegionsPanel") as DevExpress.Xpf.Docking.LayoutPanel;
+
+        if (assistant is null) { Console.WriteLine("[FAIL] AI 도우미 패널이 없다"); return 1; }
+
+        dock!.DockController.Activate(assistant);
+        vm.AssistantRequest = "오른쪽 위 설정 버튼 눌러줘";
+        vm.AssistantCode = "그림누르기(\"설정버튼.png\");   // 오른쪽 위 톱니 모양 설정 버튼";
+        await Pump(400);
+
+        var sameGroup = regions?.Parent is DevExpress.Xpf.Docking.TabbedGroup group && ReferenceEquals(assistant.Parent, group);
+        var edits = assistant.Content is DependencyObject body ? Descendants<DevExpress.Xpf.Editors.TextEdit>(body).Where(t => t.IsVisible).ToList() : [];
+        var shown = edits.Any(t => (t.EditValue as string)?.Contains("설정 버튼 눌러줘", StringComparison.Ordinal) == true)
+                    && edits.Any(t => (t.EditValue as string)?.Contains("그림누르기", StringComparison.Ordinal) == true);
+
+        if (sameGroup && shown)
+            Console.WriteLine($"[PASS] AI 도우미 패널 - 영역 패널과 같은 탭 줄 · 요청·코드 칸이 보인다(칸 {edits.Count}개)");
+        else { Console.WriteLine($"[FAIL] AI 도우미 패널 - 같은 탭 줄 {sameGroup} · 칸 보임 {shown} (칸 {edits.Count}개)"); failures++; }
+
+        failures += VerticalAlignmentCheck.Report((FrameworkElement)window.Content, "스크립트 화면(AI 도우미)");
+
+        Render(window, output);
+        Console.WriteLine($"[INFO] AI 도우미 화면을 찍었다: {output}");
+
+        vm.AssistantRequest = null;
+        vm.AssistantCode = null;
 
         return failures;
     }

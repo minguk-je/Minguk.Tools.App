@@ -493,6 +493,9 @@
                                        CommandParameter="RegionsPanel"
                                        Content="영역(_R)" />
                     <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
+                                       CommandParameter="AssistantPanel"
+                                       Content="AI 도우미(_A)" />
+                    <dxb:BarButtonItem Command="{Binding ShowToolWindowCommand}"
                                        CommandParameter="BreakpointsPanel"
                                        Content="중단점(_B)" />
                     <dxb:BarItemSeparator />
@@ -1351,6 +1354,68 @@
                                         </DockPanel>
                                     </Border>
                                 </Grid>
+                            </DockPanel>
+                        </dxdo:LayoutPanel>
+
+                        <!--
+                            ── AI 도우미 ── 지금 미리보기 화면을 로컬 그림 모델에 보여 주고 요청대로 한 줄씩 코드를 넣는다(사용자, 2026-09-24
+                            "현재 화면 미리보기로 보여주고 오른쪽 위에 버튼 눌러줘. 이러면 스크립트 내용에 순차 적으로 만들어 주는거야").
+                            찾은 자리는 영역으로 미리보기에 띄워 사람이 확인한 뒤 [넣기] - 누르기는 본보기를 저장하고 그림누르기 로 적는다.
+                            모델·주소는 프로젝트 폴더의 llm.json. 설계 docs/superpowers/specs/2026-09-24-스크립트-도우미-design.md.
+                        -->
+                        <dxdo:LayoutPanel x:Name="AssistantPanel"
+                                          Caption="AI 도우미">
+                            <DockPanel>
+                                <dxb:ToolBarControl AllowCustomizationMenu="False"
+                                                    AllowQuickCustomization="False"
+                                                    DockPanel.Dock="Top"
+                                                    ShowBackground="False"
+                                                    TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
+                                                    TextBlock.FontSize="{DynamicResource BaseFontSize}">
+                                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                                       Command="{Binding AssistantInsertCommand}"
+                                                       Content="넣기"
+                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
+                                                       Hint="아래 코드를 편집기 커서 줄 다음에 넣는다(Ctrl+Z 로 되돌린다).&#10;누르기·나타날때까지면 먼저 그 영역을 영역 이미지(Resources\이름.png)로 저장한다 - 영역이 버튼에 맞는지 미리보기에서 보고 누른다." />
+                                    <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                                       Command="{Binding AssistantDiscardCommand}"
+                                                       Content="버리기"
+                                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/delete.png'}"
+                                                       Hint="이 계획을 버리고 도우미가 만든 영역을 지운다. 묻는 중이면 멈춘다." />
+                                    <dxb:BarItemSeparator />
+                                    <dxb:BarStaticItem Content="{Binding AssistantStatus}" />
+                                </dxb:ToolBarControl>
+                                <dxlc:LayoutControl Padding="6"
+                                                    Orientation="Vertical">
+                                    <dxlc:LayoutItem Label="요청">
+                                        <dxe:ButtonEdit AllowDefaultButton="False"
+                                                        EditValue="{Binding AssistantRequest, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                        NullText="예: 오른쪽 위 설정 버튼 눌러줘 · 보상 창이 뜰 때까지 기다려 · F 눌러">
+                                            <dxe:ButtonEdit.Buttons>
+                                                <dxe:ButtonInfo Command="{Binding AssistantSendCommand}"
+                                                                Content="보내기" />
+                                            </dxe:ButtonEdit.Buttons>
+                                            <dxmvvm:Interaction.Behaviors>
+                                                <dxmvvm:KeyToCommand Command="{Binding AssistantSendCommand}"
+                                                                     KeyGesture="Enter" />
+                                            </dxmvvm:Interaction.Behaviors>
+                                        </dxe:ButtonEdit>
+                                    </dxlc:LayoutItem>
+                                    <dxlc:LayoutItem Label="할 일">
+                                        <dxe:TextEdit EditValue="{Binding AssistantSay, Mode=OneWay}"
+                                                      IsReadOnly="True" />
+                                    </dxlc:LayoutItem>
+                                    <dxlc:LayoutItem VerticalAlignment="Stretch"
+                                                     Label="코드">
+                                        <dxe:TextEdit MinHeight="48"
+                                                      VerticalContentAlignment="Top"
+                                                      FontFamily="Consolas"
+                                                      AcceptsReturn="True"
+                                                      EditValue="{Binding AssistantCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      TextWrapping="Wrap"
+                                                      VerticalScrollBarVisibility="Auto" />
+                                    </dxlc:LayoutItem>
+                                </dxlc:LayoutControl>
                             </DockPanel>
                         </dxdo:LayoutPanel>
 

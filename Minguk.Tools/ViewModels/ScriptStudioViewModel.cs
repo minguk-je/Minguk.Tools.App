@@ -540,8 +540,9 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
     /// 4: 영역 패널을 아래 탭에서 솔루션 탐색기 탭 그룹으로(2026-09-15, 사용자).
     /// 5: 솔루션 탐색기 탭 그룹에 도움말 패널(2026-09-15, 사용자).
     /// 6: 영역 패널을 아래 탭 줄 맨 왼쪽으로(2026-09-16, 사용자 - 칸이 늘어 좁고, 탭이 있다는 것을 알아채게).
+    /// 7: 아래 탭 줄 영역 옆에 AI 도우미 패널(2026-09-24, 사용자 "현재 화면 미리보기로 보여주고 오른쪽 위에 버튼 눌러줘").
     /// </summary>
-    private const int DockLayoutVersion = 6;
+    private const int DockLayoutVersion = 7;
 
     // ── 미리보기 | 문서 나누기 ──────────────────────────────────────────
 

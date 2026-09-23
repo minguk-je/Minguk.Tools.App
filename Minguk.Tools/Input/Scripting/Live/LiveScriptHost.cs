@@ -51,6 +51,11 @@ public sealed class LiveScriptHost
     public string? ResourceRoot { get; init; }
 
     /// <summary>
+    /// 언어 모델 길을 만든다(<c>판단</c>·<c>화면판단</c>). 없으면 <see cref="Minguk.Tools.Llm.LlmAdapterFactory"/> - 검사가 가짜 모델을 꽂는다.
+    /// </summary>
+    public Func<Minguk.Tools.Llm.LlmSpec, Minguk.Tools.Llm.ILlmAdapter>? Llm { get; init; }
+
+    /// <summary>
     /// 스크립트의 <c>프로젝트실행("이름")</c> 이 부른다 - 같은 솔루션의 다른 프로젝트를 찾아 이어서 돌리고 오류를 준다.
     /// 두 번째 인자는 이 host 자신(<c>this</c>) - 새 host 를 만들 때 자리·틀 삼아 복사해 쓰라고 준다.
     /// </summary>
@@ -127,6 +132,7 @@ public sealed class LiveScriptHost
         OcrFor = OcrFor,
         Regions = Regions,
         ResourceRoot = resourceRoot,
+        Llm = Llm,
         RunProject = RunProject,
         Moves = Moves,
         Print = Print,
