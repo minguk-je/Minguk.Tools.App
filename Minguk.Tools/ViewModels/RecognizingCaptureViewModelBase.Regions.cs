@@ -279,6 +279,60 @@ public abstract partial class RecognizingCaptureViewModelBase
         SelectedRegion = Regions.FirstOrDefault(r => string.Equals(r.Name, keep, StringComparison.OrdinalIgnoreCase)) ?? Regions.FirstOrDefault();
         SelectedCell = keepCell is null ? null : SelectedRegion?.FindCell(keepCell);
         UpdateLiveRegions();
+        WatchRegionsFile();
+    }
+
+    // ── regions.json 을 밖에서 고치면 다시 읽는다 ─────────────────────────
+
+    /// <summary>지켜보는 regions.json - 프로젝트를 바꾸면 새 파일로 갈아 건다.</summary>
+    private readonly System.Reactive.Disposables.SerialDisposable _regionsFileWatch = new();
+
+    private string? _watchedRegionsPath;
+
+    /// <summary>이 화면이 마지막으로 읽거나 쓴 regions.json 의 글 - 파일 글이 이것과 같으면 제가 저장한 것이라 넘긴다.</summary>
+    private string? _regionsFileText;
+
+    /// <summary>
+    /// regions.json 을 지켜본다. 밖(다른 창의 앱·하네스 <c>--apply-regions</c>·편집기)에서 바뀌면 목록을 다시 읽는다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-24) 로그 - 앱이 켜진 채 파일에 영역 셋을 더했더니, 앱은 옛 목록(10개)을 든 채로 있다가 다음 저장에서 파일을 덮어 셋이 사라졌고
+    /// 스크립트는 "「대상」 라는 영역이 없습니다" 로 멈췄다. 스크립트 파일처럼(<see cref="Helper.FileChangeWatcher"/>, 300ms 묶기·잠김 재시도) 바뀐 글을 받아
+    /// 제가 마지막으로 읽거나 쓴 글과 다를 때만 다시 읽는다 - 제 저장이 되돌아온 알림은 글이 같아 넘어간다.
+    /// </remarks>
+    private void WatchRegionsFile()
+    {
+        var path = RegionBook.Path;
+
+        _regionsFileText = ReadRegionsText(path);
+
+        if (string.Equals(path, _watchedRegionsPath, StringComparison.OrdinalIgnoreCase)) return;
+
+        _watchedRegionsPath = path;
+        _regionsFileWatch.Disposable = new Helper.FileChangeWatcher(path, action => System.Windows.Application.Current?.Dispatcher.BeginInvoke(action), OnRegionsFileChanged);
+    }
+
+    private void OnRegionsFileChanged(string text) => Guard(() =>
+    {
+        if (string.Equals(text, _regionsFileText, StringComparison.Ordinal)) return;
+
+        LoadRegions();
+        RegionsRevision++;
+
+        StatusText = $"regions.json 이 밖에서 바뀌어 영역을 다시 읽었습니다 - {Regions.Count}개.";
+        Logger.Info($"영역 목록을 다시 읽었다(밖에서 바뀜): {_watchedRegionsPath} · {Regions.Count}개");
+    });
+
+    private static string? ReadRegionsText(string path)
+    {
+        try
+        {
+            return System.IO.File.Exists(path) ? Helper.FileChangeWatcher.ReadShared(path) : null;
+        }
+        catch (System.IO.IOException)
+        {
+            return null;
+        }
     }
 
     /// <summary>칸마다 저장된 이름. 트리에서 칸 이름을 고치면 옛 이름과 견줘 겹치거나 틀리면 되돌린다.</summary>
@@ -302,6 +356,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         _regionEvents.Clear();
         _cellEvents.Clear();
         _previewRegionEvents.Dispose();
+        _regionsFileWatch.Dispose();
     }
 
     private void OnCellPropertyChanged(RegionCell cell, string? propertyName)
@@ -357,6 +412,9 @@ public abstract partial class RecognizingCaptureViewModelBase
     private void SaveRegions() => Guard(() =>
     {
         RegionBook.Save();
+
+        // 제가 쓴 글을 기억한다 - 파일 감시가 이 저장을 "밖에서 바뀜" 으로 알려 와도 넘기게.
+        _regionsFileText = ReadRegionsText(RegionBook.Path);
         RaisePropertyChanged(nameof(Regions));
     });
 

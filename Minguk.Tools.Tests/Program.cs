@@ -183,6 +183,10 @@ internal static partial class Program
             return _failures == 0 ? 0 : 1;
         }
 
+        if (args.Contains("--hud-bench")) return BenchHudOcr();
+
+        if (ArgValue(args, "--apply-engines=") is { } engineProject) return ApplyHudRegions(engineProject, enginesOnly: true);
+
         if (ArgValue(args, "--apply-regions=") is { } hudProject) return ApplyHudRegions(hudProject);
 
         // 진짜 Ollama 로 판단 시간·정확도(아이온2 사냥 장면 8개) - 모델 올리기만 1~2분.

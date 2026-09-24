@@ -2,7 +2,7 @@
   {
     "name": "지역",
     "x": 0.8609, "y": 0.0681, "width": 0.1156, "height": 0.0236,
-    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": "Windows",
     "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
     "note": "미니맵 위 지역 이름 - 붉은 가시 왕관섬"
   },
@@ -23,14 +23,14 @@
   {
     "name": "게이지",
     "x": 0.8633, "y": 0.2639, "width": 0.1094, "height": 0.0194,
-    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": "PaddleV6TinyGpu",
     "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
     "note": "미니맵 아래 빨간 막대의 % - 퀘스트가 「각성 게이지 100% 도달시 개방」"
   },
   {
     "name": "퀘스트",
     "x": 0.8734, "y": 0.2931, "width": 0.1100, "height": 0.0236,
-    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": "Windows",
     "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
     "note": "퀘스트 목록 첫 줄 제목 - [LV45] 악몽을 보는 데바. 오른쪽 끝까지 넣으면 거기 있는 것을 7 로 읽어 폭을 줄였다 - 긴 제목은 끝이 잘릴 수 있다"
   },
@@ -44,35 +44,35 @@
   {
     "name": "체력",
     "x": 0.3906, "y": 0.8861, "width": 0.0953, "height": 0.0194,
-    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": "Windows",
     "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
     "note": "아래 가운데 빨간 막대 「9,473 / 9,473」 - 숫자들읽기(\"체력\") 가 [현재, 최대]"
   },
   {
     "name": "마나",
     "x": 0.5273, "y": 0.8861, "width": 0.0703, "height": 0.0194,
-    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 3, "ocrEngine": null,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 3, "ocrEngine": "PaddleV6TinyGpu",
     "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
     "note": "아래 가운데 파란 막대 「3,724 / 3,724」 - 숫자들읽기(\"마나\") 가 [현재, 최대]"
   },
   {
     "name": "레벨",
     "x": 0.4906, "y": 0.9111, "width": 0.0180, "height": 0.0222,
-    "live": false, "digits": true, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "live": false, "digits": true, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": "PaddleV6TinyGpu",
     "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
     "note": "아래 가운데 문장 안 숫자 - 46"
   },
   {
     "name": "대상",
     "x": 0.4323, "y": 0.0296, "width": 0.1276, "height": 0.0176,
-    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": "Windows",
     "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
     "note": "위쪽 가운데 대상 창의 레벨+이름 「46 고원 칼니프」 - 대상이 없으면 비어 있다(글자있나(\"대상\")). 이름 길이에 따라 가운데 정렬로 움직여 넉넉히 잡았다"
   },
   {
     "name": "대상거리",
     "x": 0.5583, "y": 0.0296, "width": 0.0260, "height": 0.0176,
-    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": "Windows",
     "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
     "note": "대상까지 거리 「14m」 - 숫자읽기(\"대상거리\")"
   },
