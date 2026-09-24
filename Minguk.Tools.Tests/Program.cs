@@ -185,6 +185,9 @@ internal static partial class Program
 
         if (args.Contains("--hud-bench")) return BenchHudOcr();
 
+        // 영역을 끌어 놓는 순간 미리보기 패널이 움직이는지(임시 솔루션, 커서 안 씀).
+        if (args.Contains("--region-drop")) return RegionDropProbe.Run(int.Parse(ArgValue(args, "--width=") ?? "1600"), int.Parse(ArgValue(args, "--height=") ?? "1000"));
+
         if (ArgValue(args, "--apply-engines=") is { } engineProject) return ApplyHudRegions(engineProject, enginesOnly: true);
 
         if (ArgValue(args, "--apply-regions=") is { } hudProject) return ApplyHudRegions(hudProject);

@@ -84,6 +84,13 @@
     "note": "대상 체력 빨간 막대 - 글자가 없어 OCR 로는 못 읽는다. 자리만 잡아 둔다(막대 색 비율로 읽는 것은 아직 없다)"
   },
   {
+    "name": "줍기",
+    "x": 0.3646, "y": 0.4000, "width": 0.3125, "height": 0.3000,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 1, "ocrEngine": "Windows",
+    "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
+    "note": "캐릭터 둘레 - 물건이 떨어지면 「F 줍기」 안내가 물건 옆에 뜬다(자리가 움직여 넉넉히). 읽기(\"줍기\") 에 「줍기」 가 들었으면 F. 이름표 등 다른 글도 같이 읽힌다"
+  },
+  {
     "name": "재화",
     "x": 0.0313, "y": 0.0014, "width": 0.1523, "height": 0.0194,
     "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,

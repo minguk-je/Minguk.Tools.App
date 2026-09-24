@@ -281,7 +281,9 @@
         <parts:PreviewForwardBar DockPanel.Dock="Top" />
 
         <!-- ── 상태 표시줄 ── 왼쪽 상태 글, 오른쪽 지금 단계 · 검출 결과(스크립트 화면과 같은 자리). -->
-        <dxb:StatusBarControl AllowCustomizationMenu="False"
+        <!-- 높이를 글꼴 크기에서 못 박는다 - 담긴 글에 따라 1px 오르내리면 위의 미리보기가 같이 흔들렸다(스크립트 화면과 같다, FontSizeToBarHeightConverter). -->
+        <dxb:StatusBarControl Height="{Binding (TextBlock.FontSize), RelativeSource={RelativeSource Self}, Converter={markup:FontSizeToBarHeightConverter}}"
+                              AllowCustomizationMenu="False"
                               DockPanel.Dock="Bottom"
                               TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                               TextBlock.FontSize="{DynamicResource BaseFontSize}">

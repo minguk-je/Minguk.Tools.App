@@ -236,6 +236,8 @@ OS·하드웨어·외부 라이브러리는 **인터페이스 + 구현 + 팩터�
   - **한 줄에 놓인 컨트롤은 모두 세로 가운데 정렬** - 글자 템플릿의 `TextBlock` 에 `VerticalAlignment="Center"`. 도구 줄 글자 템플릿은 `Minguk.Base/Resource/Style.xaml`
     (`BarStaticItem`·`BarButtonItem`·`BarCheckItem`·`BarEditItem`). 글자 상자가 칸 높이로 늘어나면 글자는 상자 위에 붙어 뜬다.
     검사 `VerticalAlignmentCheck`(`--labeling-screen`·`--script-screen`·`--environment-screen`·`--play-screen`) - 화면을 찍는 검사를 새로 만들면 넣는다.
+  - **미리보기가 있는 화면의 상태 표시줄은 높이를 못 박는다**(`Height` = 글꼴 크기 × 2, `markup:FontSizeToBarHeightConverter`, 사용자 2026-09-24) - 담긴 글(검출·글자 읽기 상태,
+    「영역1」 같은 글자)에 따라 줄 높이가 1px 오르내리면 위의 미리보기 패널이 같이 줄었다 늘어 확대한 그림이 흔들렸다. 화면 밖 검사 창에서는 재현이 안 돼 실제 앱 진단 기록으로 찾았다.
   - 칸 옆 버튼은 `dxe:ButtonEdit` 안에 넣고 `AllowDefaultButton="False"` 를 같이 적는다(안 적으면 빈 `…` 버튼이 하나 더 붙는다). 그림 버튼은 `GlyphKind="User"` + `Image`(가운데 정렬).
   - `dxlc` 에는 `ItemHeight`·`ShowLabel` 이 없다 - 라벨을 비우려면 `AddColonToLabel="False" Label=""`.
 - 폰트·크기는 `BaseFontFamily`/`BaseFontSize` 를 **DynamicResource** 로. 경량 테마(`UseLightweightThemes`)라 표준 WPF 컨트롤은 테마를 안 탄다.

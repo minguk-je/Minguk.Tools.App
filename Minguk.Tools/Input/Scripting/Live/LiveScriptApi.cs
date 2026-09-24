@@ -1385,10 +1385,15 @@ public partial class LiveScriptApi : IDisposable
         var wanted = text.Trim();
         var tiles = new List<Rect>();
 
+        // 자리를 줬으면 그 자리가 고른 엔진(regions.json 의 ocrEngine)으로 - 읽기("이름") 과 같다(사용자, 2026-09-24 영역별 엔진).
+        var ocr = Ocr();
+
         if (regionName is not null)
         {
             var book = _host.Regions?.Invoke() ?? throw Guard("영역 목록이 없습니다 - 화면에서 데이터셋 폴더를 골라야 합니다.");
             var found = book.Resolve(regionName) ?? throw Guard(MissingRegion(book, regionName));
+
+            ocr = Ocr(found.Region);
 
             // 칸의 상자(돌린 칸은 감싸는 상자) - 찾은 자리를 화면 좌표로 되돌리려면 자른 자리를 알아야 한다.
             _host.Hub.TryGetFrameSize(out var frameWidth, out var frameHeight);
@@ -1419,7 +1424,7 @@ public partial class LiveScriptApi : IDisposable
             ThrowIfStopping();
 
             var crop = CropFor(tile);
-            var outcome = Ocr().RecognizeAsync(crop, _token).GetAwaiter().GetResult();
+            var outcome = ocr.RecognizeAsync(crop, _token).GetAwaiter().GetResult();
 
             foreach (var line in outcome.Lines)
             {

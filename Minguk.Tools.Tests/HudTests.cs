@@ -78,6 +78,15 @@ internal static partial class Program
         Expect("재화", r => r.Numbers.Skip(r.Numbers.Length - 3).SequenceEqual([2212096, 64076, 16751]), "끝 셋 [2212096, 64076, 16751]");
         Expect("대상", r => Squash(r.Text).Contains("칼니프"), "46 고원 칼니프 - Windows OCR 이라 앞은 깨져도 이름 끝은 읽는다");
         Expect("대상거리", r => r.Numbers.FirstOrDefault() == 14, "14m → 14");
+        Expect("줍기", r => !Squash(r.Text).Contains("줍기"), "줍을 것이 없으면 「줍기」 가 없다");
+
+        // ── 1080p 몬스터를 잡은 뒤 - 자루가 떨어지고 「F 줍기」 가 떴다. 대상은 없다 ──
+        screen = "1080p 줍기";
+        read = ReadHud(ocr, regions, Path.Combine(folder, "aion2-loot-1080p.png"), "loot");
+
+        Expect("줍기", r => Squash(r.Text).Contains("줍기"), "「F 줍기」 가 든다");
+        Expect("대상", r => r.Text.Length == 0, "대상이 없으면 빈 글");
+        Expect("체력", r => r.Numbers.SequenceEqual([7320, 10129]), "[7320, 10129]");
 
         foreach (var engine in engines.Values) engine.Dispose();
 

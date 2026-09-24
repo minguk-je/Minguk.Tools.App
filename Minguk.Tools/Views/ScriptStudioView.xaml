@@ -611,7 +611,9 @@
                 ══ 상태 표시줄 ═══════════════════════════════════════════════════════
                 VS 처럼 왼쪽에 상태 글, 오른쪽에 줄·열 · 오류 수 · 인식 상태 · 입력 경로.
             -->
-            <dxb:StatusBarControl AllowCustomizationMenu="False"
+            <!-- 높이를 글꼴 크기에서 못 박는다 - 담긴 글에 따라 1px 오르내리면 위의 미리보기가 같이 흔들렸다(사용자, 2026-09-24, FontSizeToBarHeightConverter). -->
+            <dxb:StatusBarControl Height="{Binding (TextBlock.FontSize), RelativeSource={RelativeSource Self}, Converter={markup:FontSizeToBarHeightConverter}}"
+                                  AllowCustomizationMenu="False"
                                   DockPanel.Dock="Bottom"
                                   TextBlock.FontFamily="{DynamicResource BaseFontFamily}"
                                   TextBlock.FontSize="{DynamicResource BaseFontSize}">
