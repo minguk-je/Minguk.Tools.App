@@ -107,6 +107,7 @@ public static class ScriptApiCatalog
         new("GoToTarget", "목표로가기", "ms", "미니맵 목표 마커 쪽으로 걸어간다. 마커가 없으면 걷지 않고 false.", ScriptApiMode.Live),
         new("MarkerBearing", "마커방위", "name", "미니맵의 그 이름 점(minimap.json 의 markers - 기본 「몹」 은 빨간 점) 가운데 가장 가까운 것 - 방위·거리(px)·돌 각. 없으면 null.", ScriptApiMode.Live),
         new("MarkerBearings", "마커방위들", "name", "그 이름 점을 모두, 가까운 것부터.", ScriptApiMode.Live),
+        new("WalkToMarker", "마커로걷기", "name, ms", "그 이름 점 가운데 가장 가까운 것 쪽으로 키보드(W·A·S·D 8방향)만으로 걷는다 - 마우스는 안 쓰고 화살표 방위도 안 믿는다. 걸을 때 점이 밀리는 쪽을 보고 방향을 잡는다. 다 왔거나 시간이 다 되면 true, 점이 없거나 막혔으면 false.", ScriptApiMode.Live),
         new("GoToMarker", "마커로가기", "name, ms", "그 이름 점 가운데 가장 가까운 것 쪽으로 걸어간다. 없으면 걷지 않고 false. 주위에 몹이 없을 때 미니맵의 몹 쪽으로 가는 데 쓴다.", ScriptApiMode.Live),
         new("TurnScale", "회전배율", "", "마우스 가로 1 카운트가 몸을 몇 도 돌리나. 모르면 그 자리에서 재서 minimap.json 에 적는다(제자리에서 조금 돌고 걷는다).", ScriptApiMode.Live),
         new("HealthBar", "체력바", "검출", "그 검출 머리 위 체력바가 몇 할 찼는지(0~1). 못 찾으면 null. 쏘기 전·뒤를 견줘 맞았는지 안다.", ScriptApiMode.Live),

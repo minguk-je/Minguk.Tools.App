@@ -38,6 +38,18 @@ public partial class LiveScriptApi
     /// </remarks>
     private const int TurnSettleMs = 250;
 
+    /// <summary>몸을 돌릴 때 마우스 이동을 이만큼(카운트)씩 잘게 나눠 보낸다.</summary>
+    /// <remarks>
+    /// 사람 마우스는 한 번에 수십 카운트 이하로 보낸다. 150~1196 카운트를 한 번에 보냈더니 아이온2 에서 몸이 0~4° 만 돌았다(사용자 로그 2026-09-25 02:12) -
+    /// 크게 튀는 이동을 게임이 버리는 것으로 본다. 사람은 마우스만 움직여 돈다고 했다.
+    /// </remarks>
+    private const int TurnChunkCounts = 30;
+
+    /// <summary>돌리라고 보냈는데 몸 방위가 이만큼(도)도 안 바뀐 검사가 잇달아 이만큼이면 안 도는 것으로 보고 멈춘다.</summary>
+    private const double StuckTurnDegrees = 2;
+
+    private const int StuckTurnChecks = 6;
+
     // ── 읽기 ────────────────────────────────────────────────────────────
 
     /// <summary>캐릭터 몸이 향한 방위(도) - 북 0, 시계 방향. 미니맵을 못 읽으면 멈추고 이유를 말한다.</summary>
@@ -162,8 +174,34 @@ public partial class LiveScriptApi
 
         if (Math.Abs(turn) <= BearingTolerance) return;
 
-        MoveBy((int)Math.Round(turn / scale), 0);
+        TurnMouse((int)Math.Round(turn / scale));
     }
+
+    /// <summary>
+    /// 몸을 돌리는 마우스 가로 이동 - <see cref="TurnChunkCounts"/> 씩 잘게, 조각 사이 1ms. 호출 기록에는 한 줄.
+    /// </summary>
+    private void TurnMouse(int counts) => Traced("TurnMouse", counts.ToString(), () =>
+    {
+        BeforeInput();
+        ForgetAim();
+
+        var sign = Math.Sign(counts);
+        var left = Math.Abs(counts);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        while (left > 0)
+        {
+            var step = Math.Min(TurnChunkCounts, left);
+
+            _host.Service.Adapter.MoveMouseBy(sign * step, 0);
+            left -= step;
+
+            // 한꺼번에 몰아 보내면 한 번 튄 것과 같다 - 조각 사이를 1ms 띄운다(1ms 잠들기는 15ms 가 되기도 해 돌며 기다린다).
+            var until = watch.Elapsed.TotalMilliseconds + 1;
+
+            while (left > 0 && watch.Elapsed.TotalMilliseconds < until) System.Threading.Thread.SpinWait(50);
+        }
+    });
 
     /// <summary>
     /// 걸으면서 방위를 맞춘다 - 키를 누른 채로 <see cref="GoToCheckMs"/> 마다 미니맵을 보고 어긋난 만큼 마우스를 돌린다.
@@ -182,6 +220,11 @@ public partial class LiveScriptApi
 
         BeforeInput();
 
+        // 돌리라고 보냈는데 몸이 안 돌면(마우스가 게임에 안 먹는다) 앞으로만 걷게 된다 - 그렇게 두지 않고 멈춘다(사용자 2026-09-25 "몹이 없을 때 전진만 하네").
+        double? lastHeading = null;
+        var turnedLast = false;
+        var stuck = 0;
+
         try
         {
             Hold(key);
@@ -192,11 +235,26 @@ public partial class LiveScriptApi
 
                 if (Environment.TickCount64 >= deadline) break;
 
-                var turn = MinimapReader.Difference(HeadingCore(), bearing);
+                var heading = HeadingCore();
+
+                if (turnedLast && lastHeading is { } before)
+                {
+                    stuck = Math.Abs(MinimapReader.Difference(before, heading)) < StuckTurnDegrees ? stuck + 1 : 0;
+
+                    if (stuck >= StuckTurnChecks)
+                        throw Guard($"마우스를 돌려도 몸 방향이 안 바뀝니다(방위 {heading:0}도 그대로) - 마우스 이동이 게임에 안 먹거나 회전 배율({scale:0.####}도/카운트)이 틀렸습니다. " +
+                                    $"게임 창을 누른 뒤 커서가 안 보이는 상태인지 보고, {MinimapSpec.FileName} 의 degreesPerCount 를 0 으로 지워 다시 재 보세요.");
+                }
+
+                lastHeading = heading;
+
+                var turn = MinimapReader.Difference(heading, bearing);
+
+                turnedLast = Math.Abs(turn) > BearingTolerance * 3;
 
                 if (Math.Abs(turn) <= BearingTolerance) continue;
 
-                MoveBy((int)Math.Round(turn / scale), 0);
+                TurnMouse((int)Math.Round(turn / scale));
             }
         }
         finally
@@ -230,7 +288,7 @@ public partial class LiveScriptApi
             var sent = attempt % 2 == 0 ? counts : -counts;
             var before = HeadingCore();
 
-            MoveBy(sent, 0);
+            TurnMouse(sent);
             WalkCore("W", 300);
 
             // 걷기가 끝나고 미니맵이 따라올 때까지 기다린다 - 이것이 없으면 돌기 전 화면을 읽는다.
@@ -249,7 +307,8 @@ public partial class LiveScriptApi
         }
 
         if (samples.Count == 0)
-            throw Guard($"회전 배율을 재지 못했습니다({string.Join(" · ", tries)}) - 0도 가까이만 나오면 벽에 막혀 몸이 안 도는 것이니 트인 곳에서 다시 해 보세요. " +
+            throw Guard($"회전 배율을 재지 못했습니다({string.Join(" · ", tries)}) - 0도 가까이만 나오면 벽에 막혀 몸이 안 돌거나 마우스 이동이 게임에 안 먹는 것입니다. " +
+                        "트인 곳에서, 게임 창을 누른 뒤 커서가 안 보이는 상태로 다시 해 보세요. " +
                         "아는 값이 있으면 minimap.json 의 degreesPerCount 에 적으면 됩니다.");
 
         samples.Sort();
