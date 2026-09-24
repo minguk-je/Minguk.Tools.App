@@ -2438,6 +2438,8 @@ public partial class LiveScriptApi : IDisposable
         null => "",
         string text => Quote(text),
         IReadOnlyList<ScriptDetection> mobs => mobs.Count == 0 ? "없음" : $"{mobs.Count}마리: {mobs[0]}",
+        // 숫자들읽기 - 「System.Int32[]」 로 찍혀 무엇으로 읽었는지 몰랐다(사용자, 2026-09-24 물약을 계속 먹던 것을 쫓다가).
+        int[] numbers => $"[{string.Join(", ", numbers)}]",
         _ => result.ToString() ?? ""
     };
 
