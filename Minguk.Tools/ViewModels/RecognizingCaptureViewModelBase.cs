@@ -106,7 +106,13 @@ public abstract partial class RecognizingCaptureViewModelBase : CaptureViewModel
     /// <summary>잡고 있는지·찾고 있는지·무엇을 잡는지를 허브에 알린다. 시작·중지·검출 토글 때.</summary>
     protected void PublishPerceptionState() => Hub.PublishState(IsRunning, IsDetectionOn, SelectedTarget);
 
-    protected override void OnRunningStateChanged() => PublishPerceptionState();
+    protected override void OnRunningStateChanged()
+    {
+        PublishPerceptionState();
+
+        // 잡기 시작하면 글자 읽기 모델을 미리 깨운다 - F5 를 누른 뒤 첫 읽기가 모델 올리기를 치르지 않게(PrepareRecognitionForScript).
+        if (IsRunning && Regions.Count > 0) Guard(() => WarmOcrEngines());
+    }
 
     protected RecognizingCaptureViewModelBase()
     {

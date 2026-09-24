@@ -106,7 +106,8 @@ public partial class PlayViewModel : RecognizingCaptureViewModelBase
             RunOnUi,
             message => RunOnUi(() => StatusText = message),
             OcrEngineForScripts,
-            RunProjectCompiledAsync);
+            RunProjectCompiledAsync,
+            PrepareRecognitionForScript);
 
         Player = new ScriptPlayer(ResolveRun);
 

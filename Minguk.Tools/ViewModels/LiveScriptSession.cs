@@ -34,6 +34,7 @@ public sealed class LiveScriptSession : IDisposable
     private readonly Action<string> _notify;
     private readonly Action<Action> _onUi;
     private readonly Func<string, LiveScriptHost, CancellationToken, Task<IReadOnlyList<ScriptError>>>? _runProject;
+    private readonly Action? _prepareRecognition;
     private readonly EmergencyStop _emergency = new();
 
     private LiveScriptApi? _api;
@@ -48,8 +49,10 @@ public sealed class LiveScriptSession : IDisposable
         Action<Action> onUi,
         Action<string> notify,
         Func<Minguk.Tools.Vision.Regions.NamedRegion?, IOcrEngine?>? ocrFor = null,
-        Func<string, LiveScriptHost, CancellationToken, Task<IReadOnlyList<ScriptError>>>? runProject = null)
+        Func<string, LiveScriptHost, CancellationToken, Task<IReadOnlyList<ScriptError>>>? runProject = null,
+        Action? prepareRecognition = null)
     {
+        _prepareRecognition = prepareRecognition;
         _service = service;
         _requiresForeground = requiresForeground;
         _target = target;
@@ -142,8 +145,36 @@ public sealed class LiveScriptSession : IDisposable
             {
                 Cleanup(api);
             }
-        }, beforeRun);
+        }, beforeRun, token =>
+        {
+            PrepareRecognition();
+
+            // 캐시가 풀렸으면(10분 안 씀) 여기서 컴파일해 둔다 - 실행이 같은 열쇠로 캐시에서 꺼낸다.
+            return unit is not null && engine is IProjectScriptEngine projectEngine
+                ? projectEngine.CheckLiveAsync(unit, token)
+                : engine.CheckLiveAsync(source, token);
+        }, IsTargetInFront);
     }
+
+    /// <summary>화면에 글자 읽기 준비(리드백·모델 깨우기)를 청한다. UI 스레드에서 - 시작 요청이 UI 에서 온다.</summary>
+    private void PrepareRecognition()
+    {
+        try
+        {
+            _prepareRecognition?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            NLog.LogManager.GetCurrentClassLogger().Warn(ex, "글자 읽기 준비에 실패했다 - 첫 읽기에서 다시 한다");
+        }
+    }
+
+    /// <summary>대상 창이 이미 앞에 있는가. 영상·잡은 것 없음은 아니다(대기를 그대로 둔다).</summary>
+    private bool IsTargetInFront()
+        => _target() is { Kind: CaptureTargetKind.Window, Handle: var handle }
+           && handle != IntPtr.Zero
+           && ForegroundWindow.Handle != IntPtr.Zero
+           && ForegroundWindow.IsInFront(handle);
 
     /// <summary>
     /// 실행을 거절한다 - 이유를 상태 줄·출력 창·로그 셋에 다 남긴다.
@@ -200,7 +231,11 @@ public sealed class LiveScriptSession : IDisposable
             {
                 Cleanup(api);
             }
-        }, beforeRun);
+        }, beforeRun, _ =>
+        {
+            PrepareRecognition();
+            return Task.CompletedTask;
+        }, IsTargetInFront);
     }
 
     /// <summary>프로젝트이동이 남긴 프로젝트를 돌리는 길 - 화면이 준 <see cref="LiveScriptHost.RunProject"/>(소스 또는 빌드된 것). 없으면 이동을 못 한다.</summary>

@@ -15,9 +15,13 @@ namespace Minguk.Tools.ViewModels;
 /// </summary>
 /// <param name="RunOnce">한 바퀴. 끝까지 돌았으면 true, 멈췄거나 틀렸으면 false. 진행은 progress 로.</param>
 /// <param name="BeforeRun">시작 전 대기가 끝난 뒤, 첫 바퀴 전에 한 번.</param>
+/// <param name="Prepare">시작을 누르자마자 대기와 <b>나란히</b> 도는 준비(컴파일·글자 읽기 모델 깨우기). 대기가 끝나면 이것이 끝나기를 기다린다.</param>
+/// <param name="IsTargetInFront">대상 창이 이미 앞에 있는가 - 그러면 시작 전 대기를 건너뛴다(게임에서 F5 로 시작한 경우).</param>
 public sealed record ScriptRunContext(
     Func<IProgress<string>, CancellationToken, Task<bool>> RunOnce,
-    Func<Task>? BeforeRun = null)
+    Func<Task>? BeforeRun = null,
+    Func<CancellationToken, Task>? Prepare = null,
+    Func<bool>? IsTargetInFront = null)
 {
     /// <summary>계획 모드 - 계획을 단계로 굳혀 차례로 보낸다. 입력 자동화 화면이 하던 것.</summary>
     public static ScriptRunContext ForPlan(SequencePlan plan, InputService service, int holdTimeMs, int intervalMs, Func<Task>? beforeRun = null)
@@ -178,7 +182,10 @@ public sealed class ScriptPlayer : ViewModelBase
             return;
         }
 
-        Logger.Info($"스크립트 시작({(loop ? "반복" : "1회")}) - {StartDelaySeconds}초 대기");
+        // 대기는 "그 사이에 게임으로 넘어가라" 는 시간이다. 게임에서 F5 를 눌렀으면 이미 넘어가 있다 - 매번 1초를 버렸다(사용자, 2026-09-24 "처음 시작할 때 좀 느리게").
+        var skipDelay = context.IsTargetInFront?.Invoke() == true;
+
+        Logger.Info($"스크립트 시작({(loop ? "반복" : "1회")}) - {(skipDelay ? "대상 창이 앞에 있어 대기 없이" : $"{StartDelaySeconds}초 대기")}");
 
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
@@ -194,16 +201,21 @@ public sealed class ScriptPlayer : ViewModelBase
         // Progress<T> 는 만든 스레드(여기서는 UI)로 보고를 넘겨 준다.
         var progress = new Progress<string>(symbol => CurrentStep = symbol);
 
-        _ = RunAsync(context, loop, progress, _cts.Token);
+        _ = RunAsync(context, loop, skipDelay, progress, _cts.Token);
     }
 
-    private async Task RunAsync(ScriptRunContext context, bool loop, IProgress<string> progress, CancellationToken token)
+    private async Task RunAsync(ScriptRunContext context, bool loop, bool skipDelay, IProgress<string> progress, CancellationToken token)
     {
         var failed = false;
 
         try
         {
-            if (!await CountDownAsync(token)) return;
+            // 준비는 대기와 나란히 - 대기가 끝난 뒤에 컴파일하던 때는 둘이 더해져 캐시가 풀린 뒤 첫 실행이 2.9초 걸렸다(실측).
+            var prepared = PrepareAsync(context, token);
+
+            if (!skipDelay && !await CountDownAsync(token)) return;
+
+            await prepared;
 
             if (context.BeforeRun is not null) await context.BeforeRun();
 
@@ -265,6 +277,24 @@ public sealed class ScriptPlayer : ViewModelBase
         public static readonly (int, int)[] Started = [(880, 70), (1175, 90)];
         public static readonly (int, int)[] Finished = [(1319, 120)];
         public static readonly (int, int)[] Failed = [(330, 350)];
+    }
+
+    /// <summary>준비를 돌린다. 실패해도 막지 않는다 - 실행이 같은 일을 다시 해 보고 그때 이유를 말한다.</summary>
+    private static async Task PrepareAsync(ScriptRunContext context, CancellationToken token)
+    {
+        if (context.Prepare is null) return;
+
+        try
+        {
+            await context.Prepare(token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn(ex, "시작 준비에 실패했다 - 실행에서 다시 해 본다");
+        }
     }
 
     /// <summary>시작 전 대기. 남은 시간을 표시해 주지 않으면 사용자가 언제 옮겨야 할지 알 수 없다.</summary>

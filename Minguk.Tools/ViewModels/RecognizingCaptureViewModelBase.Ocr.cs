@@ -162,6 +162,99 @@ public abstract partial class RecognizingCaptureViewModelBase
         }
     }
 
+    // ── 스크립트 시작 전 준비 ───────────────────────────────────────────────
+
+    /// <summary>한 번 깨운 엔진. 버리면(<see cref="DropAllOcrEngines"/>) 같이 비운다 - 새 엔진은 다시 깨운다.</summary>
+    private readonly HashSet<IOcrEngine> _warmedOcr = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// 스크립트가 곧 화면을 읽는다 - 리드백을 지금 켜고(캡처가 다시 시작된다) 글자 읽기 모델을 깨운다. UI 스레드, 시작 요청 때.
+    /// </summary>
+    /// <remarks>
+    /// 첫 읽기가 이 둘을 도는 동안 치렀다 - 앱을 켜고 처음 돌린 사냥에서 첫 <c>숫자읽기</c> 가 3838ms(모델 둘 올리기 + 캡처 다시 시작 + DirectML 첫 추론, 실측 2026-09-24).
+    /// 시작 대기·컴파일과 나란히 돌게 여기서 먼저 한다. 자리가 없는 프로젝트는 읽을 것이 없으니 안 한다.
+    /// </remarks>
+    protected void PrepareRecognitionForScript()
+    {
+        if (Regions.Count == 0) return;
+
+        if (IsRunning && !EnableCpuReadback)
+        {
+            Hub.PreparingFrames();
+            EnsureCpuReadback("스크립트가 화면 글자를 읽습니다");
+        }
+
+        WarmOcrEngines();
+    }
+
+    /// <summary>
+    /// 이 프로젝트의 자리들이 쓰는 엔진을 만들고 한 번 읽혀 둔다(백그라운드). 이미 깨운 것은 건너뛴다.
+    /// </summary>
+    /// <remarks>캡처를 시작할 때도 부른다 - F5 를 누르기 전에 끝나 있으면 첫 실행도 빠르다. 학습 중이면 <see cref="TryGetOcrEngine"/> 이 CPU 로 바꿔 준다.</remarks>
+    private void WarmOcrEngines()
+    {
+        var kinds = Regions.Select(region => region.OcrEngine ?? SelectedOcrEngine.Kind).Distinct().ToList();
+
+        if (kinds.Count == 0) return;
+
+        var sample = OcrWarmUpSample.Value;
+
+        _ = Task.Run(async () =>
+        {
+            foreach (var kind in kinds)
+            {
+                if (!TryGetOcrEngine(kind, out var engine, out _) || engine is null) continue;
+
+                lock (_ocrGate)
+                {
+                    if (!_warmedOcr.Add(engine)) continue;
+                }
+
+                try
+                {
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    await engine.RecognizeAsync(sample);
+                    Logger.Debug($"글자 읽기 예열 {engine.Name} {watch.ElapsedMilliseconds}ms");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 깨우는 사이에 엔진을 바꿨다(학습 시작·끝, 엔진 콤보). 새 엔진은 첫 읽기가 깨운다.
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn(ex, $"글자 읽기 예열에 실패했다 ({engine.Name}) - 첫 읽기에서 다시 한다");
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// 예열에 읽힐 그림 - 숫자·한글이 든 한 줄. 빈 그림이면 글자를 못 찾아 인식 모델이 안 돌아 깨지 않는다.
+    /// </summary>
+    /// <remarks>WPF 로 그리므로 처음 꺼낼 때 UI 스레드여야 한다 - <see cref="PrepareRecognitionForScript"/>·캡처 시작이 UI 스레드다.</remarks>
+    private static readonly Lazy<BitmapSource> OcrWarmUpSample = new(() =>
+    {
+        const int width = 360, height = 48;
+
+        var visual = new DrawingVisual();
+
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
+
+            var text = new FormattedText("7,320 / 10,129 사냥 줍기", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                new Typeface("Malgun Gothic"), 24, Brushes.White, 1.0);
+
+            context.DrawText(text, new Point(8, (height - text.Height) / 2));
+        }
+
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+
+        return bitmap;
+    });
+
     /// <summary>
     /// 만든 엔진을 다 버린다. 다음 읽기가 그때에 맞는 쪽(학습 중이면 CPU, 아니면 GPU)으로 다시 만든다.
     /// </summary>
@@ -174,6 +267,7 @@ public abstract partial class RecognizingCaptureViewModelBase
         {
             stale = [.. _ocrEngines.Values];
             _ocrEngines.Clear();
+            _warmedOcr.Clear();
             _ocr = null;
         }
 
