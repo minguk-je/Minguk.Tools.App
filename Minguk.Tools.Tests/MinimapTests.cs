@@ -148,6 +148,41 @@ internal static partial class Program
                   $"남은 마커 {withoutClock.Count}개");
         }
 
+        // 이름 붙인 점 종류 - 아이온2 사냥터(2026-09-25, 사용자 캡처를 사냥 프로젝트 「미니맵」 자리로 자른 것).
+        // 캐릭터 둘레에 빨간 몹 점 셋(북 하나·남 하나·남서 하나), 왼쪽 아래에 어두운 붉은 지도 무늬 - 무늬는 몹이 아니다.
+        var aion = ArrowOf(folder, "aion2-mobs.png", spec);
+
+        // 화살표(58px) 바로 옆에 흰 깃털 아이콘이 둘(82·74px) - 가장 큰 뭉치를 고르던 때는 깃털을 화살표로 잡았다.
+        Check("미니맵: 아이온2 - 옆의 큰 흰 깃털이 아니라 한가운데 화살표를 잡는다(중심 123,82 ±3)",
+              aion is not null && Math.Abs(aion.CenterX - 123) <= 3 && Math.Abs(aion.CenterY - 82) <= 3,
+              aion is null ? "못 찾음" : $"{aion.Mask.Count}px · 중심({aion.CenterX:0},{aion.CenterY:0})");
+
+        if (aion is not null)
+        {
+            var (aionPixels, aionWidth, aionHeight) = LoadBgra(Path.Combine(folder, "aion2-mobs.png"));
+            var mobs = MinimapReader.Markers(aionPixels, aionWidth, aionHeight, spec, spec.MarkerNamed("몹")!, aion.CenterX, aion.CenterY);
+            var described = string.Join(" · ", mobs.Select(m => $"{m.Bearing:0}도 {m.Distance:0}px {m.Pixels}px"));
+
+            Check("미니맵: 「몹」 빨간 점 셋만 잡고 어두운 붉은 지도 무늬는 안 잡는다",
+                  mobs.Count == 3 && mobs.All(m => m.Distance < 40),
+                  $"{mobs.Count}개 - {described}");
+
+            Check("미니맵: 몹 점 방위 - 북·남·남서(±20)",
+                  mobs.Count == 3
+                  && mobs.Any(m => Math.Abs(MinimapReader.Difference(0, m.Bearing)) <= 20)
+                  && mobs.Any(m => Math.Abs(MinimapReader.Difference(180, m.Bearing)) <= 20)
+                  && mobs.Any(m => Math.Abs(MinimapReader.Difference(240, m.Bearing)) <= 20),
+                  described);
+
+            Check("미니맵: 빨간 몹 점은 노란 「목표」 로 안 잡힌다",
+                  MinimapReader.Markers(aionPixels, aionWidth, aionHeight, spec, aion.CenterX, aion.CenterY).Count == 0,
+                  $"목표 {MinimapReader.Markers(aionPixels, aionWidth, aionHeight, spec, aion.CenterX, aion.CenterY).Count}개");
+        }
+
+        Check("미니맵: 모르는 점 이름은 null, 「목표」 는 노란 마커 규칙",
+              spec.MarkerNamed("없는이름") is null && ReferenceEquals(spec.MarkerNamed(MinimapSpec.TargetMarkerName), spec.Marker),
+              "");
+
         // 빠른가 - 조준 스레드 옆에서 프레임마다 돌 수 있어야 한다.
         var watch = System.Diagnostics.Stopwatch.StartNew();
 

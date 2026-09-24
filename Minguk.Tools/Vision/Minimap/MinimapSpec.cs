@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -79,6 +80,29 @@ public sealed class MinimapSpec
     [JsonPropertyName("marker")]
     public MinimapMarkerSpec Marker { get; set; } = new();
 
+    /// <summary>
+    /// 이름 붙인 점 종류 - 이름 → 색 규칙. 스크립트가 <c>마커방위("몹")</c>·<c>마커로가기("몹", 밀리초)</c> 처럼 이름으로 부른다.
+    /// </summary>
+    /// <remarks>
+    /// 게임마다 점 색이 다르다 - 코드에 「몹」 을 박지 않고 여기에 둔다(사용자, 2026-09-25 "이런것도 공통으로 사용할 수 있게").
+    /// 다른 종류(채집·동료)는 이 파일에 이름과 색만 더하면 된다. 「목표」 는 따로 적지 않아도 <see cref="Marker"/>(노란 ▼)다.
+    ///
+    /// 기본 「몹」 은 빨간 ●(흰 테두리) - 사용자 "주위에 몹이 없으면 미니맵에 빨간원 있으면 그쪽으로 이동해서 공격".
+    /// 아이온2 1080p 실측: 점 하나가 23~25px, 한가운데 RGB 239,34,33. 지도의 어두운 붉은 무늬(115,31,28)는 밝기에서 갈린다 -
+    /// R≥150 에 R−G·R−B≥80 이면 점 셋만 남고 잡음 0.
+    /// </remarks>
+    [JsonPropertyName("markers")]
+    public Dictionary<string, MinimapMarkerSpec> Markers { get; set; } = DefaultMarkers();
+
+    /// <summary>「목표」 는 늘 <see cref="Marker"/>.</summary>
+    public const string TargetMarkerName = "목표";
+
+    private static Dictionary<string, MinimapMarkerSpec> DefaultMarkers() => new() { ["몹"] = MinimapMarkerSpec.RedDot() };
+
+    /// <summary>그 이름의 색 규칙. 없으면 null.</summary>
+    public MinimapMarkerSpec? MarkerNamed(string name)
+        => name == TargetMarkerName ? Marker : Markers.GetValueOrDefault(name);
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
@@ -98,6 +122,10 @@ public sealed class MinimapSpec
         if (string.IsNullOrWhiteSpace(spec.Region)) throw new JsonException("region 은 화살표를 찾을 자리 이름입니다.");
 
         spec.Marker ??= new MinimapMarkerSpec();
+        // 옛 파일(markers 없음)은 기본 종류를 받는다. 사람이 적은 종류는 그대로 두고 「몹」 만 없으면 채운다.
+        spec.Markers ??= DefaultMarkers();
+
+        foreach (var (name, rule) in DefaultMarkers()) spec.Markers.TryAdd(name, rule);
 
         return spec;
     }
@@ -105,9 +133,20 @@ public sealed class MinimapSpec
     public void Save(string path) => File.WriteAllText(path, JsonSerializer.Serialize(this, Options), new System.Text.UTF8Encoding(false));
 }
 
-/// <summary>미니맵 위 목표 마커 색. 기본값은 실제 게임의 노란 ▼(실측 24px·22px 뭉치).</summary>
+/// <summary>미니맵 위 마커 색. 기본값은 실제 게임의 노란 ▼(실측 24px·22px 뭉치), 몬스터 빨간 점은 <see cref="RedDot"/>.</summary>
 public sealed class MinimapMarkerSpec
 {
+    /// <summary>몬스터 빨간 점 - 초록·파랑이 둘 다 빠진 밝은 빨강.</summary>
+    public static MinimapMarkerSpec RedDot() => new()
+    {
+        MinRed = 150,
+        MinGreen = 0,
+        MaxBlue = 255,
+        MinRedMinusBlue = 80,
+        MinRedMinusGreen = 80,
+        MinPixels = 8
+    };
+
     [JsonPropertyName("minRed")]
     public int MinRed { get; set; } = 160;
 
@@ -120,6 +159,14 @@ public sealed class MinimapMarkerSpec
     /// <summary>노랑은 파랑이 빠진 색이다 - 이만큼은 차이 나야 지도의 누런 벽선과 갈린다.</summary>
     [JsonPropertyName("minRedMinusBlue")]
     public int MinRedMinusBlue { get; set; } = 90;
+
+    /// <summary>빨강은 초록도 빠진다 - 노랑(R≈G)과 가르는 값. 노란 마커는 안 쓴다(−255).</summary>
+    [JsonPropertyName("minRedMinusGreen")]
+    public int MinRedMinusGreen { get; set; } = -255;
+
+    /// <summary>이 색이 들어 있는가.</summary>
+    public bool Matches(int r, int g, int b)
+        => r >= MinRed && g >= MinGreen && b <= MaxBlue && r - b >= MinRedMinusBlue && r - g >= MinRedMinusGreen;
 
     /// <summary>이보다 작은 뭉치는 안 본다 - 벽선 조각·글자를 거른다.</summary>
     [JsonPropertyName("minPixels")]

@@ -99,9 +99,14 @@ public static class MinimapReader
             }
         }
 
-        var blob = LargestBlob(picked, ArrowJoinPixels);
+        // 화살표는 늘 미니맵 한가운데다 - 12px 넘는 뭉치 가운데 한가운데에 가장 가까운 것. 가장 큰 뭉치를 고르던 때는
+        // 아이온2 에서 화살표(58px) 바로 옆 흰 깃털 아이콘(82·74px, 한가운데서 19px)을 골라 방위·몹 방향이 다 틀렸다(실측 2026-09-25).
+        // 화살표는 실제 게임에서 58~71px 로 잡힌다. 12px 보다 작으면 지도 선·글자 조각이거나 화살표가 가려진 것이다.
+        var blob = Blobs(picked, ArrowJoinPixels)
+            .Where(b => b.Count >= 12)
+            .OrderBy(b => DistanceSquared(b, cx, cy))
+            .FirstOrDefault() ?? [];
 
-        // 화살표는 실제 게임에서 61~71px 로 잡힌다. 이보다 훨씬 작으면 미니맵을 잘못 잡았거나 화살표가 가려진 것이다.
         if (blob.Count < 12) return null;
 
         var sumX = 0.0;
@@ -207,11 +212,22 @@ public static class MinimapReader
     /// </summary>
     public static IReadOnlyList<MinimapMarker> Markers(byte[] bgra, int width, int height, MinimapSpec spec,
                                                        double centerX, double centerY, out IReadOnlyList<(double X, double Y)> places)
+        => Markers(bgra, width, height, spec, spec?.Marker ?? new MinimapMarkerSpec(), centerX, centerY, out places);
+
+    /// <summary>
+    /// 그 색 규칙의 점들 - 이름 붙인 종류(<see cref="MinimapSpec.Markers"/>, 예: 「몹」 빨간 점)를 읽는다. 가까운 것부터.
+    /// </summary>
+    public static IReadOnlyList<MinimapMarker> Markers(byte[] bgra, int width, int height, MinimapSpec spec, MinimapMarkerSpec rule,
+                                                       double centerX, double centerY)
+        => Markers(bgra, width, height, spec, rule, centerX, centerY, out _);
+
+    private static IReadOnlyList<MinimapMarker> Markers(byte[] bgra, int width, int height, MinimapSpec spec, MinimapMarkerSpec rule,
+                                                        double centerX, double centerY, out IReadOnlyList<(double X, double Y)> places)
     {
         ArgumentNullException.ThrowIfNull(bgra);
         ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(rule);
 
-        var rule = spec.Marker ?? new MinimapMarkerSpec();
         var picked = new List<(short X, short Y)>();
 
         for (var y = 0; y < height; y++)
@@ -224,8 +240,7 @@ public static class MinimapReader
 
                 int b = bgra[i], g = bgra[i + 1], r = bgra[i + 2];
 
-                if (r < rule.MinRed || g < rule.MinGreen || b > rule.MaxBlue) continue;
-                if (r - b < rule.MinRedMinusBlue) continue;
+                if (!rule.Matches(r, g, b)) continue;
 
                 picked.Add(((short)x, (short)y));
             }
@@ -385,10 +400,12 @@ public static class MinimapReader
         return blobs;
     }
 
-    private static List<(short X, short Y)> LargestBlob(IReadOnlyList<(short X, short Y)> pixels, int join = 1)
+    /// <summary>뭉치 무게중심이 그 점에서 얼마나 먼지(제곱).</summary>
+    private static double DistanceSquared(List<(short X, short Y)> blob, double x, double y)
     {
-        var blobs = Blobs(pixels, join);
+        var dx = blob.Average(p => p.X) - x;
+        var dy = blob.Average(p => p.Y) - y;
 
-        return blobs.Count == 0 ? [] : blobs.OrderByDescending(b => b.Count).First();
+        return (dx * dx) + (dy * dy);
     }
 }

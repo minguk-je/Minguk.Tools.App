@@ -49,6 +49,24 @@ public partial class LiveScriptApi
     /// <summary>미니맵 목표 마커를 모두 - 가까운 것부터.</summary>
     public IReadOnlyList<ScriptBearing> TargetBearings() => Traced("TargetBearings", "", () => AllTargetBearings());
 
+    /// <summary>
+    /// 미니맵의 그 이름 점(<c>minimap.json</c> 의 <c>markers</c>, 기본 「몹」 = 빨간 점) 가운데 가장 가까운 것. 없으면 null.
+    /// </summary>
+    /// <remarks>사용자(2026-09-25) "주위에 몹이 없으면 미니맵에 빨간원 있으면 그쪽으로 이동해서 공격" · "공통으로 사용할 수 있게" - 게임마다 색은 파일에, 이름으로 부른다.</remarks>
+    public ScriptBearing? MarkerBearing(string name) => Traced("MarkerBearing", Quote(name), () => AllMarkerBearings(name).FirstOrDefault());
+
+    /// <summary>그 이름 점을 모두 - 가까운 것부터.</summary>
+    public IReadOnlyList<ScriptBearing> MarkerBearings(string name) => Traced("MarkerBearings", Quote(name), () => AllMarkerBearings(name));
+
+    /// <summary>그 이름 점 가운데 가장 가까운 것 쪽으로 걸어간다. 없으면 걷지 않고 false.</summary>
+    public bool GoToMarker(string name, int milliseconds) => Traced("GoToMarker", $"{Quote(name)}, {milliseconds}", () =>
+    {
+        if (AllMarkerBearings(name).FirstOrDefault() is not { } marker) return false;
+
+        GoToCore(marker.Bearing, milliseconds);
+        return true;
+    });
+
     /// <summary>지금 몸 방향에서 그 방위까지 몇 도 돌아야 하나(−180~180). 양수면 오른쪽.</summary>
     public double BearingTo(double bearing) => Traced("BearingTo", bearing.ToString("0.#"), () => MinimapReader.Difference(HeadingCore(), bearing));
 
@@ -94,6 +112,12 @@ public partial class LiveScriptApi
 
     public bool 목표로가기(int 밀리초) => GoToTarget(밀리초);
 
+    public ScriptBearing? 마커방위(string 이름) => MarkerBearing(이름);
+
+    public IReadOnlyList<ScriptBearing> 마커방위들(string 이름) => MarkerBearings(이름);
+
+    public bool 마커로가기(string 이름, int 밀리초) => GoToMarker(이름, 밀리초);
+
     public double 회전배율() => TurnScale();
 
     // ── 속 ──────────────────────────────────────────────────────────────
@@ -110,9 +134,14 @@ public partial class LiveScriptApi
 
     private ScriptBearing? TargetBearingCore() => AllTargetBearings().FirstOrDefault();
 
-    private IReadOnlyList<ScriptBearing> AllTargetBearings()
+    private IReadOnlyList<ScriptBearing> AllTargetBearings() => AllMarkerBearings(MinimapSpec.TargetMarkerName);
+
+    private IReadOnlyList<ScriptBearing> AllMarkerBearings(string name)
     {
         var spec = MinimapSpecOrThrow();
+        var rule = spec.MarkerNamed(name)
+                   ?? throw Guard($"미니맵 점 종류 「{name}」 이 {MinimapSpec.FileName} 에 없습니다 - 있는 것: {string.Join(", ", spec.Markers.Keys.Prepend(MinimapSpec.TargetMarkerName))}. " +
+                                  "새 종류는 markers 에 이름과 색(minRed·minRedMinusGreen 등)을 더하세요.");
         var template = MinimapTemplateOrThrow(spec);
         var (pixels, width, height) = MinimapPixels(spec);
 
@@ -121,7 +150,7 @@ public partial class LiveScriptApi
 
         var heading = MinimapReader.Normalize(spec.HeadingAtTemplate + MinimapReader.BestRotation(template.Mask, arrow.Mask));
 
-        return MinimapReader.Markers(pixels, width, height, spec, arrow.CenterX, arrow.CenterY)
+        return MinimapReader.Markers(pixels, width, height, spec, rule, arrow.CenterX, arrow.CenterY)
             .Select(m => new ScriptBearing(m.Bearing, m.Distance, MinimapReader.Difference(heading, m.Bearing)))
             .ToArray();
     }
