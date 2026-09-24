@@ -131,11 +131,25 @@ public static class RegionTargets
         return (string.Join(" ", parts), [.. numbers]);
     }
 
-    /// <summary>글에서 숫자 덩어리들을 왼쪽부터. 너무 길어 int 를 넘는 덩어리는 버린다.</summary>
+    /// <summary>
+    /// 천 단위 쉼표 - 숫자 뒤 쉼표(또는 마침표) 다음에 숫자가 딱 셋(「9,473」·「2,479,369」). OCR 이 작은 쉼표를 마침표로 읽는다(실측: 「9.473/9.473」).
+    /// </summary>
+    /// <remarks>소수 한 자리 「93.3%」 는 셋이 아니라 그대로 끊는다. 소수 세 자리(「1.250」)는 천 단위로 잘못 볼 수 있다 - 게임 HUD 에서는 드물다.</remarks>
+    private static readonly System.Text.RegularExpressions.Regex ThousandsComma = new(@"(?<=\d)[,.](?=\d{3}(?!\d))", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// 글에서 숫자 덩어리들을 왼쪽부터. 너무 길어 int 를 넘는 덩어리는 버린다. 천 단위 쉼표는 숫자 안으로 친다.
+    /// </summary>
+    /// <remarks>
+    /// 아이온2 HUD 는 체력 「9,473 / 9,473」·재화 「2,479,369」 처럼 쉼표를 붙인다(사용자, 2026-09-24 "아이온2 HUD 영역 잡는 것도") -
+    /// 쉼표에서 끊으면 [9, 473, 9, 473] 이 된다. 쉼표 뒤가 딱 세 자리일 때만 붙인다 - 「17,24」 같은 것은 그대로 둘로 끊는다.
+    /// </remarks>
     public static IReadOnlyList<int> NumbersIn(string text)
     {
         var numbers = new List<int>();
         var digits = new StringBuilder();
+
+        text = ThousandsComma.Replace(text ?? string.Empty, string.Empty);
 
         foreach (var letter in text + " ")
         {

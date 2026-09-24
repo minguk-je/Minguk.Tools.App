@@ -175,6 +175,16 @@ internal static partial class Program
             return _failures == 0 ? 0 : 1;
         }
 
+        // 아이온2 HUD 영역을 실제 화면에서 읽는다(몇 초) · 프로젝트에 넣기.
+        if (args.Contains("--hud"))
+        {
+            TestAion2Hud();
+            foreach (var line in Results) Console.WriteLine(line);
+            return _failures == 0 ? 0 : 1;
+        }
+
+        if (ArgValue(args, "--apply-regions=") is { } hudProject) return ApplyHudRegions(hudProject);
+
         // 진짜 Ollama 로 판단 시간·정확도(아이온2 사냥 장면 8개) - 모델 올리기만 1~2분.
         if (args.Contains("--llm")) return LiveLlmCheck.Run(args);
 
@@ -262,6 +272,7 @@ internal static partial class Program
         TestRegionMaskEditing();
         TestLlm();
         TestScriptAssistant();
+        TestAion2Hud();
         TestMinimap();
         TestCompiledScript();
         TestTrainingActivity();
