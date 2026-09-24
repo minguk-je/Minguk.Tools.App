@@ -33,36 +33,14 @@ internal static partial class Program
         }
 
         var regions = LoadPreset(Path.Combine(folder, HudPreset));
-        var screen = new BitmapImage();
-        screen.BeginInit();
-        screen.CacheOption = BitmapCacheOption.OnLoad;
-        screen.UriSource = new Uri(Path.Combine(folder, "aion2-field-720p.png"));
-        screen.EndInit();
-        screen.Freeze();
 
         using var ocr = OcrEngineFactory.Create(out var fallback);
 
         if (fallback is not null) Console.WriteLine($"[INFO] 글자 읽기: {fallback}");
 
-        var read = new Dictionary<string, (string Text, int[] Numbers)>(StringComparer.Ordinal);
-
-        foreach (var region in regions)
-        {
-            var texts = RegionTargets.Of(region, null)
-                .Select(target =>
-                {
-                    var crop = RegionPreprocess.Apply(CropRatio(screen, target.Box), region);
-
-                    // 영역을 맞출 때 눈으로 보려고 - MINGUK_HUD_DUMP 를 켜면 잘린 조각을 %TEMP% 에 남긴다.
-                    if (Environment.GetEnvironmentVariable("MINGUK_HUD_DUMP") is { Length: > 0 }) SavePng(crop, Path.Combine(Path.GetTempPath(), $"hud-{region.Name}-{target.Cell.Name}.png"));
-
-                    return ocr.RecognizeAsync(crop).GetAwaiter().GetResult().Text;
-                })
-                .ToList();
-
-            read[region.Name] = RegionTargets.Combine(texts);
-            Console.WriteLine($"[INFO] 아이온2 HUD 「{region.Name}」 → 「{read[region.Name].Text}」 숫자 [{string.Join(", ", read[region.Name].Numbers)}]");
-        }
+        // ── 720p 필드 화면 - 대상 없음 ──
+        var screen = "720p 필드";
+        var read = ReadHud(ocr, regions, Path.Combine(folder, "aion2-field-720p.png"), "field");
 
         static string Squash(string text) => text.Replace(" ", string.Empty);
 
@@ -75,6 +53,21 @@ internal static partial class Program
         Expect("레벨", r => r.Numbers.SequenceEqual([46]), "[46]");
         Expect("재화", r => r.Numbers.Skip(r.Numbers.Length - 3).SequenceEqual([2479369, 49849, 11751]), "끝 셋 [2479369, 49849, 11751]");
         Expect("시각", r => r.Numbers.SequenceEqual([6, 47, 8]) || r.Text.Contains("06:47:08"), "06:47:08");
+        Expect("대상", r => r.Text.Length == 0, "대상이 없으면 빈 글");
+
+        // ── 1080p 대상 잡은 화면 - 같은 영역(0~1 비율)이 해상도가 달라도 맞는지 ──
+        screen = "1080p 대상";
+        read = ReadHud(ocr, regions, Path.Combine(folder, "aion2-target-1080p.png"), "target");
+
+        Expect("지역", r => Squash(r.Text).Contains("고원동부"), "아르타미아 고원 동부");
+        Expect("퀘스트", r => Squash(r.Text).Contains("악몽을") && r.Text.Contains("45"), "[LV45] 악몽을 보는 데바");
+        Expect("게이지", r => r.Numbers.FirstOrDefault() == 94, "94.4% → 94");
+        Expect("체력", r => r.Numbers.SequenceEqual([10129, 10129]), "[10129, 10129]");
+        Expect("마나", r => r.Numbers.SequenceEqual([4002, 4002]), "[4002, 4002]");
+        Expect("레벨", r => r.Numbers.SequenceEqual([46]), "[46]");
+        Expect("재화", r => r.Numbers.Skip(r.Numbers.Length - 3).SequenceEqual([2212096, 64076, 16751]), "끝 셋 [2212096, 64076, 16751]");
+        Expect("대상", r => Squash(r.Text).Contains("고원칼니프") && r.Numbers.FirstOrDefault() == 46, "46 고원 칼니프");
+        Expect("대상거리", r => r.Numbers.FirstOrDefault() == 14, "14m → 14");
 
         Check("숫자 뽑기: 천 단위 쉼표는 숫자 안으로(「9,473 / 9,473」 → 9473, 9473), 세 자리가 아니면 끊는다(「17,24」 → 17, 24)",
               RegionTargets.NumbersIn("9,473 / 9,473").SequenceEqual([9473, 9473]) && RegionTargets.NumbersIn("2,479,369").SequenceEqual([2479369])
@@ -85,8 +78,41 @@ internal static partial class Program
         {
             var got = read.TryGetValue(name, out var value) ? value : (string.Empty, []);
 
-            Check($"아이온2 HUD: 「{name}」 을 읽는다(기대 {expected})", ok(got), $"「{got.Item1}」 [{string.Join(", ", got.Item2)}]");
+            Check($"아이온2 HUD({screen}): 「{name}」 을 읽는다(기대 {expected})", ok(got), $"「{got.Item1}」 [{string.Join(", ", got.Item2)}]");
         }
+    }
+
+    /// <summary>화면 한 장을 영역마다 잘라 읽는다. MINGUK_HUD_DUMP 를 켜면 잘린 조각을 %TEMP%\hud-{tag}-영역-구역.png 로 남긴다(영역을 맞출 때 눈으로 본다).</summary>
+    private static Dictionary<string, (string Text, int[] Numbers)> ReadHud(IOcrEngine ocr, IReadOnlyList<NamedRegion> regions, string imagePath, string tag)
+    {
+        var screen = new BitmapImage();
+        screen.BeginInit();
+        screen.CacheOption = BitmapCacheOption.OnLoad;
+        screen.UriSource = new Uri(imagePath);
+        screen.EndInit();
+        screen.Freeze();
+
+        var read = new Dictionary<string, (string Text, int[] Numbers)>(StringComparer.Ordinal);
+
+        foreach (var region in regions)
+        {
+            var texts = RegionTargets.Of(region, null)
+                .Select(target =>
+                {
+                    var crop = RegionPreprocess.Apply(CropRatio(screen, target.Box), region);
+
+                    if (Environment.GetEnvironmentVariable("MINGUK_HUD_DUMP") is { Length: > 0 })
+                        SavePng(crop, Path.Combine(Path.GetTempPath(), $"hud-{tag}-{region.Name}-{target.Cell.Name}.png"));
+
+                    return ocr.RecognizeAsync(crop).GetAwaiter().GetResult().Text;
+                })
+                .ToList();
+
+            read[region.Name] = RegionTargets.Combine(texts);
+            Console.WriteLine($"[INFO] 아이온2 HUD {tag} 「{region.Name}」 → 「{read[region.Name].Text}」 숫자 [{string.Join(", ", read[region.Name].Numbers)}]");
+        }
+
+        return read;
     }
 
     /// <summary>

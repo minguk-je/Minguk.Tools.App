@@ -63,6 +63,27 @@
     "note": "아래 가운데 문장 안 숫자 - 46"
   },
   {
+    "name": "대상",
+    "x": 0.4323, "y": 0.0296, "width": 0.1276, "height": 0.0176,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
+    "note": "위쪽 가운데 대상 창의 레벨+이름 「46 고원 칼니프」 - 대상이 없으면 비어 있다(글자있나(\"대상\")). 이름 길이에 따라 가운데 정렬로 움직여 넉넉히 잡았다"
+  },
+  {
+    "name": "대상거리",
+    "x": 0.5583, "y": 0.0296, "width": 0.0260, "height": 0.0176,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
+    "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
+    "note": "대상까지 거리 「14m」 - 숫자읽기(\"대상거리\")"
+  },
+  {
+    "name": "대상체력바",
+    "x": 0.4130, "y": 0.0500, "width": 0.1703, "height": 0.0111,
+    "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 1, "ocrEngine": null,
+    "cells": [ { "name": "전체", "x": 0, "y": 0, "width": 1, "height": 1, "angle": 0, "digits": false } ],
+    "note": "대상 체력 빨간 막대 - 글자가 없어 OCR 로는 못 읽는다. 자리만 잡아 둔다(막대 색 비율로 읽는 것은 아직 없다)"
+  },
+  {
     "name": "재화",
     "x": 0.0313, "y": 0.0014, "width": 0.1523, "height": 0.0194,
     "live": false, "digits": false, "threshold": 0, "invert": false, "scale": 2, "ocrEngine": null,
