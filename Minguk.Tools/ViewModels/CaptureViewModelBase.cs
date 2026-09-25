@@ -206,6 +206,9 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
     public DelegateCommand DoStopCommand { get; set; }
     public DelegateCommand SaveFrameCommand { get; set; }
 
+    /// <summary>캡처 저장 - 꺼져 있으면 켜고 한 장 저장한다(스크립트 화면 도구 줄).</summary>
+    public DelegateCommand SaveCaptureCommand { get; set; }
+
     public DelegateCommand CollectFrameCommand { get; set; } = null!;
 
     public bool IsRunning
@@ -264,6 +267,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         set => SetProperty(() => SelectedTarget, value, () =>
         {
             DoStartCommand.RaiseCanExecuteChanged();
+            SaveCaptureCommand?.RaiseCanExecuteChanged();
 
             // 사람이 고른 것만 "원하는 대상" 으로 기억한다. 목록을 훑다 없어서 임시로 잡힌 것(모니터)을 기억하면
             // 게임을 켜고 새로 고침해도 안 돌아오고, 그대로 저장돼 다음 실행부터 게임을 잊는다(실측 2026-09-13).
@@ -454,6 +458,7 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         DoStartCommand = new DelegateCommand(DoStart, () => !IsRunning && SelectedTarget is not null, false);
         DoStopCommand = new DelegateCommand(DoStop, () => IsRunning, false);
         SaveFrameCommand = new DelegateCommand(DoSaveFrame, () => IsRunning, false);
+        SaveCaptureCommand = new DelegateCommand(DoSaveCapture, () => SelectedTarget is not null, false);
         CollectFrameCommand = new DelegateCommand(DoCollectFrame, () => IsRunning && SupportsCollecting, false);
 
         OnPreviewMouseDownCommand = new DelegateCommand<MouseButtonEventArgs>(OnPreviewMouseDown, false);
@@ -715,6 +720,36 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             Logger.Error(JsonConvert.SerializeObject(ex));
             ExceptionViewer.Show(ex, MethodBase.GetCurrentMethod()?.GetDeclaringName());
         }
+    }
+
+    /// <summary>
+    /// 다음 프레임 한 장을 PNG 로 떨어뜨린다 - 캡처가 꺼져 있으면 먼저 켠다. 켜지 못했으면 false.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-26) "화면캡처 쪽으로 가서 시작 누르고 프레임 저장 눌렀는데 불편해" - 스크립트 화면 「캡처 저장」 이 부른다.
+    /// 캡처를 켜면(<see cref="DoStart"/>) 저장 요청이 지워지므로 켠 <b>다음에</b> 요청한다.
+    /// </remarks>
+    protected bool RequestFrameSave()
+    {
+        EnsureCpuReadback("프레임을 저장하려면 픽셀이 필요합니다");
+
+        if (!IsRunning) DoStart();
+        if (!IsRunning) return false;
+
+        Interlocked.Exchange(ref _isSaveFrameRequested, 1);
+        return true;
+    }
+
+    /// <summary>캡처 저장 단추 - 고른 대상을 못 찾아 임시로 잡힌 대상이면 켜지 않는다(엉뚱한 화면을 저장하지 않게).</summary>
+    private void DoSaveCapture()
+    {
+        if (!IsRunning && IsTemporaryTarget)
+        {
+            StatusText = $"고른 대상 창을 찾지 못해 '{SelectedTarget?.Display}' 가 임시로 잡혀 있어 캡처를 켜지 않았습니다 - 게임을 켠 뒤 대상 창을 다시 고르세요.";
+            return;
+        }
+
+        if (!RequestFrameSave()) StatusText ??= "캡처를 켜지 못해 저장하지 못했습니다.";
     }
 
     /// <summary>다음 프레임 한 장을 PNG 로 떨어뜨린다. 캡처 내용을 눈으로 확인하는 용도.</summary>

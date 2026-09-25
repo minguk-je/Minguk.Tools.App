@@ -307,6 +307,12 @@
                                    Content="담기 (F8)"
                                    Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}"
                                    Hint="한 장을 데이터셋에 담는다. 검출이 켜져 있으면 찾은 것이 라벨로 같이 들어간다." />
+                <!-- 화면캡처 화면의 「프레임 저장」 과 같다 - 캡처가 꺼져 있으면 먼저 켠다(사용자, 2026-09-26 "화면캡처 쪽으로 가서 시작 누르고 프레임 저장 눌렀는데 불편해"). -->
+                <dxb:BarButtonItem BarItemDisplayMode="ContentAndGlyph"
+                                   Command="{Binding SaveCaptureCommand}"
+                                   Content="캡처 저장"
+                                   Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}"
+                                   Hint="지금 화면 한 장을 프로젝트 Captures 폴더에 PNG 로 저장한다(화면캡처의 「프레임 저장」 과 같다). 캡처가 꺼져 있으면 먼저 켠다." />
             </dxb:Bar>
 
             <!-- ── 인식 ── 검출 · 추적 · 문턱. 글자 읽기 자리는 영역 패널에 있다. -->
@@ -585,6 +591,9 @@
                     <dxb:BarButtonItem Command="{Binding CollectFrameCommand}"
                                        Content="데이터셋에 담기(_C)"
                                        Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/add.png'}" />
+                    <dxb:BarButtonItem Command="{Binding SaveCaptureCommand}"
+                                       Content="캡처 저장(_V)"
+                                       Glyph="{image:FreeImage ResourceName='Axialis/Basic/16x16/save.png'}" />
                     <dxb:BarButtonItem Command="{Binding ClickDetectionCommand}"
                                        Content="찾은 것 누르기(_K)"
                                        Glyph="{image:FreeImage ResourceName='Axialis/HardwareNetwork/16x16/mouse.png'}" />
