@@ -58,11 +58,12 @@ public static class ScriptHelp
 
         ["Detections"] = Detections, ["NearestDetection"] = Detections, ["TargetDetection"] = Detections, ["ReleaseTarget"] = Detections, ["WaitDetection"] = Detections,
 
-        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen, ["PressRegion"] = Screen, ["RegionSpot"] = Screen, ["HitConfirmed"] = Screen, ["HealthBar"] = Detections, ["HitByHealthBar"] = Detections,
+        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["FindTexts"] = Screen, ["ReadLines"] = Screen, ["RunInBackground"] = Screen, ["BarFillAt"] = Screen, ["BrightnessAt"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen, ["PressRegion"] = Screen, ["RegionSpot"] = Screen, ["HitConfirmed"] = Screen, ["HealthBar"] = Detections, ["HitByHealthBar"] = Detections,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
         ["Heading"] = Minimap, ["TargetBearing"] = Minimap, ["TargetBearings"] = Minimap, ["BearingTo"] = Minimap,
         ["Face"] = Minimap, ["GoTo"] = Minimap, ["GoToTarget"] = Minimap, ["TurnScale"] = Minimap,
+        ["MarkerBearing"] = Minimap, ["MarkerBearings"] = Minimap, ["GoToMarker"] = Minimap, ["WalkToMarker"] = Minimap, ["WalkPathToMarker"] = Minimap, ["IgnoreNearestMarker"] = Minimap,
 
         ["SituationSummary"] = Llm, ["Judge"] = Llm, ["JudgeScreen"] = Llm, ["Ask"] = Llm, ["AskScreen"] = Llm, ["CorrectJudgement"] = Llm, ["SetJudgeRules"] = Llm,
 
@@ -78,10 +79,17 @@ public static class ScriptHelp
         ["Heading"] = "출력(방위());   // 0=북 · 90=동 · 180=남 · 270=서",
         ["TargetBearing"] = "var 목표 = 목표방위();\nif (목표 != null) 출력(목표);   // 방위 237도 · 거리 105px · 돌 각 -14도",
         ["TargetBearings"] = "foreach (var 표 in 목표방위들()) 출력(표);",
-        ["MarkerBearing"] = "var 몹 = 마커방위(\"몹\");\nif (몹 != null) 출력(몹);   // 미니맵 빨간 점 - 방위·거리·돌 각",
-        ["MarkerBearings"] = "출력($\"미니맵 몹 {마커방위들(\"몹\").Count}마리\");",
-        ["WalkToMarker"] = "if (!마커로걷기(\"몹\", 2000)) 출력(\"미니맵에 몹이 없거나 막혔습니다\");   // 키보드로만 가장 가까운 빨간 점 쪽으로 2초",
-        ["GoToMarker"] = "if (!마커로가기(\"몹\", 2000)) 출력(\"미니맵에 몹이 없습니다\");   // 가장 가까운 빨간 점 쪽으로 2초",
+        ["MarkerBearing"] = "var 몹 = 마커방위(\"선공몹,일반몹\");\nif (몹 != null) 출력(몹);   // 미니맵 빨간·흰 점 가운데 가장 가까운 것 - 방위·거리·돌 각",
+        ["MarkerBearings"] = "출력($\"미니맵 선공몹 {마커방위들(\"선공몹\").Count}마리\");",
+        ["RunInBackground"] = "따로돌리기(\"줍기\", 200, () =>\n{\n    if (읽기(\"줍기\").Contains(\"줍기\")) 키(\"F\");\n});   // 본 흐름(공격)과 따로 0.2초마다",
+        ["ReadLines"] = "foreach (var 줄 in 글줄들(\"시야\")) 출력(줄);   // 한 번 읽고 모든 줄",
+        ["FindTexts"] = "foreach (var 곳 in 글자찾기들(\"연구원\")) 출력(곳);   // 대상 칸과 몹 머리 위 이름표 둘 다",
+        ["BarFillAt"] = "if (채움(\"대상체력바\") < 0.02) 출력(\"대상 체력바가 비었습니다\");   // 0~1",
+        ["BrightnessAt"] = "if (밝기(\"창단추\") < 128) 출력(\"단추가 꺼져 있습니다\");   // 0~255",
+        ["IgnoreNearestMarker"] = "마커무시(\"선공몹,일반몹\", 5000);   // 방금 잡은 몹 점(가장 가까운 것)을 5초 동안 뺀다",
+        ["WalkToMarker"] = "if (!마커로걷기(\"선공몹,일반몹\", 2000)) 출력(\"미니맵에 몹이 없거나 막혔습니다\");   // 키보드로만 가장 가까운 몹 점 쪽으로 2초",
+        ["WalkPathToMarker"] = "if (!길찾아걷기(\"퀘스트,목표\", 3000)) 출력(\"미니맵에 표시가 없거나 막혔습니다\");   // 바닥만 밟아 퀘스트 표시 쪽으로 3초",
+        ["GoToMarker"] = "if (!마커로가기(\"선공몹\", 2000)) 출력(\"미니맵에 몹이 없습니다\");   // 가장 가까운 빨간 점 쪽으로 2초",
         ["BearingTo"] = "if (Math.Abs(방위차(90)) > 10) 바라보기(90);",
         ["Face"] = "바라보기(180);   // 남쪽을 보도록 마우스를 돌린다(한 번짜리)",
         ["GoTo"] = "가기(237, 3000);   // 남서쪽으로 3초 걷는다 - 걷는 동안 미니맵을 보며 고친다",

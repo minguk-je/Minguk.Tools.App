@@ -655,7 +655,7 @@ internal static class ViewSmokeProbe
             var korean = Minguk.Tools.Input.Scripting.ScriptApiCatalog.Match("글").Select(m => m.Name).ToList();
             var english = Minguk.Tools.Input.Scripting.ScriptApiCatalog.Match("cl").Select(m => m.Name).ToList();
             // 앞글자가 같은 것은 다 나와야 한다 - 목록에서 고르는 것이니 하나로 좁혀질 이유가 없다.
-            var ok = korean.SequenceEqual(["글자", "글자있나", "글자찾기", "글자누르기"]) && english.SequenceEqual(["Click", "ClickAt"]);
+            var ok = korean.SequenceEqual(["글자", "글자있나", "글자찾기", "글자찾기들", "글자누르기", "글줄들"]) && english.SequenceEqual(["Click", "ClickAt"]);
             Console.WriteLine($"[{(ok ? "PASS" : "FAIL")}] 앞글자로 고른다 — 글→{string.Join(",", korean)} cl→{string.Join(",", english)}");
             if (!ok) failures++;
 

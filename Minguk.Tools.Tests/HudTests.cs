@@ -90,6 +90,8 @@ internal static partial class Program
 
         foreach (var engine in engines.Values) engine.Dispose();
 
+        TestTargetBarFill(folder, regions);
+
         Check("숫자 뽑기: 천 단위 쉼표는 숫자 안으로(「9,473 / 9,473」 → 9473, 9473), 세 자리가 아니면 끊는다(「17,24」 → 17, 24)",
               RegionTargets.NumbersIn("9,473 / 9,473").SequenceEqual([9473, 9473]) && RegionTargets.NumbersIn("2,479,369").SequenceEqual([2479369])
               && RegionTargets.NumbersIn("17,24").SequenceEqual([17, 24]),
@@ -101,6 +103,99 @@ internal static partial class Program
 
             Check($"아이온2 HUD({screen}): 「{name}」 을 읽는다(기대 {expected})", ok(got), $"「{got.Item1}」 [{string.Join(", ", got.Item2)}]");
         }
+    }
+
+    /// <summary>
+    /// 대상 체력바 채움(<see cref="Vision.HealthBars.BarFill"/>) - 사용자(2026-09-25) "체력바로 확인해줘". 대상 이름만 보고 공격키를 누르던 것을 체력바로도 확인한다.
+    /// </summary>
+    private static void TestTargetBarFill(string folder, IReadOnlyList<NamedRegion> regions)
+    {
+        var bar = regions.First(r => r.Name == "대상체력바");
+
+        double FillOf(string file)
+        {
+            var (pixels, width, height) = LoadBgra(Path.Combine(folder, file));
+            var left = (int)Math.Floor(bar.X * width);
+            var top = (int)Math.Floor(bar.Y * height);
+            var cropWidth = (int)Math.Ceiling((bar.X + bar.Width) * width) - left;
+            var cropHeight = (int)Math.Ceiling((bar.Y + bar.Height) * height) - top;
+            var crop = new byte[cropWidth * cropHeight * 4];
+
+            for (var y = 0; y < cropHeight; y++)
+                Array.Copy(pixels, (((top + y) * width) + left) * 4, crop, y * cropWidth * 4, cropWidth * 4);
+
+            return Vision.HealthBars.BarFill.Measure(crop, cropWidth, cropHeight);
+        }
+
+        var full = FillOf("aion2-target-1080p.png");
+        var loot = FillOf("aion2-loot-1080p.png");
+        var field = FillOf("aion2-field-720p.png");
+
+        Check("대상 체력바: 가득 찬 대상은 1 가까이 - 가운데 문양·오른쪽 장식을 넘어 끝까지", full >= 0.97, $"{full:0.000}");
+        Check("대상 체력바: 대상이 없는 화면(줍기·필드)은 0 - 빈 자리를 찬 막대로 안 본다", loot < 0.02 && field < 0.02, $"줍기 {loot:0.000} · 필드 {field:0.000}");
+
+        // 사냥 중 잡은 막대 조각(2026-09-25) - 초록이 왼쪽 약 1/3, 나머지는 회색(49,49,49), 가운데 문양과 오른쪽 끝 장식은 떨어져 있다.
+        var (third, thirdWidth, thirdHeight) = LoadBgra(Path.Combine(folder, "aion2-target-bar-33.png"));
+        var measured = Vision.HealthBars.BarFill.Measure(third, thirdWidth, thirdHeight);
+
+        Check("대상 체력바: 1/3 남은 막대는 0.33(±0.03) - 떨어진 문양·장식까지 세지 않는다", Math.Abs(measured - 0.33) <= 0.03, $"{measured:0.000}");
+
+        // 몹이 죽어 막대가 비었을 때 - 찬 칸(초록)만 회색으로 칠해 본다. 테두리·문양은 그대로.
+        for (var i = 0; i < third.Length; i += 4)
+        {
+            if (third[i + 1] - third[i] < 40 || third[i + 1] < 90) continue;
+
+            third[i] = third[i + 1] = third[i + 2] = 49;
+        }
+
+        var emptied = Vision.HealthBars.BarFill.Measure(third, thirdWidth, thirdHeight);
+
+        Check("대상 체력바: 빈 막대는 0 가까이", emptied < 0.03, $"{emptied:0.000}");
+
+        // 대상 문양 - 대상이 있는지는 몹 이름을 안 읽고 체력바 가운데 금색 문양으로 본다(사용자, 2026-09-25 "몹은 이름을 읽지 말고 그냥 게이지바만").
+        // 본보기는 가운데 빛나는 점을 투명하게 뺀 테두리(aion2-target-emblem.png). 자리는 사냥 프로젝트의 「대상문양」(x 0.4844 y 0.0417 w 0.0313 h 0.0509).
+        // 금색(보통 몹)·빨강(선공 몹, 던전) 둘 - 사냥 스크립트는 둘 중 높은 쪽이 0.7 넘으면 대상이 있다고 본다.
+        Vision.Matching.GrayImage Emblem(string file) => Vision.Matching.GrayImage.From(
+            BitmapFrame.Create(new Uri(Path.Combine(folder, file)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad), useAlpha: true);
+
+        var gold = Emblem("aion2-target-emblem.png");
+        var red = Emblem("aion2-target-emblem-red.png");
+
+        // 1920 너비 화면의 「대상문양」 자리(930, 45, 61×55 px) - 빨간 대상 화면은 위쪽 띠(200px)만 두어 비율 대신 픽셀로 자른다.
+        double EmblemScore(string file)
+        {
+            var frame = BitmapFrame.Create(new Uri(Path.Combine(folder, file)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            var crop = Vision.Matching.GrayImage.From(new CroppedBitmap(frame, new System.Windows.Int32Rect(930, 45, 61, 55)));
+
+            return Math.Max(Vision.Matching.TemplateMatch.Find(crop, gold)?.Score ?? 0, Vision.Matching.TemplateMatch.Find(crop, red)?.Score ?? 0);
+        }
+
+        var goldTarget = EmblemScore("aion2-target-1080p.png");
+        var redTarget = EmblemScore("aion2-target-red-top.png");
+        var withoutTarget = EmblemScore("aion2-loot-1080p.png");
+
+        Check("대상 문양: 금색·빨간 대상 모두 0.7 넘게, 대상이 없으면 0.7 아래(앱의 본보기 대조, 두 본보기 중 높은 쪽)",
+              goldTarget >= 0.7 && redTarget >= 0.7 && withoutTarget < 0.7,
+              $"금색 대상 {goldTarget:0.000} · 빨간 대상 {redTarget:0.000} · 없음 {withoutTarget:0.000}");
+
+        // 테두리 - 가운데 색 원을 빼고 바깥 금속 테두리만(반지름 13.5~17px). 싸우는 중 문양 색이 바뀌어도 한 장으로 잡는다(로그 21:38 - 금색·빨강 사이 0.5초에 둘 다 놓쳐 풀었다).
+        var ring = Emblem("aion2-target-emblem-ring.png");
+
+        double RingScore(string file)
+        {
+            var frame = BitmapFrame.Create(new Uri(Path.Combine(folder, file)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+
+            return Vision.Matching.TemplateMatch.Find(Vision.Matching.GrayImage.From(new CroppedBitmap(frame, new System.Windows.Int32Rect(930, 45, 61, 55))), ring)?.Score ?? 0;
+        }
+
+        var ringGold = RingScore("aion2-target-1080p.png");
+        var ringRed = RingScore("aion2-target-red-top.png");
+        var ringSwamp = RingScore("aion2-target-red-swamp-top.png");
+        var ringNone = RingScore("aion2-loot-1080p.png");
+
+        Check("대상 문양 테두리: 색과 상관없이 금색·빨강(던전·늪지) 대상 0.7 넘게, 대상이 없으면 0.7 아래",
+              ringGold >= 0.7 && ringRed >= 0.7 && ringSwamp >= 0.7 && ringNone < 0.7,
+              $"금색 {ringGold:0.000} · 빨강 던전 {ringRed:0.000} · 빨강 늪지 {ringSwamp:0.000} · 없음 {ringNone:0.000}");
     }
 
     /// <summary>

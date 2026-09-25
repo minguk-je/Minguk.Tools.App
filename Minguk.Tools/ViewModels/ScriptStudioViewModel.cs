@@ -725,7 +725,43 @@ public partial class ScriptStudioViewModel : RecognizingCaptureViewModelBase
 
         if (IsPaused) IsPaused = false;
         else if (Live.Debug.IsPaused) Live.Debug.Continue();
-        else if (Player.IsIdle) Player.RunOnce();
+        else if (Player.IsIdle)
+        {
+            // 고른 대상을 못 찾아 임시로 잡힌 대상(모니터)이면 돌리지 않는다 - 그 화면을 게임으로 알고 누른다(사용자 2026-09-26 "너를 클릭하는데").
+            if (!IsRunning && IsTemporaryTarget)
+            {
+                StatusText = $"고른 대상 창을 찾지 못해 '{SelectedTarget?.Display}' 가 임시로 잡혀 있어 스크립트를 시작하지 않았습니다 - 게임을 켠 뒤 대상 창을 다시 고르세요.";
+                Logger.Info($"F5 - 임시 대상이라 시작 안 함: {SelectedTarget?.Display}");
+                return;
+            }
+
+            StartCaptureForRun();
+            Player.RunOnce();
+        }
+    }
+
+    /// <summary>
+    /// F5 로 처음부터 돌리는데 캡처가 꺼져 있으면 먼저 켠다 - 「캡처 시작」 을 누른 것과 같다.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-25) "F5 누르면 캡처 시작 안눌러져 있으면 캡처 시작 버튼 먼저 눌러줘" - 캡처 없이 돌면 화면을 못 읽어 첫 읽기에서 멈췄다.
+    /// 자리가 있으면 리드백을 먼저 켜 둔다 - 켠 뒤에 켜면 캡처가 한 번 더 다시 시작된다(<see cref="RecognizingCaptureViewModelBase.PrepareRecognitionForScript"/>).
+    /// 대상 창을 안 골랐으면 켤 수 없다 - 상태 줄에 말하고 스크립트는 그대로 돌린다(화면을 안 읽는 스크립트도 있다).
+    /// </remarks>
+    private void StartCaptureForRun()
+    {
+        if (IsRunning) return;
+
+        if (SelectedTarget is null)
+        {
+            StatusText = "캡처할 대상 창을 고르지 않아 캡처를 켜지 못했습니다 - 도구 줄에서 대상 창을 고르세요.";
+            return;
+        }
+
+        if (Regions.Count > 0) EnsureCpuReadback("스크립트가 화면 글자를 읽습니다");
+
+        Logger.Info("F5 - 캡처가 꺼져 있어 먼저 시작한다");
+        DoStart();
     }
 
     /// <summary>대상 창이 닫혀 캡처가 멈췄다 - 눈이 없는 스크립트는 세울 수밖에 없다(옛 검출로 계속 쏘거나 "눈이 없습니다" 예외로 끝나던 것).</summary>

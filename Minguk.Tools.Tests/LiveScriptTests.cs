@@ -501,6 +501,76 @@ internal static partial class Program
             }
         }
 
+        // ── 따로돌리기 - 본 흐름 옆에서 되풀이, 중지와 함께 멈추고 끝나면 키를 떼기 전에 선다 ──
+        //    사용자(2026-09-25) "다 쓰레드로 분리하자" - 줍기·물약·물러나기·화면 돌리기를 따로 돌린다.
+        {
+            var adapter = new RecordingAdapter();
+            var printed = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var host = new LiveScriptHost
+            {
+                Service = new InputService(adapter),
+                RequiresForeground = false,
+                Target = () => monitor,
+                Hub = new FakeHub(monitor),
+                Print = printed.Enqueue,
+                Watch = (_, _) => { },
+                HoldTimeMs = 1,
+                MaxInputsPerSecond = 1000
+            };
+
+            using var cts = new CancellationTokenSource();
+            var api = new LiveScriptApi(host, cts.Token);
+            var run = System.Threading.Tasks.Task.Run(() => new RoslynScriptEngine().RunLiveAsync(
+                "var 바퀴 = 0; 따로돌리기(\"줍기\", 20, () => { 바퀴++; 키(\"F\"); }); 따로돌리기(\"터짐\", 20, () => throw new System.InvalidOperationException(\"일부러\"));\n" +
+                "while (!중지되었나()) 쉬기(20);\n출력($\"바퀴 {바퀴}\");", api, null, cts.Token).GetAwaiter().GetResult());
+
+            Thread.Sleep(1500);
+            cts.Cancel();
+            var finished = run.Wait(5000);
+
+            api.ReleaseAll();
+
+            // 기록은 보통 List 라 따로 도는 일이 쓰는 사이에 세면 부딪힌다 - 세운 뒤에 센다.
+            var pressesWhileRunning = adapter.Calls.Count(c => c == "Press 70");
+            var afterRelease = adapter.Calls.Count;
+            Thread.Sleep(300);
+            var pressedAfterRelease = adapter.Calls.Count - afterRelease;
+
+            Check("따로돌리기: 본 흐름 옆에서 되풀이하고, 중지하면 같이 멈추고, 키를 뗀 뒤에는 더 안 누른다",
+                  pressesWhileRunning >= 10 && finished && pressedAfterRelease == 0,
+                  $"도는 동안 F {pressesWhileRunning}번 · 끝남 {finished} · 뗀 뒤 누름 {pressedAfterRelease}");
+
+            Check("따로돌리기: 안에서 난 오류는 출력에 알리고 이어 돈다(스크립트를 세우지 않는다)",
+                  printed.Any(p => p.Contains("「터짐」") && p.Contains("일부러")),
+                  string.Join(" | ", printed.Take(3)));
+        }
+
+        {
+            var adapter = new RecordingAdapter();
+            var host = new LiveScriptHost
+            {
+                Service = new InputService(adapter),
+                RequiresForeground = false,
+                Target = () => monitor,
+                Hub = new FakeHub(monitor),
+                Print = _ => { },
+                Watch = (_, _) => { },
+                HoldTimeMs = 1
+            };
+
+            using var cts = new CancellationTokenSource();
+            var api = new LiveScriptApi(host, cts.Token);
+            var errors = System.Threading.Tasks.Task.Run(() => new RoslynScriptEngine().RunLiveAsync(
+                "따로돌리기(\"줍기\", 20, () => 끝());\nwhile (true) 쉬기(20);", api, null, cts.Token).GetAwaiter().GetResult());
+            var ended = errors.Wait(5000);
+
+            Check("따로돌리기: 따로 도는 일이 끝()을 부르면 스크립트 전체가 오류 없이 끝난다",
+                  ended && errors.Result.Count == 0 && api.Outcome == LiveScriptOutcome.Stopped,
+                  $"끝남 {ended} · 결과 {api.Outcome} · 오류 {(ended ? errors.Result.Count : -1)}");
+
+            api.ReleaseAll();
+        }
+
         // ── 문법 검사는 돌리지 않고 줄 번호를 준다 ──
         {
             var adapter = new RecordingAdapter();

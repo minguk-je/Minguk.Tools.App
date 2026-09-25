@@ -267,11 +267,24 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
 
             // 사람이 고른 것만 "원하는 대상" 으로 기억한다. 목록을 훑다 없어서 임시로 잡힌 것(모니터)을 기억하면
             // 게임을 켜고 새로 고침해도 안 돌아오고, 그대로 저장돼 다음 실행부터 게임을 잊는다(실측 2026-09-13).
-            if (!_isRefreshingTargets && value is not null) _lastSelectedTargetDisplay = value.Display;
+            if (!_isRefreshingTargets && value is not null)
+            {
+                _lastSelectedTargetDisplay = value.Display;
+                IsTemporaryTarget = false;
+            }
         });
     }
 
     private bool _isRefreshingTargets;
+
+    /// <summary>
+    /// 지금 대상이 사람이 고른 것이 아니라, 고른 것을 못 찾아 임시로 잡힌 것(목록 첫 번째 = 모니터)인가.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-26) "너를 클릭하는데" - 앱을 다시 켰을 때 게임 창을 못 찾아 모니터가 잡혔고, F5 가 그 모니터로 캡처를 켜
+    /// 스크립트가 Minguk Tools 화면을 게임으로 알고 X·단추를 눌렀다. 이것이 참이면 F5 가 캡처·스크립트를 시작하지 않는다.
+    /// </remarks>
+    protected bool IsTemporaryTarget { get; private set; }
 
     public string? StatusText
     {
@@ -576,14 +589,22 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
             foreach (var video in videos)
                 Targets.Add(video);
 
-            // ① 사람이 고른 것(이번에 목록에 있으면) → ② 방금 전까지 보던 것 → ③ 목록의 첫 번째.
+            // ① 사람이 고른 것(이번에 목록에 있으면) → ①' 같은 프로그램의 창 → ② 방금 전까지 보던 것 → ③ 목록의 첫 번째.
             // 예전에는 ②가 먼저라, 앱을 켤 때 게임이 없어 모니터가 임시로 잡히면 게임을 켜고 새로 고침해도 모니터에 머물렀다.
-            SelectedTarget = Targets.FirstOrDefault(target => target.Display == _lastSelectedTargetDisplay)
+            // ①' - 게임 창 제목에 캐릭터·채널 같은 글이 들어 있어(「AION2 l 슈퍼상들리에」) 조금만 바뀌어도 ①로 못 찾고 모니터로 갔다(2026-09-26).
+            var exact = Targets.FirstOrDefault(target => target.Display == _lastSelectedTargetDisplay);
+            var sameProgram = exact is null ? SameProgramWindow(_lastSelectedTargetDisplay) : null;
+
+            SelectedTarget = exact
+                             ?? sameProgram
                              ?? Targets.FirstOrDefault(target => target.Key == previouslySelected?.Key)
                              ?? Targets.FirstOrDefault();
 
-            var hasSavedTarget = Targets.Any(target => target.Display == _lastSelectedTargetDisplay);
-            Logger.Debug($"대상 복구: 저장='{_lastSelectedTargetDisplay}' / 후보 {Targets.Count}개 / 일치 {hasSavedTarget} / 선택='{SelectedTarget?.Display}'");
+            if (sameProgram is not null) _lastSelectedTargetDisplay = sameProgram.Display;   // 같은 게임 - 다음부터는 이 이름으로 찾는다
+
+            var hasSavedTarget = exact is not null || sameProgram is not null;
+            IsTemporaryTarget = !hasSavedTarget && !string.IsNullOrEmpty(_lastSelectedTargetDisplay);
+            Logger.Debug($"대상 복구: 저장='{_lastSelectedTargetDisplay}' / 후보 {Targets.Count}개 / 일치 {exact is not null} / 같은 프로그램 {sameProgram is not null} / 선택='{SelectedTarget?.Display}'");
 
             StatusText = hasSavedTarget || string.IsNullOrEmpty(_lastSelectedTargetDisplay)
                 ? $"대상 {Targets.Count}개 (모니터 + 창{(videos.Count > 0 ? $" + 영상 {videos.Count}" : string.Empty)})"
@@ -598,6 +619,24 @@ public abstract partial class CaptureViewModelBase : DocumentViewModelBase, IDis
         {
             _isRefreshingTargets = false;
         }
+    }
+
+    /// <summary>
+    /// 저장한 대상이 창이면(「[창] 제목  (프로세스, 가로×세로)」) 지금 목록에서 같은 프로세스의 창 - 크기까지 같은 것을 앞에. 없으면 null.
+    /// </summary>
+    private CaptureTarget? SameProgramWindow(string savedDisplay)
+    {
+        var saved = System.Text.RegularExpressions.Regex.Match(savedDisplay, @"^\[창\] .*\((?<process>[^,()]+), (?<width>\d+)×(?<height>\d+)\)$");
+
+        if (!saved.Success) return null;
+
+        var process = saved.Groups["process"].Value.Trim();
+        var width = int.Parse(saved.Groups["width"].Value);
+        var height = int.Parse(saved.Groups["height"].Value);
+
+        return Targets.Where(target => target.Kind == CaptureTargetKind.Window && string.Equals(target.ProcessName, process, StringComparison.OrdinalIgnoreCase))
+                      .OrderByDescending(target => target.Width == width && target.Height == height)
+                      .FirstOrDefault();
     }
 
     protected void DoStart()

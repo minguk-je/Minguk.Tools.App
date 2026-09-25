@@ -30,6 +30,8 @@ internal static partial class Program
             return;
         }
 
+        TestMinimapPath(folder);
+
         var field = ArrowOf(folder, "field.png", spec);
         var dungeonA = ArrowOf(folder, "dungeon-a.png", spec);
         var dungeonB = ArrowOf(folder, "dungeon-b.png", spec);
@@ -160,10 +162,10 @@ internal static partial class Program
         if (aion is not null)
         {
             var (aionPixels, aionWidth, aionHeight) = LoadBgra(Path.Combine(folder, "aion2-mobs.png"));
-            var mobs = MinimapReader.Markers(aionPixels, aionWidth, aionHeight, spec, spec.MarkerNamed("몹")!, aion.CenterX, aion.CenterY);
+            var mobs = MinimapReader.Markers(aionPixels, aionWidth, aionHeight, spec, spec.MarkerNamed("선공몹")!, aion.CenterX, aion.CenterY);
             var described = string.Join(" · ", mobs.Select(m => $"{m.Bearing:0}도 {m.Distance:0}px {m.Pixels}px"));
 
-            Check("미니맵: 「몹」 빨간 점 셋만 잡고 어두운 붉은 지도 무늬는 안 잡는다",
+            Check("미니맵: 「선공몹」 빨간 점 셋만 잡고 어두운 붉은 지도 무늬는 안 잡는다",
                   mobs.Count == 3 && mobs.All(m => m.Distance < 40),
                   $"{mobs.Count}개 - {described}");
 
@@ -178,6 +180,48 @@ internal static partial class Program
                   MinimapReader.Markers(aionPixels, aionWidth, aionHeight, spec, aion.CenterX, aion.CenterY).Count == 0,
                   $"목표 {MinimapReader.Markers(aionPixels, aionWidth, aionHeight, spec, aion.CenterX, aion.CenterY).Count}개");
         }
+
+        if (aion is not null)
+        {
+            // 흰 점(「일반몹」) - 이 화면에는 없다. 흰 깃털 넷·화살표·빨간 점 흰 테두리·시계 숫자가 있어 모양으로 걸러야 한다.
+            var (whitePixels, whiteWidth, whiteHeight) = LoadBgra(Path.Combine(folder, "aion2-mobs.png"));
+            var white = spec.MarkerNamed("일반몹")!;
+            var none = MinimapReader.Markers(whitePixels, whiteWidth, whiteHeight, spec, white, aion.CenterX, aion.CenterY);
+
+            Check("미니맵: 「일반몹」 흰 점 - 흰 깃털·화살표·테두리·시계 숫자는 안 잡는다",
+                  none.Count == 0,
+                  string.Join(" · ", none.Select(m => $"{m.Bearing:0}도 {m.Distance:0}px {m.Pixels}px")));
+
+            // 사용자 캡처(2026-09-25)의 흰 점은 빨간 점과 같은 크기의 흰 동그라미다 - 파일이 없어 같은 크기(지름 6px)를 캐릭터 동쪽 30px 에 그려 넣는다.
+            var (dotX, dotY) = ((int)Math.Round(aion.CenterX) + 30, (int)Math.Round(aion.CenterY));
+
+            for (var y = -3; y <= 3; y++)
+            {
+                for (var x = -3; x <= 3; x++)
+                {
+                    if ((x * x) + (y * y) > 8) continue;
+
+                    var i = (((dotY + y) * whiteWidth) + dotX + x) * 4;
+
+                    whitePixels[i] = 235;
+                    whitePixels[i + 1] = 238;
+                    whitePixels[i + 2] = 240;
+                }
+            }
+
+            var one = MinimapReader.Markers(whitePixels, whiteWidth, whiteHeight, spec, white, aion.CenterX, aion.CenterY);
+
+            Check("미니맵: 「일반몹」 흰 동그라미를 넣으면 그것 하나만 동쪽(90°)·30px 로 잡는다",
+                  one.Count == 1 && Math.Abs(MinimapReader.Difference(90, one[0].Bearing)) <= 5 && Math.Abs(one[0].Distance - 30) <= 2,
+                  string.Join(" · ", one.Select(m => $"{m.Bearing:0}도 {m.Distance:0}px {m.Pixels}px")));
+        }
+
+        var both = spec.MarkersNamed("선공몹, 일반몹", out var noneUnknown);
+        var wrong = spec.MarkersNamed("선공몹,없는이름", out var oneUnknown);
+
+        Check("미니맵: 쉼표로 이은 이름은 둘 다, 모르는 이름이 섞이면 빈 목록과 그 이름",
+              both.Count == 2 && noneUnknown.Count == 0 && wrong.Count == 0 && oneUnknown.SequenceEqual(["없는이름"]),
+              $"{both.Count}개 · 모름 [{string.Join(",", oneUnknown)}]");
 
         Check("미니맵: 모르는 점 이름은 null, 「목표」 는 노란 마커 규칙",
               spec.MarkerNamed("없는이름") is null && ReferenceEquals(spec.MarkerNamed(MinimapSpec.TargetMarkerName), spec.Marker),

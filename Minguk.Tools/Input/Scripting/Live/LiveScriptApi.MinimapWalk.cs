@@ -55,7 +55,97 @@ public partial class LiveScriptApi
 
     public bool 마커로걷기(string 이름, int 밀리초) => WalkToMarker(이름, 밀리초);
 
-    private bool WalkToMarkerCore(string name, int milliseconds)
+    /// <summary>
+    /// <c>마커로걷기</c> 와 같되 미니맵의 바닥(밝은 칸)만 밟는 길을 찾아 그 길을 따라 걷는다 - 던전 통로처럼 곧게 못 가는 곳.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-26) "미니맵 바닥/벽을 구분해 길찾기가 좋을거 같은데" - 곧게만 걷다 던전 벽에 막혔다(<see cref="MinimapPathFinder"/>).
+    /// 걸음(0.3초)마다 길을 다시 찾아 길 위 <see cref="PathLookAheadPixels"/> 앞 지점 쪽 키를 누른다. 길이 없으면 곧게 간다.
+    /// </remarks>
+    public bool WalkPathToMarker(string name, int milliseconds)
+        => Traced("WalkPathToMarker", $"{Quote(name)}, {milliseconds}", () => WalkToMarkerCore(name, milliseconds, usePath: true));
+
+    public bool 길찾아걷기(string 이름, int 밀리초) => WalkPathToMarker(이름, 밀리초);
+
+    /// <summary>길을 따라 걸을 때 길 위 이만큼(px) 앞 지점을 겨눈다 - 가까우면 칸 흔들림에 휘둘리고, 멀면 모퉁이를 깎다 벽에 걸린다.</summary>
+    private const double PathLookAheadPixels = 12;
+
+    /// <summary>
+    /// 점(캐릭터 기준 px) 쪽으로 가는 길 위 앞 지점(캐릭터 기준 px). 길을 못 찾으면 null.
+    /// </summary>
+    private (double X, double Y)? PathAim((double X, double Y) target)
+    {
+        var spec = MinimapSpecOrThrow();
+        var (pixels, width, height) = MinimapPixels(spec);
+        var arrow = MinimapReader.FindArrow(pixels, width, height, spec);
+        var centerX = arrow?.CenterX ?? width / 2.0;
+        var centerY = arrow?.CenterY ?? height / 2.0;
+        var path = MinimapPathFinder.Find(pixels, width, height, (centerX, centerY), (centerX + target.X, centerY + target.Y), spec.FloorMinBrightness);
+
+        if (path is not { Count: > 0 }) return null;
+
+        var aim = path.FirstOrDefault(p => Distance(p, (centerX, centerY)) >= PathLookAheadPixels);
+
+        if (aim == default) aim = path[^1];
+
+        return (aim.X - centerX, aim.Y - centerY);
+    }
+
+    // ── 뺀 자리 ─────────────────────────────────────────────────────────
+
+    /// <summary>뺀 점 자리에서 이만큼(px) 안의 점은 그 점으로 본다 - 점 자리 흔들림(±0.3px)과 몹이 조금 움직인 것을 넉넉히.</summary>
+    private const double IgnoredSpotPixels = 4;
+
+    /// <summary>뺀 점 자리(캐릭터 기준 미니맵 px)와 풀릴 때. 걸으면 점들과 같이 옮긴다.</summary>
+    private readonly List<(double X, double Y, long Until)> _ignoredSpots = [];
+
+    /// <summary>
+    /// 그 이름 점 가운데 지금 가장 가까운 것을 그 시간 동안 뺀다 - <c>마커방위</c>·<c>마커로걷기</c> 가 그 자리 점을 안 본다. 뺀 점을 돌려준다(없으면 null).
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-25) "미니맵에 몹이 죽으면 빨간색이나 흰색원이 사라지는데 2-3초 걸리는거 같아. 그런데 그쪽으로 간단말이지. 타겟했던 몹 위치 기억했다가"
+    /// - 잡은 뒤 2.6초에 미니맵을 봐 아직 남은 죽은 몹 점(7~17px)으로 걸었다(로그 09:32~09:33). 싸울 때 잡힌 대상은 거의 늘 가장 가까운 점이라 그것을 뺀다.
+    /// 캐릭터가 걸으면 점이 밀리므로 <c>마커로걷기</c> 가 밀린 만큼 뺀 자리도 옮긴다.
+    /// </remarks>
+    public ScriptBearing? IgnoreNearestMarker(string name, int milliseconds) => Traced("IgnoreNearestMarker", $"{Quote(name)}, {milliseconds}", () =>
+    {
+        var spots = MarkerSpots(name);
+
+        if (spots.Count == 0) return null;
+
+        var nearest = Nearest(spots);
+
+        lock (_ignoredSpots) _ignoredSpots.Add((nearest.X, nearest.Y, Environment.TickCount64 + Math.Max(0, milliseconds)));
+
+        return new ScriptBearing(BearingOf(nearest), Length(nearest), 0);
+    });
+
+    public ScriptBearing? 마커무시(string 이름, int 밀리초) => IgnoreNearestMarker(이름, 밀리초);
+
+    /// <summary>뺀 자리 근처인가. 풀린 것은 여기서 치운다.</summary>
+    private bool IsIgnoredSpot(double x, double y)
+    {
+        lock (_ignoredSpots)
+        {
+            var now = Environment.TickCount64;
+
+            _ignoredSpots.RemoveAll(s => s.Until <= now);
+
+            return _ignoredSpots.Any(s => Distance((s.X, s.Y), (x, y)) <= IgnoredSpotPixels);
+        }
+    }
+
+    /// <summary>캐릭터가 움직여 점들이 이만큼 밀렸다 - 뺀 자리도 같이 민다.</summary>
+    private void ShiftIgnoredSpots(double dx, double dy)
+    {
+        lock (_ignoredSpots)
+        {
+            for (var i = 0; i < _ignoredSpots.Count; i++)
+                _ignoredSpots[i] = (_ignoredSpots[i].X + dx, _ignoredSpots[i].Y + dy, _ignoredSpots[i].Until);
+        }
+    }
+
+    private bool WalkToMarkerCore(string name, int milliseconds, bool usePath = false)
     {
         if (milliseconds <= 0) return false;
 
@@ -67,10 +157,16 @@ public partial class LiveScriptApi
 
         if (Length(target) <= WalkArrivePixels) return true;
 
+        // 겨눌 곳 - 길을 따라 걸으면 길 위 앞 지점, 아니면 점 그대로.
+        (double X, double Y) Aim((double X, double Y) point) => usePath ? PathAim(point) ?? point : point;
+
         var deadline = Environment.TickCount64 + milliseconds;
         var held = new List<ushort>();
-        var (keys, offset) = _walkForward is { } known ? PickDirection(BearingOf(target) - known) : WalkDirections[0];
+        var aim = Aim(target);
+        var (keys, offset) = _walkForward is { } known ? PickDirection(BearingOf(aim) - known) : WalkDirections[0];
         var still = 0;
+
+        Logger.Debug($"걷기 시작({(usePath ? "길찾기" : "곧게")}): 점 ({target.X:0}, {target.Y:0}) · 겨냥 ({aim.X:0}, {aim.Y:0}) · 앞 {(_walkForward is { } f ? $"{f:0}도" : "모름")} · 키 {keys}");
 
         BeforeInput();
 
@@ -97,6 +193,8 @@ public partial class LiveScriptApi
 
                     if (Math.Sqrt((dx * dx) + (dy * dy)) >= WalkMinMovePixels)
                     {
+                        ShiftIgnoredSpots(dx, dy);
+
                         var forward = MinimapReader.Normalize(BearingOf((-dx, -dy)) - offset);
 
                         // 몹도 움직이고 점 자리도 흔들린다 - 새 값은 반만 믿는다.
@@ -107,6 +205,7 @@ public partial class LiveScriptApi
                     }
                     else if (++still >= WalkStuckSteps)
                     {
+                        Logger.Debug($"걷기 막힘: 점 ({target.X:0}, {target.Y:0}) · 키 {keys} · {WalkStuckSteps}걸음 안 움직임");
                         return false;
                     }
                 }
@@ -117,7 +216,12 @@ public partial class LiveScriptApi
 
                 if (_walkForward is not { } walkForward) continue;
 
-                var (nextKeys, nextOffset) = PickDirection(BearingOf(target) - walkForward);
+                aim = Aim(target);
+
+                var (nextKeys, nextOffset) = PickDirection(BearingOf(aim) - walkForward);
+
+                if (nextKeys != keys)
+                    Logger.Debug($"걷기: 점 ({target.X:0}, {target.Y:0}) · 겨냥 ({aim.X:0}, {aim.Y:0}) · 앞 {walkForward:0}도 · 키 {keys} → {nextKeys}");
 
                 if (nextKeys == keys) continue;
 
@@ -135,19 +239,22 @@ public partial class LiveScriptApi
         }
     }
 
-    /// <summary>그 이름 점들 - 캐릭터 자리 기준(미니맵 px, 오른쪽 +x · 아래 +y).</summary>
+    /// <summary>그 이름 점들 - 캐릭터 자리 기준(미니맵 px, 오른쪽 +x · 아래 +y). <c>마커무시</c> 로 뺀 자리의 점은 없다.</summary>
     /// <remarks>캐릭터 자리는 화살표 무게중심, 화살표를 못 찾으면 미니맵 한가운데. 방위는 안 읽는다.</remarks>
     private List<(double X, double Y)> MarkerSpots(string name)
+        => [.. MarkerSpotsAll(name).Where(s => !IsIgnoredSpot(s.X, s.Y))];
+
+    private List<(double X, double Y)> MarkerSpotsAll(string name)
     {
         var spec = MinimapSpecOrThrow();
-        var rule = spec.MarkerNamed(name)
-                   ?? throw Guard($"미니맵 점 종류 「{name}」 이 {MinimapSpec.FileName} 에 없습니다 - 있는 것: {string.Join(", ", spec.Markers.Keys.Prepend(MinimapSpec.TargetMarkerName))}.");
+        var rules = MarkerRulesOrThrow(spec, name);
         var (pixels, width, height) = MinimapPixels(spec);
         var arrow = MinimapReader.FindArrow(pixels, width, height, spec);
         var centerX = arrow?.CenterX ?? width / 2.0;
         var centerY = arrow?.CenterY ?? height / 2.0;
 
-        return MinimapReader.Markers(pixels, width, height, spec, rule, centerX, centerY)
+        return rules
+            .SelectMany(rule => MinimapReader.Markers(pixels, width, height, spec, rule, centerX, centerY))
             .Select(m =>
             {
                 var radians = m.Bearing * Math.PI / 180.0;

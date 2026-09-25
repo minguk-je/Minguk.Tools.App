@@ -251,7 +251,11 @@ public static class MinimapReader
 
         foreach (var blob in Blobs(picked))
         {
-            if (blob.Count < rule.MinPixels) continue;
+            var boxWidth = blob.Max(p => p.X) - blob.Min(p => p.X) + 1;
+            var boxHeight = blob.Max(p => p.Y) - blob.Min(p => p.Y) + 1;
+
+            // 크기·모양 - 흰 점처럼 색만으로 안 갈리는 종류(깃털·화살표·글자도 흰색)는 꽉 찬 동그라미만 남긴다.
+            if (!rule.FitsShape(blob.Count, boxWidth, boxHeight)) continue;
 
             var sumX = 0.0;
             var sumY = 0.0;

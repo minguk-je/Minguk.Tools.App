@@ -1006,7 +1006,7 @@ public partial class LiveScriptApi : IDisposable
             var left = end - Environment.TickCount64;
             if (left <= 0) return;
 
-            if (_token.WaitHandle.WaitOne((int)Math.Min(left, 50))) ThrowIfStopping();
+            if (_token.WaitHandle.WaitOne((int)Math.Min(left, 50)) || _backgroundGuard is not null || _backgroundEnded) ThrowIfStopping();
         }
     }
 
@@ -1355,6 +1355,16 @@ public partial class LiveScriptApi : IDisposable
     public ScriptSpot? FindText(string text, string? regionName = null)
         => Traced("FindText", regionName is null ? Quote(text) : $"{Quote(text)}, {Quote(regionName)}", () => FindTextCore(text, regionName));
 
+    /// <summary>
+    /// 그 글이 든 곳을 <b>모두</b> 찾는다 - 위에서 아래, 왼쪽에서 오른쪽 순. 없으면 빈 목록.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-25) "공격 시작 하면 화면을 몹과 방향을 일치" - 몹 이름은 위쪽 대상 칸과 몹 머리 위 이름표 두 곳에 뜬다. <c>글자찾기</c> 는 가장 위의 것 하나라
+    /// 늘 대상 칸이 잡혔다. 모두 받아 부르는 쪽이 고른다(예: 대상 칸보다 아래).
+    /// </remarks>
+    public IReadOnlyList<ScriptSpot> FindTexts(string text, string? regionName = null)
+        => Traced("FindTexts", regionName is null ? Quote(text) : $"{Quote(text)}, {Quote(regionName)}", () => FindTextsCore(text, regionName));
+
     /// <summary>글을 찾아 그 가운데를 누른다. 찾았으면 참.</summary>
     public bool PressText(string text, string? regionName = null, object? button = null)
         => Traced("PressText", regionName is null ? Quote(text) : $"{Quote(text)}, {Quote(regionName)}", () =>
@@ -1373,16 +1383,37 @@ public partial class LiveScriptApi : IDisposable
     /// <summary>이웃 조각과 겹치는 몫 - 경계에 걸린 글자가 어느 한쪽에는 통째로 들어가게.</summary>
     private const double FindTextOverlap = 0.15;
 
-    private ScriptSpot? FindTextCore(string text, string? regionName)
+    private ScriptSpot? FindTextCore(string text, string? regionName) => FindTextsCore(text, regionName).FirstOrDefault();
+
+    private IReadOnlyList<ScriptSpot> FindTextsCore(string text, string? regionName)
     {
         if (string.IsNullOrWhiteSpace(text)) throw Guard("찾을 글이 비어 있습니다.");
 
+        return TextSpotsCore(text, regionName);
+    }
+
+    /// <summary>
+    /// 그 자리(없으면 화면 전체)를 한 번 읽어 모든 줄을 자리와 함께 준다 - 위에서 아래 순.
+    /// </summary>
+    /// <remarks>
+    /// 사용자(2026-09-25) "몹이랑 화면 정면으로 바꾸는거 너무 느려" - 이름 조각마다 <c>글자찾기들</c> 을 부르면 조각마다 OCR 을 다시 했다(한 번 0.2초 × 셋).
+    /// 한 번 읽고 줄들을 스크립트가 견준다 - 깨져 읽힌 이름도 조각 몇 개를 한꺼번에 대 볼 수 있다.
+    /// </remarks>
+    public IReadOnlyList<ScriptSpot> ReadLines(string? regionName = null)
+        => Traced("ReadLines", regionName is null ? "" : Quote(regionName), () => TextSpotsCore(null, regionName));
+
+    public IReadOnlyList<ScriptSpot> 글줄들() => ReadLines();
+    public IReadOnlyList<ScriptSpot> 글줄들(string 자리) => ReadLines(자리);
+
+    /// <param name="text">찾을 글. null 이면 모든 줄.</param>
+    private IReadOnlyList<ScriptSpot> TextSpotsCore(string? text, string? regionName)
+    {
         var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
 
         if (!CaptureTargetBounds.TryGet(target, out var bounds))
             throw Guard("대상 창의 자리를 알 수 없습니다 - 창이 닫혔거나 최소화됐습니다.");
 
-        var wanted = text.Trim();
+        var wanted = text?.Trim();
         var tiles = new List<Rect>();
 
         // 자리를 줬으면 그 자리가 고른 엔진(regions.json 의 ocrEngine)으로 - 읽기("이름") 과 같다(사용자, 2026-09-24 영역별 엔진).
@@ -1417,7 +1448,7 @@ public partial class LiveScriptApi : IDisposable
                 }
         }
 
-        ScriptSpot? best = null;
+        var spots = new List<ScriptSpot>();
 
         foreach (var tile in tiles)
         {
@@ -1428,19 +1459,25 @@ public partial class LiveScriptApi : IDisposable
 
             foreach (var line in outcome.Lines)
             {
-                // 낱말 하나에 다 있으면 그 낱말, 아니면 줄 전체(띄어쓰기를 무시하고 견준다 - OCR 이 「사격 장」 으로 나누기도 한다).
-                var word = line.Words.FirstOrDefault(w => Squash(w.Text).Contains(Squash(wanted), StringComparison.OrdinalIgnoreCase));
-                var hit = word.Text is not null ? word : Squash(line.Text).Contains(Squash(wanted), StringComparison.OrdinalIgnoreCase) ? Union(line) : default;
+                // 찾을 글이 없으면 줄 전체. 있으면 낱말 하나에 다 있으면 그 낱말, 아니면 줄 전체(띄어쓰기를 무시하고 견준다 - OCR 이 「사격 장」 으로 나누기도 한다).
+                var word = wanted is null ? default : line.Words.FirstOrDefault(w => Squash(w.Text).Contains(Squash(wanted), StringComparison.OrdinalIgnoreCase));
+                var hit = wanted is null || word.Text is null
+                    ? (wanted is null || Squash(line.Text).Contains(Squash(wanted), StringComparison.OrdinalIgnoreCase) ? Union(line) : default)
+                    : word;
 
                 if (hit.Text is null) continue;
 
                 var spot = ToSpot(hit, tile, bounds);
 
-                if (best is null || spot.CenterY < best.CenterY - 4 || (Math.Abs(spot.CenterY - best.CenterY) <= 4 && spot.CenterX < best.CenterX)) best = spot;
+                // 조각이 겹쳐 같은 글이 두 번 잡힌다 - 가운데가 가까우면 하나로.
+                if (spots.Any(s => Math.Abs(s.CenterX - spot.CenterX) <= 8 && Math.Abs(s.CenterY - spot.CenterY) <= 8)) continue;
+
+                spots.Add(spot);
             }
         }
 
-        return best;
+        // 가장 위·왼쪽이 먼저(4px 안은 같은 줄) - 글자찾기가 첫 것을 쓴다.
+        return [.. spots.OrderBy(s => s.CenterY / 5).ThenBy(s => s.CenterX)];
     }
 
     private static string Squash(string text) => text.Replace(" ", string.Empty);
@@ -2059,6 +2096,8 @@ public partial class LiveScriptApi : IDisposable
 
     /// <summary>화면 전체에서 그 글을 찾아 자리를 준다(가운데 화면 픽셀). 없으면 null. 메뉴·버튼용 - 매 프레임이 아니라 메뉴가 떴을 때.</summary>
     public ScriptSpot? 글자찾기(string 글) => FindText(글);
+    public IReadOnlyList<ScriptSpot> 글자찾기들(string 글) => FindTexts(글);
+    public IReadOnlyList<ScriptSpot> 글자찾기들(string 글, string 자리) => FindTexts(글, 자리);
 
     /// <summary>이름 붙인 자리 안에서만 찾는다 - 빠르다.</summary>
     public ScriptSpot? 글자찾기(string 글, string 자리) => FindText(글, 자리);
@@ -2191,6 +2230,9 @@ public partial class LiveScriptApi : IDisposable
         // 조준 스레드도 멈춘다 - 멈춘 뒤에도 마우스가 돌면 안 된다.
         _aim?.Disengage();
 
+        // 따로 도는 일도 키를 떼기 전에 세운다 - 뗀 뒤에 다시 누르면 게임에 눌린 채 남는다.
+        StopBackground();
+
         lock (_gate)
         {
             held = [.. _heldKeys];
@@ -2219,13 +2261,15 @@ public partial class LiveScriptApi : IDisposable
     /// <summary>한 바퀴가 끝났다 - 조준 스레드를 내린다. 스크립트가 제 발로 끝나면 토큰이 안 취소돼 스레드가 남는다.</summary>
     public void Dispose()
     {
+        StopBackground();
         _aim?.Dispose();
         _aim = null;
     }
 
     // ── 흐름 ─────────────────────────────────────────────────────────────
 
-    public bool IsStopped() => _token.IsCancellationRequested;
+    /// <summary>멈추라고 했나 - F6·Pause·실행 시간 상한, 또는 따로 도는 일이 안전장치에 걸렸거나 끝냈다.</summary>
+    public bool IsStopped() => _token.IsCancellationRequested || _backgroundGuard is not null || _backgroundEnded;
 
     public bool 중지되었나() => IsStopped();
 
@@ -2240,7 +2284,26 @@ public partial class LiveScriptApi : IDisposable
 
     public void Print(object? value) => _host.Print(value?.ToString() ?? "null");
 
-    public void Watch(string name, object? value) => _host.Watch(name ?? string.Empty, value?.ToString() ?? "null");
+    public void Watch(string name, object? value)
+    {
+        var key = name ?? string.Empty;
+        var text = value?.ToString() ?? "null";
+
+        // 바뀔 때만 로그에도 - 변수 칸 값이 로그에 없어 스크립트가 무엇으로 판단했는지 나중에 알 수 없었다(사용자 2026-09-26, 퀘스트가 멈춘 까닭을 쫓다가).
+        //   매 바퀴 적으면 넘치니 같은 값은 건너뛴다.
+        lock (_watched)
+        {
+            if (!_watched.TryGetValue(key, out var before) || before != text)
+            {
+                _watched[key] = text;
+                Logger.Debug($"보기: {key} = {text}");
+            }
+        }
+
+        _host.Watch(key, text);
+    }
+
+    private readonly Dictionary<string, string> _watched = new(StringComparer.Ordinal);
 
     public void 출력(object? value) => Print(value);
 
@@ -2425,7 +2488,10 @@ public partial class LiveScriptApi : IDisposable
         }
         catch (Exception ex)
         {
-            _host.Trace?.Invoke(new ScriptCall(DateTime.Now, name, arguments, "! " + ex.Message, watch.Elapsed.TotalMilliseconds));
+            // 멈추기(F6·Pause)로 끊긴 것은 .NET 영어 문장("The operation was canceled.") 대신 한국어로 - 호출 칸은 화면이다.
+            var shown = ex is OperationCanceledException ? "멈춤으로 끊김" : ex.Message;
+
+            _host.Trace?.Invoke(new ScriptCall(DateTime.Now, name, arguments, "! " + shown, watch.Elapsed.TotalMilliseconds));
             throw;
         }
     }
@@ -2438,6 +2504,9 @@ public partial class LiveScriptApi : IDisposable
         null => "",
         string text => Quote(text),
         IReadOnlyList<ScriptDetection> mobs => mobs.Count == 0 ? "없음" : $"{mobs.Count}마리: {mobs[0]}",
+        // 글자찾기들 - 「<>z__ReadOnlyList`1[...ScriptSpot]」 로 찍혀 무엇을 찾았는지 몰랐다(사용자 로그 2026-09-25).
+        //   3곳만 적던 때는 퀘스트 목록의 넷째 줄(할 일)이 어떻게 읽혔는지 몰라 원인을 못 찾았다(2026-09-26) - 12곳까지.
+        IReadOnlyList<ScriptSpot> spots => spots.Count == 0 ? "없음" : $"{spots.Count}곳: {string.Join(" · ", spots.Take(12))}{(spots.Count > 12 ? " …" : "")}",
         // 숫자들읽기 - 「System.Int32[]」 로 찍혀 무엇으로 읽었는지 몰랐다(사용자, 2026-09-24 물약을 계속 먹던 것을 쫓다가).
         int[] numbers => $"[{string.Join(", ", numbers)}]",
         _ => result.ToString() ?? ""
@@ -2529,6 +2598,8 @@ public partial class LiveScriptApi : IDisposable
 
     private void ThrowIfStopping()
     {
+        ThrowIfBackgroundStopped();
+
         if (!_token.IsCancellationRequested) return;
 
         Outcome = LiveScriptOutcome.Stopped;

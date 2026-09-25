@@ -151,20 +151,34 @@ public partial class LiveScriptApi
     private IReadOnlyList<ScriptBearing> AllMarkerBearings(string name)
     {
         var spec = MinimapSpecOrThrow();
-        var rule = spec.MarkerNamed(name)
-                   ?? throw Guard($"미니맵 점 종류 「{name}」 이 {MinimapSpec.FileName} 에 없습니다 - 있는 것: {string.Join(", ", spec.Markers.Keys.Prepend(MinimapSpec.TargetMarkerName))}. " +
-                                  "새 종류는 markers 에 이름과 색(minRed·minRedMinusGreen 등)을 더하세요.");
+        var rules = MarkerRulesOrThrow(spec, name);
         var template = MinimapTemplateOrThrow(spec);
         var (pixels, width, height) = MinimapPixels(spec);
 
-        if (MinimapReader.FindArrow(pixels, width, height, spec) is not { } arrow)
-            throw Guard($"미니맵에서 화살표를 못 찾았습니다 - 「{spec.Region}」 자리가 미니맵에 맞는지 보세요.");
+        // 화살표를 못 찾으면(던전처럼 미니맵이 다르게 생긴 곳, 가려진 순간) 멈추지 않고 미니맵 한가운데를 캐릭터 자리로 본다 - 점의 방위·거리는 그대로 쓸 수 있다.
+        // 돌 각만 모른다(0). 사용자 로그(2026-09-25 10:53·10:55): 일일던전에 들어가자 「화살표를 못 찾았습니다」 로 사냥이 멈췄다. 키보드 걷기는 원래 이렇게 한다.
+        var arrow = MinimapReader.FindArrow(pixels, width, height, spec);
+        var centerX = arrow?.CenterX ?? width / 2.0;
+        var centerY = arrow?.CenterY ?? height / 2.0;
+        double? heading = arrow is null ? null : MinimapReader.Normalize(spec.HeadingAtTemplate + MinimapReader.BestRotation(template.Mask, arrow.Mask));
 
-        var heading = MinimapReader.Normalize(spec.HeadingAtTemplate + MinimapReader.BestRotation(template.Mask, arrow.Mask));
-
-        return MinimapReader.Markers(pixels, width, height, spec, rule, arrow.CenterX, arrow.CenterY)
-            .Select(m => new ScriptBearing(m.Bearing, m.Distance, MinimapReader.Difference(heading, m.Bearing)))
+        return rules
+            .SelectMany(rule => MinimapReader.Markers(pixels, width, height, spec, rule, centerX, centerY))
+            .Where(m => !IsIgnoredSpot(m.Distance * Math.Sin(m.Bearing * Math.PI / 180.0), -m.Distance * Math.Cos(m.Bearing * Math.PI / 180.0)))
+            .OrderBy(m => m.Distance)
+            .Select(m => new ScriptBearing(m.Bearing, m.Distance, heading is { } h ? MinimapReader.Difference(h, m.Bearing) : 0))
             .ToArray();
+    }
+
+    /// <summary>쉼표로 이은 점 종류 이름들의 규칙. 모르는 이름이 있으면 멈추고 있는 이름을 알려 준다.</summary>
+    private IReadOnlyList<MinimapMarkerSpec> MarkerRulesOrThrow(MinimapSpec spec, string names)
+    {
+        var rules = spec.MarkersNamed(names, out var unknown);
+
+        if (rules.Count > 0) return rules;
+
+        throw Guard($"미니맵 점 종류 「{string.Join(", ", unknown)}」 이 {MinimapSpec.FileName} 에 없습니다 - 있는 것: {string.Join(", ", spec.Markers.Keys.Prepend(MinimapSpec.TargetMarkerName))}. " +
+                    "여럿은 \"선공몹,일반몹\" 처럼 쉼표로 잇고, 새 종류는 markers 에 이름과 색을 더하세요.");
     }
 
     private void FaceCore(double bearing)
