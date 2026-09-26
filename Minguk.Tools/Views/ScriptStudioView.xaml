@@ -208,6 +208,17 @@
                                                   ItemsSource="{Binding OcrEngines}" />
                     </dxb:BarEditItem.EditSettings>
                 </dxb:BarEditItem>
+                <!-- OCR·검출이 쓸 GPU(사용자, 2026-09-26 "GPU 2장인데?") - 게임이 쓰는 카드와 다른 것을 고르면 GPU 를 나눠 쓰지 않는다. 앱 전체 설정. -->
+                <dxb:BarEditItem Content="GPU"
+                                 EditValue="{Binding SelectedGpu, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 EditWidth="220"
+                                 Hint="글자 읽기(GPU 엔진)·검출이 쓸 GPU. 두 장이면 게임이 쓰는 카드(보통 0)가 아닌 쪽을 고른다. 글자 읽기는 다음 읽기부터, 검출은 다음에 모델을 올릴 때부터 바뀐다.">
+                    <dxb:BarEditItem.EditSettings>
+                        <dxe:ComboBoxEditSettings DisplayMember="Name"
+                                                  IsTextEditable="False"
+                                                  ItemsSource="{Binding GpuChoices}" />
+                    </dxb:BarEditItem.EditSettings>
+                </dxb:BarEditItem>
             </dxb:Bar>
 
             <!-- ── 실행 설정 ── 돌릴 때 쓰는 값. 시작 대기 | 조준 배율 · 자동 | 설정 값 창 -->
@@ -1127,7 +1138,7 @@
                                         <dxg:GridControl.Columns>
                                             <dxg:GridColumn FieldName="Name" Header="이름" />
                                             <!-- 계속 읽기는 자리 단위 - 칸 줄에서는 체크를 숨긴다. -->
-                                            <dxg:GridColumn FieldName="KeepReading" Header="계속 읽기">
+                                            <dxg:GridColumn FieldName="KeepReading" Header="계속">
                                                 <dxg:GridColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <dxe:CheckEdit x:Name="PART_Editor"
@@ -1156,7 +1167,7 @@
                                                 </dxg:GridColumn.CellTemplate>
                                             </dxg:GridColumn>
                                             <!-- 이진화(그레이스케일 + 밝기 기준) - 자리 단위(사용자, 2026-09-18 "탄약 숫자도 잘 못 읽잖아"), 칸 줄에서는 숨긴다. 0 이면 꺼짐. -->
-                                            <dxg:GridColumn FieldName="Threshold" Header="밝기 기준">
+                                            <dxg:GridColumn FieldName="Threshold" Header="밝기">
                                                 <dxg:GridColumn.EditSettings>
                                                     <dxe:SpinEditSettings MaxValue="255"
                                                                           MinValue="0" />
@@ -1226,7 +1237,7 @@
                                                 OCR 엔진 - 자리 단위(사용자, 2026-09-18 "영역별로 어떤 OCR 쓸지 따로 지정"), 칸 줄에서는 숨긴다.
                                                 기본(null)이면 위 콤보에서 고른 전체 엔진을 그대로 쓴다.
                                             -->
-                                            <dxg:GridColumn FieldName="OcrEngineName" Header="OCR 엔진">
+                                            <dxg:GridColumn FieldName="OcrEngineName" Header="OCR">
                                                 <dxg:GridColumn.EditSettings>
                                                     <dxe:ComboBoxEditSettings DisplayMember="Label"
                                                                               IsTextEditable="False"
@@ -1258,7 +1269,16 @@
                                                     </DataTemplate>
                                                 </dxg:GridColumn.CellTemplate>
                                             </dxg:GridColumn>
-                                            <dxg:GridColumn AllowEditing="False" FieldName="LastText" Header="읽은 글자" />
+                                            <!-- 읽은 글자는 길 수 있다(퀘스트 목록 여러 줄) - 이 열만 너비를 막는다. 전체는 툴팁으로(사용자, 2026-09-26 "컬럼 넓이 너무 넓혔어"). -->
+                                            <dxg:GridColumn MaxWidth="220" AllowEditing="False" FieldName="LastText" Header="읽은 글자">
+                                                <dxg:GridColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <dxe:TextEdit x:Name="PART_Editor"
+                                                                      ShowTooltipForTrimmedText="True"
+                                                                      TextTrimming="CharacterEllipsis" />
+                                                    </DataTemplate>
+                                                </dxg:GridColumn.CellTemplate>
+                                            </dxg:GridColumn>
                                             <!-- 자리·크기 열은 숨겼다(2026-09-15, 사용자) - 미리보기의 손잡이로 고치고 치수는 끄는 동안 픽셀로 뜬다. 열 고르기로 다시 켤 수 있다. -->
                                             <dxg:GridColumn AllowEditing="False" FieldName="X" Header="가로" Visible="False">
                                                 <dxg:GridColumn.EditSettings>

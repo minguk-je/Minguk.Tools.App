@@ -123,6 +123,7 @@ public static class ScriptApiCatalog
         new("PressImage", "그림누르기", "resource, [score], [name]", "본보기 그림을 찾아 그 가운데를 누른다. 찾았으면 true - 그림누르기(\"사격장.png\").", ScriptApiMode.Live),
         new("PressRegion", "영역누르기", "name, [button]", "이름 붙인 영역(또는 \"영역.구역\")의 가운데를 그냥 누른다 - 늘 같은 자리에 있는 버튼은 찾을 것 없이 이쪽이 빠르다. 영역누르기(\"시작버튼\")", ScriptApiMode.Live),
         new("RegionSpot", "영역자리", "name", "이름 붙인 영역의 가운데 자리(화면 픽셀)와 크기. 눌러 보기 전에 어디인지 볼 때. var 자리 = 영역자리(\"시작버튼\"); 출력(자리.x);", ScriptApiMode.Live),
+        new("ScreenSize", "화면크기", "", "캡처 대상(창·모니터·영상)의 크기(px). 영역·본보기를 잰 해상도와 맞는지 처음에 본다. var (너비, 높이) = 화면크기();", ScriptApiMode.Live),
         new("SituationSummary", "상황요약", "names", "이름 붙인 자리들을 읽어 「이름: 읽은 글」 줄로 묶는다. 「검출」 을 넣으면 지금 검출을 이름별 수·자리로. 판단(상황요약(\"지역, 퀘스트, 체력, 검출\"), …) 처럼 넘긴다.", ScriptApiMode.Live),
         new("Judge", "판단", "situation, actions", "로컬 LLM(llm.json 의 textModel, 기본 qwen3:8b)이 상황을 보고 행동 목록(쉼표로) 중 하나를 고른다. 목록 밖은 못 고른다. 규칙은 프로젝트의 llm-rules.md. 한 번에 몇 초 - 분명한 규칙은 스크립트로 먼저 처리한다.", ScriptApiMode.Live),
         new("JudgeScreen", "화면판단", "question, actions, [name]", "지금 화면(또는 이름 붙인 자리)을 그림 모델(visionModel)에 보여 주고 행동 목록 중 하나를 고르게 한다. 글자는 OCR 로 읽어 질문에 넣는 편이 정확하다.", ScriptApiMode.Live),

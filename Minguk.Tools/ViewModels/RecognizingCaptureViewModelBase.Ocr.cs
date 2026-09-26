@@ -83,8 +83,19 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 영역 그리드의 「OCR 엔진」 열이 고르는 것 - 맨 앞은 "기본"(<see cref="Vision.Regions.NamedRegion.OcrEngineName"/> 이 비는 값, null).
     /// 사용자(2026-09-18) "영역별로 어떤 OCR 쓸지 따로 지정 가능하게" · "그리드에 별도로 선택 안 하면 기본으로, 지정하면 그걸로".
     /// </summary>
+    /// <remarks>글은 짧게 - 긴 이름이 영역 그리드의 「OCR」 열을 넓혔다(사용자, 2026-09-26 "영역 그리드 컬럼 넓이 너무 넓혔어"). 긴 이름은 도구 줄 콤보에.</remarks>
     public IReadOnlyList<RegionOcrEngineOption> RegionOcrEngineOptions { get; } =
-        [new(null, "기본(위에서 고른 것)"), .. OcrEngineChoice.All.Select(c => new RegionOcrEngineOption(c.Kind.ToString(), c.Name))];
+        [new(null, "기본"), .. OcrEngineChoice.All.Select(c => new RegionOcrEngineOption(c.Kind.ToString(), ShortEngineName(c.Kind)))];
+
+    private static string ShortEngineName(OcrEngineKind kind) => kind switch
+    {
+        OcrEngineKind.PaddleGpu => "v5 GPU",
+        OcrEngineKind.PaddleCpu => "v5 CPU",
+        OcrEngineKind.Windows => "Windows",
+        OcrEngineKind.PaddleV6TinyGpu => "v6 tiny",
+        OcrEngineKind.PaddleV6SmallGpu => "v6 small",
+        _ => kind.ToString()
+    };
 
     /// <summary>
     /// 고른 엔진. 바꾸면 지금 것을 버리고 다음 읽기에서 새로 만든다 - 읽는 도중이면 그 읽기가 끝난 뒤 놓인다.
@@ -106,9 +117,37 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// <summary>화면 이름과 무관한 앱 전체 키 - 어느 화면에서 골라도 같다.</summary>
     private const string OcrEngineSettingKey = "Minguk.Tools.Ocr.Engine";
 
-    /// <summary>저장된 엔진을 되살린다. <c>RestoreSettings</c> 에서.</summary>
+    /// <summary>이 PC 의 GPU 들(콤보). DirectML 번호 순서.</summary>
+    public IReadOnlyList<Vision.Inference.GpuChoice> GpuChoices { get; } = Vision.Inference.GpuAdapters.List();
+
+    /// <summary>
+    /// OCR·검출이 쓸 GPU(사용자, 2026-09-26 "GPU 2장인데?" - 게임과 다른 카드로). 앱 전체 설정(<see cref="Minguk.Tools.Inference.DmlDevice"/>).
+    /// 바꾸면 OCR 엔진은 버리고 다음 읽기에서 새 카드로 만든다. 검출 모델은 다음에 올릴 때부터.
+    /// </summary>
+    public Vision.Inference.GpuChoice SelectedGpu
+    {
+        get => GetProperty(() => SelectedGpu) ?? GpuChoices[0];
+        set => SetProperty(() => SelectedGpu, value, () =>
+        {
+            if (value is null || Minguk.Tools.Inference.DmlDevice.Index == value.Index) return;
+
+            Minguk.Tools.Inference.DmlDevice.Index = value.Index;
+            DropAllOcrEngines();
+            OcrStatus = $"GPU: {value.Name} - 글자 읽기는 다음 읽기부터, 검출은 다음에 모델을 올릴 때부터";
+        });
+    }
+
+    /// <summary>저장된 엔진·GPU 를 되살린다. <c>RestoreSettings</c> 에서.</summary>
     protected void RestoreOcrEngineChoice()
-        => SelectedOcrEngine = OcrEngineChoice.Parse(AppSettingUtility.Get(OcrEngineSettingKey, OcrEngineChoice.Default.Kind.ToString()));
+    {
+        // 저장된 번호가 이 PC 에 없으면(다른 PC 에서 고른 값) 0 으로 - 설정은 앱 전체에 남아 PC 를 옮기면 안 맞을 수 있다.
+        var gpu = Minguk.Tools.Inference.DmlDevice.Index;
+
+        if (GpuChoices.All(c => c.Index != gpu)) Minguk.Tools.Inference.DmlDevice.Index = gpu = 0;
+
+        SelectedGpu = GpuChoices.FirstOrDefault(c => c.Index == gpu) ?? GpuChoices[0];
+        SelectedOcrEngine = OcrEngineChoice.Parse(AppSettingUtility.Get(OcrEngineSettingKey, OcrEngineChoice.Default.Kind.ToString()));
+    }
 
     /// <summary>스크립트의 읽기()가 쓸 엔진(전체 설정 것). 없으면 null - 스크립트가 그 이유를 말한다.</summary>
     protected IOcrEngine? OcrEngineForScripts() => EnsureOcrEngine(out _) ? _ocr : null;

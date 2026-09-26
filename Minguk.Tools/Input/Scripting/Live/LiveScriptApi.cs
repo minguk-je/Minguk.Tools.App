@@ -1400,7 +1400,9 @@ public partial class LiveScriptApi : IDisposable
     /// 한 번 읽고 줄들을 스크립트가 견준다 - 깨져 읽힌 이름도 조각 몇 개를 한꺼번에 대 볼 수 있다.
     /// </remarks>
     public IReadOnlyList<ScriptSpot> ReadLines(string? regionName = null)
-        => Traced("ReadLines", regionName is null ? "" : Quote(regionName), () => TextSpotsCore(null, regionName));
+        => Traced("ReadLines", regionName is null ? "" : Quote(regionName), () => regionName is null
+            ? TextSpotsCore(null, null)
+            : FrameCached("글줄들|" + regionName, () => TextSpotsCore(null, regionName)));
 
     public IReadOnlyList<ScriptSpot> 글줄들() => ReadLines();
     public IReadOnlyList<ScriptSpot> 글줄들(string 자리) => ReadLines(자리);
@@ -1519,7 +1521,15 @@ public partial class LiveScriptApi : IDisposable
     /// <summary>읽어 둔 본보기 - 파일을 읽고 회색조로 바꾸는 값을 부를 때마다 치르지 않는다.</summary>
     private readonly Dictionary<string, Vision.Matching.GrayImage> _templates = new(StringComparer.OrdinalIgnoreCase);
 
+    // 닮음 문턱과 상관없이 가장 닮은 자리 하나를 캐시하고 문턱은 나중에 댄다 - 그림있나(0.8)·닮음(-1) 이 같은 프레임에서 한 번만 찾는다.
     private ScriptSpot? FindImageCore(string resourceName, double minimumScore, string? regionName)
+    {
+        var best = FrameCached($"그림|{resourceName}|{regionName}", () => FindImageUncached(resourceName, -1, regionName));
+
+        return best is not null && best.Score >= minimumScore ? best : null;
+    }
+
+    private ScriptSpot? FindImageUncached(string resourceName, double minimumScore, string? regionName)
     {
         var target = _host.Target() ?? throw Guard("대상 창이 없습니다 - 화면에서 창을 골라 시작(연결)하세요.");
 
@@ -1580,6 +1590,15 @@ public partial class LiveScriptApi : IDisposable
         });
 
     public ScriptSpot 영역자리(string 자리) => RegionSpot(자리);
+
+    /// <summary>
+    /// 캡처 대상(창·모니터·영상)의 크기(px). 모르면 (0, 0). 영역·본보기를 잰 해상도와 맞는지 스크립트가 처음에 본다 -
+    /// 게임이 다른 모니터로 가며 1920×1200 이 되자 HUD 가 밀려 자동 이동·안내를 못 읽었다(2026-09-26).
+    /// </summary>
+    public (int Width, int Height) ScreenSize() => Traced("ScreenSize", "", () =>
+        _host.Target() is { } target && CaptureTargetBounds.TryGet(target, out var bounds) ? ((int)bounds.Width, (int)bounds.Height) : (0, 0));
+
+    public (int 너비, int 높이) 화면크기() => ScreenSize();
 
     public void 영역누르기(string 자리) => PressRegion(자리);
 
@@ -2029,7 +2048,36 @@ public partial class LiveScriptApi : IDisposable
     /// </remarks>
     public bool HasTextAt(string name) => Traced("HasTextAt", Quote(name), () => ReadAtCore(name).Text.Length > 0);
 
-    private (string Text, int? First, int[] Numbers) ReadAtCore(string name)
+    // ── 프레임 캐시 ─────────────────────────────────────────────────────
+    //
+    // 새 프레임이 안 왔으면 같은 자리를 다시 읽지 않는다(사용자, 2026-09-26 "새로운 캡처 이미지가 왔으면 그때 OCR 들 다시 읽고 하는 거 아냐?").
+    // 스크립트 한 바퀴에 「안내띠」·「자동이동」 을 두세 번 읽고 본보기 열 장을 매번 대 보는데, 캡처는 30fps 라 그 사이 프레임이 같은 때가 많다.
+    // 허브의 프레임 번호(FrameVersion)가 같으면 지난 결과를 그대로 준다. 번호가 0(가짜 허브·아직 프레임 없음)이면 캐시 안 함.
+    // 따로 도는 일(체력·줍기)도 같은 표를 쓰므로 잠근다.
+
+    private readonly Dictionary<string, (long Version, object? Value)> _frameCache = new(StringComparer.Ordinal);
+
+    private T FrameCached<T>(string key, Func<T> compute)
+    {
+        var version = _host.Hub.FrameVersion;
+
+        if (version <= 0) return compute();
+
+        lock (_frameCache)
+        {
+            if (_frameCache.TryGetValue(key, out var hit) && hit.Version == version && hit.Value is T cached) return cached;
+        }
+
+        var value = compute();
+
+        lock (_frameCache) _frameCache[key] = (version, value);
+
+        return value;
+    }
+
+    private (string Text, int? First, int[] Numbers) ReadAtCore(string name) => FrameCached("읽기|" + name, () => ReadAtUncached(name));
+
+    private (string Text, int? First, int[] Numbers) ReadAtUncached(string name)
     {
         var book = _host.Regions?.Invoke()
                    ?? throw Guard("영역 목록이 없습니다 - 화면에서 데이터셋 폴더를 골라야 합니다.");

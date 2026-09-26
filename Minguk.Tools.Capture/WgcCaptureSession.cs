@@ -60,6 +60,28 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
     private bool _running;
     private bool _disposed;
 
+    // ── 검은 프레임 감시 ──────────────────────────────────────────────────────
+    //
+    // 아이온2 가 지역 이동(로딩)에서 스왑체인을 다시 만들면 창 캡처가 그 뒤로 검은 프레임만 준다(실측 2026-09-26 16:25 - 미리보기도 검고,
+    // 캡처를 중지했다 다시 시작하면 돌아온다). 프레임은 계속 오니 폴백 감시(한 장도 안 올 때)로는 못 잡는다.
+    // 리드백 픽셀을 성글게 훑어 BlackRestartDelay 넘게 검으면 같은 대상으로 세션을 다시 잡는다. 로딩 화면은 그림이 있어 순검정이 아니고, 순검정이어도 그 안에 끝난다.
+
+    /// <summary>검은 프레임이 이만큼 이어지면 세션을 다시 잡는다.</summary>
+    private static readonly TimeSpan BlackRestartDelay = TimeSpan.FromSeconds(5);
+
+    /// <summary>다시 잡은 뒤 이만큼은 또 다시 잡지 않는다 - 진짜 검은 화면에서 끝없이 되풀이하지 않게.</summary>
+    private static readonly TimeSpan BlackRestartCooldown = TimeSpan.FromSeconds(15);
+
+    /// <summary>표본 픽셀의 R·G·B 가 모두 이 아래면 검은 픽셀.</summary>
+    private const int BlackLevel = 8;
+
+    /// <summary>표본 간격(px). 1080p 에서 가로 80 × 세로 45 = 3,600점.</summary>
+    private const int BlackSampleStep = 24;
+
+    private long _blackSinceTimestamp;
+    private long _lastBlackRestartTimestamp;
+    private int _blackRestartPending;
+
     public WgcCaptureSession(CaptureTarget target, bool cpuReadback = false, bool autoFallbackToMonitor = true)
     {
         Target = target;
@@ -381,6 +403,8 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
             pixels = map.DataPointer;
             rowPitch = (int)map.RowPitch;
             readbackMs = Elapsed(readbackStartTimestamp);
+
+            WatchBlackFrame(pixels, rowPitch, width, height, frameArrivedTimestamp);
         }
 
         try
@@ -435,6 +459,90 @@ public sealed class WgcCaptureSession : IScreenCaptureAdapter
     }
 
     private static double Elapsed(long from) => (Stopwatch.GetTimestamp() - from) * 1000d / Stopwatch.Frequency;
+
+    /// <summary>리드백 픽셀이 검은지 성글게 본다. 검은 채로 <see cref="BlackRestartDelay"/> 가 지나면 세션 다시 잡기를 건다. _sessionLock 안에서 불린다.</summary>
+    private unsafe void WatchBlackFrame(IntPtr pixels, int rowPitch, int width, int height, long timestamp)
+    {
+        if (Target.Kind != CaptureTargetKind.Window || pixels == IntPtr.Zero) return;
+
+        var black = true;
+
+        for (var y = BlackSampleStep / 2; y < height && black; y += BlackSampleStep)
+        {
+            var row = (byte*)pixels + ((long)y * rowPitch);
+
+            for (var x = BlackSampleStep / 2; x < width; x += BlackSampleStep)
+            {
+                var p = row + (x * 4);
+
+                if (p[0] > BlackLevel || p[1] > BlackLevel || p[2] > BlackLevel)
+                {
+                    black = false;
+                    break;
+                }
+            }
+        }
+
+        if (!black)
+        {
+            _blackSinceTimestamp = 0;
+            return;
+        }
+
+        if (_blackSinceTimestamp == 0)
+        {
+            _blackSinceTimestamp = timestamp;
+            return;
+        }
+
+        var blackFor = TimeSpan.FromSeconds((double)(timestamp - _blackSinceTimestamp) / Stopwatch.Frequency);
+        var sinceRestart = TimeSpan.FromSeconds((double)(timestamp - _lastBlackRestartTimestamp) / Stopwatch.Frequency);
+
+        if (blackFor < BlackRestartDelay || (_lastBlackRestartTimestamp != 0 && sinceRestart < BlackRestartCooldown)) return;
+        if (Interlocked.Exchange(ref _blackRestartPending, 1) != 0) return;
+
+        _lastBlackRestartTimestamp = timestamp;
+        _blackSinceTimestamp = 0;
+
+        // 프레임 콜백 안에서 프레임 풀을 내리면 안 된다 - 콜백 밖(스레드풀)에서 다시 잡는다.
+        ThreadPool.QueueUserWorkItem(_ => RestartAfterBlack(blackFor));
+    }
+
+    /// <summary>검은 프레임이 이어져 같은 대상으로 세션을 다시 잡는다. 프레임 번호는 잇는다(받는 쪽이 같은 장을 가리는 데 쓴다).</summary>
+    private void RestartAfterBlack(TimeSpan blackFor)
+    {
+        try
+        {
+            lock (_sessionLock)
+            {
+                if (!_running || _disposed) return;
+
+                var frameId = _frameId;
+
+                try
+                {
+                    StopCore();
+                    StartCore(Target);
+                    _frameId = frameId;
+                }
+                catch (Exception ex)
+                {
+                    _running = false;
+                    Logger.Error(ex, "검은 프레임 뒤 캡처 다시 잡기 실패");
+                    Notice?.Invoke(this, $"화면이 검게 들어와 캡처를 다시 잡으려 했지만 실패했습니다: {ex.Message}");
+                    Ended?.Invoke(this, "화면이 검게 들어와 캡처를 다시 잡지 못했습니다");
+                    return;
+                }
+            }
+
+            Logger.Info($"검은 프레임이 {blackFor.TotalSeconds:0.#}초 이어져 캡처를 다시 잡았다: {Target.Display}");
+            Notice?.Invoke(this, $"화면이 {blackFor.TotalSeconds:0.#}초 동안 검게 들어와 캡처를 다시 잡았습니다.");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _blackRestartPending, 0);
+        }
+    }
 
     // ── 전체화면 폴백 ────────────────────────────────────────────────────────
 

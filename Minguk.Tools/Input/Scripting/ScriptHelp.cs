@@ -58,7 +58,7 @@ public static class ScriptHelp
 
         ["Detections"] = Detections, ["NearestDetection"] = Detections, ["TargetDetection"] = Detections, ["ReleaseTarget"] = Detections, ["WaitDetection"] = Detections,
 
-        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["FindTexts"] = Screen, ["ReadLines"] = Screen, ["RunInBackground"] = Screen, ["BarFillAt"] = Screen, ["BrightnessAt"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen, ["PressRegion"] = Screen, ["RegionSpot"] = Screen, ["HitConfirmed"] = Screen, ["HealthBar"] = Detections, ["HitByHealthBar"] = Detections,
+        ["ReadText"] = Screen, ["ReadNumber"] = Screen, ["ReadNumbersAt"] = Screen, ["HasTextAt"] = Screen, ["FindText"] = Screen, ["FindTexts"] = Screen, ["ReadLines"] = Screen, ["RunInBackground"] = Screen, ["BarFillAt"] = Screen, ["BrightnessAt"] = Screen, ["PressText"] = Screen, ["FindImage"] = Screen, ["HasImage"] = Screen, ["ImageScore"] = Screen, ["PressImage"] = Screen, ["PressRegion"] = Screen, ["RegionSpot"] = Screen, ["ScreenSize"] = Screen, ["HitConfirmed"] = Screen, ["HealthBar"] = Detections, ["HitByHealthBar"] = Detections,
         ["Ammo"] = Screen, ["AmmoMax"] = Screen, ["Health"] = Screen, ["HealthMax"] = Screen, ["Ultimate"] = Screen, ["UltimateReady"] = Screen,
 
         ["Heading"] = Minimap, ["TargetBearing"] = Minimap, ["TargetBearings"] = Minimap, ["BearingTo"] = Minimap,
@@ -132,6 +132,7 @@ public static class ScriptHelp
         ["PressImage"] = "if (!그림누르기(\"사격장.png\")) 출력(\"사격장 카드가 안 보인다\");",
         ["PressRegion"] = "영역누르기(\"시작버튼\");            // 영역 패널에서 만든 자리의 가운데를 그냥 누른다\n영역누르기(\"메뉴.닫기\", \"Right\");",
         ["RegionSpot"] = "var 자리 = 영역자리(\"시작버튼\");\n출력($\"{자리.x}, {자리.y} 크기 {자리.너비}x{자리.높이}\");",
+        ["ScreenSize"] = "var (너비, 높이) = 화면크기();\nif (너비 != 1920 || 높이 != 1080) { 출력($\"해상도가 {너비}x{높이} 입니다 - 1920x1080 으로 맞추세요\"); 끝(); }",
         ["Wait"] = "쉬기(300);",
         ["IsStopped"] = "while (!중지되었나())\n{\n    // 반복할 일\n    쉬기(10);\n}",
         ["Print"] = "출력($\"탄약 {숫자읽기(\"탄약\")}\");",

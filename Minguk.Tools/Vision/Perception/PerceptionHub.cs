@@ -91,7 +91,15 @@ public sealed class PerceptionHub : IPerceptionHub
             Buffer.BlockCopy(bgra, 0, _frame, 0, needed);
             _frameWidth = width;
             _frameHeight = height;
+            _frameVersion++;
         }
+    }
+
+    private long _frameVersion;
+
+    public long FrameVersion
+    {
+        get { lock (_frameGate) return _frameVersion; }
     }
 
     public bool TryGetFrameSize(out int width, out int height)

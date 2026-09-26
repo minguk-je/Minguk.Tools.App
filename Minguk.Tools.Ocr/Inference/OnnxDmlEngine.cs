@@ -33,26 +33,42 @@ public sealed class OnnxDmlEngine : IDisposable
 
     private bool _disposed;
 
+    /// <param name="deviceId">DirectML 이 쓸 GPU 번호. 음수(기본)면 <see cref="DmlDevice.Index"/>(앱 설정 - GPU 두 장이면 게임과 다른 카드).</param>
     /// <param name="useGpu">
     /// 거짓이면 CPU 로 돈다. 느리지만 <b>답을 맞춰 보는 잣대</b>가 된다 - GPU 쪽이 이상한 값을 내놓을 때
     /// 모델이 잘못된 것인지 실행 공급자가 잘못된 것인지 이것으로 가른다.
     /// </param>
-    public OnnxDmlEngine(string modelPath, int deviceId = 0, bool useGpu = true)
+    public OnnxDmlEngine(string modelPath, int deviceId = -1, bool useGpu = true)
     {
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"모델 파일이 없다: {modelPath}", modelPath);
 
         _options = new SessionOptions();
 
+        var device = deviceId < 0 ? DmlDevice.Index : deviceId;
+
         if (useGpu)
         {
             // DirectML EP 의 요구 조건이다. 둘 다 끄지 않으면 세션 생성이나 실행에서 터진다.
             _options.EnableMemoryPattern = false;
             _options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-            _options.AppendExecutionProvider_DML(deviceId);
+            _options.AppendExecutionProvider_DML(device);
         }
 
-        _session = new InferenceSession(modelPath, _options);
+        try
+        {
+            _session = new InferenceSession(modelPath, _options);
+        }
+        catch (OnnxRuntimeException ex) when (useGpu && device != 0)
+        {
+            // 다른 PC 에는 그 번호의 GPU 가 없을 수 있다(설정은 앱 전체에 남는다, 사용자 "다른 환경의 윈도우에서도 사용할거야") - 0 번으로 내려앉고 알린다.
+            Logger.Warn(ex, $"GPU {device} 으로 DirectML 세션을 못 만들어 GPU 0 으로 돈다: {Path.GetFileName(modelPath)}");
+            _options.Dispose();
+            _options = new SessionOptions { EnableMemoryPattern = false, ExecutionMode = ExecutionMode.ORT_SEQUENTIAL };
+            _options.AppendExecutionProvider_DML(0);
+            _session = new InferenceSession(modelPath, _options);
+            device = 0;
+        }
         _runOptions = new RunOptions();
 
         _inputNames = _session.InputNames.ToArray();
@@ -61,7 +77,7 @@ public sealed class OnnxDmlEngine : IDisposable
         ModelPath = modelPath;
 
         Logger.Info($"ONNX 모델 로드: {Path.GetFileName(modelPath)} " +
-                    $"(입력 {string.Join(", ", _inputNames)} / 출력 {string.Join(", ", _outputNames)})");
+                    $"({(useGpu ? $"GPU {device}" : "CPU")} · 입력 {string.Join(", ", _inputNames)} / 출력 {string.Join(", ", _outputNames)})");
     }
 
     public string ModelPath { get; }

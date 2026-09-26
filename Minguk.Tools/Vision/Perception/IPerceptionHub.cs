@@ -99,6 +99,12 @@ public interface IPerceptionHub
     /// <summary>프레임 한 벌을 복사해 둔다. Bgra32, 줄 간격 = 너비*4.</summary>
     void PublishFrame(byte[] bgra, int width, int height);
 
+    /// <summary>
+    /// 마지막 프레임의 번호 - 새 프레임이 올 때마다 1씩 는다. 스크립트가 같은 프레임을 두 번 읽지 않게(<c>읽기</c>·<c>글줄들</c>·<c>그림있나</c> 의 프레임 캐시) 쓴다.
+    /// 0 이면 모른다(캐시 안 함). 가짜 허브는 기본 0.
+    /// </summary>
+    long FrameVersion => 0;
+
     /// <summary>마지막 프레임의 한 부분(0~1 비율)을 그림으로 잘라 준다. 프레임이 없으면 false.</summary>
     bool TryCropFrame(Rect ratio, out BitmapSource? crop);
 
