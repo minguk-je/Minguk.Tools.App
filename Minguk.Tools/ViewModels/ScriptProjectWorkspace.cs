@@ -715,7 +715,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
             Nodes.Add(new ScriptProjectNode(item.Path, ParentOf(item.Path), Path.GetFileName(item.Path), ScriptProjectNode.KindOf(item.Kind), TryRename)
             {
                 IsEntry = string.Equals(item.Path, project.Entry, StringComparison.OrdinalIgnoreCase),
-                IsMissing = !File.Exists(project.FullPath(item.Path))
+                IsMissing = !File.Exists(project.FullPath(item.Path)),
+                FullPath = project.FullPath(item.Path)
             });
 
         AddReferenceNodes(project, solution);
@@ -916,7 +917,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
                 {
                     IsExternal = true,
                     IsEntry = string.Equals(item.Path, other.Entry, StringComparison.OrdinalIgnoreCase),
-                    IsMissing = !File.Exists(full)
+                    IsMissing = !File.Exists(full),
+                    FullPath = full
                 });
             }
         }

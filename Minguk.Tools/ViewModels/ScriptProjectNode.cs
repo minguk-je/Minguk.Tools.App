@@ -95,6 +95,86 @@ public sealed class ScriptProjectNode : ViewModelBase
         }
     }
 
+    /// <summary>디스크의 전체 경로 - 파일 줄만(미리보기가 읽는다). 폴더·프로젝트 줄은 null.</summary>
+    public string? FullPath { get; init; }
+
+    /// <summary>그림 파일 줄 - 마우스를 올리면 미리보기를 띄운다(사용자, 2026-09-26 "이미지면 미리보기 보여줘").</summary>
+    public bool IsImage => Kind == ScriptNodeKind.Resource && FullPath is not null && IsImageName(Name);
+
+    private static bool IsImageName(string name) => System.IO.Path.GetExtension(name).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif";
+
+    /// <summary>미리보기 긴 변(px) - 1080p 캡처를 원본 크기로 풀면 한 장 8MB 라 줄여 푼다.</summary>
+    private const int PreviewPixels = 480;
+
+    private ImageSource? _preview;
+    private string _previewCaption = string.Empty;
+    private DateTime _previewStamp;
+
+    /// <summary>그림 미리보기. 처음 볼 때 풀고, 파일이 바뀌었으면 다시 푼다. 못 읽으면 null.</summary>
+    public ImageSource? Preview
+    {
+        get
+        {
+            LoadPreview();
+            return _preview;
+        }
+    }
+
+    /// <summary>미리보기 아래 줄 - 이름과 원본 크기.</summary>
+    public string PreviewCaption
+    {
+        get
+        {
+            LoadPreview();
+            return _previewCaption;
+        }
+    }
+
+    private void LoadPreview()
+    {
+        if (!IsImage) return;
+
+        try
+        {
+            var stamp = System.IO.File.GetLastWriteTimeUtc(FullPath!);
+
+            if (_preview is not null && stamp == _previewStamp) return;
+
+            int width, height;
+
+            // 원본 크기만 먼저 읽는다(픽셀은 안 푼다) - 줄여 풀 비율을 정하고 캡션에 쓴다.
+            using (var stream = System.IO.File.OpenRead(FullPath!))
+            {
+                var frame = System.Windows.Media.Imaging.BitmapDecoder.Create(stream, System.Windows.Media.Imaging.BitmapCreateOptions.DelayCreation,
+                                                                              System.Windows.Media.Imaging.BitmapCacheOption.None).Frames[0];
+                width = frame.PixelWidth;
+                height = frame.PixelHeight;
+            }
+
+            // OnLoad 로 다 읽고 파일을 놓는다 - 붙들면 스크립트·캡처 저장이 그 파일을 못 덮는다.
+            var image = new System.Windows.Media.Imaging.BitmapImage();
+            image.BeginInit();
+            image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            image.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache;
+            image.UriSource = new Uri(FullPath!);
+
+            if (width >= height && width > PreviewPixels) image.DecodePixelWidth = PreviewPixels;
+            else if (height > width && height > PreviewPixels) image.DecodePixelHeight = PreviewPixels;
+
+            image.EndInit();
+            image.Freeze();
+
+            _preview = image;
+            _previewCaption = $"{Name}  ·  {width}×{height}";
+            _previewStamp = stamp;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or InvalidOperationException)
+        {
+            _preview = null;
+            _previewCaption = $"{Name}  ·  그림을 읽지 못했습니다";
+        }
+    }
+
     public ImageSource? Glyph => FreeImage.Instance?.CacheImageSource(Kind switch
     {
         ScriptNodeKind.Project or ScriptNodeKind.ProjectReference => "axialispureflat/development/16x16/project_csharp.png",

@@ -23,8 +23,9 @@ public static class MinimapPathFinder
     /// <summary>캐릭터·목적지 둘레 이만큼(칸)은 늘 바닥으로 본다 - 화살표·표시 그림이 바닥을 가린다.</summary>
     private const int ForcedRadius = 3;
 
-    /// <summary>목적지 둘레 억지 바닥(칸) - 퀘스트 표시(금색 테두리 다이아몬드, 1080p 약 22px)가 통로 바닥을 가려 길이 끊겼다(캡처 53).</summary>
-    private const int GoalForcedRadius = 6;
+    /// <summary>목적지 둘레 억지 바닥(칸) - 퀘스트 표시(금색 테두리 다이아몬드, 1080p 약 22px)와 그 빛이 통로 바닥을 가려 길이 끊겼다.</summary>
+    /// <remarks>6칸(12px)이던 때 걷는 도중 장에서 표시 앞 3칸(x 96~101)이 푸르지 않아 길이 없었다(진단\길찾기 10:13, dungeon-room-2.png).</remarks>
+    private const int GoalForcedRadius = 10;
 
     /// <summary>벽에서 가까울수록 더하는 값의 세기 - 값 = 세기 ÷ 벽까지 칸².</summary>
     /// <remarks>
@@ -41,14 +42,66 @@ public static class MinimapPathFinder
     /// </summary>
     /// <param name="bgra">미니맵 조각(BGRA32).</param>
     /// <param name="floorMinBrightness">이만큼 넘게 밝은 칸이 바닥.</param>
-    /// <param name="floorMinBlueMinusRed">칸 평균 B − R 이 이만큼 넘어야 바닥(푸른 바닥만) - 기본 −255 는 안 본다.</param>
+    /// <param name="floorMinCoolMinusRed">칸 평균 B − R 이 이만큼 넘어야 바닥(푸른 바닥만) - 기본 −255 는 안 본다.</param>
     public static IReadOnlyList<(double X, double Y)>? Find(byte[] bgra, int width, int height,
                                                             (double X, double Y) start, (double X, double Y) goal, int floorMinBrightness,
-                                                            int floorMinBlueMinusRed = -255)
+                                                            int floorMinCoolMinusRed = -255)
+        => FindDetailed(bgra, width, height, start, goal, floorMinBrightness, floorMinCoolMinusRed)?.Path;
+
+    /// <summary>찾은 길과 그때의 바닥·벽까지 거리 칸 - 겨냥점을 통로 가운데로 옮기는 데 쓴다(<see cref="MinimapPath.Recenter"/>).</summary>
+    public sealed record MinimapPath(IReadOnlyList<(double X, double Y)> Path, bool[] Floor, int[] Clearance, int Columns, int Rows)
+    {
+        /// <summary>
+        /// 그 점 둘레 <paramref name="radiusCells"/> 칸 안 바닥 가운데 벽에서 가장 먼 칸의 가운데(px) - 통로 한가운데.
+        /// 벽까지 거리가 같으면 원래 점에 가까운 칸. 둘레에 바닥이 없으면 원래 점.
+        /// </summary>
+        /// <remarks>사용자(2026-09-26) "통로 중앙으로 가게 해야 할거 같아" - 벽에서 먼 칸을 싸게 치는 것만으로는 겨냥이 가장자리에 남아 잔해에 걸렸다.</remarks>
+        public (double X, double Y) Recenter((double X, double Y) point, int radiusCells)
+        {
+            var (cx, cy) = ToCell(point, Columns, Rows);
+            var best = (X: point.X, Y: point.Y);
+            var bestClearance = -1;
+            var bestDistance = double.MaxValue;
+
+            for (var y = Math.Max(0, cy - radiusCells); y <= Math.Min(Rows - 1, cy + radiusCells); y++)
+            {
+                for (var x = Math.Max(0, cx - radiusCells); x <= Math.Min(Columns - 1, cx + radiusCells); x++)
+                {
+                    var i = (y * Columns) + x;
+
+                    if (!Floor[i]) continue;
+
+                    var center = ((x + 0.5) * CellPixels, (y + 0.5) * CellPixels);
+                    var distance = Math.Sqrt(((center.Item1 - point.X) * (center.Item1 - point.X)) + ((center.Item2 - point.Y) * (center.Item2 - point.Y)));
+
+                    if (Clearance[i] > bestClearance || (Clearance[i] == bestClearance && distance < bestDistance))
+                    {
+                        best = center;
+                        bestClearance = Clearance[i];
+                        bestDistance = distance;
+                    }
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>그 점(px)의 벽까지 거리(칸). 바닥이 아니면 0.</summary>
+        public int ClearanceAt((double X, double Y) point)
+        {
+            var (cx, cy) = ToCell(point, Columns, Rows);
+
+            return Clearance[(cy * Columns) + cx];
+        }
+    }
+
+    public static MinimapPath? FindDetailed(byte[] bgra, int width, int height,
+                                            (double X, double Y) start, (double X, double Y) goal, int floorMinBrightness,
+                                            int floorMinCoolMinusRed = -255)
     {
         ArgumentNullException.ThrowIfNull(bgra);
 
-        var floor = FloorGrid(bgra, width, height, floorMinBrightness, out var columns, out var rows, floorMinBlueMinusRed);
+        var floor = FloorGrid(bgra, width, height, floorMinBrightness, out var columns, out var rows, floorMinCoolMinusRed);
 
         if (columns == 0 || rows == 0) return null;
 
@@ -65,7 +118,7 @@ public static class MinimapPathFinder
         {
             var route = Search(floor, clearance, columns, rows, (sx, sy), (gx, gy), minimum);
 
-            if (route is not null) return route;
+            if (route is not null) return new MinimapPath(route, floor, clearance, columns, rows);
         }
 
         return null;
@@ -78,7 +131,7 @@ public static class MinimapPathFinder
     /// (방 안 46,70,79 · 원 속 바깥 33,37,33 · 145,130,90).
     /// </remarks>
     public static bool[] FloorGrid(byte[] bgra, int width, int height, int floorMinBrightness, out int columns, out int rows,
-                                   int floorMinBlueMinusRed = -255)
+                                   int floorMinCoolMinusRed = -255)
     {
         columns = width / CellPixels;
         rows = height / CellPixels;
@@ -90,7 +143,7 @@ public static class MinimapPathFinder
             for (var cx = 0; cx < columns; cx++)
             {
                 double sum = 0;
-                double blueMinusRed = 0;
+                double coolMinusRed = 0;
                 var count = 0;
 
                 for (var y = cy * CellPixels; y < (cy + 1) * CellPixels && y < height; y++)
@@ -102,12 +155,13 @@ public static class MinimapPathFinder
                         if (i + 2 >= bgra.Length) continue;
 
                         sum += (0.114 * bgra[i]) + (0.587 * bgra[i + 1]) + (0.299 * bgra[i + 2]);
-                        blueMinusRed += bgra[i] - bgra[i + 2];
+                        // 서늘한 정도 - B·G 가운데 큰 쪽 − R. 시야 부채꼴 빛 아래 통로는 푸르지 않고 청록·초록빛 회색이라(106,113,93) B − R 만 보면 끊겼다(진단 10:13).
+                        coolMinusRed += Math.Max(bgra[i], bgra[i + 1]) - bgra[i + 2];
                         count++;
                     }
                 }
 
-                raw[(cy * columns) + cx] = count > 0 && sum / count >= floorMinBrightness && blueMinusRed / count >= floorMinBlueMinusRed;
+                raw[(cy * columns) + cx] = count > 0 && sum / count >= floorMinBrightness && coolMinusRed / count >= floorMinCoolMinusRed;
             }
         }
 

@@ -81,16 +81,66 @@ public partial class LiveScriptApi
         var spec = MinimapSpecOrThrow();
         var (pixels, width, height) = MinimapPixels(spec);
         var (centerX, centerY) = center;
-        var path = MinimapPathFinder.Find(pixels, width, height, (centerX, centerY), (centerX + target.X, centerY + target.Y), spec.FloorMinBrightness,
-                                            spec.FloorMinBlueMinusRed);
+        var found = MinimapPathFinder.FindDetailed(pixels, width, height, (centerX, centerY), (centerX + target.X, centerY + target.Y), spec.FloorMinBrightness,
+                                                   spec.FloorMinCoolMinusRed);
 
-        if (path is not { Count: > 0 }) return null;
+        if (found is not { Path.Count: > 0 })
+        {
+            SavePathDiagnostic(pixels, width, height, center, target);
+            return null;
+        }
 
+        var path = found.Path;
         var aim = path.FirstOrDefault(p => Distance(p, (centerX, centerY)) >= PathLookAheadPixels);
 
         if (aim == default) aim = path[^1];
 
+        // 통로 한가운데로 - 겨냥점 둘레에서 벽에서 가장 먼 칸으로 옮긴다(목적지 바로 앞은 그대로 - 표시 위로 가야 한다).
+        if (Distance(aim, (centerX + target.X, centerY + target.Y)) > RecenterRadiusCells * MinimapPathFinder.CellPixels)
+            aim = found.Recenter(aim, RecenterRadiusCells);
+
         return (aim.X - centerX, aim.Y - centerY);
+    }
+
+    /// <summary>겨냥점을 통로 가운데로 옮길 때 둘러볼 반지름(칸, 2px) - 통로 반폭쯤. 너무 크면 옆 통로로 새고, 작으면 못 옮긴다.</summary>
+    private const int RecenterRadiusCells = 5;
+
+    /// <summary>한 번 실행에 남길 길찾기 진단 조각 수.</summary>
+    private const int MaxPathDiagnostics = 20;
+
+    private int _pathDiagnostics;
+
+    /// <summary>
+    /// 길을 못 찾은 순간의 미니맵 조각을 프로젝트 폴더 <c>진단\길찾기\</c> 에 남긴다 - 바닥 판정(floorMinBrightness·floorMinCoolMinusRed)을 맞추는 재료.
+    /// 이름에 캐릭터 자리와 점 자리(조각 px)를 적는다. 한 번 실행에 <see cref="MaxPathDiagnostics"/> 장까지.
+    /// </summary>
+    /// <remarks>2026-09-26 로그 10:03 - 걷는 도중 길이 있다 없다 하며 겨냥이 방 아래 ↔ 벽 너머 점으로 뛰어 키가 W ↔ D 로 바뀌었다.</remarks>
+    private void SavePathDiagnostic(byte[] pixels, int width, int height, (double X, double Y) center, (double X, double Y) target)
+    {
+        Logger.Debug($"길찾기: 길 없음 - 캐릭터 ({center.X:0}, {center.Y:0}) · 점 ({center.X + target.X:0}, {center.Y + target.Y:0})");
+
+        if (_pathDiagnostics >= MaxPathDiagnostics || _host.ResourceRoot is not { } root) return;
+
+        try
+        {
+            var folder = System.IO.Path.Combine(root, "진단", "길찾기");
+            System.IO.Directory.CreateDirectory(folder);
+
+            var path = System.IO.Path.Combine(folder,
+                $"{DateTime.Now:HHmmss_fff}_캐릭터{center.X:0}x{center.Y:0}_점{center.X + target.X:0}x{center.Y + target.Y:0}.png");
+            var image = System.Windows.Media.Imaging.BitmapSource.Create(width, height, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, width * 4);
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+
+            using (var file = System.IO.File.Create(path)) encoder.Save(file);
+
+            _pathDiagnostics++;
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug(ex, "길찾기 진단 조각을 못 남겼다");
+        }
     }
 
     // ── 뺀 자리 ─────────────────────────────────────────────────────────
@@ -164,7 +214,17 @@ public partial class LiveScriptApi
         if (Length(target) <= WalkArrivePixels) return true;
 
         // 겨눌 곳 - 길을 따라 걸으면 길 위 앞 지점, 아니면 점 그대로.
-        (double X, double Y) Aim((double X, double Y) point) => usePath ? PathAim(point, center) ?? point : point;
+        //   길을 한 번 찾은 뒤 한 장에서 못 찾으면 직전 겨냥을 그대로 쓴다 - 점 쪽으로 곧게 바꾸면 벽을 향해 키가 바뀌었다(로그 10:03, 겨냥 (-1,13) ↔ (-42,19)).
+        (double X, double Y)? lastPathAim = null;
+
+        (double X, double Y) Aim((double X, double Y) point)
+        {
+            if (!usePath) return point;
+
+            if (PathAim(point, center) is { } found) return (lastPathAim = found).Value;
+
+            return lastPathAim ?? point;
+        }
 
         var deadline = Environment.TickCount64 + milliseconds;
         var held = new List<ushort>();
@@ -224,7 +284,9 @@ public partial class LiveScriptApi
                     }
                 }
 
-                target = Nearest(spots);
+                // 처음 고른 점을 끝까지 따라간다 - 걸음마다 가장 가까운 점으로 바꾸면 점이 둘일 때(남서 42px · 북동 25px, 로그 10:31)
+                //   목표가 번갈아 잡혀 키가 W ↔ S 로 뒤집혔다. 그 점이 사라졌을 때만 가장 가까운 것으로.
+                target = Distance(same, target) <= WalkMatchPixels ? same : Nearest(spots);
 
                 if (Length(target) <= WalkArrivePixels) return true;
 

@@ -58,6 +58,7 @@ internal static partial class Program
         }
 
         TestMinimapRoomExit(folder);
+        TestMinimapRoomExit2(folder);
 
         // 만든 ㄷ자 통로 - 가운데가 벽이라 곧게 가면 벽을 지난다.
         const int W = 120, H = 80;
@@ -152,6 +153,72 @@ internal static partial class Program
               route is null ? "길 없음" : $"벗어날 때 {LeaveDepth(route):0}px 아래 (밝기만: {(byBrightness is null ? "길 없음" : $"{LeaveDepth(byBrightness):0}px")})");
     }
 
-    /// <summary>아이온2 던전 바닥의 B − R 최소 - 퀘스트 프로젝트 minimap.json 의 floorMinBlueMinusRed 와 같게.</summary>
-    private const int RoomFloorBlue = 4;
+    /// <summary>
+    /// 같은 방에서 걷는 도중 길이 끊긴 장(진단\길찾기 10:13:52, dungeon-room-2.png) - 캐릭터 (124,82) · 점 (82,98).
+    /// 사람 눈에는 방 아래 → 서쪽 통로로 이어져 있다.
+    /// </summary>
+    private static void TestMinimapRoomExit2(string folder)
+    {
+        var path = Path.Combine(folder, "dungeon-room-2.png");
+
+        if (!File.Exists(path))
+        {
+            Fail("미니맵 길찾기: 좁은 방(걷는 도중) 검사 그림", $"{path} 이 없다");
+            return;
+        }
+
+        var (pixels, width, height) = LoadBgra(path);
+        var start = (124.0, 82.0);
+        var goal = (82.0, 98.0);
+        var route = MinimapPathFinder.Find(pixels, width, height, start, goal, 30, RoomFloorBlue);
+
+        if (route is null)
+        {
+            // 끊긴 자리를 보려고 바닥 칸(열림 뒤)을 찍는다 - # 바닥 · . 아님 · S 캐릭터 · G 점.
+            var floor = MinimapPathFinder.FloorGrid(pixels, width, height, 30, out var columns, out _, RoomFloorBlue);
+
+            for (var cy = 28; cy <= 56; cy++)
+            {
+                var line = new System.Text.StringBuilder($"  {cy * 2,3} ");
+
+                for (var cx = 34; cx <= 72; cx++)
+                    line.Append(cx == 62 && cy == 41 ? 'S' : cx == 41 && cy == 49 ? 'G' : floor[(cy * columns) + cx] ? '#' : '.');
+
+                Console.WriteLine(line);
+            }
+        }
+
+        var end = route?.LastOrDefault();
+
+        // 통로 가운데로 - 길 위 12px 앞 지점을 둘레 5칸에서 벽에서 가장 먼 칸으로 옮기면 벽까지 거리가 늘어야 한다(같거나 커야).
+        var detailed = MinimapPathFinder.FindDetailed(pixels, width, height, start, goal, 30, RoomFloorBlue);
+
+        if (detailed is not null)
+        {
+            var worse = 0;
+            var samples = 0;
+
+            foreach (var p in detailed.Path.Where(p => Math.Abs(p.X - goal.Item1) + Math.Abs(p.Y - goal.Item2) > 12))
+            {
+                var moved = detailed.Recenter(p, 5);
+
+                samples++;
+                if (detailed.ClearanceAt(moved) < detailed.ClearanceAt(p)) worse++;
+            }
+
+            var sample = detailed.Path[Math.Min(6, detailed.Path.Count - 1)];
+            var centered = detailed.Recenter(sample, 5);
+
+            Check("미니맵 길찾기: 좁은 방(걷는 도중) - 겨냥을 통로 가운데로 옮기면 벽까지 거리가 줄지 않는다",
+                  samples > 0 && worse == 0,
+                  $"{samples}점 · 나빠짐 {worse} · 예 ({sample.X:0},{sample.Y:0}) 벽 {detailed.ClearanceAt(sample)}칸 → ({centered.X:0},{centered.Y:0}) 벽 {detailed.ClearanceAt(centered)}칸");
+        }
+
+        Check("미니맵 길찾기: 좁은 방(걷는 도중 끊긴 장) - 방 아래로 나가 표시까지 간다",
+              route is { Count: > 0 } && end is { } e && Math.Abs(e.X - goal.Item1) <= 3 && Math.Abs(e.Y - goal.Item2) <= 3,
+              route is null ? "길 없음" : $"{route.Count}칸 · {string.Join(" ", route.Where((_, i) => i % 5 == 0).Select(p => $"({p.X:0},{p.Y:0})"))}");
+    }
+
+    /// <summary>아이온2 던전 바닥의 B − R 최소 - 퀘스트 프로젝트 minimap.json 의 floorMinCoolMinusRed 와 같게.</summary>
+    private const int RoomFloorBlue = 6;
 }

@@ -72,6 +72,24 @@
                 </Border>
             </DataTemplate>
 
+            <!--
+                솔루션 탐색기 그림 파일 줄의 미리보기(사용자, 2026-09-26 "이미지면 미리보기 보여줘"). 데이터 문맥은 칸(RowData.Row = 줄).
+                x:Shared="False" - 스타일 Setter 로 넣는 툴팁이라 줄마다 새로 만든다(한 벌을 나눠 쓰면 한 줄에만 붙는다).
+            -->
+            <ToolTip x:Key="ImagePreviewToolTip"
+                     x:Shared="False">
+                <StackPanel>
+                    <Image MaxWidth="480"
+                           MaxHeight="480"
+                           Source="{Binding RowData.Row.Preview}"
+                           Stretch="Uniform"
+                           StretchDirection="DownOnly" />
+                    <TextBlock Margin="0,4,0,0"
+                               HorizontalAlignment="Center"
+                               Text="{Binding RowData.Row.PreviewCaption}" />
+                </StackPanel>
+            </ToolTip>
+
             <!-- 영역 패널 트리 - 자리 줄 밑에 칸 줄(자리와 칸은 형식이 달라 자식 고르기로 묶는다). -->
             <regions:RegionTreeChildren x:Key="RegionTreeChildren" />
 
@@ -738,6 +756,12 @@
                                                                         <DataTrigger Binding="{Binding RowData.Row.IsMissing}"
                                                                                      Value="True">
                                                                             <Setter Property="Opacity" Value="0.5" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding RowData.Row.IsImage}"
+                                                                                     Value="True">
+                                                                            <!-- 잘린 이름의 자체 툴팁(파일명)이 미리보기를 덮었다 - 그림 줄은 끈다. 이름은 미리보기 아래 줄에 있다. -->
+                                                                            <Setter Property="ShowTooltipForTrimmedText" Value="False" />
+                                                                            <Setter Property="ToolTip" Value="{DynamicResource ImagePreviewToolTip}" />
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
