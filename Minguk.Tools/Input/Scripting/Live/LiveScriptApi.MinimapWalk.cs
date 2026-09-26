@@ -70,6 +70,30 @@ public partial class LiveScriptApi
 
     public bool 길찾아걷기(string 이름, int 밀리초) => WalkPathToMarker(이름, 밀리초);
 
+    /// <summary>
+    /// <c>길찾아걷기</c> 와 같되 <b>그 방위·거리에 가장 가까운 점</b>을 따라간다 - 같은 종류 점이 여럿(던전 감옥 문 셋)일 때 걷기마다 다른 점을 잡아 사이에서 맴돌았다
+    /// (로그 2026-09-26 18:22, 방위 187→283→179→335°). 스크립트가 지난번 점의 방위·거리를 넘겨 잠근다. 그 점이 <see cref="PreferMatchPixels"/> 안에 없으면 가장 가까운 점.
+    /// </summary>
+    public bool WalkPathToMarker(string name, int milliseconds, double bearing, double distance)
+        => Traced("WalkPathToMarker", $"{Quote(name)}, {milliseconds}, {bearing:0}, {distance:0}", () => WalkToMarkerCore(name, milliseconds, usePath: true, prefer: ToPoint(bearing, distance)));
+
+    public bool 길찾아걷기(string 이름, int 밀리초, double 방위, double 거리) => WalkPathToMarker(이름, 밀리초, 방위, 거리);
+
+    public bool WalkToMarker(string name, int milliseconds, double bearing, double distance)
+        => Traced("WalkToMarker", $"{Quote(name)}, {milliseconds}, {bearing:0}, {distance:0}", () => WalkToMarkerCore(name, milliseconds, prefer: ToPoint(bearing, distance)));
+
+    public bool 마커로걷기(string 이름, int 밀리초, double 방위, double 거리) => WalkToMarker(이름, 밀리초, 방위, 거리);
+
+    /// <summary>잠근 점으로 볼 거리(px) - 걷는 3초 동안 점이 밀리는 만큼보다 넉넉히.</summary>
+    private const double PreferMatchPixels = 25;
+
+    private static (double X, double Y) ToPoint(double bearing, double distance)
+    {
+        var radians = bearing * Math.PI / 180.0;
+
+        return (distance * Math.Sin(radians), -distance * Math.Cos(radians));
+    }
+
     /// <summary>길을 따라 걸을 때 길 위 이만큼(px) 앞 지점을 겨눈다 - 가까우면 칸 흔들림에 휘둘리고, 멀면 모퉁이를 깎다 벽에 걸린다.</summary>
     private const double PathLookAheadPixels = 12;
 
@@ -197,7 +221,7 @@ public partial class LiveScriptApi
         }
     }
 
-    private bool WalkToMarkerCore(string name, int milliseconds, bool usePath = false)
+    private bool WalkToMarkerCore(string name, int milliseconds, bool usePath = false, (double X, double Y)? prefer = null)
     {
         if (milliseconds <= 0) return false;
 
@@ -209,7 +233,8 @@ public partial class LiveScriptApi
 
         if (spots.Count == 0) return false;
 
-        var target = Nearest(spots);
+        // 잠근 점이 있으면 그것에 가장 가까운 점 - 같은 종류가 여럿일 때 걷기마다 갈아타지 않게.
+        var target = prefer is { } p && spots.MinBy(s => Distance(s, p)) is var near && Distance(near, p) <= PreferMatchPixels ? near : Nearest(spots);
 
         if (Length(target) <= WalkArrivePixels) return true;
 

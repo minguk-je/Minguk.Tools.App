@@ -2557,6 +2557,8 @@ public partial class LiveScriptApi : IDisposable
         IReadOnlyList<ScriptSpot> spots => spots.Count == 0 ? "없음" : $"{spots.Count}곳: {string.Join(" · ", spots.Take(12))}{(spots.Count > 12 ? " …" : "")}",
         // 숫자들읽기 - 「System.Int32[]」 로 찍혀 무엇으로 읽었는지 몰랐다(사용자, 2026-09-24 물약을 계속 먹던 것을 쫓다가).
         int[] numbers => $"[{string.Join(", ", numbers)}]",
+        // 마커방위들 - 「ScriptBearing[]」 로 찍혀 던전에서 어느 점을 잡았는지 몰랐다(2026-09-26 18:40).
+        IReadOnlyList<ScriptBearing> bearings => bearings.Count == 0 ? "없음" : $"{bearings.Count}개: {string.Join(" · ", bearings.Take(8).Select(b => $"{b.Bearing:0}도 {b.Distance:0}px"))}",
         _ => result.ToString() ?? ""
     };
 

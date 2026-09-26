@@ -59,6 +59,8 @@ internal static partial class Program
         // 프로젝트의 사진·자리로 PP-OCRv5 가 몇 장 맞는지 잰다. 사진이 있어야 하므로 평소 검증 밖.
         if (args.Contains("--ocr-bench")) return OcrBench.Run(args);
         if (args.Contains("--ocr-crop")) return OcrCropCheck.Run(args);
+        // 미니맵 조각 한 장을 스크립트가 보는 대로(바닥·점·화살표·길) 그림으로 뽑는다.
+        if (args.Contains("--minimap-dump")) return MinimapDump.Run(args);
 
         // 켜 둔 게임 창을 잡아 자리·칸을 읽어 본다. 게임이 떠 있어야 한다.
         if (args.Contains("--live-ocr")) return LiveOcrCheck.Run(args);

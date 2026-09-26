@@ -110,7 +110,7 @@ public static class ScriptApiCatalog
         new("GoToTarget", "목표로가기", "ms", "미니맵 목표 마커 쪽으로 걸어간다. 마커가 없으면 걷지 않고 false.", ScriptApiMode.Live),
         new("MarkerBearing", "마커방위", "name", "미니맵의 그 이름 점(minimap.json 의 markers - 기본 「선공몹」 빨간 점·「일반몹」 흰 점, 여럿은 쉼표로 선공몹,일반몹) 가운데 가장 가까운 것 - 방위·거리(px)·돌 각. 없으면 null.", ScriptApiMode.Live),
         new("MarkerBearings", "마커방위들", "name", "그 이름 점을 모두, 가까운 것부터.", ScriptApiMode.Live),
-        new("WalkPathToMarker", "길찾아걷기", "name, ms", "마커로걷기와 같되 미니맵의 바닥(밝은 칸)만 밟는 길을 찾아 따라 걷는다 - 던전 통로처럼 곧게 못 가는 곳. 바닥 밝기 기준은 minimap.json 의 floorMinBrightness(기본 30). 길이 없으면 곧게 간다.", ScriptApiMode.Live),
+        new("WalkPathToMarker", "길찾아걷기", "name, ms[, bearing, distance]", "마커로걷기와 같되 미니맵의 바닥(밝은 칸)만 밟는 길을 찾아 따라 걷는다 - 던전 통로처럼 곧게 못 가는 곳. 바닥 밝기 기준은 minimap.json 의 floorMinBrightness(기본 30). 길이 없으면 곧게 간다. 방위·거리를 주면 그 점에 가장 가까운 점을 따라간다(같은 종류 점이 여럿일 때 갈아타지 않게).", ScriptApiMode.Live),
         new("WalkToMarker", "마커로걷기", "name, ms", "그 이름 점 가운데 가장 가까운 것 쪽으로 키보드(W·A·S·D 8방향)만으로 걷는다 - 마우스는 안 쓰고 화살표 방위도 안 믿는다. 걸을 때 점이 밀리는 쪽을 보고 방향을 잡는다. 다 왔거나 시간이 다 되면 true, 점이 없거나 막혔으면 false.", ScriptApiMode.Live),
         new("IgnoreNearestMarker", "마커무시", "name, ms", "그 이름 점 가운데 지금 가장 가까운 것을 그 시간 동안 뺀다 - 마커방위·마커로걷기가 그 자리 점을 안 본다. 잡은 몹 점이 미니맵에서 사라지기까지 2~3초 남아 그쪽으로 가는 것을 막는다. 뺀 점(없으면 null).", ScriptApiMode.Live),
         new("GoToMarker", "마커로가기", "name, ms", "그 이름 점 가운데 가장 가까운 것 쪽으로 걸어간다. 없으면 걷지 않고 false. 주위에 몹이 없을 때 미니맵의 몹 쪽으로 가는 데 쓴다.", ScriptApiMode.Live),

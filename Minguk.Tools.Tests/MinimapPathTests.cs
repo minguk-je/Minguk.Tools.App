@@ -59,6 +59,7 @@ internal static partial class Program
 
         TestMinimapRoomExit(folder);
         TestMinimapRoomExit2(folder);
+        TestMinimapQuestMarkerRule(folder);
 
         // 만든 ㄷ자 통로 - 가운데가 벽이라 곧게 가면 벽을 지난다.
         const int W = 120, H = 80;
@@ -217,6 +218,36 @@ internal static partial class Program
         Check("미니맵 길찾기: 좁은 방(걷는 도중 끊긴 장) - 방 아래로 나가 표시까지 간다",
               route is { Count: > 0 } && end is { } e && Math.Abs(e.X - goal.Item1) <= 3 && Math.Abs(e.Y - goal.Item2) <= 3,
               route is null ? "길 없음" : $"{route.Count}칸 · {string.Join(" ", route.Where((_, i) => i % 5 == 0).Select(p => $"({p.X:0},{p.Y:0})"))}");
+    }
+
+    /// <summary>
+    /// 퀘스트 프로젝트 minimap.json 의 「퀘스트」 점 규칙(2026-09-26) - 감옥 문 셋(dungeon-cages.png, 노란 ● 22px, 18~28px 거리)은 셋 다 잡고,
+    /// 캐릭터 둘레 밝은 원 테두리(반지름 ≈35px, 누런색)는 안 잡아야 한다. 30px 이상이기만 하던 옛 규칙은 테두리 조각을 34~37px 표시로 잡아
+    /// 걸을 때마다 다른 방향으로 걸어 맴돌았다(로그 18:40). 던전 금색 다이아몬드(테두리만, 58px·채움 0.15)도 그대로 잡혀야 한다.
+    /// </summary>
+    private static void TestMinimapQuestMarkerRule(string folder)
+    {
+        var rule = new MinimapMarkerSpec { MinRed = 150, MinGreen = 110, MaxBlue = 255, MinRedMinusBlue = 70, MinRedMinusGreen = -255, MinPixels = 20, MaxPixels = 150, MinFill = 0.12, MaxAspect = 1.6 };
+        var spec = new MinimapSpec { Ignore = [[0.69, 0.84, 0.13, 0.16]] };
+
+        foreach (var (file, expected, maxDistance, what) in new[] { ("dungeon-cages.png", 3, 30.0, "감옥 문 셋"), ("dungeon-path.png", 1, 60.0, "금색 다이아몬드"), ("dungeon-room.png", 1, 60.0, "좁은 방 다이아몬드") })
+        {
+            var path = Path.Combine(folder, file);
+
+            if (!File.Exists(path))
+            {
+                Fail($"미니맵 퀘스트 점 규칙: {file}", "검사 그림이 없다");
+                continue;
+            }
+
+            var (pixels, width, height) = LoadBgra(path);
+            var arrow = MinimapReader.FindArrow(pixels, width, height, spec);
+            var marks = arrow is null ? [] : MinimapReader.Markers(pixels, width, height, spec, rule, arrow.CenterX, arrow.CenterY);
+
+            Check($"미니맵 퀘스트 점 규칙: {file} - {what} {expected}개, 원 테두리(34~37px)는 안 잡는다",
+                  marks.Count == expected && marks.All(m => m.Distance <= maxDistance),
+                  string.Join(" · ", marks.Select(m => $"{m.Bearing:0}도 {m.Distance:0}px {m.Pixels}px²")));
+        }
     }
 
     /// <summary>아이온2 던전 바닥의 B − R 최소 - 퀘스트 프로젝트 minimap.json 의 floorMinCoolMinusRed 와 같게.</summary>
