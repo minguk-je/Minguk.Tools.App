@@ -38,6 +38,7 @@ public static class SolutionProbe
             failures += CheckProjectSwitch(root);
             failures += CheckProjectOrder(root);
             failures += CheckDataNotListed();
+            failures += CheckFolderFilesListed(root);
             failures += SolutionSettingsProbe.Run(root);
         }
         finally
@@ -72,6 +73,48 @@ public static class SolutionProbe
 
         Report(ok, "데이터(사진·라벨·모델·영역)는 프로젝트 목록에 안 넣고 스크립트·Resources 는 넣는다",
             ok ? $"숨김 {hidden.Length} · 보임 {shown.Length}" : $"안 숨겨짐: {string.Join(", ", wrongHidden)} / 잘못 숨겨짐: {string.Join(", ", wrongShown)}");
+
+        return ok ? 0 : 1;
+    }
+
+    /// <summary>
+    /// 폴더에 이미 있던 파일도 모두 목록에 들어간다 - 새로 생긴 것만 넣어 「참고캡처」 에 사진 52장 가운데 이름 바꾼 한 장만 떴다(사용자, 2026-09-26).
+    /// 「프로젝트에서 제외」 한 것은 다시 안 들어오고(저장했다 다시 읽어도), 손으로 다시 넣으면 풀린다. 데이터 폴더는 안 들어간다.
+    /// </summary>
+    private static int CheckFolderFilesListed(string root)
+    {
+        var project = Minguk.Tools.Input.Scripting.Projects.ScriptProject.Create(Path.Combine(root, "폴더훑기"), "퀘스트", "// 시작\n");
+        var dir = project.Directory;
+
+        foreach (var name in new[] { "참고캡처/01.png", "참고캡처/02.png", "참고캡처/README.md", "참고캡처/옛것/03.png", "빼기/a.txt", "Images/x.png" })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dir, name))!);
+            File.WriteAllText(Path.Combine(dir, name), "x");
+        }
+
+        project.Add("참고캡처/README.md");   // 감시가 한 장만 넣은 것처럼
+
+        var added = Minguk.Tools.ViewModels.ScriptProjectWorkspace.AddUnlisted(project);
+        var all = new[] { "참고캡처/01.png", "참고캡처/02.png", "참고캡처/README.md", "참고캡처/옛것/03.png", "빼기/a.txt" }.All(p => project.Find(p) is not null);
+        var noData = project.Find("Images/x.png") is null && !project.Folders.Contains("Images");
+
+        project.RemoveFolder("빼기");
+        project.MarkExcluded("빼기");
+        project.Remove("참고캡처/02.png");
+        project.MarkExcluded("참고캡처/02.png");
+        project.Save();
+
+        var reloaded = Minguk.Tools.Input.Scripting.Projects.ScriptProject.Load(project.FilePath);
+        Minguk.Tools.ViewModels.ScriptProjectWorkspace.AddUnlisted(reloaded);
+        var stayedOut = reloaded.Find("빼기/a.txt") is null && reloaded.Find("참고캡처/02.png") is null;
+
+        reloaded.Add("참고캡처/02.png");
+        var unExcluded = !reloaded.IsExcluded("참고캡처/02.png") && reloaded.IsExcluded("빼기/a.txt");
+
+        var ok = added && all && noData && stayedOut && unExcluded;
+
+        Report(ok, "폴더에 이미 있던 파일도 모두 목록에 넣고, 제외한 것은 저장·다시 읽은 뒤에도 안 넣고, 손으로 넣으면 풀린다",
+            $"넣음 {added} · 다 있음 {all} · 데이터 없음 {noData} · 제외 유지 {stayedOut} · 다시 넣으면 풀림 {unExcluded}");
 
         return ok ? 0 : 1;
     }

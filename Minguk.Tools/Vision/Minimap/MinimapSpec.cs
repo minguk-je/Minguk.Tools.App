@@ -44,6 +44,13 @@ public sealed class MinimapSpec
     [JsonPropertyName("floorMinBrightness")]
     public int FloorMinBrightness { get; set; } = 30;
 
+    /// <summary>
+    /// 길찾기가 바닥으로 볼 칸의 B − R 최소 - 푸른 바닥만 바닥이다. 기본 −255 는 안 본다(바닥 색이 게임마다 다르다).
+    /// 아이온2 던전: 캐릭터 둘레의 누런 원 안이 밝기로는 다 바닥이 되어 벽을 뚫는 길이 나왔다 - 바닥은 원 밑에서도 푸르다(캡처 53, 2026-09-26).
+    /// </summary>
+    [JsonPropertyName("floorMinBlueMinusRed")]
+    public int FloorMinBlueMinusRed { get; set; } = -255;
+
     /// <summary>화살표는 무채색~푸른 회백색이라 R − B 가 작다. 미니맵 바탕의 노란 원·길 띠는 이 값이 크다.</summary>
     [JsonPropertyName("maxRedMinusBlue")]
     public int MaxRedMinusBlue { get; set; } = 12;

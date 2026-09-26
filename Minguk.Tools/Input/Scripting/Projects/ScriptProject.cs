@@ -82,6 +82,14 @@ public sealed class ScriptProject
     [JsonPropertyName("folders")]
     public List<string> Folders { get; set; } = [];
 
+    /// <summary>
+    /// 사람이 「프로젝트에서 제외」 한 것(상대 경로, 폴더면 그 안 전부) - 폴더를 훑어 파일을 넣을 때 다시 넣지 않는다.
+    /// 없으면 적지 않는다. 같은 경로를 손으로 다시 넣으면(<see cref="Add"/>) 풀린다.
+    /// </summary>
+    [JsonPropertyName("excluded")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Excluded { get; set; }
+
     /// <summary>프로젝트 파일의 전체 경로. 저장하지 않는다.</summary>
     [JsonIgnore]
     public string FilePath { get; private set; } = string.Empty;
@@ -205,6 +213,9 @@ public sealed class ScriptProject
 
         if (Find(relative) is { } existing) return existing;
 
+        if (Excluded is { } excluded && excluded.RemoveAll(e => string.Equals(e, relative, StringComparison.OrdinalIgnoreCase)) > 0 && excluded.Count == 0)
+            Excluded = null;
+
         var item = new ScriptProjectItem { Path = relative, Kind = kind ?? KindOf(relative) };
         Items.Add(item);
 
@@ -308,6 +319,28 @@ public sealed class ScriptProject
         return true;
     }
 
+    /// <summary>「프로젝트에서 제외」 로 적는다 - 폴더를 훑어도 다시 안 넣는다(폴더면 그 안 전부).</summary>
+    public void MarkExcluded(string relative)
+    {
+        var clean = Clean(relative).TrimEnd('/');
+
+        if (clean.Length == 0 || IsExcluded(clean)) return;
+
+        Excluded ??= [];
+        Excluded.RemoveAll(e => e.StartsWith(clean + "/", StringComparison.OrdinalIgnoreCase));
+        Excluded.Add(clean);
+    }
+
+    /// <summary>제외한 것이거나 제외한 폴더 안인가.</summary>
+    public bool IsExcluded(string relative)
+    {
+        if (Excluded is not { Count: > 0 } excluded) return false;
+
+        var clean = Clean(relative).TrimEnd('/');
+
+        return excluded.Any(e => string.Equals(e, clean, StringComparison.OrdinalIgnoreCase) || clean.StartsWith(e + "/", StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>폴더와 그 안의 항목을 목록에서 뺀다.</summary>
     public void RemoveFolder(string relative)
     {
@@ -367,7 +400,7 @@ public sealed class ScriptProject
     /// <remarks>객체를 바꾸지 않고 안만 바꾼다 - 이 객체를 들고 있는 쪽(작업 공간·탐색기)을 다 다시 이을 필요가 없게.</remarks>
     public bool ReplaceListWith(ScriptProject other)
     {
-        static string Key(ScriptProject p) => System.Text.Json.JsonSerializer.Serialize(new { p.Name, p.Language, p.Entry, p.Items, p.Folders });
+        static string Key(ScriptProject p) => System.Text.Json.JsonSerializer.Serialize(new { p.Name, p.Language, p.Entry, p.Items, p.Folders, p.Excluded });
 
         if (Key(this) == Key(other)) return false;
 
@@ -376,6 +409,7 @@ public sealed class ScriptProject
         Entry = other.Entry;
         Items = [.. other.Items.Select(i => new ScriptProjectItem { Path = i.Path, Kind = i.Kind })];
         Folders = [.. other.Folders];
+        Excluded = other.Excluded is null ? null : [.. other.Excluded];
 
         return true;
     }

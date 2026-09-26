@@ -23,36 +23,62 @@ public static class MinimapPathFinder
     /// <summary>캐릭터·목적지 둘레 이만큼(칸)은 늘 바닥으로 본다 - 화살표·표시 그림이 바닥을 가린다.</summary>
     private const int ForcedRadius = 3;
 
-    /// <summary>벽에서 가까울수록 더하는 값의 세기.</summary>
-    private const double WallPenalty = 4;
+    /// <summary>목적지 둘레 억지 바닥(칸) - 퀘스트 표시(금색 테두리 다이아몬드, 1080p 약 22px)가 통로 바닥을 가려 길이 끊겼다(캡처 53).</summary>
+    private const int GoalForcedRadius = 6;
+
+    /// <summary>벽에서 가까울수록 더하는 값의 세기 - 값 = 세기 ÷ 벽까지 칸².</summary>
+    /// <remarks>
+    /// 4 ÷ (칸+1) 이던 때는 통로 가운데와 가장자리 값 차이가 작아 길이 벽 쪽으로 붙었고, 미니맵에 안 나오는 장애물(무너진 기둥·잔해)에
+    /// 걸려 못 지나갔다(사용자, 2026-09-26 "장애물이 있어서 못지나가고 있었어.. 통로 중앙으로 가게 해야 할거 같아", 캡처 53).
+    /// </remarks>
+    private const double WallPenalty = 24;
+
+    /// <summary>벽에서 이만큼(칸) 떨어진 칸만 먼저 밟아 본다 - 길이 없으면 한 칸씩 줄인다(좁은 방·문).</summary>
+    private static readonly int[] MinClearances = [4, 3, 2, 1];
 
     /// <summary>
     /// 바닥만 밟는 길(미니맵 조각 안 px, 시작 다음 칸부터 목적지까지). 못 찾으면 null.
     /// </summary>
     /// <param name="bgra">미니맵 조각(BGRA32).</param>
     /// <param name="floorMinBrightness">이만큼 넘게 밝은 칸이 바닥.</param>
+    /// <param name="floorMinBlueMinusRed">칸 평균 B − R 이 이만큼 넘어야 바닥(푸른 바닥만) - 기본 −255 는 안 본다.</param>
     public static IReadOnlyList<(double X, double Y)>? Find(byte[] bgra, int width, int height,
-                                                            (double X, double Y) start, (double X, double Y) goal, int floorMinBrightness)
+                                                            (double X, double Y) start, (double X, double Y) goal, int floorMinBrightness,
+                                                            int floorMinBlueMinusRed = -255)
     {
         ArgumentNullException.ThrowIfNull(bgra);
 
-        var floor = FloorGrid(bgra, width, height, floorMinBrightness, out var columns, out var rows);
+        var floor = FloorGrid(bgra, width, height, floorMinBrightness, out var columns, out var rows, floorMinBlueMinusRed);
 
         if (columns == 0 || rows == 0) return null;
 
         var (sx, sy) = ToCell(start, columns, rows);
         var (gx, gy) = ToCell(goal, columns, rows);
 
-        Force(floor, columns, rows, sx, sy);
-        Force(floor, columns, rows, gx, gy);
+        Force(floor, columns, rows, sx, sy, ForcedRadius);
+        Force(floor, columns, rows, gx, gy, GoalForcedRadius);
 
         var clearance = Clearance(floor, columns, rows);
 
-        return Search(floor, clearance, columns, rows, (sx, sy), (gx, gy));
+        // 벽에서 넉넉히 떨어진 칸으로만 갈 수 있으면 그 길 - 시작·목적지 둘레(억지 바닥)는 늘 밟는다.
+        foreach (var minimum in MinClearances)
+        {
+            var route = Search(floor, clearance, columns, rows, (sx, sy), (gx, gy), minimum);
+
+            if (route is not null) return route;
+        }
+
+        return null;
     }
 
-    /// <summary>바닥 칸 - 칸 평균 밝기가 기준 넘으면. 가는 선은 열림으로 지운다.</summary>
-    public static bool[] FloorGrid(byte[] bgra, int width, int height, int floorMinBrightness, out int columns, out int rows)
+    /// <summary>바닥 칸 - 칸 평균 밝기가 기준 넘으면(푸른 기준을 주면 B − R 도). 가는 선은 열림으로 지운다.</summary>
+    /// <remarks>
+    /// 푸른 기준(아이온2 던전, 캡처 53): 캐릭터 둘레의 밝은 원은 누런색이라 밝기로만 보면 원 안이 다 바닥이 되어, 좁은 방 벽을 뚫고
+    /// 표시 쪽으로 곧게 가는 길이 나왔다(로그 08:59 - 남서로 걷다 1~2초씩 제자리). 원 밑에서도 실제 바닥은 푸르스름하게 남는다
+    /// (방 안 46,70,79 · 원 속 바깥 33,37,33 · 145,130,90).
+    /// </remarks>
+    public static bool[] FloorGrid(byte[] bgra, int width, int height, int floorMinBrightness, out int columns, out int rows,
+                                   int floorMinBlueMinusRed = -255)
     {
         columns = width / CellPixels;
         rows = height / CellPixels;
@@ -64,6 +90,7 @@ public static class MinimapPathFinder
             for (var cx = 0; cx < columns; cx++)
             {
                 double sum = 0;
+                double blueMinusRed = 0;
                 var count = 0;
 
                 for (var y = cy * CellPixels; y < (cy + 1) * CellPixels && y < height; y++)
@@ -75,11 +102,12 @@ public static class MinimapPathFinder
                         if (i + 2 >= bgra.Length) continue;
 
                         sum += (0.114 * bgra[i]) + (0.587 * bgra[i + 1]) + (0.299 * bgra[i + 2]);
+                        blueMinusRed += bgra[i] - bgra[i + 2];
                         count++;
                     }
                 }
 
-                raw[(cy * columns) + cx] = count > 0 && sum / count >= floorMinBrightness;
+                raw[(cy * columns) + cx] = count > 0 && sum / count >= floorMinBrightness && blueMinusRed / count >= floorMinBlueMinusRed;
             }
         }
 
@@ -137,10 +165,10 @@ public static class MinimapPathFinder
     private static (int X, int Y) ToCell((double X, double Y) point, int columns, int rows)
         => (Math.Clamp((int)(point.X / CellPixels), 0, columns - 1), Math.Clamp((int)(point.Y / CellPixels), 0, rows - 1));
 
-    private static void Force(bool[] floor, int columns, int rows, int cx, int cy)
+    private static void Force(bool[] floor, int columns, int rows, int cx, int cy, int radius)
     {
-        for (var y = Math.Max(0, cy - ForcedRadius); y <= Math.Min(rows - 1, cy + ForcedRadius); y++)
-            for (var x = Math.Max(0, cx - ForcedRadius); x <= Math.Min(columns - 1, cx + ForcedRadius); x++)
+        for (var y = Math.Max(0, cy - radius); y <= Math.Min(rows - 1, cy + radius); y++)
+            for (var x = Math.Max(0, cx - radius); x <= Math.Min(columns - 1, cx + radius); x++)
                 floor[(y * columns) + x] = true;
     }
 
@@ -185,10 +213,22 @@ public static class MinimapPathFinder
         return distance;
     }
 
-    /// <summary>다익스트라(8이웃). 한 걸음 값 = 거리 × (1 + 벽가까움 값).</summary>
+    /// <summary>다익스트라(8이웃). 한 걸음 값 = 거리 × (1 + 벽가까움 값). 벽까지 <paramref name="minClearance"/> 칸 안 되는 칸은 안 밟는다(시작·목적지 둘레는 밟는다).</summary>
     private static IReadOnlyList<(double X, double Y)>? Search(bool[] floor, int[] clearance, int columns, int rows,
-                                                                (int X, int Y) start, (int X, int Y) goal)
+                                                                (int X, int Y) start, (int X, int Y) goal, int minClearance)
     {
+        bool Walkable(int index)
+        {
+            if (!floor[index]) return false;
+            if (clearance[index] >= minClearance) return true;
+
+            var x = index % columns;
+            var y = index / columns;
+
+            return (Math.Abs(x - start.X) <= ForcedRadius && Math.Abs(y - start.Y) <= ForcedRadius)
+                || (Math.Abs(x - goal.X) <= GoalForcedRadius && Math.Abs(y - goal.Y) <= GoalForcedRadius);
+        }
+
         var total = floor.Length;
         var cost = new double[total];
         var previous = new int[total];
@@ -224,12 +264,13 @@ public static class MinimapPathFinder
 
                     var next = (ny * columns) + nx;
 
-                    if (!floor[next]) continue;
+                    if (!Walkable(next)) continue;
 
                     // 대각선은 모서리를 긁지 않게 옆 두 칸도 바닥이어야
-                    if (dx != 0 && dy != 0 && (!floor[(y * columns) + nx] || !floor[(ny * columns) + x])) continue;
+                    if (dx != 0 && dy != 0 && (!Walkable((y * columns) + nx) || !Walkable((ny * columns) + x))) continue;
 
-                    var step = (dx != 0 && dy != 0 ? Math.Sqrt(2) : 1) * (1 + (WallPenalty / (Math.Min(clearance[next], 1000) + 1)));
+                    var wall = Math.Max(1, Math.Min(clearance[next], 1000));
+                    var step = (dx != 0 && dy != 0 ? Math.Sqrt(2) : 1) * (1 + (WallPenalty / ((double)wall * wall)));
                     var nextCost = cost[current] + step;
 
                     if (nextCost >= cost[next]) continue;

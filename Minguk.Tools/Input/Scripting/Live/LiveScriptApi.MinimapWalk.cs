@@ -37,6 +37,9 @@ public partial class LiveScriptApi
     /// <summary>안 움직인 걸음이 잇달아 이만큼이면 막힌 것으로 보고 그만둔다.</summary>
     private const int WalkStuckSteps = 4;
 
+    /// <summary>지금 누른 키가 겨냥에서 이만큼(도) 안이면 안 바꾼다 - 8방향 한 칸(45°)보다 조금 넓게.</summary>
+    private const double WalkKeepDegrees = 50;
+
     /// <summary>8방향 - 키와 W(앞) 기준 각(도, 시계 방향).</summary>
     private static readonly (string Keys, double Offset)[] WalkDirections =
     [
@@ -73,14 +76,13 @@ public partial class LiveScriptApi
     /// <summary>
     /// 점(캐릭터 기준 px) 쪽으로 가는 길 위 앞 지점(캐릭터 기준 px). 길을 못 찾으면 null.
     /// </summary>
-    private (double X, double Y)? PathAim((double X, double Y) target)
+    private (double X, double Y)? PathAim((double X, double Y) target, (double X, double Y) center)
     {
         var spec = MinimapSpecOrThrow();
         var (pixels, width, height) = MinimapPixels(spec);
-        var arrow = MinimapReader.FindArrow(pixels, width, height, spec);
-        var centerX = arrow?.CenterX ?? width / 2.0;
-        var centerY = arrow?.CenterY ?? height / 2.0;
-        var path = MinimapPathFinder.Find(pixels, width, height, (centerX, centerY), (centerX + target.X, centerY + target.Y), spec.FloorMinBrightness);
+        var (centerX, centerY) = center;
+        var path = MinimapPathFinder.Find(pixels, width, height, (centerX, centerY), (centerX + target.X, centerY + target.Y), spec.FloorMinBrightness,
+                                            spec.FloorMinBlueMinusRed);
 
         if (path is not { Count: > 0 }) return null;
 
@@ -149,7 +151,11 @@ public partial class LiveScriptApi
     {
         if (milliseconds <= 0) return false;
 
-        var spots = MarkerSpots(name);
+        // 캐릭터 자리는 걷는 동안 한 곳으로 못 박는다 - 화살표는 몸 방향으로 도는 세모라 키를 바꿀 때마다 무게중심이 2~4px 옮겨 가,
+        //   그것을 점이 밀린 것으로 읽어 W 방향이 걸음마다 60~140° 튀었다(로그 2026-09-26 08:50, 25초 동안 점까지 43~60px 에서 안 줄었다).
+        //   캐릭터는 미니맵 한가운데에 서 있고 지도만 밀리므로 처음 잡은 자리가 끝까지 맞다.
+        var center = MinimapCenter();
+        var spots = MarkerSpots(name, center);
 
         if (spots.Count == 0) return false;
 
@@ -158,13 +164,14 @@ public partial class LiveScriptApi
         if (Length(target) <= WalkArrivePixels) return true;
 
         // 겨눌 곳 - 길을 따라 걸으면 길 위 앞 지점, 아니면 점 그대로.
-        (double X, double Y) Aim((double X, double Y) point) => usePath ? PathAim(point) ?? point : point;
+        (double X, double Y) Aim((double X, double Y) point) => usePath ? PathAim(point, center) ?? point : point;
 
         var deadline = Environment.TickCount64 + milliseconds;
         var held = new List<ushort>();
         var aim = Aim(target);
         var (keys, offset) = _walkForward is { } known ? PickDirection(BearingOf(aim) - known) : WalkDirections[0];
         var still = 0;
+        var turning = true;   // 키를 막 바꿨다 - 아이온2 는 몸을 돌리며 휘어 가서 이 걸음의 밀림은 키 방향이 아니다. W 방향을 안 고친다
 
         Logger.Debug($"걷기 시작({(usePath ? "길찾기" : "곧게")}): 점 ({target.X:0}, {target.Y:0}) · 겨냥 ({aim.X:0}, {aim.Y:0}) · 앞 {(_walkForward is { } f ? $"{f:0}도" : "모름")} · 키 {keys}");
 
@@ -178,12 +185,15 @@ public partial class LiveScriptApi
             {
                 Wait((int)Math.Min(WalkStepMs, deadline - Environment.TickCount64));
 
-                spots = MarkerSpots(name);
+                spots = MarkerSpots(name, center);
 
                 // 점이 사라졌다 - 미니맵 밖으로 나갔거나 몹이 죽었다. 스크립트가 다시 보게 한다.
                 if (spots.Count == 0) return true;
 
                 var same = spots.MinBy(s => Distance(s, target));
+                var settled = !turning;
+
+                turning = false;
 
                 if (Distance(same, target) <= WalkMatchPixels)
                 {
@@ -195,12 +205,16 @@ public partial class LiveScriptApi
                     {
                         ShiftIgnoredSpots(dx, dy);
 
-                        var forward = MinimapReader.Normalize(BearingOf((-dx, -dy)) - offset);
+                        if (settled || _walkForward is null)
+                        {
+                            var forward = MinimapReader.Normalize(BearingOf((-dx, -dy)) - offset);
 
-                        // 몹도 움직이고 점 자리도 흔들린다 - 새 값은 반만 믿는다.
-                        _walkForward = _walkForward is { } before
-                            ? MinimapReader.Normalize(before + (MinimapReader.Difference(before, forward) / 2))
-                            : forward;
+                            // 몹도 움직이고 점 자리도 흔들린다 - 새 값은 반만 믿는다.
+                            _walkForward = _walkForward is { } before
+                                ? MinimapReader.Normalize(before + (MinimapReader.Difference(before, forward) / 2))
+                                : forward;
+                        }
+
                         still = 0;
                     }
                     else if (++still >= WalkStuckSteps)
@@ -218,17 +232,23 @@ public partial class LiveScriptApi
 
                 aim = Aim(target);
 
-                var (nextKeys, nextOffset) = PickDirection(BearingOf(aim) - walkForward);
+                // 지금 키가 겨냥에서 WalkKeepDegrees 안이면 그대로 간다 - 가장 가까운 키로 곧바로 바꾸면 경계(22.5°)에서
+                //   D ↔ W+D ↔ S+D 로 0.3초마다 바뀌어, 몸을 돌리느라 거의 못 나갔다(08:50 로그 - 3초에 키 4~8번).
+                var relative = BearingOf(aim) - walkForward;
 
-                if (nextKeys != keys)
-                    Logger.Debug($"걷기: 점 ({target.X:0}, {target.Y:0}) · 겨냥 ({aim.X:0}, {aim.Y:0}) · 앞 {walkForward:0}도 · 키 {keys} → {nextKeys}");
+                if (Math.Abs(MinimapReader.Difference(offset, MinimapReader.Normalize(relative))) <= WalkKeepDegrees) continue;
+
+                var (nextKeys, nextOffset) = PickDirection(relative);
 
                 if (nextKeys == keys) continue;
+
+                Logger.Debug($"걷기: 점 ({target.X:0}, {target.Y:0}) · 겨냥 ({aim.X:0}, {aim.Y:0}) · 앞 {walkForward:0}도 · 키 {keys} → {nextKeys}");
 
                 ReleaseWalkKeys(held);
                 PressWalkKeys(nextKeys, held);
                 keys = nextKeys;
                 offset = nextOffset;
+                turning = true;
             }
 
             return true;
@@ -241,17 +261,16 @@ public partial class LiveScriptApi
 
     /// <summary>그 이름 점들 - 캐릭터 자리 기준(미니맵 px, 오른쪽 +x · 아래 +y). <c>마커무시</c> 로 뺀 자리의 점은 없다.</summary>
     /// <remarks>캐릭터 자리는 화살표 무게중심, 화살표를 못 찾으면 미니맵 한가운데. 방위는 안 읽는다.</remarks>
-    private List<(double X, double Y)> MarkerSpots(string name)
-        => [.. MarkerSpotsAll(name).Where(s => !IsIgnoredSpot(s.X, s.Y))];
+    /// <remarks><paramref name="center"/> 를 주면 화살표를 안 찾고 그 자리를 캐릭터로 본다(걷는 동안 못 박은 자리).</remarks>
+    private List<(double X, double Y)> MarkerSpots(string name, (double X, double Y)? center = null)
+        => [.. MarkerSpotsAll(name, center).Where(s => !IsIgnoredSpot(s.X, s.Y))];
 
-    private List<(double X, double Y)> MarkerSpotsAll(string name)
+    private List<(double X, double Y)> MarkerSpotsAll(string name, (double X, double Y)? center = null)
     {
         var spec = MinimapSpecOrThrow();
         var rules = MarkerRulesOrThrow(spec, name);
         var (pixels, width, height) = MinimapPixels(spec);
-        var arrow = MinimapReader.FindArrow(pixels, width, height, spec);
-        var centerX = arrow?.CenterX ?? width / 2.0;
-        var centerY = arrow?.CenterY ?? height / 2.0;
+        var (centerX, centerY) = center ?? MinimapCenter(spec, pixels, width, height);
 
         return rules
             .SelectMany(rule => MinimapReader.Markers(pixels, width, height, spec, rule, centerX, centerY))
@@ -262,6 +281,22 @@ public partial class LiveScriptApi
                 return (m.Distance * Math.Sin(radians), -m.Distance * Math.Cos(radians));
             })
             .ToList();
+    }
+
+    /// <summary>캐릭터 자리(미니맵 조각 px) - 화살표 무게중심, 화살표를 못 찾으면 미니맵 한가운데.</summary>
+    private (double X, double Y) MinimapCenter()
+    {
+        var spec = MinimapSpecOrThrow();
+        var (pixels, width, height) = MinimapPixels(spec);
+
+        return MinimapCenter(spec, pixels, width, height);
+    }
+
+    private static (double X, double Y) MinimapCenter(MinimapSpec spec, byte[] pixels, int width, int height)
+    {
+        var arrow = MinimapReader.FindArrow(pixels, width, height, spec);
+
+        return (arrow?.CenterX ?? width / 2.0, arrow?.CenterY ?? height / 2.0);
     }
 
     /// <summary>W 기준 그 각에 가장 가까운 8방향 키.</summary>

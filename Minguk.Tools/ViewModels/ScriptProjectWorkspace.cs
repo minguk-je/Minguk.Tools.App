@@ -280,6 +280,9 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     {
         Project = project;
         PruneDataItems(project);
+
+        if (AddUnlisted(project)) project.Save();
+
         RebuildNodes();
         WatchFolder(project);
         Changed?.Invoke(this, EventArgs.Empty);
@@ -302,7 +305,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
     /// </summary>
     /// <remarks>
     /// VS 는 목록에 없는 파일을 안 보이지만 여기서는 폴더에 넣은 것이 곧바로 탐색기에 뜨길 바랐다. 그래서 <b>새로 생긴 것</b>은 넣고
-    /// <b>없어진 것</b>은 뺀다. 이미 있던 파일을 "프로젝트에서 제외" 한 것은 다시 넣지 않는다 - 알림은 생길 때만 오기 때문이다.
+    /// <b>없어진 것</b>은 뺀다. 열 때도 폴더 안 파일을 모두 넣는다(<see cref="AddUnlisted"/>). "프로젝트에서 제외" 한 것은 프로젝트 파일의
+    /// <c>excluded</c> 에 적혀 다시 넣지 않는다.
     /// 우리가 만든 파일(새 파일·끌어다 놓기·이름 바꾸기)은 목록을 먼저 고치므로 알림이 와도 할 일이 없다.
     /// 무시하는 것: 프로젝트 파일, .git·.vs·bin·obj 폴더, 임시 파일(~ 로 시작, .tmp, .swp).
     /// </remarks>
@@ -406,6 +410,9 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
             if (project.RelativePath(path) is not { } relative || IsIgnored(relative)) continue;
 
+            // 제외한 것이 다시 생겼다(스크립트가 다시 쓴 파일 등) - 안 넣는다. 없어진 것은 아래에서 목록에 있을 때만 뺀다.
+            if (project.IsExcluded(relative) && (File.Exists(path) || Directory.Exists(path))) continue;
+
             if (Directory.Exists(path))
             {
                 if (!project.Folders.Contains(relative, StringComparer.OrdinalIgnoreCase))
@@ -415,11 +422,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
                 }
 
                 // 폴더째 붙여 넣으면 안의 파일은 알림이 따로 안 올 수 있다 - 안을 훑는다.
-                foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-                    if (project.RelativePath(file) is { } inner && !IsIgnored(inner) && project.Find(inner) is null) { project.Add(inner); changed = true; }
-
-                foreach (var directory in Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories))
-                    if (project.RelativePath(directory) is { } inner && !IsIgnored(inner) && !project.Folders.Contains(inner, StringComparer.OrdinalIgnoreCase)) { project.AddFolder(inner); changed = true; }
+                changed |= AddUnlisted(project, path);
             }
             else if (File.Exists(path))
             {
@@ -495,13 +498,59 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         foreach (var folder in project.Folders.ToList())
             if (!Directory.Exists(project.FullPath(folder))) { project.RemoveFolder(folder); changed = true; }
 
-        foreach (var directory in Directory.EnumerateDirectories(project.Directory, "*", SearchOption.AllDirectories))
-            if (project.RelativePath(directory) is { } relative && !IsIgnored(relative) && !project.Folders.Contains(relative, StringComparer.OrdinalIgnoreCase)) { project.AddFolder(relative); changed = true; }
-
-        foreach (var file in Directory.EnumerateFiles(project.Directory, "*", SearchOption.AllDirectories))
-            if (project.RelativePath(file) is { } relative && !IsIgnored(relative) && project.Find(relative) is null) { project.Add(relative); changed = true; }
+        changed |= AddUnlisted(project);
 
         CloseMissingDocuments();
+        return changed;
+    }
+
+    /// <summary>
+    /// 폴더(기본은 프로젝트 폴더) 안의 파일·폴더 가운데 목록에 없는 것을 모두 넣는다 - 데이터·무시할 것·「프로젝트에서 제외」 한 것은 빼고. 넣었으면 true.
+    /// </summary>
+    /// <remarks>
+    /// 폴더 감시는 새로 생긴 것만 넣어, 이미 사진 52장이 든 「참고캡처」 폴더에 이름을 바꾼 한 장과 README 만 떴다(사용자, 2026-09-26
+    /// "폴더 밑에 파일 있으면 다 추가해줘.. 변경된 파일만 감지해서 추가하니까 이상해"). 열 때·알림이 넘칠 때·폴더째 붙여 넣을 때 이것으로 훑는다.
+    /// 데이터 폴더(Images 등 수천 장)는 들어가지 않고 건너뛴다.
+    /// </remarks>
+    public static bool AddUnlisted(ScriptProject project, string? folder = null)
+    {
+        var changed = false;
+
+        void Walk(string directory)
+        {
+            foreach (var sub in Directory.EnumerateDirectories(directory))
+            {
+                if (project.RelativePath(sub) is not { } relative || IsIgnored(relative) || project.IsExcluded(relative)) continue;
+
+                if (!project.Folders.Contains(relative, StringComparer.OrdinalIgnoreCase))
+                {
+                    project.AddFolder(relative);
+                    changed = true;
+                }
+
+                Walk(sub);
+            }
+
+            foreach (var file in Directory.EnumerateFiles(directory))
+            {
+                if (project.RelativePath(file) is not { } relative || IsIgnored(relative) || project.IsExcluded(relative) || project.Find(relative) is not null) continue;
+
+                project.Add(relative);
+                changed = true;
+            }
+        }
+
+        try
+        {
+            var start = folder ?? project.Directory;
+
+            if (Directory.Exists(start)) Walk(start);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Logger.Warn(ex, $"프로젝트 폴더를 다 훑지 못했다: {project.Directory}");
+        }
+
         return changed;
     }
 
@@ -833,6 +882,16 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
             if (other is null) continue;
 
+            // 다른 프로젝트도 폴더 안 파일을 다 보인다 - 그 프로젝트를 열었을 때와 같게 목록에 넣어 둔다.
+            try
+            {
+                if (AddUnlisted(other)) other.Save();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Logger.Warn(ex, $"솔루션의 프로젝트 목록을 저장하지 못했다: {filePath}");
+            }
+
             string ParentIdOf(string relative)
             {
                 var index = relative.LastIndexOf('/');
@@ -1113,7 +1172,7 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         if (Ask(question, MessageButton.OKCancel) is not (MessageResult.OK or MessageResult.Yes))
             return false;
 
-        return Unlist(node);
+        return Unlist(node, exclude: node.Kind != ScriptNodeKind.ProjectReference);
     }
 
     /// <summary>
@@ -1148,7 +1207,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
         return Unlist(node);
     }
 
-    private bool Unlist(ScriptProjectNode node)
+    /// <param name="exclude">「프로젝트에서 제외」 - 폴더를 훑어도 다시 안 넣게 적어 둔다(삭제는 파일이 없어지니 안 적는다).</param>
+    private bool Unlist(ScriptProjectNode node, bool exclude = false)
     {
         var project = Project!;
 
@@ -1156,6 +1216,8 @@ public sealed class ScriptProjectWorkspace : ViewModelBase, IDisposable
 
         if (node.IsFolder) project.RemoveFolder(node.Id);
         else project.Remove(node.Id);
+
+        if (exclude) project.MarkExcluded(node.Id);
 
         project.Save();
         RebuildNodes();
