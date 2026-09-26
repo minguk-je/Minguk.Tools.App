@@ -83,19 +83,9 @@ public abstract partial class RecognizingCaptureViewModelBase
     /// 영역 그리드의 「OCR 엔진」 열이 고르는 것 - 맨 앞은 "기본"(<see cref="Vision.Regions.NamedRegion.OcrEngineName"/> 이 비는 값, null).
     /// 사용자(2026-09-18) "영역별로 어떤 OCR 쓸지 따로 지정 가능하게" · "그리드에 별도로 선택 안 하면 기본으로, 지정하면 그걸로".
     /// </summary>
-    /// <remarks>글은 짧게 - 긴 이름이 영역 그리드의 「OCR」 열을 넓혔다(사용자, 2026-09-26 "영역 그리드 컬럼 넓이 너무 넓혔어"). 긴 이름은 도구 줄 콤보에.</remarks>
+    /// <remarks>도구 줄 콤보와 같은 이름(<see cref="OcrEngineChoice.Name"/>) - 이름이 짧아 열이 안 넓어진다(사용자, 2026-09-26 "컬럼 넓이 너무 넓혔어" · "이름이 틀리네").</remarks>
     public IReadOnlyList<RegionOcrEngineOption> RegionOcrEngineOptions { get; } =
-        [new(null, "기본"), .. OcrEngineChoice.All.Select(c => new RegionOcrEngineOption(c.Kind.ToString(), ShortEngineName(c.Kind)))];
-
-    private static string ShortEngineName(OcrEngineKind kind) => kind switch
-    {
-        OcrEngineKind.PaddleGpu => "v5 GPU",
-        OcrEngineKind.PaddleCpu => "v5 CPU",
-        OcrEngineKind.Windows => "Windows",
-        OcrEngineKind.PaddleV6TinyGpu => "v6 tiny",
-        OcrEngineKind.PaddleV6SmallGpu => "v6 small",
-        _ => kind.ToString()
-    };
+        [new(null, "기본"), .. OcrEngineChoice.All.Select(c => new RegionOcrEngineOption(c.Kind.ToString(), c.Name))];
 
     /// <summary>
     /// 고른 엔진. 바꾸면 지금 것을 버리고 다음 읽기에서 새로 만든다 - 읽는 도중이면 그 읽기가 끝난 뒤 놓인다.

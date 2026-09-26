@@ -32,11 +32,12 @@ public sealed record OcrEngineChoice(OcrEngineKind Kind, string Name)
 {
     public static readonly IReadOnlyList<OcrEngineChoice> All =
     [
-        new(OcrEngineKind.PaddleGpu, "PP-OCRv5 (GPU)"),
-        new(OcrEngineKind.PaddleCpu, "PP-OCRv5 (CPU)"),
-        new(OcrEngineKind.Windows, "Windows 내장 OCR"),
-        new(OcrEngineKind.PaddleV6TinyGpu, "PP-OCRv6 tiny (GPU, 숫자·영문)"),
-        new(OcrEngineKind.PaddleV6SmallGpu, "PP-OCRv6 small (GPU, 숫자·영문)")
+        // 이름은 도구 줄 콤보와 영역 그리드 「OCR」 열이 같이 쓴다 - 한 이름으로(사용자, 2026-09-26 "상단의 OCR 이름이랑 영역 그리드 OCR 컬럼의 이름이 틀리네"). 설명은 콤보 힌트에.
+        new(OcrEngineKind.PaddleGpu, "PP-OCRv5 GPU"),
+        new(OcrEngineKind.PaddleCpu, "PP-OCRv5 CPU"),
+        new(OcrEngineKind.Windows, "Windows OCR"),
+        new(OcrEngineKind.PaddleV6TinyGpu, "PP-OCRv6 tiny"),
+        new(OcrEngineKind.PaddleV6SmallGpu, "PP-OCRv6 small")
     ];
 
     public static OcrEngineChoice Default => All[0];
